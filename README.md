@@ -46,6 +46,10 @@ The core crate builds and tests on any OS without WebView dependencies
 Linux with `rustup target add x86_64-pc-windows-gnu` plus mingw-w64:
 `cargo clippy --workspace --target x86_64-pc-windows-gnu`.
 
+**No toolchain?** Every CI run uploads a `vyro-windows-<sha>` artifact (Actions → run →
+Artifacts) with `vyro-inventory.exe` (double-click; saves `vyro-inventory.json` beside it) and
+`vyro.exe` (the app; needs WebView2, preinstalled on Windows 11).
+
 To see exactly what Vyro reads on a machine (e.g. to compare with `msinfo32`):
 
 ```sh

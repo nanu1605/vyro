@@ -66,5 +66,18 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test -p vyro-core
       - name: Inventory on a real Windows machine (for eyeballing)
-        run: cargo run -p vyro-core --example inventory
+        run: cargo run -p vyro-core --example inventory -- --no-wait
       - run: pnpm tauri build --no-bundle
+
+      # Ready-to-run downloads for checking on a real PC without a toolchain.
+      - name: Collect Windows binaries
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist-win | Out-Null
+          Copy-Item target\debug\examples\inventory.exe dist-win\vyro-inventory.exe
+          Copy-Item target\release\vyro.exe dist-win\vyro.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vyro-windows-${{ github.sha }}
+          path: dist-win/
+          retention-days: 14
