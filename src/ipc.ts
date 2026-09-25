@@ -3,7 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { HistoryRange, HistorySeries, SensorSnapshot, SensorTree } from './types';
+import type { HardwareId, HistoryRange, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -30,4 +30,18 @@ export function queryHistory(metric: string, range: HistoryRange): Promise<Histo
 
 export function getSensorTree(): Promise<SensorTree> {
   return invoke<SensorTree>('get_sensor_tree');
+}
+
+export async function getHardwareId(): Promise<HardwareId> {
+  if (!inTauri) return (await import('./sample')).sampleHardware;
+  return invoke<HardwareId>('get_hardware_id');
+}
+
+export async function getSystemInfo(): Promise<SystemInfo> {
+  if (!inTauri) {
+    const { sampleSystem } = await import('./sample');
+    const now = Math.floor(Date.now() / 1000);
+    return { ...sampleSystem, uptimeSecs: sampleSystem.bootTime == null ? null : now - sampleSystem.bootTime };
+  }
+  return invoke<SystemInfo>('get_system_info');
 }

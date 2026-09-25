@@ -24,6 +24,8 @@
   const recent = new Ring(SPARK_POINTS);
 
   function frame(dt: number): boolean {
+    // Hidden tab: skip drawing and let the loop sleep; the resize observer wakes it on show.
+    if (dial.offsetParent === null) return false;
     const snap = animator.reducedMotion;
     const a = tUsage.step(dt, snap);
     const b = tMhz.step(dt, snap);
@@ -51,6 +53,7 @@
       gauge?.resize();
       frame(0);
       redrawSpark();
+      animator.wake();
     });
     ro.observe(dial);
     ro.observe(spark);
