@@ -98,7 +98,8 @@ pub fn gpus() -> Vec<GpuId> {
         let Ok(desc) = (unsafe { adapter.GetDesc1() }) else {
             continue;
         };
-        if desc.Flags & (DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32) != 0 {
+        let software = desc.Flags & (DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32) != 0;
+        if software || pci::is_basic_render_driver(desc.VendorId, desc.DeviceId) {
             continue;
         }
         let luid = (desc.AdapterLuid.HighPart, desc.AdapterLuid.LowPart);

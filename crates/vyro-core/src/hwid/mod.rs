@@ -175,5 +175,11 @@ mod tests {
         assert!(!hw.cpu.caches.is_empty(), "caches decoded");
         assert!(hw.smbios_version.is_some(), "SMBIOS table read");
         assert!(hw.board.bios_vendor.is_some() || hw.board.system_manufacturer.is_some());
+        assert!(
+            hw.gpus
+                .iter()
+                .all(|g| !pci::is_basic_render_driver(g.vendor_id, g.device_id)),
+            "software rasterizer listed as a GPU"
+        );
     }
 }

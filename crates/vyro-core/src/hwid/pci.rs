@@ -40,6 +40,12 @@ pub fn vendor_name(vendor_id: u32) -> Option<&'static str> {
     })
 }
 
+/// Microsoft Basic Render Driver (WARP), a software rasterizer. On some VMs DXGI reports it
+/// without `DXGI_ADAPTER_FLAG_SOFTWARE`, so it is also recognised by id.
+pub fn is_basic_render_driver(vendor_id: u32, device_id: u32) -> bool {
+    vendor_id == 0x1414 && device_id == 0x8C
+}
+
 /// Text part of a registry `DeviceDesc`, e.g. `@oem12.inf,%dev%;Intel(R) … Controller` →
 /// `Intel(R) … Controller`.
 pub fn device_desc_text(desc: &str) -> &str {
@@ -125,6 +131,13 @@ mod tests {
         let id = parse_hardware_id(r"pci\ven_1002&dev_744c").unwrap();
         assert_eq!((id.vendor, id.device, id.subsys), (0x1002, 0x744C, None));
         assert!(parse_hardware_id("USB\\VID_046D&PID_C52B").is_none());
+    }
+
+    #[test]
+    fn warp_is_recognised_by_id() {
+        assert!(is_basic_render_driver(0x1414, 0x8C));
+        assert!(!is_basic_render_driver(0x10DE, 0x8C));
+        assert!(!is_basic_render_driver(0x1414, 0x8D));
     }
 
     #[test]
