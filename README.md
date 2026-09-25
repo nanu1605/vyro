@@ -7,8 +7,9 @@ app or library).
 - **Build spec:** [`PROJECT_PLAN.md`](PROJECT_PLAN.md) — what to build and why.
 - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — milestones, phase tracker, decision log.
 
-**Status:** Phase 0. The sensor engine, history store and UI run end-to-end on simulated
-hardware. Real Windows sensors start in Phase 1.
+**Status:** Phase 1. The sensor engine, history store and UI run end-to-end; live readings are
+still simulated. The Hardware and System views show real inventory on Windows (CPU topology,
+caches, memory modules, board/BIOS, GPUs, OS, security posture, startup apps, power history).
 
 ## Layout
 
@@ -41,7 +42,16 @@ pnpm check && pnpm test && pnpm build
 ```
 
 The core crate builds and tests on any OS without WebView dependencies
-(`cargo test` at the root targets it by default).
+(`cargo test` at the root targets it by default). Windows-only code can be type-checked from
+Linux with `rustup target add x86_64-pc-windows-gnu` plus mingw-w64:
+`cargo clippy --workspace --target x86_64-pc-windows-gnu`.
+
+To see exactly what Vyro reads on a machine (e.g. to compare with `msinfo32`):
+
+```sh
+cargo run -p vyro-core --example inventory              # board serial redacted
+cargo run -p vyro-core --example inventory -- --show-serial
+```
 
 ## Architecture in brief
 

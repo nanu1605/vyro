@@ -65,9 +65,29 @@ Built and verified on Linux (unit tests; app run under Xvfb). Pending: first run
 - [x] CI: Linux (core + frontend) and Windows (Tauri shell build)
 
 ### P1 — Static inventory, hardware ID, system info (M2)
-CPUID topology + P/E map, SMBIOS parser (types 0/2/4/16/17), DXGI GPU ID, OS/uptime/boot,
-Secure Boot, TPM, virtualization, BitLocker (admin), startup apps (+heuristic), sleep/wake
-history. System + Hardware panels. Board serial local-only.
+Built; verified by unit tests (Linux), Windows type-check + clippy (cross target), a Wine smoke
+run, and Windows CI (real-machine sanity tests + inventory dump in the log). Pending: field check
+against `msinfo32` / Task Manager on a physical Windows PC (`cargo run -p vyro-core --example
+inventory`).
+
+- [x] CPUID decode: vendor, brand, family/model/stepping, ISA extensions, hybrid, hypervisor,
+      leaf 0x16 base/max clock
+- [x] `GetLogicalProcessorInformationEx` decoder: cores, threads, packages, P/E map via
+      `EfficiencyClass`, aggregated caches (offsets asserted against Windows headers at compile time)
+- [x] SMBIOS parser: BIOS, system, baseboard (+ serial, local only, redacted from `Debug`),
+      processor socket/clocks, memory arrays and modules (JEDEC vendor names, channel heuristic)
+- [x] GPUs via DXGI + display-class registry (driver / vendor driver version, date, BIOS, memory type)
+- [x] Chipset from the PCI LPC/eSPI bridge description (Intel; AMD → unknown)
+- [x] OS name/edition/version/build/install date (Windows 11 naming fix), boot time, uptime
+- [x] UEFI, Secure Boot, TPM (TBS), virtualization + hypervisor, BitLocker (WMI, admin only),
+      elevation
+- [x] Startup apps: Run keys, Startup folders, non-Microsoft logon/boot scheduled tasks, with
+      Explorer's enabled/disabled state. Startup *impact* omitted (no public API — spec §2.10)
+- [x] Power history from the System event log (boot, shutdown, unexpected shutdown, sleep, wake
+      + wake source, modern standby)
+- [x] Process / thread / handle counts
+- [x] Collected once on a background thread (`Inventory`), never in the poll loop
+- [x] Hardware and System views (tabs), browser-mode sample data
 
 ### P2 — Live usage, clocks, GPU, per-process (M2)
 PDH CPU/GPU-engine counters, top-N processes, interim MHz via `CallNtPowerInformation`.
