@@ -1,14 +1,14 @@
 [workspace]
 resolver = "2"
-members = ["crates/vyro-core"]
+members = ["crates/vyro-core", "src-tauri"]
 # src-tauri needs WebView2 (Windows) / webkit2gtk (Linux) to build; the core crate builds anywhere.
-default-members = ["crates/vyro-core"]
+default-members = ["crates/vyro-core", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 license = "UNLICENSED"
-rust-version = "1.80"
+rust-version = "1.88"
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
