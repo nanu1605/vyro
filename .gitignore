@@ -1,0 +1,29 @@
+# Rust
+/target/
+**/target/
+
+# Node / frontend
+node_modules/
+/dist/
+.vite/
+.svelte-kit/
+
+# Tauri
+src-tauri/gen/schemas/
+
+# Local data / logs
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.log
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test output
+/playwright-report/
+/test-results/
