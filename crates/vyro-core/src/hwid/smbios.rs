@@ -292,6 +292,44 @@ pub fn dimm_vendor(raw: &str) -> Option<String> {
     Some(s)
 }
 
+/// Module vendor inferred from a part-number prefix, for firmware that leaves the manufacturer
+/// blank or "Unknown".
+pub fn vendor_from_part_number(part: &str) -> Option<&'static str> {
+    const PREFIXES: &[(&str, &str)] = &[
+        ("CMK", "Corsair"),
+        ("CMH", "Corsair"),
+        ("CMT", "Corsair"),
+        ("CMW", "Corsair"),
+        ("CMS", "Corsair"),
+        ("CMP", "Corsair"),
+        ("KF", "Kingston"),
+        ("KVR", "Kingston"),
+        ("KCP", "Kingston"),
+        ("F5-", "G.Skill"),
+        ("F4-", "G.Skill"),
+        ("CT", "Crucial"),
+        ("BL", "Crucial"),
+        ("M32", "Samsung"),
+        ("M42", "Samsung"),
+        ("M47", "Samsung"),
+        ("HMC", "SK hynix"),
+        ("HMA", "SK hynix"),
+        ("MTC", "Micron"),
+        ("MTA", "Micron"),
+        ("TED", "Team Group"),
+        ("FF3", "Team Group"),
+        ("AX5", "ADATA"),
+        ("AD5", "ADATA"),
+        ("PVV", "Patriot"),
+        ("PSD", "Patriot"),
+    ];
+    let up = part.trim().to_ascii_uppercase();
+    PREFIXES
+        .iter()
+        .find(|(p, _)| up.starts_with(p))
+        .map(|(_, v)| *v)
+}
+
 /// Channel letter from a slot or bank label, e.g. "P0 CHANNEL A", "DIMM_B2",
 /// "Controller0-ChannelA-DIMM1".
 fn channel_of(label: &str) -> Option<char> {
@@ -365,7 +403,12 @@ pub fn memory(smbios: &Smbios) -> MemoryId {
                 .string(0x10)
                 .unwrap_or_else(|| format!("Slot {}", m.dimms.len())),
             bank: d.string(0x11),
-            manufacturer: d.string(0x17).and_then(|s| dimm_vendor(&s)),
+            manufacturer: d.string(0x17).and_then(|s| dimm_vendor(&s)).or_else(|| {
+                d.string(0x1A)
+                    .as_deref()
+                    .and_then(vendor_from_part_number)
+                    .map(str::to_owned)
+            }),
             part_number: d.string(0x1A),
             size_mb,
             memory_type: d.byte(0x12).and_then(memory_type_name).map(str::to_owned),
@@ -634,6 +677,18 @@ mod tests {
             Some("Micron Technology")
         );
         assert_eq!(dimm_vendor("Unknown"), None);
+    }
+
+    #[test]
+    fn vendor_falls_back_to_part_number() {
+        // Real module from a field report (manufacturer string was blank).
+        assert_eq!(
+            vendor_from_part_number("CMK16GX5M1B5600C40"),
+            Some("Corsair")
+        );
+        assert_eq!(vendor_from_part_number("F5-6000J3038F16G"), Some("G.Skill"));
+        assert_eq!(vendor_from_part_number("KF560C40-16"), Some("Kingston"));
+        assert_eq!(vendor_from_part_number("XYZ123"), None);
     }
 
     #[test]

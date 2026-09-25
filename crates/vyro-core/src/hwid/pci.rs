@@ -73,6 +73,54 @@ pub fn chipset_from_description(desc: &str) -> Option<String> {
     Some(format!("{vendor} {model}"))
 }
 
+/// Chipset from the board model name, e.g. "B650M GAMING PLUS WIFI" → "AMD B650". Used when
+/// the LPC bridge does not name it (AMD platforms).
+pub fn chipset_from_board(product: &str) -> Option<String> {
+    const AMD: &[&str] = &[
+        "X870E", "X870", "B850", "B840", "X670E", "X670", "B650E", "B650", "A620", "X570", "B550",
+        "A520", "X470", "B450", "X370", "B350", "A320",
+    ];
+    const INTEL: &[&str] = &[
+        "Z890", "B860", "H810", "Z790", "B760", "H770", "H610", "Z690", "B660", "H670", "Z590",
+        "B560", "H570", "H510", "Z490", "B460", "H470", "H410",
+    ];
+    let up = product.to_ascii_uppercase();
+    let tokens: Vec<&str> = up.split(|c: char| !c.is_ascii_alphanumeric()).collect();
+    // Match a whole token or a token with a form-factor suffix ("B650M", "B650I", "X670E-A").
+    let hit = |model: &str| {
+        tokens.iter().any(|t| {
+            t.strip_prefix(model).is_some_and(|rest| {
+                rest.is_empty() || rest == "M" || rest == "I" || rest == "P" || rest == "PRO"
+            })
+        })
+    };
+    if let Some(m) = AMD.iter().find(|m| hit(m)) {
+        return Some(format!("AMD {m}"));
+    }
+    INTEL.iter().find(|m| hit(m)).map(|m| format!("Intel {m}"))
+}
+
+/// NVIDIA's registry BIOS string ("Version98.6.1f.80.1e") in its usual display form
+/// ("98.06.1F.80.1E"). Other formats are returned trimmed but otherwise unchanged.
+pub fn normalize_gpu_bios(raw: &str) -> String {
+    let s = raw.trim();
+    let s = s.strip_prefix("Version").unwrap_or(s).trim();
+    let parts: Vec<&str> = s.split('.').collect();
+    let hex = parts.len() >= 3
+        && parts
+            .iter()
+            .all(|p| !p.is_empty() && p.len() <= 2 && p.chars().all(|c| c.is_ascii_hexdigit()));
+    if hex {
+        parts
+            .iter()
+            .map(|p| format!("{:0>2}", p.to_ascii_uppercase()))
+            .collect::<Vec<_>>()
+            .join(".")
+    } else {
+        s.to_owned()
+    }
+}
+
 /// Formats the user-mode driver version DXGI reports as a packed `u64`.
 pub fn format_umd_version(v: u64) -> String {
     format!(
@@ -138,6 +186,35 @@ mod tests {
         assert!(is_basic_render_driver(0x1414, 0x8C));
         assert!(!is_basic_render_driver(0x10DE, 0x8C));
         assert!(!is_basic_render_driver(0x1414, 0x8D));
+    }
+
+    #[test]
+    fn chipset_from_board_names() {
+        assert_eq!(
+            chipset_from_board("B650M GAMING PLUS WIFI (MS-7E24)").as_deref(),
+            Some("AMD B650")
+        );
+        assert_eq!(
+            chipset_from_board("ROG STRIX X670E-E GAMING WIFI").as_deref(),
+            Some("AMD X670E")
+        );
+        assert_eq!(
+            chipset_from_board("ROG STRIX Z790-E GAMING WIFI").as_deref(),
+            Some("Intel Z790")
+        );
+        assert_eq!(
+            chipset_from_board("MAG B550 TOMAHAWK").as_deref(),
+            Some("AMD B550")
+        );
+        assert_eq!(chipset_from_board("Virtual Machine"), None);
+        assert_eq!(chipset_from_board("MS-7E24"), None);
+    }
+
+    #[test]
+    fn gpu_bios_display() {
+        assert_eq!(normalize_gpu_bios("Version98.6.1f.80.1e"), "98.06.1F.80.1E");
+        assert_eq!(normalize_gpu_bios("95.04.1F.00.2D"), "95.04.1F.00.2D");
+        assert_eq!(normalize_gpu_bios("102-RAPHAEL-008"), "102-RAPHAEL-008");
     }
 
     #[test]

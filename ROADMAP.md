@@ -66,9 +66,11 @@ Built and verified on Linux (unit tests; app run under Xvfb). Pending: first run
 
 ### P1 — Static inventory, hardware ID, system info (M2)
 Built; verified by unit tests (Linux), Windows type-check + clippy (cross target), a Wine smoke
-run, and Windows CI (real-machine sanity tests + inventory dump in the log). Pending: field check
-against `msinfo32` / Task Manager on a physical Windows PC (`cargo run -p vyro-core --example
-inventory`).
+run, and Windows CI (real-machine sanity tests + inventory dump in the log). Field-checked on a physical PC
+(Ryzen 7 9700X / MSI B650M / 2×16 GB DDR5-5600 / RTX 5060 Ti + Radeon iGPU / Windows 11 25H2):
+CPU, caches, topology, board/BIOS, DIMMs, GPUs, OS, security and startup apps all correct. Gaps
+found there and fixed: DIMM vendor from part number when firmware leaves it blank, AMD chipset
+from the board name, NVIDIA GPU BIOS display format.
 
 - [x] CPUID decode: vendor, brand, family/model/stepping, ISA extensions, hybrid, hypervisor,
       leaf 0x16 base/max clock

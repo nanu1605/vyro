@@ -110,7 +110,13 @@ fn collect_windows(hw: &mut HardwareId) {
     if let Some(mb) = win::installed_memory_mb() {
         hw.memory.total_mb = Some(mb);
     }
-    hw.board.chipset = win::chipset();
+    // Intel names the chipset on the LPC bridge; AMD boards don't, so fall back to the board name.
+    hw.board.chipset = win::chipset().or_else(|| {
+        hw.board
+            .product
+            .as_deref()
+            .and_then(pci::chipset_from_board)
+    });
     hw.gpus = win::gpus();
 }
 

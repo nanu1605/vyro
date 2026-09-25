@@ -160,6 +160,7 @@ fn enrich_from_registry(gpus: &mut [GpuId]) {
         gpu.bios_version = gpu.bios_version.take().or_else(|| {
             k.value("HardwareInformation.BiosString")
                 .and_then(|v| pci::decode_reg_text(&v.data))
+                .map(|b| pci::normalize_gpu_bios(&b))
         });
         gpu.memory_type = gpu.memory_type.take().or_else(|| {
             k.value("HardwareInformation.MemoryType")
