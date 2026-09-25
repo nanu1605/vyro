@@ -32,6 +32,10 @@ describe('browser simulator', () => {
       expect(gpu.vramUsedMB!).toBeLessThanOrEqual(gpu.vramTotalMB!);
       expect(gpu.engine.tensor).toBeNull();
       expect(s.memory.usedMB! + s.memory.availableMB!).toBe(32768);
+      expect(s.cpu.usagePerCore).toHaveLength(16);
+      expect(s.cpu.usagePerCore.every((u) => u >= 0 && u <= 100)).toBe(true);
+      expect(s.processes.length).toBeGreaterThan(0);
+      expect(new Set(s.processes.map((p) => p.pid)).size).toBe(s.processes.length);
     }
   });
 });

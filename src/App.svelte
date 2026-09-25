@@ -5,6 +5,9 @@
   import AppStatus from './components/AppStatus.svelte';
   import HardwarePanel from './components/HardwarePanel.svelte';
   import SystemPanel from './components/SystemPanel.svelte';
+  import CoresCard from './components/CoresCard.svelte';
+  import GpuCard from './components/GpuCard.svelte';
+  import ProcessesPanel from './components/ProcessesPanel.svelte';
   import { animator } from './anim';
   import { fmt, fmtGB } from './format';
   import { inTauri, onSensors, setUiVisible } from './ipc';
@@ -12,6 +15,7 @@
 
   const TABS = [
     { id: 'dashboard', label: 'Dashboard' },
+    { id: 'processes', label: 'Processes' },
     { id: 'hardware', label: 'Hardware' },
     { id: 'system', label: 'System' },
   ] as const;
@@ -28,7 +32,12 @@
 
   let tab = $state<Tab>(savedTab());
   // Panels mount on first visit and then stay mounted (keeps fetched data and live history).
-  let visited = $state<Record<Tab, boolean>>({ dashboard: true, hardware: false, system: false });
+  let visited = $state<Record<Tab, boolean>>({
+    dashboard: true,
+    processes: false,
+    hardware: false,
+    system: false,
+  });
 
   function select(t: Tab): void {
     tab = t;
@@ -148,7 +157,20 @@
         <StatTile label="System power" value={snap?.power.estTotalW} unit="W" sub="estimated" />
         <StatTile label={cpuFan?.name ?? 'CPU fan'} value={cpuFan?.rpm} unit="RPM" />
       </div>
+
+      <div class="cards">
+        <CoresCard {cpu} />
+        {#each snap?.gpu ?? [] as g, i (i)}
+          <GpuCard gpu={g} />
+        {/each}
+      </div>
     </div>
+
+    {#if visited.processes}
+      <div id="panel-processes" role="tabpanel" aria-labelledby="tab-processes" hidden={tab !== 'processes'}>
+        <ProcessesPanel processes={snap?.processes ?? []} />
+      </div>
+    {/if}
 
     {#if visited.hardware}
       <div id="panel-hardware" role="tabpanel" aria-labelledby="tab-hardware" hidden={tab !== 'hardware'}>
@@ -228,6 +250,12 @@
   .tiles {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
     gap: 0.75rem;
     margin-top: 1rem;
   }

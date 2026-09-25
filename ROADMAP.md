@@ -92,8 +92,25 @@ from the board name, NVIDIA GPU BIOS display format.
 - [x] Hardware and System views (tabs), browser-mode sample data
 
 ### P2 — Live usage, clocks, GPU, per-process (M2)
-PDH CPU/GPU-engine counters, top-N processes, interim MHz via `CallNtPowerInformation`.
-GPU: NVML → NVAPI (hotspot/mem temp, voltage) → ADLX → IGCL. Tensor/RT → N/A.
+Status: **2a built** (awaiting check on a physical PC with `vyro-live.exe` / `vyro.exe`);
+**2b** (AMD / Intel vendor libraries, NVIDIA hotspot) next.
+
+- [x] CPU total + per-logical-processor utilization from PDH `% Processor Utility` (Task
+      Manager's counter), falling back to `% Processor Time` and the legacy `Processor` object
+- [x] Effective clock = `% Processor Performance` × nominal `Processor Frequency` (Task
+      Manager's "Speed"), `CallNtPowerInformation` as the interim fallback; rated base/boost from
+      CPUID / SMBIOS
+- [x] GPU usage + per-engine (3D / decode / encode / compute / copy) from `GPU Engine` counters,
+      aggregated like Task Manager; dedicated VRAM from `GPU Adapter Memory`; tensor/RT → N/A
+- [x] NVIDIA via NVML (dynamic load): core/mem clock, temperature, VRAM, power + limit, fan %,
+      PCIe gen/width, throttle reasons; matched to DXGI adapters by PCI bus (D3DKMT)
+- [x] Vendor-neutral fallback: WDDM adapter / node perf data (temperature, fan RPM, clocks)
+- [x] Top processes (union of top 25 by CPU, RAM, GPU) from one `NtQuerySystemInformation` call
+- [x] Basic memory totals (used / available / committed / cached); full set in P4
+- [x] Dashboard gauges on live data (`VYRO_SIM=1` forces the simulator), per-core and GPU engine
+      cards, **Processes** view
+- [ ] 2b: AMD ADLX (hotspot, memory temp, power, voltage), Intel IGCL, NVIDIA NVAPI hotspot /
+      memory temperature / voltage
 
 ### P3 — Displays (M2)
 DisplayConfig + DXGI + EDID/CTA/DisplayID parser, HDR/SDR white level, VRR range + state,

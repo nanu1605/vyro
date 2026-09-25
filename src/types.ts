@@ -4,6 +4,8 @@ export type { AppSnapshot } from './bindings/AppSnapshot';
 export type { CpuSnapshot } from './bindings/CpuSnapshot';
 export type { EngineStatus } from './bindings/EngineStatus';
 export type { GpuSnapshot } from './bindings/GpuSnapshot';
+export type { GpuEngines } from './bindings/GpuEngines';
+export type { ProcessSnapshot } from './bindings/ProcessSnapshot';
 export type { HistoryPoint } from './bindings/HistoryPoint';
 export type { HistoryRange } from './bindings/HistoryRange';
 export type { HistorySeries } from './bindings/HistorySeries';

@@ -47,6 +47,17 @@ interface SimState {
   mem: number;
 }
 
+const SIM_PROCS: Array<[string, number, number, number, number]> = [
+  ['game.exe', 9120, 0.55, 5200, 0.9],
+  ['chrome.exe', 4412, 0.15, 1350, 0.04],
+  ['chrome.exe', 4588, 0.05, 620, 0],
+  ['Discord.exe', 7004, 0.04, 410, 0.02],
+  ['MsMpEng.exe', 3120, 0.03, 290, 0],
+  ['dwm.exe', 1308, 0.02, 95, 0.03],
+  ['explorer.exe', 6020, 0.01, 180, 0],
+  ['vyro.exe', 8800, 0.004, 42, 0.001],
+];
+
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const pickLoad = (rand: () => number) => (rand() < 0.25 ? 55 + rand() * 45 : 3 + rand() * 22);
 
@@ -79,7 +90,7 @@ export function nextSnapshot(st: SimState, ts: number, pollHz: number, rand: () 
     vendor: 'Simulated',
     integrated: false,
     usage: st.gpu,
-    engine: { graphics3d: st.gpu, decode: 0, encode: 0, compute: 0, copy: 0, tensor: null, raytrace: null },
+    engine: { graphics3d: st.gpu, decode: 2, encode: st.gpu > 50 ? 3 : 0, compute: 0, copy: st.gpu * 0.05, tensor: null, raytrace: null },
     mhzCore: 210 + (st.gpu / 100) * 2500,
     mhzMem: st.gpu > 8 ? 10501 : 405,
     tempEdge: st.gpuTemp,
@@ -98,6 +109,18 @@ export function nextSnapshot(st: SimState, ts: number, pollHz: number, rand: () 
     throttlePowerLimit: false,
     throttleReasons: [],
   });
+  for (let i = 0; i < 16; i++) {
+    const bias = Math.sin(i * 2.3);
+    s.cpu.usagePerCore.push(clamp(st.cpu + bias * 12 + (rand() - 0.5) * 16, 0, 100));
+    s.cpu.mhzPerCore.push(mhz + bias * 150);
+  }
+  s.processes = SIM_PROCS.map(([name, pid, c, ram, g]) => ({
+    pid,
+    name,
+    cpuPct: Math.min(100, st.cpu * c * (0.8 + rand() * 0.4)),
+    ramMB: ram * (0.97 + rand() * 0.06),
+    gpuPct: Math.min(100, st.gpu * g),
+  }));
   s.memory.totalMB = 32768;
   s.memory.usedMB = st.mem;
   s.memory.availableMB = 32768 - st.mem;
