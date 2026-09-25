@@ -51,15 +51,18 @@ pulled ahead of P6 if the early release should include history/alerts — decide
 ## Phase tracker
 
 ### P0 — Scaffold, sensor engine, animation, history skeleton (M1)
-- [ ] Workspace: `crates/vyro-core` (pure Rust) + `src-tauri` (Tauri 2 shell)
-- [ ] Unified sensor `Registry` with min/max/avg; `Provider` trait
-- [ ] `SensorSnapshot` + aux structs, generated TS bindings
-- [ ] Poller (1 Hz, 5 s when hidden) → registry → history → `sensors` event
-- [ ] `SimProvider`
-- [ ] SQLite history: tiered write path, `query_history`, retention + size cap
-- [ ] Svelte UI: canvas speedometers (usage + MHz), sparklines, stat tiles, eased 60 fps,
+Built and verified on Linux (unit tests; app run under Xvfb). Pending: first run on a Windows machine
+(`pnpm tauri dev`) and a first footprint measurement there.
+
+- [x] Workspace: `crates/vyro-core` (pure Rust) + `src-tauri` (Tauri 2 shell)
+- [x] Unified sensor `Registry` with min/max/avg; `Provider` trait
+- [x] `SensorSnapshot` + aux structs, generated TS bindings
+- [x] Poller (1 Hz, 5 s when hidden) → registry → history → `sensors` event
+- [x] `SimProvider`
+- [x] SQLite history: tiered write path, `query_history`, retention + size cap
+- [x] Svelte UI: canvas speedometers (usage + MHz), sparklines, stat tiles, eased 60 fps,
       `prefers-reduced-motion`, pause when hidden; dark theme; stacks < 720 px
-- [ ] CI: Linux (core + frontend) and Windows (Tauri shell build)
+- [x] CI: Linux (core + frontend) and Windows (Tauri shell build)
 
 ### P1 — Static inventory, hardware ID, system info (M2)
 CPUID topology + P/E map, SMBIOS parser (types 0/2/4/16/17), DXGI GPU ID, OS/uptime/boot,

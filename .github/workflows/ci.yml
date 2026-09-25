@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-and-frontend:
+    name: Core + frontend (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - run: cargo fmt --all --check
+      - run: cargo clippy -p vyro-core --all-targets -- -D warnings
+      - run: cargo test -p vyro-core
+      - name: TypeScript bindings match the Rust structs
+        run: |
+          if [ -n "$(git status --porcelain -- src/bindings)" ]; then
+            git status --short -- src/bindings
+            echo "::error::src/bindings is stale; run 'cargo test -p vyro-core' and commit the result"
+            exit 1
+          fi
+
+      - run: pnpm check
+      - run: pnpm test
+      - run: pnpm build
+
+  tauri-windows:
+    name: Tauri app (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test -p vyro-core
+      - run: pnpm tauri build --no-bundle
