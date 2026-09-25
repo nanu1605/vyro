@@ -3,14 +3,20 @@
 //! `#[cfg(windows)]` and the Tauri shell wires this crate to the UI.
 
 pub mod history;
+pub mod hwid;
 pub mod info;
+pub mod inventory;
 pub mod poller;
 pub mod provider;
 pub mod registry;
 pub mod sim;
 pub mod snapshot;
+pub mod sysinfo;
+#[cfg(windows)]
+mod winutil;
 
 pub use history::{History, HistoryConfig, HistoryRange, HistorySeries};
+pub use inventory::Inventory;
 pub use poller::{Poller, PollerConfig, PollerHandle, SnapshotSink};
 pub use provider::{BoxError, Provider};
 pub use registry::{Group, Registry, Sensor, SensorDesc, SensorKey, SensorTree, Source, Unit};

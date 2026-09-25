@@ -1,46 +1,313 @@
 //! Payloads served on demand by commands rather than in the 1 Hz `sensors` event (spec §4.4).
 //!
-//! Phase 0 defines the shapes the command surface returns; the fields are filled in by the
-//! phases that implement each area (P1 system / hardware, P3 displays, P7 health).
+//! `SystemInfo` and `HardwareId` are collected once at startup (Phase 1). Every field is
+//! optional: `null` means "could not be determined on this machine", and admin-only fields are
+//! `null` when the app is not elevated.
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::snapshot::Status;
 
+// ---------------------------------------------------------------------------------------------
+// System
+// ---------------------------------------------------------------------------------------------
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct SystemInfo {
-    pub os_edition: Option<String>,
-    pub os_version: Option<String>,
-    pub os_build: Option<String>,
-    /// Unix time, seconds.
-    pub install_date: Option<i64>,
+    pub os: OsInfo,
     /// Unix time, seconds.
     pub boot_time: Option<i64>,
+    /// Seconds since boot when this payload was produced.
     pub uptime_secs: Option<i64>,
-    pub secure_boot: Option<bool>,
-    pub tpm_version: Option<String>,
-    pub virtualization: Option<bool>,
-    pub bitlocker: Option<bool>,
+    pub security: SecurityInfo,
+    pub processes: ProcessOverview,
+    pub startup_apps: Vec<StartupApp>,
+    /// Newest first.
+    pub power_events: Vec<PowerEvent>,
+    /// Whether the app runs elevated. Admin-only fields are `null` when it does not.
+    pub elevated: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
-pub struct HardwareId {
-    pub cpu_model: Option<String>,
-    pub cpu_vendor: Option<String>,
-    pub cpu_cores: Option<u32>,
-    pub cpu_threads: Option<u32>,
-    pub gpus: Vec<String>,
-    pub board_manufacturer: Option<String>,
-    pub board_model: Option<String>,
-    pub bios_version: Option<String>,
-    /// Displayed locally only; never logged, persisted or transmitted.
-    pub board_serial: Option<String>,
+pub struct OsInfo {
+    /// e.g. "Windows 11 Pro".
+    pub name: Option<String>,
+    /// Edition id, e.g. "Professional".
+    pub edition: Option<String>,
+    /// Feature update, e.g. "24H2".
+    pub display_version: Option<String>,
+    /// Build with update revision, e.g. "26100.2033".
+    pub build: Option<String>,
+    /// Unix time, seconds.
+    pub install_date: Option<i64>,
+    /// e.g. "x64".
+    pub architecture: Option<String>,
 }
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SecurityInfo {
+    /// Firmware boots in UEFI mode (vs. legacy BIOS).
+    pub uefi: Option<bool>,
+    pub secure_boot: Option<bool>,
+    pub tpm_present: Option<bool>,
+    /// "2.0" or "1.2".
+    pub tpm_version: Option<String>,
+    /// Hardware virtualization (VT-x / AMD-V) enabled in firmware.
+    pub virtualization_enabled: Option<bool>,
+    /// A hypervisor (Hyper-V, VBS, …) is running underneath Windows.
+    pub hypervisor_present: Option<bool>,
+    /// BitLocker protection on the system drive. Requires elevation.
+    pub bitlocker_system_drive: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ProcessOverview {
+    pub processes: Option<u32>,
+    pub threads: Option<u32>,
+    pub handles: Option<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum StartupSource {
+    /// `HKLM\…\Run` (all users).
+    RegistryMachine,
+    /// `HKCU\…\Run` (current user).
+    RegistryUser,
+    /// All-users Startup folder.
+    FolderMachine,
+    /// Current user's Startup folder.
+    FolderUser,
+    /// Task Scheduler task with a logon or boot trigger.
+    ScheduledTask,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct StartupApp {
+    pub name: String,
+    pub command: String,
+    pub source: StartupSource,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum PowerEventKind {
+    Boot,
+    Shutdown,
+    /// The previous session ended without a clean shutdown.
+    UnexpectedShutdown,
+    Sleep,
+    Wake,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PowerEvent {
+    /// Unix time, seconds.
+    pub ts: i64,
+    pub kind: PowerEventKind,
+    /// e.g. the wake source.
+    pub detail: Option<String>,
+}
+
+// ---------------------------------------------------------------------------------------------
+// Hardware identification
+// ---------------------------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct HardwareId {
+    pub cpu: CpuId,
+    pub memory: MemoryId,
+    pub board: BoardId,
+    pub gpus: Vec<GpuId>,
+    /// e.g. "3.5".
+    pub smbios_version: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CpuId {
+    /// CPUID vendor string, e.g. "GenuineIntel".
+    pub vendor: Option<String>,
+    pub brand: Option<String>,
+    pub architecture: Option<String>,
+    pub family: Option<u32>,
+    pub model: Option<u32>,
+    pub stepping: Option<u32>,
+    pub socket: Option<String>,
+    pub packages: Option<u32>,
+    pub cores: Option<u32>,
+    pub threads: Option<u32>,
+    /// Set on hybrid CPUs only.
+    pub performance_cores: Option<u32>,
+    pub efficiency_cores: Option<u32>,
+    pub hybrid: bool,
+    /// One entry per physical core, in OS order.
+    pub core_map: Vec<CoreInfo>,
+    pub caches: Vec<CacheInfo>,
+    /// Notable instruction-set extensions, e.g. "AVX2", "AES".
+    pub isa: Vec<String>,
+    pub base_mhz: Option<f64>,
+    pub max_mhz: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum CoreKind {
+    Performance,
+    Efficiency,
+    /// Non-hybrid CPU: all cores alike.
+    Uniform,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CoreInfo {
+    pub index: u32,
+    pub kind: CoreKind,
+    /// Logical processor numbers (group × 64 + bit) served by this core.
+    pub logical: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum CacheKind {
+    Data,
+    Instruction,
+    Unified,
+    Trace,
+}
+
+/// Identical cache instances are aggregated: `count` × `size_kb`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CacheInfo {
+    pub level: u8,
+    pub kind: CacheKind,
+    pub size_kb: u32,
+    pub ways: Option<u32>,
+    pub line_bytes: u32,
+    pub count: u32,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct MemoryId {
+    /// Installed memory as reported by firmware.
+    pub total_mb: Option<f64>,
+    pub max_capacity_mb: Option<f64>,
+    pub slots_total: Option<u32>,
+    pub slots_used: u32,
+    /// Populated channels, decoded from slot names; approximate.
+    pub channels: Option<u32>,
+    pub dimms: Vec<DimmInfo>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DimmInfo {
+    pub slot: String,
+    pub bank: Option<String>,
+    pub manufacturer: Option<String>,
+    pub part_number: Option<String>,
+    #[serde(rename = "sizeMB")]
+    pub size_mb: f64,
+    /// e.g. "DDR5".
+    pub memory_type: Option<String>,
+    /// e.g. "DIMM", "SODIMM".
+    pub form_factor: Option<String>,
+    /// Rated transfer rate, MT/s.
+    pub speed_mts: Option<u32>,
+    /// Transfer rate the firmware configured, MT/s.
+    pub configured_speed_mts: Option<u32>,
+    pub configured_voltage_mv: Option<u32>,
+    pub rank: Option<u32>,
+}
+
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BoardId {
+    pub system_manufacturer: Option<String>,
+    pub system_product: Option<String>,
+    pub manufacturer: Option<String>,
+    pub product: Option<String>,
+    pub version: Option<String>,
+    /// Displayed locally only; never logged, persisted or transmitted (spec §2.10).
+    pub serial: Option<String>,
+    pub bios_vendor: Option<String>,
+    pub bios_version: Option<String>,
+    pub bios_date: Option<String>,
+    pub chipset: Option<String>,
+}
+
+impl std::fmt::Debug for BoardId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BoardId")
+            .field("system_manufacturer", &self.system_manufacturer)
+            .field("system_product", &self.system_product)
+            .field("manufacturer", &self.manufacturer)
+            .field("product", &self.product)
+            .field("version", &self.version)
+            .field("serial", &self.serial.as_ref().map(|_| "<redacted>"))
+            .field("bios_vendor", &self.bios_vendor)
+            .field("bios_version", &self.bios_version)
+            .field("bios_date", &self.bios_date)
+            .field("chipset", &self.chipset)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct GpuId {
+    pub name: String,
+    pub vendor: Option<String>,
+    pub vendor_id: u32,
+    pub device_id: u32,
+    pub subsys_id: u32,
+    pub revision: u32,
+    #[serde(rename = "vramMB")]
+    pub vram_mb: Option<f64>,
+    #[serde(rename = "sharedMB")]
+    pub shared_mb: Option<f64>,
+    /// Windows driver version, e.g. "32.0.15.6094".
+    pub driver_version: Option<String>,
+    /// Vendor-facing version, e.g. NVIDIA "560.94".
+    pub vendor_driver_version: Option<String>,
+    pub driver_date: Option<String>,
+    pub bios_version: Option<String>,
+    pub memory_type: Option<String>,
+}
+
+// ---------------------------------------------------------------------------------------------
+// Later phases
+// ---------------------------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -75,4 +342,20 @@ pub struct SubsystemHealth {
     pub name: String,
     pub status: Status,
     pub messages: Vec<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn board_debug_never_prints_the_serial() {
+        let board = BoardId {
+            serial: Some("SN-SECRET-123".into()),
+            ..Default::default()
+        };
+        let text = format!("{board:?}");
+        assert!(!text.contains("SN-SECRET-123"));
+        assert!(text.contains("<redacted>"));
+    }
 }
