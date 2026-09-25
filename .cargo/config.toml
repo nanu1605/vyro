@@ -1,0 +1,4 @@
+# ts-rs: `cargo test -p vyro-core` regenerates the TypeScript bindings consumed by the frontend.
+[env]
+TS_RS_EXPORT_DIR = { value = "src/bindings", relative = true }
+TS_RS_LARGE_INT = "number"

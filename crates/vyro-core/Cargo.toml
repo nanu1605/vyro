@@ -1,0 +1,22 @@
+[package]
+name = "vyro-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fastrand = "2.5.0"
+indexmap = { version = "2.11.4", features = ["serde"] }
+log = "0.4.34"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+thiserror = "2.0.21"
+ts-rs = "12.0.1"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tempfile = "3.27.0"
