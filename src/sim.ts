@@ -76,6 +76,8 @@ export function nextSnapshot(st: SimState, ts: number, pollHz: number, rand: () 
   s.cpu.powerPkgW = cpuW;
   s.gpu.push({
     name: 'Simulated GPU (browser)',
+    vendor: 'Simulated',
+    integrated: false,
     usage: st.gpu,
     engine: { graphics3d: st.gpu, decode: 0, encode: 0, compute: 0, copy: 0, tensor: null, raytrace: null },
     mhzCore: 210 + (st.gpu / 100) * 2500,
@@ -89,10 +91,12 @@ export function nextSnapshot(st: SimState, ts: number, pollHz: number, rand: () 
     powerLimitW: 200,
     voltageV: null,
     fanPct: st.gpuTemp < 50 ? 0 : clamp((st.gpuTemp - 50) * 3 + 30, 0, 100),
+    fanRpm: null,
     pcieGen: 4,
     pcieWidth: 16,
     throttleThermal: false,
     throttlePowerLimit: false,
+    throttleReasons: [],
   });
   s.memory.totalMB = 32768;
   s.memory.usedMB = st.mem;
