@@ -56,6 +56,9 @@ pub struct CpuSnapshot {
 #[ts(export)]
 pub struct GpuSnapshot {
     pub name: String,
+    pub vendor: Option<String>,
+    /// Integrated (shares system memory) vs discrete; `None` when unknown.
+    pub integrated: Option<bool>,
     pub usage: Option<f64>,
     pub engine: GpuEngines,
     pub mhz_core: Option<f64>,
@@ -71,10 +74,13 @@ pub struct GpuSnapshot {
     pub power_limit_w: Option<f64>,
     pub voltage_v: Option<f64>,
     pub fan_pct: Option<f64>,
+    pub fan_rpm: Option<f64>,
     pub pcie_gen: Option<u32>,
     pub pcie_width: Option<u32>,
     pub throttle_thermal: Option<bool>,
     pub throttle_power_limit: Option<bool>,
+    /// Active clock limiters as reported by the vendor library, e.g. "power cap", "thermal".
+    pub throttle_reasons: Vec<String>,
 }
 
 /// Per-engine utilization, %. Tensor / ray-trace are usually unavailable (spec §2.10).

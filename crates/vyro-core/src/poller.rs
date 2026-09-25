@@ -81,9 +81,13 @@ impl Poller {
         }
     }
 
-    pub fn with_provider(mut self, provider: impl Provider + 'static) -> Self {
+    pub fn with_provider(self, provider: impl Provider + 'static) -> Self {
+        self.with_boxed(Box::new(provider))
+    }
+
+    pub fn with_boxed(mut self, provider: Box<dyn Provider>) -> Self {
         self.slots.push(Slot {
-            provider: Box::new(provider),
+            provider,
             enabled: true,
             last_error: None,
         });

@@ -36,6 +36,23 @@ pub fn collect() -> HardwareId {
     hw
 }
 
+/// Rated (base, boost) CPU clock in MHz from CPUID, else SMBIOS. Cheap: no WMI or event log.
+pub fn rated_cpu_mhz() -> (Option<f64>, Option<f64>) {
+    let mut hw = HardwareId::default();
+    #[cfg(target_arch = "x86_64")]
+    apply_cpuid(&mut hw, &cpuid::read_live());
+    #[cfg(windows)]
+    if let Some(s) = win::smbios_raw()
+        .as_deref()
+        .and_then(smbios::Smbios::from_raw)
+    {
+        let p = smbios::processor(&s);
+        hw.cpu.base_mhz = hw.cpu.base_mhz.or(p.current_mhz.map(f64::from));
+        hw.cpu.max_mhz = hw.cpu.max_mhz.or(p.max_mhz.map(f64::from));
+    }
+    (hw.cpu.base_mhz, hw.cpu.max_mhz)
+}
+
 /// Whether CPUID reports a hypervisor underneath the OS (`None` off x86-64).
 pub fn cpuid_hypervisor_present() -> Option<bool> {
     #[cfg(target_arch = "x86_64")]

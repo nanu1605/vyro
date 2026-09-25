@@ -6,12 +6,15 @@ pub mod history;
 pub mod hwid;
 pub mod info;
 pub mod inventory;
+#[cfg(windows)]
+pub mod live;
 pub mod poller;
 pub mod provider;
 pub mod registry;
 pub mod sim;
 pub mod snapshot;
 pub mod sysinfo;
+pub mod usage;
 #[cfg(windows)]
 mod winutil;
 

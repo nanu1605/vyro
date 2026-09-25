@@ -8,7 +8,7 @@ use crate::provider::{BoxError, Provider};
 use crate::registry::{Group, Registry, SensorDesc, SensorKey, Source, Unit};
 use crate::snapshot::{
     DimmSnapshot, FanKind, FanSnapshot, GpuEngines, GpuSnapshot, NetKind, NetworkSnapshot,
-    SensorSnapshot, Status, StorageKind, StorageSnapshot, VoltageReading,
+    ProcessSnapshot, SensorSnapshot, Status, StorageKind, StorageSnapshot, VoltageReading,
 };
 
 const MHZ_BASE: f64 = 3600.0;
@@ -286,6 +286,8 @@ impl Provider for SimProvider {
         let fan_pct = if self.gpu_temp < 50.0 { 0.0 } else { fan_pct };
         snap.gpu.push(GpuSnapshot {
             name: "Simulated GPU".into(),
+            vendor: Some("Simulated".into()),
+            integrated: Some(false),
             usage: reg.set(k.gpu_usage, Some(gload)),
             engine: GpuEngines {
                 graphics3d: Some(gload),
@@ -310,10 +312,16 @@ impl Provider for SimProvider {
             power_limit_w: Some(200.0),
             voltage_v: Some(0.7 + gload * 0.0028),
             fan_pct: reg.set(k.gpu_fan, Some(fan_pct)),
+            fan_rpm: Some(fan_pct * 30.0),
             pcie_gen: Some(4),
             pcie_width: Some(16),
             throttle_thermal: Some(false),
             throttle_power_limit: Some(gpu_w > 195.0),
+            throttle_reasons: if gpu_w > 195.0 {
+                vec!["power cap".into()]
+            } else {
+                Vec::new()
+            },
         });
 
         // Memory
@@ -413,6 +421,28 @@ impl Provider for SimProvider {
             wifi_signal_pct: None,
             wifi_channel: None,
         });
+
+        // Processes: (name, pid, share of CPU load, RAM MB, share of GPU load)
+        const PROCS: [(&str, u32, f64, f64, f64); 8] = [
+            ("game.exe", 9120, 0.55, 5200.0, 0.9),
+            ("chrome.exe", 4412, 0.15, 1350.0, 0.04),
+            ("chrome.exe", 4588, 0.05, 620.0, 0.0),
+            ("Discord.exe", 7004, 0.04, 410.0, 0.02),
+            ("MsMpEng.exe", 3120, 0.03, 290.0, 0.0),
+            ("dwm.exe", 1308, 0.02, 95.0, 0.03),
+            ("explorer.exe", 6020, 0.01, 180.0, 0.0),
+            ("vyro.exe", 8800, 0.004, 42.0, 0.001),
+        ];
+        snap.processes = PROCS
+            .iter()
+            .map(|&(name, pid, c, ram, g)| ProcessSnapshot {
+                pid,
+                name: name.into(),
+                cpu_pct: Some((load * c * (0.8 + rng.f64() * 0.4)).min(100.0)),
+                ram_mb: Some(ram * (0.97 + rng.f64() * 0.06)),
+                gpu_pct: Some((gload * g).min(100.0)),
+            })
+            .collect();
 
         // Power
         let total = cpu_w + gpu_w + 45.0;

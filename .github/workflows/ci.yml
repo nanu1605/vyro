@@ -67,6 +67,8 @@ jobs:
       - run: cargo test -p vyro-core
       - name: Inventory on a real Windows machine (for eyeballing)
         run: cargo run -p vyro-core --example inventory -- --no-wait
+      - name: Live sensors on a real Windows machine (for eyeballing)
+        run: cargo run -p vyro-core --example live -- --no-wait --samples 3
       - run: pnpm tauri build --no-bundle
 
       # Ready-to-run downloads for checking on a real PC without a toolchain.
@@ -75,6 +77,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force dist-win | Out-Null
           Copy-Item target\debug\examples\inventory.exe dist-win\vyro-inventory.exe
+          Copy-Item target\debug\examples\live.exe dist-win\vyro-live.exe
           Copy-Item target\release\vyro.exe dist-win\vyro.exe
       - uses: actions/upload-artifact@v4
         with:

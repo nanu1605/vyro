@@ -33,10 +33,8 @@ impl Engine {
             .name("vyro-inventory".into())
             .spawn(move || warm.warm())?;
 
-        // Live readings are simulated until the Phase 2 providers land; the simulator then
-        // remains for non-Windows hosts and `VYRO_SIM=1`.
-        let mut poller = Poller::new(Arc::clone(&registry), PollerConfig::default())
-            .with_provider(SimProvider::new());
+        let mut poller =
+            with_providers(Poller::new(Arc::clone(&registry), PollerConfig::default()));
         if let Some(history) = &history {
             poller = poller.with_history(Arc::clone(history));
         }
@@ -72,6 +70,19 @@ impl Engine {
             poller.stop();
         }
     }
+}
+
+/// Real providers on Windows; the simulator elsewhere and with `VYRO_SIM=1`.
+fn with_providers(poller: Poller) -> Poller {
+    #[cfg(windows)]
+    if std::env::var_os("VYRO_SIM").is_none_or(|v| v != "1") {
+        log::info!("sensors: live providers");
+        return vyro_core::live::providers()
+            .into_iter()
+            .fold(poller, Poller::with_boxed);
+    }
+    log::info!("sensors: simulated");
+    poller.with_provider(SimProvider::new())
 }
 
 fn open_history(app: &AppHandle) -> Option<History> {
