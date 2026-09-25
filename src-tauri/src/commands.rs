@@ -1,6 +1,8 @@
 //! On-demand commands (spec §4.1). Anything touching SQLite or cloning the sensor tree is
 //! `async` so it runs off the main thread.
 
+use std::sync::Arc;
+
 use tauri::State;
 use vyro_core::info::{DisplayInfo, HardwareId, HealthReport, SystemInfo};
 use vyro_core::snapshot::AppSnapshot;
@@ -42,17 +44,24 @@ pub fn get_app_metrics(engine: State<'_, Engine>) -> AppSnapshot {
     engine.latest().map(|s| s.app).unwrap_or_default()
 }
 
-// Filled in by later phases: system/hardware (P1), displays (P3), health (P7).
-
+/// Static inventory; waits for the startup collection if it is still running.
 #[tauri::command]
-pub fn get_system_info() -> SystemInfo {
-    SystemInfo::default()
+pub async fn get_system_info(engine: State<'_, Engine>) -> Result<SystemInfo, String> {
+    let inventory = Arc::clone(&engine.inventory);
+    tauri::async_runtime::spawn_blocking(move || inventory.system())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn get_hardware_id() -> HardwareId {
-    HardwareId::default()
+pub async fn get_hardware_id(engine: State<'_, Engine>) -> Result<HardwareId, String> {
+    let inventory = Arc::clone(&engine.inventory);
+    tauri::async_runtime::spawn_blocking(move || inventory.hardware().clone())
+        .await
+        .map_err(|e| e.to_string())
 }
+
+// Filled in by later phases: displays (P3), health (P7).
 
 #[tauri::command]
 pub fn get_displays() -> Vec<DisplayInfo> {

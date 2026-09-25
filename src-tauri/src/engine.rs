@@ -4,8 +4,8 @@ use std::sync::{Arc, Mutex};
 
 use tauri::{AppHandle, Emitter, Manager};
 use vyro_core::{
-    lock, History, HistoryConfig, Poller, PollerConfig, PollerHandle, Registry, SensorSnapshot,
-    SimProvider,
+    lock, History, HistoryConfig, Inventory, Poller, PollerConfig, PollerHandle, Registry,
+    SensorSnapshot, SimProvider,
 };
 
 /// Event carrying each [`SensorSnapshot`] (spec §4.1).
@@ -15,6 +15,8 @@ pub struct Engine {
     pub registry: Arc<Mutex<Registry>>,
     /// `None` when the history database could not be opened; live data still flows.
     pub history: Option<Arc<Mutex<History>>>,
+    /// Static hardware / system inventory, collected once in the background at startup.
+    pub inventory: Arc<Inventory>,
     poller: Mutex<Option<PollerHandle>>,
 }
 
@@ -23,8 +25,16 @@ impl Engine {
         let registry = Arc::new(Mutex::new(Registry::new()));
         let history = open_history(app).map(|h| Arc::new(Mutex::new(h)));
 
-        // Phase 0: simulated hardware everywhere. Real Windows providers are added from
-        // Phase 1 on, with the simulator kept for non-Windows hosts and `VYRO_SIM=1`.
+        // Inventory is slow (SMBIOS, event log, Task Scheduler, WMI) and never needed for the
+        // first frame, so it is warmed off the startup path.
+        let inventory = Arc::new(Inventory::new());
+        let warm = Arc::clone(&inventory);
+        std::thread::Builder::new()
+            .name("vyro-inventory".into())
+            .spawn(move || warm.warm())?;
+
+        // Live readings are simulated until the Phase 2 providers land; the simulator then
+        // remains for non-Windows hosts and `VYRO_SIM=1`.
         let mut poller = Poller::new(Arc::clone(&registry), PollerConfig::default())
             .with_provider(SimProvider::new());
         if let Some(history) = &history {
@@ -41,6 +51,7 @@ impl Engine {
         Ok(Self {
             registry,
             history,
+            inventory,
             poller: Mutex::new(Some(handle)),
         })
     }
