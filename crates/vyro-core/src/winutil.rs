@@ -12,8 +12,10 @@ pub use windows::Win32::System::Registry::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE
 /// Decodes UTF-16LE bytes, dropping trailing NULs.
 pub fn utf16_bytes(bytes: &[u8]) -> String {
     let wide: Vec<u16> = bytes
-        .chunks_exact(2)
-        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_le_bytes(*c))
         .collect();
     String::from_utf16_lossy(&wide)
         .trim_end_matches('\0')
