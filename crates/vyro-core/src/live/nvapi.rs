@@ -14,6 +14,7 @@ type EnumPhysicalGpus = unsafe extern "C" fn(*mut [Handle; 64], *mut u32) -> i32
 type HandleU32 = unsafe extern "C" fn(Handle, *mut u32) -> i32;
 type ThermalSensors = unsafe extern "C" fn(Handle, *mut NvThermalSensors) -> i32;
 type VoltRails = unsafe extern "C" fn(Handle, *mut NvVoltRails) -> i32;
+type FanCoolers = unsafe extern "C" fn(Handle, *mut NvFanCoolersStatus) -> i32;
 
 const ID_INITIALIZE: u32 = 0x0150_E828;
 const ID_ENUM_PHYSICAL_GPUS: u32 = 0xE5AC_921F;
@@ -21,6 +22,7 @@ const ID_GET_BUS_ID: u32 = 0x1BE0_B8E5;
 const ID_GET_THERMAL_SENSORS: u32 = 0x65FE_3AAD;
 const ID_VOLT_RAILS_GET_STATUS: u32 = 0x465F_9BCF;
 const ID_GET_TACH_READING: u32 = 0x5F60_8315;
+const ID_FAN_COOLERS_GET_STATUS: u32 = 0x35AE_D5E8;
 
 #[repr(C)]
 struct NvThermalSensors {
@@ -37,6 +39,26 @@ struct NvVoltRails {
 }
 const _: () = assert!(size_of::<NvVoltRails>() == 0x4C);
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct NvFanCoolerItem {
+    cooler_id: u32,
+    current_rpm: u32,
+    current_min_level: u32,
+    current_max_level: u32,
+    current_level: u32,
+    reserved: [u32; 8],
+}
+
+#[repr(C)]
+struct NvFanCoolersStatus {
+    version: u32,
+    count: u32,
+    reserved: [u64; 4],
+    items: [NvFanCoolerItem; 32],
+}
+const _: () = assert!(size_of::<NvFanCoolersStatus>() == 1704);
+
 struct Gpu {
     handle: Handle,
     bus: u32,
@@ -49,6 +71,7 @@ pub struct NvApi {
     thermal: Option<ThermalSensors>,
     volt: Option<VoltRails>,
     tach: Option<HandleU32>,
+    coolers: Option<FanCoolers>,
 }
 
 // SAFETY: GPU handles are opaque driver tokens valid for the process lifetime; NvApi is used
@@ -56,7 +79,11 @@ pub struct NvApi {
 unsafe impl Send for NvApi {}
 
 impl NvApi {
-    pub fn load() -> Option<Self> {
+    pub fn load() -> Result<Self, String> {
+        Self::try_load().ok_or_else(|| "nvapi64.dll unavailable or NvAPI_Initialize failed".into())
+    }
+
+    fn try_load() -> Option<Self> {
         let lib = Library::system32("nvapi64.dll")?;
         // SAFETY: documented export signature.
         let qi: QueryInterface = unsafe { lib.get(c"nvapi_QueryInterface") }?;
@@ -79,6 +106,8 @@ impl NvApi {
             get(ID_VOLT_RAILS_GET_STATUS).map(|p| unsafe { std::mem::transmute(p) });
         let tach: Option<HandleU32> =
             get(ID_GET_TACH_READING).map(|p| unsafe { std::mem::transmute(p) });
+        let coolers: Option<FanCoolers> =
+            get(ID_FAN_COOLERS_GET_STATUS).map(|p| unsafe { std::mem::transmute(p) });
 
         let mut handles = [std::ptr::null_mut(); 64];
         let mut count = 0u32;
@@ -94,6 +123,7 @@ impl NvApi {
                 continue;
             }
             let thermal_mask = thermal.map_or(0, |f| probe_thermal_mask(f, handle));
+            log::info!("gpu: NVAPI GPU on bus {bus}, thermal mask {thermal_mask:#x}");
             gpus.push(Gpu {
                 handle,
                 bus,
@@ -105,6 +135,7 @@ impl NvApi {
             thermal,
             volt,
             tach,
+            coolers,
         })
     }
 
@@ -137,6 +168,26 @@ impl NvApi {
             // SAFETY: valid handle and out-pointer.
             if unsafe { f(g.handle, &mut rpm) } == 0 {
                 r.fan_rpm = Some(f64::from(rpm));
+            }
+        }
+        // Newer cards answer only the cooler-status call (tachometer reads fail).
+        if let (None, Some(f)) = (r.fan_rpm, self.coolers) {
+            let mut st = NvFanCoolersStatus {
+                version: nvapi_version(size_of::<NvFanCoolersStatus>(), 1),
+                count: 0,
+                reserved: [0; 4],
+                items: [NvFanCoolerItem {
+                    cooler_id: 0,
+                    current_rpm: 0,
+                    current_min_level: 0,
+                    current_max_level: 0,
+                    current_level: 0,
+                    reserved: [0; 8],
+                }; 32],
+            };
+            // SAFETY: versioned struct of the declared size.
+            if unsafe { f(g.handle, &mut st) } == 0 && st.count > 0 {
+                r.fan_rpm = Some(f64::from(st.items[0].current_rpm));
             }
         }
         r

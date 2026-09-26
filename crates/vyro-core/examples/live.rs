@@ -9,9 +9,29 @@
 //! Off Windows (or with `VYRO_SIM=1`) it runs the simulator instead.
 
 use std::io::{BufRead, IsTerminal};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use vyro_core::{unix_now, Provider, Registry, SensorSnapshot};
+
+/// Prints engine log lines and keeps them for the JSON report (vendor-library diagnostics).
+struct Capture(Mutex<Vec<String>>);
+
+impl log::Log for Capture {
+    fn enabled(&self, m: &log::Metadata) -> bool {
+        m.level() <= log::Level::Info
+    }
+    fn log(&self, r: &log::Record) {
+        if self.enabled(r.metadata()) {
+            let line = format!("[{}] {}", r.level(), r.args());
+            println!("  {line}");
+            self.0.lock().unwrap_or_else(|e| e.into_inner()).push(line);
+        }
+    }
+    fn flush(&self) {}
+}
+
+static LOG: Capture = Capture(Mutex::new(Vec::new()));
 
 fn providers() -> Vec<Box<dyn Provider>> {
     #[cfg(windows)]
@@ -35,6 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(5)
         .max(1);
 
+    let _ = log::set_logger(&LOG).map(|()| log::set_max_level(log::LevelFilter::Info));
     let mut reg = Registry::new();
     let mut active = Vec::new();
     let mut status = serde_json::Map::new();
@@ -115,6 +136,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "providers": status,
         "pollMs": poll_ms,
         "pollMsByProvider": per_provider,
+        "log": *LOG.0.lock().unwrap_or_else(|e| e.into_inner()),
         "snapshot": last,
         "sensors": reg.tree(),
     }))?;

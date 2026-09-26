@@ -95,6 +95,8 @@ pub struct GpuProvider {
     adl: Option<Adl>,
     igcl: Option<Igcl>,
     pdh: Option<Counters>,
+    /// Last ADL read error, so it is logged once rather than every tick.
+    adl_error: Option<String>,
 }
 
 impl GpuProvider {
@@ -107,6 +109,7 @@ impl GpuProvider {
             adl: None,
             igcl: None,
             pdh: None,
+            adl_error: None,
         }
     }
 }
@@ -296,6 +299,13 @@ fn read_nvml(nvml: &Nvml, index: u32, g: &mut GpuSnapshot) {
     }
 }
 
+fn log_once(last: &mut Option<String>, e: String) {
+    if last.as_deref() != Some(e.as_str()) {
+        log::info!("gpu: {e}");
+        *last = Some(e);
+    }
+}
+
 /// Fills readings still missing from a vendor library.
 fn apply(g: &mut GpuSnapshot, r: VendorReadings) {
     g.mhz_core = g.mhz_core.or(r.mhz_core);
@@ -381,14 +391,15 @@ impl Provider for GpuProvider {
         }
 
         let has = |v: u32| self.adapters.iter().any(|a| a.vendor_id == v);
+        let report = |what: &str, e: String| log::info!("gpu: {what} unavailable: {e}");
         if has(0x10DE) {
-            self.nvapi = NvApi::load();
+            self.nvapi = NvApi::load().map_err(|e| report("NVAPI", e)).ok();
         }
         if has(0x1002) {
-            self.adl = Adl::load();
+            self.adl = Adl::load().map_err(|e| report("ADL", e)).ok();
         }
         if has(0x8086) {
-            self.igcl = Igcl::load();
+            self.igcl = Igcl::load().map_err(|e| report("IGCL", e)).ok();
         }
         log::info!(
             "gpu: NVAPI={} ADL={} IGCL={}",
@@ -423,13 +434,14 @@ impl Provider for GpuProvider {
             };
             a.keys = Some(register(reg, i, &prefix, source));
             log::info!(
-                "gpu {i}: {} ({}, nvml={}, nvapi={}, adl={}, igcl={}, d3dkmt={})",
+                "gpu {i}: {} ({}, bus={:?}, nvml={}, nvapi={}, adl={}, igcl={}, d3dkmt={})",
                 a.name,
                 if a.integrated {
                     "integrated"
                 } else {
                     "discrete"
                 },
+                a.bus,
                 a.nvml.is_some(),
                 a.nvapi.is_some(),
                 a.adl.is_some(),
@@ -496,7 +508,10 @@ impl Provider for GpuProvider {
                 apply(&mut g, nvapi.read(idx, &a.name));
             }
             if let (Some(adl), Some(idx)) = (&self.adl, a.adl) {
-                apply(&mut g, adl.read(idx).unwrap_or_default());
+                match adl.read(idx) {
+                    Ok(r) => apply(&mut g, r),
+                    Err(e) => log_once(&mut self.adl_error, e),
+                }
             }
             if let (Some(igcl), Some(idx)) = (&mut self.igcl, a.igcl) {
                 apply(&mut g, igcl.read(idx).unwrap_or_default());

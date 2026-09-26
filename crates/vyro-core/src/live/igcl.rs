@@ -64,7 +64,11 @@ fn as_bytes(buf: &[u64]) -> &[u8] {
 }
 
 impl Igcl {
-    pub fn load() -> Option<Self> {
+    pub fn load() -> Result<Self, String> {
+        Self::try_load().ok_or_else(|| "ControlLib.dll unavailable or ctlInit failed".into())
+    }
+
+    fn try_load() -> Option<Self> {
         let lib = Library::system32("ControlLib.dll")?;
         // SAFETY (all lookups): signatures from igcl_api.h.
         let init: Init = unsafe { lib.get(c"ctlInit") }?;
@@ -123,6 +127,11 @@ impl Igcl {
                 b[CTL_DEVICE_PROPS_VENDOR..CTL_DEVICE_PROPS_VENDOR + 4]
                     .try_into()
                     .unwrap_or_default(),
+            );
+            log::info!(
+                "gpu: IGCL device vendor {vendor:#06x}, LUID {:#x}:{:#x}",
+                luid.HighPart,
+                luid.LowPart
             );
             if vendor == 0x8086 {
                 me.gpus.push(Gpu {

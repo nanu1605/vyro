@@ -41,20 +41,26 @@ pub struct Adl {
 unsafe impl Send for Adl {}
 
 impl Adl {
-    pub fn load() -> Option<Self> {
-        let lib = Library::system32("atiadlxx.dll")?;
+    pub fn load() -> Result<Self, String> {
+        let lib = Library::system32("atiadlxx.dll").ok_or("atiadlxx.dll not found")?;
         // SAFETY (all lookups): signatures from the ADL SDK headers.
-        let create: Create = unsafe { lib.get(c"ADL2_Main_Control_Create") }?;
-        let destroy: Destroy = unsafe { lib.get(c"ADL2_Main_Control_Destroy") }?;
-        let count: NumberOfAdapters = unsafe { lib.get(c"ADL2_Adapter_NumberOfAdapters_Get") }?;
-        let info: AdapterInfoGet = unsafe { lib.get(c"ADL2_Adapter_AdapterInfo_Get") }?;
-        let pmlog: PmLogGet = unsafe { lib.get(c"ADL2_New_QueryPMLogData_Get") }?;
+        let missing = |name: &str| format!("atiadlxx.dll lacks {name}");
+        let create: Create =
+            unsafe { lib.get(c"ADL2_Main_Control_Create") }.ok_or_else(|| missing("Create"))?;
+        let destroy: Destroy =
+            unsafe { lib.get(c"ADL2_Main_Control_Destroy") }.ok_or_else(|| missing("Destroy"))?;
+        let count: NumberOfAdapters = unsafe { lib.get(c"ADL2_Adapter_NumberOfAdapters_Get") }
+            .ok_or_else(|| missing("NumberOfAdapters_Get"))?;
+        let info: AdapterInfoGet = unsafe { lib.get(c"ADL2_Adapter_AdapterInfo_Get") }
+            .ok_or_else(|| missing("AdapterInfo_Get"))?;
+        let pmlog: PmLogGet = unsafe { lib.get(c"ADL2_New_QueryPMLogData_Get") }
+            .ok_or_else(|| missing("New_QueryPMLogData_Get"))?;
 
         let mut ctx: Context = std::ptr::null_mut();
         // SAFETY: valid callback and out-pointer; 1 = connected adapters only.
         let rc = unsafe { create(adl_malloc, 1, &mut ctx) };
         if rc < 0 || ctx.is_null() {
-            return None;
+            return Err(format!("ADL2_Main_Control_Create failed ({rc})"));
         }
         let mut adl = Self {
             ctx,
@@ -64,17 +70,20 @@ impl Adl {
         };
         let mut n = 0i32;
         // SAFETY: valid context and out-pointer.
-        if unsafe { count(ctx, &mut n) } != 0 || n <= 0 {
-            return None;
+        let rc = unsafe { count(ctx, &mut n) };
+        if rc != 0 || n <= 0 {
+            return Err(format!("no ADL adapters (rc {rc}, count {n})"));
         }
         let mut buf = vec![0u8; ADL_ADAPTER_INFO_SIZE * n as usize];
-        let len = i32::try_from(buf.len()).ok()?;
+        let len = i32::try_from(buf.len()).map_err(|e| e.to_string())?;
         // SAFETY: buffer of `len` bytes for `n` AdapterInfo records.
-        if unsafe { info(ctx, buf.as_mut_ptr(), len) } != 0 {
-            return None;
+        let rc = unsafe { info(ctx, buf.as_mut_ptr(), len) };
+        if rc != 0 {
+            return Err(format!("ADL2_Adapter_AdapterInfo_Get failed ({rc})"));
         }
         adl.adapters = parse_adl_adapters(&buf);
-        Some(adl)
+        log::info!("gpu: ADL adapters (index, bus): {:?}", adl.adapters);
+        Ok(adl)
     }
 
     /// Index into ADL's adapters for the GPU on `bus`.
@@ -82,15 +91,21 @@ impl Adl {
         self.adapters.iter().position(|a| a.bus == bus)
     }
 
-    pub fn read(&self, index: usize) -> Option<VendorReadings> {
-        let a = self.adapters.get(index)?;
+    pub fn read(&self, index: usize) -> Result<VendorReadings, String> {
+        let a = self.adapters.get(index).ok_or("no such ADL adapter")?;
         let mut out = PmLogOutput {
             size: 0,
             sensors: [[0; 2]; pmlog::MAX_SENSORS],
         };
         // SAFETY: valid context and output struct.
-        (unsafe { (self.pmlog)(self.ctx, a.index, &mut out) } == 0)
-            .then(|| decode_pmlog(&out.sensors))
+        let rc = unsafe { (self.pmlog)(self.ctx, a.index, &mut out) };
+        if rc != 0 {
+            return Err(format!(
+                "ADL2_New_QueryPMLogData_Get({}) failed ({rc})",
+                a.index
+            ));
+        }
+        Ok(decode_pmlog(&out.sensors))
     }
 }
 

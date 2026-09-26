@@ -52,13 +52,15 @@ const ADL_PRESENT: usize = 792;
 pub struct AdlAdapter {
     pub index: i32,
     pub bus: u32,
+    /// `iPresent`; a headless iGPU reports 0 but still answers sensor queries.
+    pub present: bool,
 }
 
 fn i32_at(b: &[u8], off: usize) -> Option<i32> {
     Some(i32::from_le_bytes(b.get(off..off + 4)?.try_into().ok()?))
 }
 
-/// Present AMD adapters from an `AdapterInfo` array, one per PCI bus (ADL lists a logical
+/// AMD adapters from an `AdapterInfo` array, one per PCI bus (ADL lists a logical
 /// adapter per display output).
 pub fn parse_adl_adapters(buf: &[u8]) -> Vec<AdlAdapter> {
     let mut out: Vec<AdlAdapter> = Vec::new();
@@ -74,8 +76,19 @@ pub fn parse_adl_adapters(buf: &[u8]) -> Vec<AdlAdapter> {
         let Ok(bus) = u32::try_from(bus) else {
             continue;
         };
-        if vendor == 0x1002 && present != 0 && !out.iter().any(|a| a.bus == bus) {
-            out.push(AdlAdapter { index, bus });
+        if vendor != 0x1002 {
+            continue;
+        }
+        let a = AdlAdapter {
+            index,
+            bus,
+            present: present != 0,
+        };
+        match out.iter_mut().find(|x| x.bus == bus) {
+            // Prefer a present logical adapter over a not-present one on the same device.
+            Some(x) if a.present && !x.present => *x = a,
+            Some(_) => {}
+            None => out.push(a),
         }
     }
     out
@@ -296,9 +309,28 @@ mod tests {
         assert_eq!(
             parse_adl_adapters(&buf),
             vec![
-                AdlAdapter { index: 0, bus: 14 },
-                AdlAdapter { index: 4, bus: 3 }
-            ]
+                AdlAdapter {
+                    index: 0,
+                    bus: 14,
+                    present: true
+                },
+                AdlAdapter {
+                    index: 4,
+                    bus: 3,
+                    present: true
+                },
+            ],
+            "a present adapter replaces a not-present one on the same bus"
+        );
+        let headless = adl_rec(7, 14, 0x1002, 0);
+        assert_eq!(
+            parse_adl_adapters(&headless),
+            vec![AdlAdapter {
+                index: 7,
+                bus: 14,
+                present: false
+            }],
+            "headless iGPU kept"
         );
     }
 
