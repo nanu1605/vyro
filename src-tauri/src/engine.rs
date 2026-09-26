@@ -7,6 +7,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 use vyro_core::alerts::{self, AlertEngine, AlertFired, AlertRule};
 use vyro_core::health::HealthEvent;
+use vyro_core::poller::{EVENT_ALERT, EVENT_HEALTH};
 use vyro_core::{
     lock, History, HistoryConfig, Inventory, Poller, PollerConfig, PollerHandle, Registry,
     SensorSnapshot, SimProvider,
@@ -101,11 +102,20 @@ impl Engine {
         lock(&self.poller).as_ref().and_then(PollerHandle::latest)
     }
 
+    /// Health changes from the history store (kept across restarts), else from memory.
     pub fn health_events(&self) -> Vec<HealthEvent> {
-        lock(&self.poller)
-            .as_ref()
-            .map(PollerHandle::health_events)
-            .unwrap_or_default()
+        let stored = self.history.as_ref().and_then(|h| {
+            lock(h)
+                .events(EVENT_HEALTH, vyro_core::health::MAX_EVENTS as i64)
+                .inspect_err(|e| log::warn!("health events: {e}"))
+                .ok()
+        });
+        stored.unwrap_or_else(|| {
+            lock(&self.poller)
+                .as_ref()
+                .map(PollerHandle::health_events)
+                .unwrap_or_default()
+        })
     }
 
     pub fn alert_rules(&self) -> Vec<AlertRule> {
@@ -122,8 +132,17 @@ impl Engine {
         }
     }
 
+    /// Fired alerts from the history store (kept across restarts), else from memory.
     pub fn alert_log(&self) -> Vec<AlertFired> {
-        lock(&self.alerts).log()
+        self.history
+            .as_ref()
+            .and_then(|h| {
+                lock(h)
+                    .events(EVENT_ALERT, alerts::MAX_LOG as i64)
+                    .inspect_err(|e| log::warn!("alert log: {e}"))
+                    .ok()
+            })
+            .unwrap_or_else(|| lock(&self.alerts).log())
     }
 
     pub fn set_visible(&self, visible: bool) {

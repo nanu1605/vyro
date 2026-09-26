@@ -2,7 +2,8 @@
 //!
 //! Three tiers keyed by `(metric, ts)`: raw 1 Hz samples, 10 s aggregates and 1 min
 //! aggregates. `WITHOUT ROWID` keeps rows clustered by metric so range queries and per-metric
-//! pruning are primary-key range scans.
+//! pruning are primary-key range scans. `event` keeps health changes and fired alerts (JSON per
+//! row, by kind) so they survive a restart.
 
 use rusqlite::Connection;
 
@@ -27,6 +28,13 @@ CREATE TABLE IF NOT EXISTS agg10s (
     max    REAL    NOT NULL,
     PRIMARY KEY (metric, ts)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS event (
+    id   INTEGER PRIMARY KEY,
+    kind TEXT    NOT NULL,
+    ts   INTEGER NOT NULL,
+    json TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS event_kind_ts ON event(kind, ts);
 CREATE TABLE IF NOT EXISTS agg1m (
     metric INTEGER NOT NULL,
     ts     INTEGER NOT NULL,

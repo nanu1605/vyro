@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { GROUP_LABEL } from '../format';
-  import { getAlertLog, getAlertRules, getSensorTree, setAlertRules, testAlert } from '../ipc';
+  import { getAlertLog, getAlertRules, getSensorTree, getSettings, setAlertRules, setSettings, testAlert, type AppSettings } from '../ipc';
   import type { AlertFired, AlertRule, Sensor, SensorSnapshot, SensorTree } from '../types';
 
   interface Props {
@@ -19,6 +19,19 @@
   let draft = $state<AlertRule | null>(null);
   let isNew = $state(false);
   let armedDelete = $state<string | null>(null);
+  let settings = $state<AppSettings | null>(null);
+
+  async function setTray(on: boolean): Promise<void> {
+    if (!settings) return;
+    const next = { ...settings, closeToTray: on };
+    try {
+      await setSettings(next);
+      settings = next;
+      error = null;
+    } catch (e) {
+      error = String(e);
+    }
+  }
 
   const sensors = $derived((tree?.groups ?? []).flatMap((g) => g.sensors));
   const byId = $derived(new Map(sensors.map((s) => [s.id, s])));
@@ -36,6 +49,9 @@
     if (!active) return;
     untrack(() => {
       void reload();
+      void getSettings()
+        .then((x) => (settings = x))
+        .catch(() => {});
       void getSensorTree(snap).then((t) => (tree = t));
     });
   });
@@ -231,7 +247,13 @@
       <button type="button" class="primary" onclick={add} disabled={!!draft}>Add rule</button>
     </div>
   </div>
-  <p class="note">Windows notifications while Vyro is running, including when it is minimised. Rules are saved on this PC.</p>
+  <p class="note">Windows notifications while Vyro is running, including from the tray. Rules are saved on this PC.</p>
+  {#if settings}
+    <label class="tray">
+      <input type="checkbox" checked={settings.closeToTray} onchange={(e) => void setTray((e.currentTarget as HTMLInputElement).checked)} />
+      Keep running in the tray when the window is closed (alerts need Vyro running; quit from the tray icon)
+    </label>
+  {/if}
   {#if error}<p class="err">{error}</p>{/if}
 
   <ul class="rules">
@@ -337,6 +359,16 @@
     margin: 0.35rem 0 0.7rem;
     color: var(--muted);
     font-size: 0.78rem;
+  }
+  .tray {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.45rem;
+    margin: 0 0 0.8rem;
+    font-size: 0.8rem;
+  }
+  .tray input {
+    margin-top: 0.15rem;
   }
   .err {
     color: var(--hot);

@@ -202,3 +202,16 @@ pub async fn get_pawnio_status() -> Result<PawnIoStatus, String> {
         .await
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn get_settings(store: State<'_, crate::tray::SettingsStore>) -> crate::tray::Settings {
+    store.get()
+}
+
+#[tauri::command]
+pub fn set_settings(
+    store: State<'_, crate::tray::SettingsStore>,
+    settings: crate::tray::Settings,
+) -> Result<(), String> {
+    store.set(settings)
+}

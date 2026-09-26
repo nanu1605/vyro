@@ -17,6 +17,9 @@ use ts_rs::TS;
 pub use rusqlite::Error;
 pub type Result<T> = rusqlite::Result<T>;
 
+/// Events kept per kind (health changes, fired alerts); older ones are pruned first.
+pub const MAX_EVENTS_PER_KIND: i64 = 1000;
+
 /// Upper bound on points returned by [`History::query`].
 pub const MAX_POINTS: i64 = 600;
 
@@ -327,6 +330,37 @@ impl History {
         tx.commit()
     }
 
+    /// Stores events of one kind (e.g. `"health"`, `"alert"`) right away; they are rare.
+    pub fn log_events<T: Serialize>(&mut self, kind: &str, ts: i64, items: &[T]) -> Result<()> {
+        if items.is_empty() {
+            return Ok(());
+        }
+        let tx = self.conn.transaction()?;
+        {
+            let mut st =
+                tx.prepare_cached("INSERT INTO event(kind, ts, json) VALUES (?1, ?2, ?3)")?;
+            for item in items {
+                let json = serde_json::to_string(item)
+                    .map_err(|e| Error::ToSqlConversionFailure(Box::new(e)))?;
+                st.execute(params![kind, ts, json])?;
+            }
+        }
+        tx.commit()
+    }
+
+    /// The newest `limit` events of `kind`, oldest first. Rows that no longer parse are skipped.
+    pub fn events<T: for<'de> Deserialize<'de>>(&self, kind: &str, limit: i64) -> Result<Vec<T>> {
+        let mut st = self.conn.prepare_cached(
+            "SELECT json FROM event WHERE kind = ?1 ORDER BY ts DESC, id DESC LIMIT ?2",
+        )?;
+        let rows = st.query_map(params![kind, limit], |r| r.get::<_, String>(0))?;
+        let mut out: Vec<T> = rows
+            .filter_map(|r| r.ok().and_then(|j| serde_json::from_str(&j).ok()))
+            .collect();
+        out.reverse();
+        Ok(out)
+    }
+
     /// Closes all open buckets (partial) and flushes. Call on shutdown.
     pub fn flush_all(&mut self) -> Result<()> {
         for state in self.metrics.values_mut() {
@@ -404,6 +438,16 @@ impl History {
                 st.execute(params![id, now - retention])?;
             }
         }
+        // Events: same 7-day window as the longest tier, and a cap per kind.
+        tx.execute(
+            "DELETE FROM event WHERE ts <= ?1",
+            params![now - self.cfg.agg1m_retention_secs],
+        )?;
+        tx.execute(
+            "DELETE FROM event WHERE id IN (SELECT id FROM (SELECT id, ROW_NUMBER() OVER \
+             (PARTITION BY kind ORDER BY ts DESC, id DESC) AS n FROM event) WHERE n > ?1)",
+            params![MAX_EVENTS_PER_KIND],
+        )?;
         tx.commit()?;
         self.enforce_size_cap()
     }
@@ -476,6 +520,36 @@ mod tests {
 
     fn history() -> History {
         History::open_in_memory(HistoryConfig::default()).unwrap()
+    }
+
+    #[test]
+    fn events_persist_newest_last_and_are_pruned() {
+        #[derive(Debug, PartialEq, Serialize, Deserialize)]
+        struct E {
+            n: i64,
+        }
+        let mut h = history();
+        h.log_events("health", T0, &[E { n: 1 }, E { n: 2 }])
+            .unwrap();
+        h.log_events("alert", T0 + 1, &[E { n: 9 }]).unwrap();
+        h.log_events("health", T0 + 2, &[E { n: 3 }]).unwrap();
+        assert_eq!(
+            h.events::<E>("health", 2).unwrap(),
+            [E { n: 2 }, E { n: 3 }]
+        );
+        assert_eq!(h.events::<E>("alert", 10).unwrap(), [E { n: 9 }]);
+        let many: Vec<E> = (0..MAX_EVENTS_PER_KIND + 5).map(|n| E { n }).collect();
+        h.log_events("alert", T0 + 3, &many).unwrap();
+        h.prune(T0 + 10).unwrap();
+        assert_eq!(
+            h.events::<E>("alert", 10_000).unwrap().len(),
+            usize::try_from(MAX_EVENTS_PER_KIND).unwrap()
+        );
+        h.prune(T0 + 8 * 24 * 3600).unwrap();
+        assert!(
+            h.events::<E>("health", 10).unwrap().is_empty(),
+            "past 7 days"
+        );
     }
 
     #[test]

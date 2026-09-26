@@ -19,6 +19,10 @@ use crate::registry::Registry;
 use crate::snapshot::{EngineStatus, SensorSnapshot};
 use crate::{lock, unix_now};
 
+/// History-store event kinds: System Health changes and fired alerts.
+pub const EVENT_HEALTH: &str = "health";
+pub const EVENT_ALERT: &str = "alert";
+
 /// Fastest poll rate accepted from [`PollerHandle::set_interval`].
 pub const MIN_INTERVAL: Duration = Duration::from_millis(10);
 
@@ -246,7 +250,13 @@ impl Poller {
         }
 
         if let Some(history) = &self.history {
-            let result = lock(history).record(snap.ts, reg.history_values());
+            let mut h = lock(history);
+            let fresh = lock(&self.health).fresh().to_vec();
+            let result = h
+                .log_events(EVENT_HEALTH, snap.ts, &fresh)
+                .and_then(|()| h.log_events(EVENT_ALERT, snap.ts, &snap.alerts))
+                .and_then(|()| h.record(snap.ts, reg.history_values()));
+            drop(h);
             match result {
                 Ok(()) => self.history_error = None,
                 Err(e) => {
@@ -409,9 +419,13 @@ mod tests {
             sound: false,
         };
         let alerts = Arc::new(Mutex::new(AlertEngine::new(vec![rule])));
+        let history = Arc::new(Mutex::new(
+            History::open_in_memory(HistoryConfig::default()).unwrap(),
+        ));
         let poller = Poller::new(registry, fast())
             .with_provider(SimProvider::with_seed(3))
-            .with_alerts(Arc::clone(&alerts));
+            .with_alerts(Arc::clone(&alerts))
+            .with_history(Arc::clone(&history));
         let (handle, rx) = spawn(poller);
         let snaps: Vec<_> = (0..3).map(|_| rx.recv_timeout(WAIT).unwrap()).collect();
         handle.stop();
@@ -420,6 +434,10 @@ mod tests {
         assert!(snaps[0].alerts[0].message.starts_with("CPU Total at"));
         assert!(snaps[1..].iter().all(|s| s.alerts.is_empty()));
         assert_eq!(lock(&alerts).log().len(), 1);
+        // Persisted for the next start.
+        let stored: Vec<crate::alerts::AlertFired> =
+            lock(&history).events(EVENT_ALERT, 10).unwrap();
+        assert_eq!(stored, snaps[0].alerts);
         assert_ne!(snaps[0].health.overall, Status::Unknown);
     }
 

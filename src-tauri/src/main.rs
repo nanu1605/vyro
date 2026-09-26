@@ -3,6 +3,7 @@
 
 mod commands;
 mod engine;
+mod tray;
 
 use tauri::Manager;
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
@@ -26,8 +27,11 @@ fn main() {
         .setup(|app| {
             let engine = Engine::start(app.handle())?;
             app.manage(engine);
+            app.manage(tray::SettingsStore::load(app.handle()));
+            tray::build(app.handle())?;
             Ok(())
         })
+        .on_window_event(tray::on_window_event)
         .invoke_handler(tauri::generate_handler![
             commands::get_latest,
             commands::set_ui_visible,
@@ -48,6 +52,8 @@ fn main() {
             commands::set_alert_rules,
             commands::get_alert_log,
             commands::test_alert,
+            commands::get_settings,
+            commands::set_settings,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build the Tauri application");

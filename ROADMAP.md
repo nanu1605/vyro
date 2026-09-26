@@ -273,8 +273,11 @@ the browser build).
       config folder (a bad file is moved aside, defaults used); Windows toast notifications via
       `tauri-plugin-notification`, silent unless the rule asks for sound (the app registers its
       toast id per user at start so a bare `vyro.exe` can notify); in-app toasts; test button. Defaults: CPU > 95 °C and GPU > 90 °C for 30 s, hardware problems; warnings off.
-- [ ] Not yet: health events and fired alerts are kept in memory only (not across restarts);
-      tray icon (alerts fire while minimised, not after the window is closed).
+- [x] Health events and fired alerts persist in the history database (`event` table, 7 days,
+      ≤ 1000 per kind), so the logs survive restarts.
+- [x] Tray icon (left-click shows, menu: Show / Quit). Closing the window hides it to the tray
+      so monitoring and alerts continue (setting, on by default, `settings.json`); a one-time
+      notification says so.
 ### P8 — Privilege separation: Windows service + ACL'd named pipe (M5)
 ### P9 — Performance hardening, profiles, intelligent analysis, polish (M5)
 ### P10 — Gaming capture + companion overlay (M6, deferrable)

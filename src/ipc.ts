@@ -80,6 +80,25 @@ export async function getAlertLog(): Promise<AlertFired[]> {
   return invoke<AlertFired[]>('get_alert_log');
 }
 
+export interface AppSettings {
+  /** Closing the window keeps Vyro running in the tray. */
+  closeToTray: boolean;
+}
+let browserSettings: AppSettings = { closeToTray: true };
+
+export async function getSettings(): Promise<AppSettings> {
+  if (!inTauri) return { ...browserSettings };
+  return invoke<AppSettings>('get_settings');
+}
+
+export async function setSettings(settings: AppSettings): Promise<void> {
+  if (!inTauri) {
+    browserSettings = { ...settings };
+    return;
+  }
+  await invoke('set_settings', { settings });
+}
+
 /** Sends a sample Windows notification. */
 export async function testAlert(sound: boolean): Promise<void> {
   if (inTauri) await invoke('test_alert', { sound });
