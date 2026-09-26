@@ -3,8 +3,8 @@
 use windows::core::{HSTRING, PCWSTR, PWSTR};
 use windows::Win32::Foundation::{ERROR_MORE_DATA, ERROR_SUCCESS};
 use windows::Win32::System::Registry::{
-    RegCloseKey, RegEnumKeyExW, RegEnumValueW, RegGetValueW, RegOpenKeyExW, HKEY, KEY_READ,
-    REG_DWORD, REG_EXPAND_SZ, REG_MULTI_SZ, REG_SZ, REG_VALUE_TYPE, RRF_RT_ANY,
+    RegCloseKey, RegEnumKeyExW, RegEnumValueW, RegGetValueW, RegOpenKeyExW, RegSetKeyValueW, HKEY,
+    KEY_READ, REG_DWORD, REG_EXPAND_SZ, REG_MULTI_SZ, REG_SZ, REG_VALUE_TYPE, RRF_RT_ANY,
 };
 
 pub use windows::Win32::System::Registry::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
@@ -54,6 +54,25 @@ impl RegValue {
             .map(str::to_owned)
             .collect()
     }
+}
+
+/// Writes a `REG_SZ` value, creating the key if needed.
+pub fn set_string(root: HKEY, path: &str, name: &str, value: &str) -> windows::core::Result<()> {
+    let data: Vec<u16> = value.encode_utf16().chain(std::iter::once(0)).collect();
+    let len = u32::try_from(data.len() * 2).unwrap_or(u32::MAX);
+    // SAFETY: path and name are NUL-terminated HSTRINGs; `data` outlives the call and `len` is
+    // its size in bytes including the terminator.
+    unsafe {
+        RegSetKeyValueW(
+            root,
+            &HSTRING::from(path),
+            &HSTRING::from(name),
+            REG_SZ.0,
+            Some(data.as_ptr().cast()),
+            len,
+        )
+    }
+    .ok()
 }
 
 /// An open registry key, closed on drop. Read-only.

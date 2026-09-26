@@ -170,6 +170,21 @@ pub fn save(path: &std::path::Path, rules: &[AlertRule]) -> std::io::Result<()> 
     std::fs::rename(&tmp, path)
 }
 
+/// Lets Windows show toasts for `aumid` without an installer-made Start-menu shortcut: the
+/// per-user `AppUserModelId` registration unpackaged desktop apps use. The MSI (P11) should
+/// remove the key on uninstall.
+#[cfg(windows)]
+pub fn register_toast_app(aumid: &str, display_name: &str) -> Result<(), String> {
+    let path = format!(r"Software\Classes\AppUserModelId\{aumid}");
+    crate::winutil::set_string(
+        crate::winutil::HKEY_CURRENT_USER,
+        &path,
+        "DisplayName",
+        display_name,
+    )
+    .map_err(|e| e.to_string())
+}
+
 /// A sensor's current reading as the rules see it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Reading {

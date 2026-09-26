@@ -214,6 +214,9 @@ inventory. Wi-Fi link details and throughput under load still to check.
   task; perf pass against spec §8; verify on a clean Win11 24H2+ with Memory Integrity on.
 - LICENSE, THIRD_PARTY_NOTICES (PawnIO driver GPL-2.0 with IOCTL exception, PawnIO modules
   LGPL-2.1, with source links), CONTRIBUTING.
+- Uninstall removes the per-user toast registration Vyro writes at start
+  (`HKCU\Software\Classes\AppUserModelId\app.vyro.monitor`) along with `alerts.json` and the
+  history database only if the user opts in.
 
 ### P6 — Low-level sensors via PawnIO (M4)
 Our own KMDF driver and its attestation signing are dropped. Vyro talks to the PawnIO driver
@@ -268,8 +271,8 @@ the browser build).
 - [x] **Alerts** (`vyro_core::alerts`, Health tab): sensor-threshold rules (above / below, hold
       time, cooldown, sound) and System Health forwarding; saved to `alerts.json` in the app
       config folder (a bad file is moved aside, defaults used); Windows toast notifications via
-      `tauri-plugin-notification`, silent unless the rule asks for sound; in-app toasts; test
-      button. Defaults: CPU > 95 °C and GPU > 90 °C for 30 s, hardware problems; warnings off.
+      `tauri-plugin-notification`, silent unless the rule asks for sound (the app registers its
+      toast id per user at start so a bare `vyro.exe` can notify); in-app toasts; test button. Defaults: CPU > 95 °C and GPU > 90 °C for 30 s, hardware problems; warnings off.
 - [ ] Not yet: health events and fired alerts are kept in memory only (not across restarts);
       tray icon (alerts fire while minimised, not after the window is closed).
 ### P8 — Privilege separation: Windows service + ACL'd named pipe (M5)

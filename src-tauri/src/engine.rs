@@ -54,6 +54,10 @@ impl Engine {
             .map_or_else(alerts::default_rules, alerts::load);
         log::info!("alerts: {} rule(s)", rules.len());
         let alerts = Arc::new(Mutex::new(AlertEngine::new(rules)));
+        #[cfg(windows)]
+        if let Err(e) = alerts::register_toast_app(&app.config().identifier, "Vyro") {
+            log::warn!("alerts: could not register for notifications: {e}");
+        }
 
         let mut poller =
             with_providers(Poller::new(Arc::clone(&registry), PollerConfig::default()))
