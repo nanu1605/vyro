@@ -6,6 +6,7 @@
 //! cargo run -p vyro-core --example inventory            # board / monitor serials redacted
 //! cargo run -p vyro-core --example inventory -- --show-serial
 //! cargo run -p vyro-core --example inventory -- --no-wait   # for CI / scripts
+//! cargo run -p vyro-core --example inventory -- --delay 10  # time to switch to a game first
 //! ```
 
 use std::io::{BufRead, IsTerminal};
@@ -46,6 +47,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     let show_serial = args.iter().any(|a| a == "--show-serial");
     let no_wait = args.iter().any(|a| a == "--no-wait");
+    let delay: u64 = args
+        .iter()
+        .position(|a| a == "--delay")
+        .and_then(|i| args.get(i + 1)?.parse().ok())
+        .unwrap_or(0);
 
     let _ = log::set_logger(&LOG).map(|()| log::set_max_level(log::LevelFilter::Info));
     let mut hw = hwid::collect();
@@ -56,6 +62,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         sysinfo::collect(hwid::cpuid_hypervisor_present()),
         unix_now(),
     );
+    // VRR only varies while a fullscreen game has focus, so allow switching back to it before
+    // the displays are sampled.
+    if delay > 0 {
+        println!("Sampling displays in {delay} s: switch to your game now.");
+        std::thread::sleep(std::time::Duration::from_secs(delay));
+    }
     let mut shown = displays();
     if !show_serial {
         for d in &mut shown {

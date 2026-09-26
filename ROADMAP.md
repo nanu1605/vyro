@@ -133,7 +133,7 @@ processes ≈ 7 ms (≈ 450 processes) — revisit in P9.
       compiled for x64 Windows; every call degrades to "unavailable" on failure
 
 ### P3 — Displays (M2)
-Status: **built**, awaiting field check. `display/edid.rs`: EDID 1.3/1.4 + CTA-861 (HDR static
+Status: **done** (see field checks below). `display/edid.rs`: EDID 1.3/1.4 + CTA-861 (HDR static
 metadata, colorimetry, FreeSync / HDMI Forum VRR / NVIDIA vendor blocks) + DisplayID 1.x/2.x
 (Type I/VII timings, Adaptive-Sync) decoder, tested on three real monitor dumps (serials
 replaced). `display/win.rs`: `QueryDisplayConfig` paths (connection, rotation, refresh, desktop
@@ -148,6 +148,11 @@ Field check 1 (LG UltraGear GSM5BB4, DP on the RTX 5060 Ti, HDR on): 2560×1440 
 brightness 100 %, collection 366 ms (DDC/CI dominates). NVAPI reported enabled=0 possible=1
 inVrrMode=1 with G-SYNC Compatible on and the desktop idle: "display in VRR mode" is now the
 enabled state and the old "enabled" bit is reported as *varying now*. EDID kept as a fixture.
+Field check 2 (Rocket League running, GPU 63 %): VRR on ✓, HDR on ✓, all values stable. "Varying
+now" read false, most likely because the console window had focus when sampled (G-SYNC only
+engages for the foreground fullscreen app); `vyro-inventory --delay N` allows switching back
+first. Phase 3 **done**: field-verified on a single HDR / G-SYNC Compatible DP monitor;
+multi-monitor, laptop panels (WMI brightness) and AMD FreeSync state (ADL) unverified here.
 
 ### P4 — Storage & memory runtime (M2)
 NVMe health log + SATA SMART decoders, PDH disk counters, memory counters, elevated manifest
