@@ -120,6 +120,8 @@ struct Addrs {
     gateways: Vec<String>,
     dns: Vec<String>,
     dhcp: Option<bool>,
+    /// IP-level MTU (the interface row reports the NIC's jumbo-frame maximum instead).
+    mtu: Option<u32>,
 }
 
 /// `SOCKET_ADDRESS` → IP address.
@@ -173,6 +175,7 @@ fn addresses() -> HashMap<u32, Addrs> {
         let mut addrs = Addrs {
             // IP_ADAPTER_DHCP_ENABLED = 0x4.
             dhcp: Some(unsafe { a.Anonymous2.Flags } & 0x4 != 0),
+            mtu: (a.Mtu != 0 && a.Mtu != u32::MAX).then_some(a.Mtu),
             ..Default::default()
         };
         let mut u = a.FirstUnicastAddress;
@@ -205,8 +208,9 @@ fn addresses() -> HashMap<u32, Addrs> {
             let node = unsafe { &*d };
             if let Some(ip) = sockaddr(&node.Address) {
                 // Skip the site-local placeholders Windows lists on IPv6-less links.
-                if !ip.to_string().starts_with("fec0:") {
-                    addrs.dns.push(ip.to_string());
+                let ip = ip.to_string();
+                if !ip.starts_with("fec0:") && !addrs.dns.contains(&ip) {
+                    addrs.dns.push(ip);
                 }
             }
             d = node.Next;
@@ -433,9 +437,14 @@ fn adapter(
         virtual_adapter: !row.hardware,
         mac: row.mac.clone().map(LocalOnly),
         link_mbps: row.up.then_some(row.link_mbps).flatten(),
-        mtu: Some(row.mtu),
+        mtu: a.mtu.or(Some(row.mtu)),
         dhcp: addrs.and(a.dhcp),
-        ipv4: a.ipv4,
+        // A disconnected adapter keeps a self-assigned 169.254.x.x address; not useful.
+        ipv4: a
+            .ipv4
+            .into_iter()
+            .filter(|ip| row.up || !ip.starts_with("169.254."))
+            .collect(),
         ipv6: a.ipv6.into_iter().map(LocalOnly).collect(),
         gateways: a.gateways,
         dns: a.dns,

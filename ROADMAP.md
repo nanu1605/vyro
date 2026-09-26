@@ -192,6 +192,12 @@ DHCP), `GetBestInterface` for the primary adapter, WLAN API (RSSI, channel, SSID
 IPv6, SSID and BSSID are local-only. Self-monitoring: app + descendants (WebView2) CPU / RAM /
 GPU from the process walk. Power: GPU sum now; CPU and total stay "needs driver". Network tab,
 dashboard Power and "Vyro itself" cards.
+Field check 1 (Ryzen desktop, Realtek 2.5GbE at 1 Gbps + Radmin VPN + idle RZ616 Wi-Fi 6E):
+primary route found, ping to 1.1.1.1 10.4 ms / 0 % loss / 0.4 ms jitter, VPN listed (has a
+default route), disconnected Wi-Fi listed; network poll ≈ 2 ms. Fixes: MTU from the IP layer
+(the interface row reported the NIC's 16114-byte jumbo maximum), duplicate DNS entries removed,
+APIPA address hidden on a disconnected adapter, global IPv6 DNS / gateways redacted in the
+inventory. Wi-Fi link details and throughput under load still to check.
 
 ### P11a — Early release (M3)
 EV code-signing, WiX MSI, Tauri updater, elevated autostart via Task Scheduler, perf pass

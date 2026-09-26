@@ -115,6 +115,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     *ip = hide();
                 }
             }
+            // DNS servers and gateways on IPv6 carry the provider-assigned prefix too.
+            for ip in n.dns.iter_mut().chain(n.gateways.iter_mut()) {
+                if ip.contains(':') && !ip.starts_with("fe80:") {
+                    *ip = hide().0;
+                }
+            }
             if let Some(w) = &mut n.wifi {
                 w.ssid = w.ssid.as_ref().map(|_| hide());
                 w.bssid = w.bssid.as_ref().map(|_| hide());
