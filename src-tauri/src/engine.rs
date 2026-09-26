@@ -3,6 +3,7 @@
 use std::sync::{Arc, Mutex};
 
 use tauri::{AppHandle, Emitter, Manager};
+use vyro_core::health::HealthEvent;
 use vyro_core::{
     lock, History, HistoryConfig, Inventory, Poller, PollerConfig, PollerHandle, Registry,
     SensorSnapshot, SimProvider,
@@ -70,6 +71,13 @@ impl Engine {
 
     pub fn latest(&self) -> Option<SensorSnapshot> {
         lock(&self.poller).as_ref().and_then(PollerHandle::latest)
+    }
+
+    pub fn health_events(&self) -> Vec<HealthEvent> {
+        lock(&self.poller)
+            .as_ref()
+            .map(PollerHandle::health_events)
+            .unwrap_or_default()
     }
 
     pub fn set_visible(&self, visible: bool) {

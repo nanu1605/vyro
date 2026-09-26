@@ -2,7 +2,7 @@
 // headless browser tests. The desktop app always uses the real pipeline (the Rust SimProvider
 // on non-Windows hosts).
 
-import type { SensorSnapshot } from './types';
+import type { HealthReport, SensorSnapshot, Status, SubsystemHealth } from './types';
 
 /** Every field present and unavailable, mirroring what the Rust side serializes. */
 export function emptySnapshot(ts: number): SensorSnapshot {
@@ -36,6 +36,7 @@ export function emptySnapshot(ts: number): SensorSnapshot {
       cpuPct: null, ramMB: null, gpuPct: null, pollHz: null, uiFps: null, activeSensors: 0,
       engine: 'starting',
     },
+    health: { overall: 'unknown', subsystems: [] },
   };
 }
 
@@ -217,8 +218,37 @@ export function nextSnapshot(st: SimState, ts: number, pollHz: number, rand: () 
   s.app.pollHz = pollHz;
   s.app.activeSensors = 14;
   s.app.engine = 'running';
+  s.health = simHealth(s);
   return s;
 }
+
+/** A small subset of the engine's health rules (`vyro_core::health`), for the browser preview. */
+export function simHealth(s: SensorSnapshot): HealthReport {
+  const sub = (name: string, monitored: boolean, findings: Array<[Status, string]>): SubsystemHealth => ({
+    name,
+    status: findings.reduce<Status>((a, [st]) => (rank(st) > rank(a) ? st : a), monitored ? 'ok' : 'unknown'),
+    messages: findings.map(([, m]) => m),
+    notes: [],
+  });
+  const t = s.cpu.tempPackage;
+  const subsystems = [
+    sub('CPU', true, t != null && t >= 90 ? [[t >= 95 ? 'fail' : 'warn', `CPU running hot: ${t.toFixed(0)} °C`]] : []),
+    sub('GPU', s.gpu.length > 0, s.gpu.filter((g) => (g.tempEdge ?? 0) >= 85).map((g) => ['warn', `${g.name} running hot`])),
+    sub('Memory', s.memory.totalMB != null, []),
+    sub(
+      'Storage',
+      s.storage.length > 0,
+      s.storage.filter((d) => d.health === 'warn' || d.health === 'fail').map((d) => [d.health, `${d.model} reports a health warning (details in Storage)`]),
+    ),
+    sub('Board thermals', s.board.tempSystem != null, []),
+    sub('Fans', s.fans.length > 0, []),
+    sub('Voltages', s.voltages.length > 0, []),
+  ];
+  const overall = subsystems.reduce<Status>((a, x) => (x.status !== 'unknown' && rank(x.status) > rank(a) ? x.status : a), 'unknown');
+  return { overall, subsystems };
+}
+
+const rank = (s: Status) => ({ fail: 3, warn: 2, ok: 1, unknown: 0 })[s];
 
 /** Emits a simulated snapshot immediately and then every `intervalMs`. Returns a stop function. */
 export function startSim(cb: (s: SensorSnapshot) => void, intervalMs = 1000): () => void {

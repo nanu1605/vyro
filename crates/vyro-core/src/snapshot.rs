@@ -24,6 +24,8 @@ pub struct SensorSnapshot {
     pub power: PowerSnapshot,
     pub processes: Vec<ProcessSnapshot>,
     pub app: AppSnapshot,
+    /// System Health, graded from this snapshot (see [`crate::health`]).
+    pub health: crate::info::HealthReport,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]

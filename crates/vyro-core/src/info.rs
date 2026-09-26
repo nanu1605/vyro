@@ -622,7 +622,10 @@ pub struct HealthReport {
 pub struct SubsystemHealth {
     pub name: String,
     pub status: Status,
+    /// What is wrong (warnings and problems), worst first.
     pub messages: Vec<String>,
+    /// Coverage gaps worth stating, e.g. a sensor that needs PawnIO.
+    pub notes: Vec<String>,
 }
 
 #[cfg(test)]

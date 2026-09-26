@@ -42,6 +42,7 @@ fn main() {
             commands::get_pawnio_status,
             commands::set_ping_host,
             commands::get_health,
+            commands::get_health_events,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build the Tauri application");

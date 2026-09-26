@@ -4,6 +4,7 @@ import type { BoardSnapshot } from "./BoardSnapshot";
 import type { CpuSnapshot } from "./CpuSnapshot";
 import type { FanSnapshot } from "./FanSnapshot";
 import type { GpuSnapshot } from "./GpuSnapshot";
+import type { HealthReport } from "./HealthReport";
 import type { MemorySnapshot } from "./MemorySnapshot";
 import type { NetworkSnapshot } from "./NetworkSnapshot";
 import type { PingSnapshot } from "./PingSnapshot";
@@ -16,4 +17,8 @@ export type SensorSnapshot = {
 /**
  * Unix time, seconds.
  */
-ts: number, cpu: CpuSnapshot, gpu: Array<GpuSnapshot>, memory: MemorySnapshot, storage: Array<StorageSnapshot>, board: BoardSnapshot, fans: Array<FanSnapshot>, voltages: Array<VoltageReading>, network: Array<NetworkSnapshot>, ping: PingSnapshot, power: PowerSnapshot, processes: Array<ProcessSnapshot>, app: AppSnapshot, };
+ts: number, cpu: CpuSnapshot, gpu: Array<GpuSnapshot>, memory: MemorySnapshot, storage: Array<StorageSnapshot>, board: BoardSnapshot, fans: Array<FanSnapshot>, voltages: Array<VoltageReading>, network: Array<NetworkSnapshot>, ping: PingSnapshot, power: PowerSnapshot, processes: Array<ProcessSnapshot>, app: AppSnapshot, 
+/**
+ * System Health, graded from this snapshot (see [`crate::health`]).
+ */
+health: HealthReport, };

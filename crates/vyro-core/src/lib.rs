@@ -4,6 +4,7 @@
 
 pub mod amd;
 pub mod display;
+pub mod health;
 pub mod history;
 pub mod hwid;
 pub mod info;

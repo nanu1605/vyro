@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use crate::health::{HealthEvent, HealthMonitor};
 use crate::history::History;
 use crate::provider::Provider;
 use crate::registry::Registry;
@@ -67,6 +68,7 @@ pub struct Poller {
     registry: Arc<Mutex<Registry>>,
     history: Option<Arc<Mutex<History>>>,
     history_error: Option<String>,
+    health: Arc<Mutex<HealthMonitor>>,
     cfg: PollerConfig,
 }
 
@@ -77,6 +79,7 @@ impl Poller {
             registry,
             history: None,
             history_error: None,
+            health: Arc::new(Mutex::new(HealthMonitor::new())),
             cfg,
         }
     }
@@ -104,6 +107,7 @@ impl Poller {
         let (tx, rx) = mpsc::channel();
         let latest = Arc::new(Mutex::new(None));
         let latest_thread = Arc::clone(&latest);
+        let health = Arc::clone(&self.health);
         let join = thread::Builder::new()
             .name("vyro-poller".into())
             .spawn(move || self.run(&rx, &sink, &latest_thread))?;
@@ -111,6 +115,7 @@ impl Poller {
             tx,
             join: Some(join),
             latest,
+            health,
         })
     }
 
@@ -216,6 +221,8 @@ impl Poller {
             EngineStatus::Throttled
         };
 
+        snap.health = lock(&self.health).update(&snap);
+
         if let Some(history) = &self.history {
             let result = lock(history).record(snap.ts, reg.history_values());
             match result {
@@ -249,9 +256,15 @@ pub struct PollerHandle {
     tx: Sender<Control>,
     join: Option<JoinHandle<()>>,
     latest: Arc<Mutex<Option<SensorSnapshot>>>,
+    health: Arc<Mutex<HealthMonitor>>,
 }
 
 impl PollerHandle {
+    /// Recent health changes (thermal limits, throttling, stopped fans…), oldest first.
+    pub fn health_events(&self) -> Vec<HealthEvent> {
+        lock(&self.health).events()
+    }
+
     /// Visible → normal interval; hidden → `hidden_interval`. Becoming visible ticks at once.
     pub fn set_visible(&self, visible: bool) {
         let _ = self.tx.send(Control::Visible(visible));

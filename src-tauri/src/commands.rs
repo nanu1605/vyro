@@ -4,6 +4,7 @@
 use std::sync::Arc;
 
 use tauri::State;
+use vyro_core::health::HealthEvent;
 use vyro_core::info::{
     DisplayInfo, DriveInfo, HardwareId, HealthReport, NetAdapterInfo, PawnIoStatus, SystemInfo,
 };
@@ -149,11 +150,16 @@ pub fn set_ping_host(host: String) -> Result<(), String> {
     }
 }
 
-// Filled in by a later phase: health (P7).
-
+/// System Health as of the latest tick.
 #[tauri::command]
-pub fn get_health() -> HealthReport {
-    HealthReport::default()
+pub fn get_health(engine: State<'_, Engine>) -> HealthReport {
+    engine.latest().map(|s| s.health).unwrap_or_default()
+}
+
+/// Recent health changes (thermal limits, throttling, stopped fans…), oldest first.
+#[tauri::command]
+pub fn get_health_events(engine: State<'_, Engine>) -> Vec<HealthEvent> {
+    engine.health_events()
 }
 
 /// Whether PawnIO (low-level sensors: CPU temperature and power, board fans) is usable.

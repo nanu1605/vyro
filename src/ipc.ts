@@ -3,7 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -33,6 +33,21 @@ export async function queryHistory(metric: string, range: HistoryRange): Promise
 export async function getSensorTree(snap: SensorSnapshot | null): Promise<SensorTree> {
   if (!inTauri) return snap ? (await import('./sim-tree')).simTree(snap) : { groups: [] };
   return invoke<SensorTree>('get_sensor_tree');
+}
+
+/** Recent health changes, oldest first. */
+export async function getHealthEvents(): Promise<HealthEvent[]> {
+  if (!inTauri) {
+    const now = Math.floor(Date.now() / 1000);
+    return [
+      { ts: now - 5400, subsystem: 'Storage', status: 'warn', message: 'ST2000DM008-2UB102 reports a health warning (details in Storage)' },
+      { ts: now - 3900, subsystem: 'CPU', status: 'warn', message: 'CPU running hot: 91 °C' },
+      { ts: now - 3720, subsystem: 'CPU', status: 'ok', message: 'Cleared: CPU running hot: 91 °C' },
+      { ts: now - 600, subsystem: 'GPU', status: 'warn', message: 'Simulated GPU (browser) is thermal throttling' },
+      { ts: now - 540, subsystem: 'GPU', status: 'ok', message: 'Cleared: Simulated GPU (browser) is thermal throttling' },
+    ];
+  }
+  return invoke<HealthEvent[]>('get_health_events');
 }
 
 /** Restarts min / max / avg for every sensor. */

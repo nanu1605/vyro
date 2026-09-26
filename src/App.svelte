@@ -19,6 +19,7 @@
   import ProcessesPanel from './components/ProcessesPanel.svelte';
   import SensorsPanel from './components/SensorsPanel.svelte';
   import HistoryPanel from './components/HistoryPanel.svelte';
+  import HealthPanel from './components/HealthPanel.svelte';
   import { animator } from './anim';
   import { fmt, fmtGB } from './format';
   import { getPawnIoStatus, inTauri, onSensors, setUiVisible } from './ipc';
@@ -27,6 +28,7 @@
   const TABS = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'history', label: 'History' },
+    { id: 'health', label: 'Health' },
     { id: 'processes', label: 'Processes' },
     { id: 'hardware', label: 'Hardware' },
     { id: 'storage', label: 'Storage' },
@@ -51,6 +53,7 @@
   let visited = $state<Record<Tab, boolean>>({
     dashboard: true,
     history: false,
+    health: false,
     processes: false,
     hardware: false,
     storage: false,
@@ -89,6 +92,15 @@
 
   // Replaced wholesale every tick; no deep reactivity needed.
   let snap = $state.raw<SensorSnapshot | null>(null);
+  const overall = $derived(snap?.health.overall ?? 'unknown');
+  /** Warnings and problems for the dashboard strip, worst first. */
+  const attention = $derived(
+    (snap?.health.subsystems ?? [])
+      .filter((x) => x.status === 'warn' || x.status === 'fail')
+      .sort((a, b) => (a.status === b.status ? 0 : a.status === 'fail' ? -1 : 1))
+      .flatMap((x) => (x.messages.length ? x.messages : [x.name])),
+  );
+
   let uiFps = $state(0);
 
   const cpu = $derived(snap?.cpu ?? null);
@@ -143,6 +155,9 @@
           onclick={() => select(t.id)}
         >
           {t.label}
+          {#if t.id === 'health' && (overall === 'warn' || overall === 'fail')}
+            <span class="alert-dot {overall}" aria-label={overall === 'fail' ? 'problem' : 'warning'}></span>
+          {/if}
         </button>
       {/each}
     </div>
@@ -151,6 +166,13 @@
   <main>
     <div id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard" hidden={tab !== 'dashboard'}>
       <PawnIoBanner status={pawnio} />
+      {#if attention.length}
+        <button type="button" class="health-strip {overall}" onclick={() => select('health')}>
+          <span class="alert-dot {overall}" aria-hidden="true"></span>
+          <span class="msg">{attention[0]}{attention.length > 1 ? ` (+${attention.length - 1} more)` : ''}</span>
+          <span class="go">Health →</span>
+        </button>
+      {/if}
       <div class="gauges">
         <GaugePanel
           label="CPU"
@@ -209,6 +231,12 @@
     {#if visited.history}
       <div id="panel-history" role="tabpanel" aria-labelledby="tab-history" hidden={tab !== 'history'}>
         <HistoryPanel {snap} active={tab === 'history'} focus={historyFocus} onclearfocus={() => (historyFocus = null)} />
+      </div>
+    {/if}
+
+    {#if visited.health}
+      <div id="panel-health" role="tabpanel" aria-labelledby="tab-health" hidden={tab !== 'health'}>
+        <HealthPanel health={snap?.health ?? null} ts={snap?.ts ?? 0} active={tab === 'health'} />
       </div>
     {/if}
 
@@ -294,6 +322,52 @@
   .tabs button[aria-selected='true'] {
     background: var(--panel-edge);
     color: var(--text);
+  }
+  .alert-dot {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-left: 0.3rem;
+    border-radius: 50%;
+    background: var(--warn);
+    vertical-align: 0.1rem;
+  }
+  .alert-dot.fail {
+    background: var(--hot);
+  }
+  .health-strip {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+    margin: 0 0 0.9rem;
+    padding: 0.55rem 0.85rem;
+    border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--warn) 8%, var(--panel));
+    color: var(--text);
+    font: inherit;
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+  }
+  .health-strip.fail {
+    border-color: color-mix(in srgb, var(--hot) 55%, var(--line));
+    background: color-mix(in srgb, var(--hot) 10%, var(--panel));
+  }
+  .health-strip .alert-dot {
+    flex: none;
+    margin: 0;
+    vertical-align: 0;
+  }
+  .health-strip .msg {
+    flex: 1;
+    min-width: 0;
+  }
+  .health-strip .go {
+    flex: none;
+    color: var(--muted);
+    font-size: 0.8rem;
   }
   [hidden] {
     display: none !important;
