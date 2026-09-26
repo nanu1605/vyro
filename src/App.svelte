@@ -73,6 +73,8 @@
   const cpu = $derived(snap?.cpu ?? null);
   const gpu = $derived(snap?.gpu[0] ?? null);
   const mem = $derived(snap?.memory ?? null);
+  // CPU temperature / power and board fans come from the kernel driver (Phase 6).
+  const NEEDS_DRIVER = 'needs Vyro driver';
   const cpuFan = $derived(snap?.fans.find((f) => f.kind === 'fan') ?? null);
 
   onMount(() => {
@@ -143,8 +145,8 @@
       </div>
 
       <div class="tiles">
-        <StatTile label="CPU package" value={cpu?.tempPackage} unit="°C" warn={80} hot={95} />
-        <StatTile label="CPU power" value={cpu?.powerPkgW} unit="W" digits={1} />
+        <StatTile label="CPU package" value={cpu?.tempPackage} unit="°C" warn={80} hot={95} sub={cpu?.tempPackage == null ? NEEDS_DRIVER : null} />
+        <StatTile label="CPU power" value={cpu?.powerPkgW} unit="W" digits={1} sub={cpu?.powerPkgW == null ? NEEDS_DRIVER : null} />
         <StatTile label="GPU temp" value={gpu?.tempEdge} unit="°C" warn={80} hot={90} />
         <StatTile label="GPU hotspot" value={gpu?.tempHotspot} unit="°C" warn={90} hot={105} />
         <StatTile
@@ -161,8 +163,8 @@
           digits={1}
           sub={mem?.totalMB != null ? `of ${fmtGB(mem.totalMB)} GB` : null}
         />
-        <StatTile label="System power" value={snap?.power.estTotalW} unit="W" sub="estimated" />
-        <StatTile label={cpuFan?.name ?? 'CPU fan'} value={cpuFan?.rpm} unit="RPM" />
+        <StatTile label="System power" value={snap?.power.estTotalW} unit="W" sub={snap?.power.estTotalW == null ? NEEDS_DRIVER : 'estimated'} />
+        <StatTile label={cpuFan?.name ?? 'CPU fan'} value={cpuFan?.rpm} unit="RPM" sub={cpuFan?.rpm == null ? NEEDS_DRIVER : null} />
       </div>
 
       <div class="cards">

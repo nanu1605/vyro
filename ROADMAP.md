@@ -170,6 +170,11 @@ lists, pools, page file (`SystemPageFileInformation`), page / hard faults, compr
 (`MemCompression` working set); "Cached" now matches Task Manager (standby + modified).
 Release builds carry a `requireAdministrator` manifest; debug builds (`pnpm tauri dev`) stay
 unelevated and show a banner. Storage tab + dashboard Memory card. Drive serials are local-only.
+Field check 1 (unelevated; Ryzen 7 9700X, 2× Crucial NVMe + Seagate 2.5" HDD): both NVMe drives
+report the full health log without admin (P3 39 °C / 5 % used, E100 38 °C / 1 % used), volumes
+map to disks, rates and memory lists match Task Manager's shape; the SATA HDD correctly asks for
+admin. The compression process is named "Memory Compression" in the process list, not
+"MemCompression": fixed. Elevated SATA SMART still to check.
 
 ### P5 — Network, power (partial), self-monitoring (M2)
 IP Helper + PDH + WLAN API, ICMP ping/loss thread, app + WebView2 footprint, power panel (GPU

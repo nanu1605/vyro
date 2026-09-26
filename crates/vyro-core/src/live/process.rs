@@ -78,7 +78,10 @@ impl Provider for ProcessProvider {
         let bytes = self.query()?;
         let list = parse_process_list(bytes, bytes.as_ptr() as usize);
         // The Memory Compression process's working set is the compressed store.
-        if let Some(p) = list.iter().find(|p| p.name == "MemCompression") {
+        if let Some(p) = list
+            .iter()
+            .find(|p| matches!(p.name.as_str(), "Memory Compression" | "MemCompression"))
+        {
             snap.memory.compressed_mb = Some(p.working_set as f64 / (1024.0 * 1024.0));
         }
         let samples = self.tracker.update(list, now);
