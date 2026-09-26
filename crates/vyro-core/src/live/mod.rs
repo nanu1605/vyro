@@ -1,9 +1,13 @@
 //! Live Windows providers (Phase 2): CPU, memory, GPU and per-process readings from OS
 //! counters and vendor libraries. No driver needed.
 
+mod adl;
 mod cpu;
+mod dll;
 mod gpu;
+mod igcl;
 mod memory;
+mod nvapi;
 mod pdh;
 mod process;
 

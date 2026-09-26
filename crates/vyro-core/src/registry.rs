@@ -66,6 +66,7 @@ pub enum Source {
     Pdh,
     Nvml,
     Nvapi,
+    Adl,
     Adlx,
     Igcl,
     Smart,

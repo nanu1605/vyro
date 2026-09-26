@@ -32,6 +32,8 @@
       ['Memory clock', unit(gpu.mhzMem, 'MHz')],
       ['Temperature', unit(gpu.tempEdge, '°C')],
       ['Hotspot', unit(gpu.tempHotspot, '°C')],
+      ['Memory temp', unit(gpu.tempMem, '°C')],
+      ['Core voltage', unit(gpu.voltageV, 'V', 3)],
       ['VRAM', gpu.vramUsedMB != null ? `${fmtGB(gpu.vramUsedMB)} / ${fmtGB(gpu.vramTotalMB)} GB` : null],
       [
         'Power',
@@ -39,7 +41,7 @@
           ? `${fmt(gpu.powerW, 1)} W${gpu.powerLimitW != null ? ` of ${fmt(gpu.powerLimitW)} W` : ''}`
           : null,
       ],
-      ['Fan', gpu.fanPct != null ? `${fmt(gpu.fanPct)}%` : unit(gpu.fanRpm, 'RPM')],
+      ['Fan', [gpu.fanPct != null ? `${fmt(gpu.fanPct)}%` : null, unit(gpu.fanRpm, 'RPM')].filter(Boolean).join(' · ') || null],
       ['PCIe link', gpu.pcieGen != null ? `Gen ${gpu.pcieGen} ×${gpu.pcieWidth ?? '?'}` : null],
       [
         'Limiters',

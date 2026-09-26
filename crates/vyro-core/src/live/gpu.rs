@@ -1,7 +1,8 @@
 //! GPU telemetry. Every adapter gets Task Manager's engine utilization and VRAM usage from PDH;
 //! NVIDIA cards add NVML (clocks, temperature, power, fan, PCIe link, throttle reasons, the
 //! same source as `nvidia-smi`); other vendors fall back to the WDDM performance data that
-//! Task Manager's GPU temperature comes from. AMD ADLX / Intel IGCL are a later step.
+//! Task Manager's GPU temperature comes from. Vendor libraries add the rest: NVAPI (hotspot /
+//! memory temperature, voltage, fan RPM), AMD ADL and Intel IGCL.
 
 use std::collections::HashMap;
 use std::ffi::c_void;
@@ -19,6 +20,9 @@ use windows::Win32::Graphics::Dxgi::{
     CreateDXGIFactory1, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE,
 };
 
+use super::adl::Adl;
+use super::igcl::Igcl;
+use super::nvapi::NvApi;
 use super::pdh::{Counter, Query};
 use super::GpuShare;
 use crate::hwid::pci;
@@ -30,6 +34,7 @@ use crate::usage::engines::{luid_key, parse_adapter_instance, summarize};
 use crate::usage::gpu::{
     kmt_mhz, kmt_rpm, kmt_temp_c, likely_integrated, match_nvml, nvml_throttle, AdapterKey, NvmlPci,
 };
+use crate::usage::vendor::VendorReadings;
 use crate::winutil::wide_array;
 
 const MIB: f64 = 1024.0 * 1024.0;
@@ -42,6 +47,9 @@ struct Keys {
     vram: SensorKey,
     power: SensorKey,
     fan: SensorKey,
+    hotspot: SensorKey,
+    mem_temp: SensorKey,
+    voltage: SensorKey,
     engines: [SensorKey; 5],
 }
 
@@ -55,7 +63,12 @@ struct Adapter {
     integrated: bool,
     /// D3DKMT adapter handle, closed on drop.
     kmt: Option<u32>,
+    /// PCI bus number (from D3DKMT), used to match vendor-library devices.
+    bus: Option<u32>,
     nvml: Option<u32>,
+    nvapi: Option<usize>,
+    adl: Option<usize>,
+    igcl: Option<usize>,
     keys: Option<Keys>,
 }
 
@@ -78,6 +91,9 @@ pub struct GpuProvider {
     share: GpuShare,
     adapters: Vec<Adapter>,
     nvml: Option<Nvml>,
+    nvapi: Option<NvApi>,
+    adl: Option<Adl>,
+    igcl: Option<Igcl>,
     pdh: Option<Counters>,
 }
 
@@ -87,6 +103,9 @@ impl GpuProvider {
             share,
             adapters: Vec::new(),
             nvml: None,
+            nvapi: None,
+            adl: None,
+            igcl: None,
             pdh: None,
         }
     }
@@ -141,6 +160,14 @@ fn enumerate() -> Vec<Adapter> {
         let kmt = unsafe { D3DKMTOpenAdapterFromLuid(&mut open) }
             .is_ok()
             .then_some(open.hAdapter);
+        let bus = kmt.and_then(|h| {
+            kmt_query(
+                h,
+                KMTQAITYPE_ADAPTERADDRESS,
+                D3DKMT_ADAPTERADDRESS::default(),
+            )
+            .map(|addr| addr.BusNumber)
+        });
         out.push(Adapter {
             integrated: likely_integrated(desc.VendorId, &name, dedicated_mb),
             name,
@@ -150,7 +177,11 @@ fn enumerate() -> Vec<Adapter> {
             luid,
             dedicated_mb,
             kmt,
+            bus,
             nvml: None,
+            nvapi: None,
+            adl: None,
+            igcl: None,
             keys: None,
         });
     }
@@ -182,8 +213,7 @@ fn init_nvml() -> Option<Nvml> {
     Some(nvml)
 }
 
-fn register(reg: &mut Registry, i: usize, prefix: &str, nvidia: bool) -> Keys {
-    let src = if nvidia { Source::Nvml } else { Source::Os };
+fn register(reg: &mut Registry, i: usize, prefix: &str, src: Source) -> Keys {
     let mut r = |what: &str, name: &str, unit, source, history: bool| {
         let d = SensorDesc::new(
             format!("gpu.{i}.{what}"),
@@ -202,6 +232,9 @@ fn register(reg: &mut Registry, i: usize, prefix: &str, nvidia: bool) -> Keys {
         vram: r("vram.used", "VRAM Used", Unit::Megabyte, src, true),
         power: r("power", "Power", Unit::Watt, src, true),
         fan: r("fan", "Fan", Unit::Percent, src, false),
+        hotspot: r("temp.hotspot", "Hotspot", Unit::Celsius, src, true),
+        mem_temp: r("temp.mem", "Memory Temperature", Unit::Celsius, src, false),
+        voltage: r("voltage", "Core Voltage", Unit::Volt, src, false),
         engines: [
             r("engine.3d", "3D", Unit::Percent, Source::Pdh, false),
             r(
@@ -263,6 +296,29 @@ fn read_nvml(nvml: &Nvml, index: u32, g: &mut GpuSnapshot) {
     }
 }
 
+/// Fills readings still missing from a vendor library.
+fn apply(g: &mut GpuSnapshot, r: VendorReadings) {
+    g.mhz_core = g.mhz_core.or(r.mhz_core);
+    g.mhz_mem = g.mhz_mem.or(r.mhz_mem);
+    g.temp_edge = g.temp_edge.or(r.temp_edge);
+    g.temp_hotspot = g.temp_hotspot.or(r.temp_hotspot);
+    g.temp_mem = g.temp_mem.or(r.temp_mem);
+    g.fan_rpm = g.fan_rpm.or(r.fan_rpm);
+    g.fan_pct = g.fan_pct.or(r.fan_pct);
+    g.voltage_v = g.voltage_v.or(r.voltage_v);
+    g.power_w = g.power_w.or(r.power_w);
+    g.throttle_power_limit = g.throttle_power_limit.or(r.throttle_power);
+    g.throttle_thermal = g.throttle_thermal.or(r.throttle_thermal);
+    if g.throttle_reasons.is_empty() {
+        if r.throttle_power == Some(true) {
+            g.throttle_reasons.push("power".to_owned());
+        }
+        if r.throttle_thermal == Some(true) {
+            g.throttle_reasons.push("thermal".to_owned());
+        }
+    }
+}
+
 /// Fills gaps from WDDM performance data (driver-dependent; zeros mean "not reported").
 fn read_kmt(h: u32, g: &mut GpuSnapshot) {
     if let Some(p) = kmt_query(
@@ -312,14 +368,7 @@ impl Provider for GpuProvider {
                     vendor_id: a.vendor_id,
                     device_id: a.device_id,
                     subsys_id: a.subsys_id,
-                    bus: a.kmt.and_then(|h| {
-                        kmt_query(
-                            h,
-                            KMTQAITYPE_ADAPTERADDRESS,
-                            D3DKMT_ADAPTERADDRESS::default(),
-                        )
-                        .map(|addr| addr.BusNumber)
-                    }),
+                    bus: a.bus,
                 })
                 .collect();
             // Device indices are dense only when every handle opened; keep NVML's numbering.
@@ -331,6 +380,31 @@ impl Provider for GpuProvider {
             }
         }
 
+        let has = |v: u32| self.adapters.iter().any(|a| a.vendor_id == v);
+        if has(0x10DE) {
+            self.nvapi = NvApi::load();
+        }
+        if has(0x1002) {
+            self.adl = Adl::load();
+        }
+        if has(0x8086) {
+            self.igcl = Igcl::load();
+        }
+        log::info!(
+            "gpu: NVAPI={} ADL={} IGCL={}",
+            self.nvapi.is_some(),
+            self.adl.is_some(),
+            self.igcl.is_some()
+        );
+        for a in &mut self.adapters {
+            match a.vendor_id {
+                0x10DE => a.nvapi = a.bus.and_then(|b| self.nvapi.as_ref()?.find(b)),
+                0x1002 => a.adl = a.bus.and_then(|b| self.adl.as_ref()?.find(b)),
+                0x8086 => a.igcl = self.igcl.as_ref().and_then(|l| l.find(a.luid)),
+                _ => {}
+            }
+        }
+
         let multi = self.adapters.len() > 1;
         for (i, a) in self.adapters.iter_mut().enumerate() {
             let prefix = if multi {
@@ -338,9 +412,18 @@ impl Provider for GpuProvider {
             } else {
                 "GPU ".to_owned()
             };
-            a.keys = Some(register(reg, i, &prefix, a.nvml.is_some()));
+            let source = if a.nvml.is_some() {
+                Source::Nvml
+            } else if a.adl.is_some() {
+                Source::Adl
+            } else if a.igcl.is_some() {
+                Source::Igcl
+            } else {
+                Source::Os
+            };
+            a.keys = Some(register(reg, i, &prefix, source));
             log::info!(
-                "gpu {i}: {} ({}, nvml={}, d3dkmt={})",
+                "gpu {i}: {} ({}, nvml={}, nvapi={}, adl={}, igcl={}, d3dkmt={})",
                 a.name,
                 if a.integrated {
                     "integrated"
@@ -348,6 +431,9 @@ impl Provider for GpuProvider {
                     "discrete"
                 },
                 a.nvml.is_some(),
+                a.nvapi.is_some(),
+                a.adl.is_some(),
+                a.igcl.is_some(),
                 a.kmt.is_some()
             );
         }
@@ -406,6 +492,15 @@ impl Provider for GpuProvider {
             if let (Some(nvml), Some(idx)) = (&self.nvml, a.nvml) {
                 read_nvml(nvml, idx, &mut g);
             }
+            if let (Some(nvapi), Some(idx)) = (&self.nvapi, a.nvapi) {
+                apply(&mut g, nvapi.read(idx, &a.name));
+            }
+            if let (Some(adl), Some(idx)) = (&self.adl, a.adl) {
+                apply(&mut g, adl.read(idx).unwrap_or_default());
+            }
+            if let (Some(igcl), Some(idx)) = (&mut self.igcl, a.igcl) {
+                apply(&mut g, igcl.read(idx).unwrap_or_default());
+            }
             if let Some(h) = a.kmt {
                 read_kmt(h, &mut g);
             }
@@ -417,6 +512,9 @@ impl Provider for GpuProvider {
             g.vram_used_mb = reg.set(k.vram, g.vram_used_mb);
             g.power_w = reg.set(k.power, g.power_w);
             g.fan_pct = reg.set(k.fan, g.fan_pct);
+            g.temp_hotspot = reg.set(k.hotspot, g.temp_hotspot);
+            g.temp_mem = reg.set(k.mem_temp, g.temp_mem);
+            g.voltage_v = reg.set(k.voltage, g.voltage_v);
             let e = &g.engine;
             for (key, v) in
                 k.engines

@@ -92,10 +92,9 @@ from the board name, NVIDIA GPU BIOS display format.
 - [x] Hardware and System views (tabs), browser-mode sample data
 
 ### P2 — Live usage, clocks, GPU, per-process (M2)
-Status: **2a done**, field-checked on the Ryzen 7 9700X / RTX 5060 Ti + Radeon iGPU PC: all
-providers up, poll ≈ 9 ms/tick; NVML matches the card (8 GB, PCIe 5.0 ×8, 180 W limit, GDDR7
-14001 MHz, zero-RPM fan at idle); the iGPU gets temperature and clocks from WDDM perf data;
-discrete GPU ordered first. **2b** (AMD / Intel vendor libraries, NVIDIA hotspot) next.
+Status: **done** (2a field-checked on the Ryzen 7 9700X / RTX 5060 Ti + Radeon iGPU PC: all
+providers up, poll ≈ 9 ms/tick, NVML matches the card, iGPU temperature and clocks via WDDM).
+2b vendor libraries built; awaiting the same field check.
 
 - [x] CPU total + per-logical-processor utilization from PDH `% Processor Utility` (Task
       Manager's counter), falling back to `% Processor Time` and the legacy `Processor` object
@@ -111,8 +110,15 @@ discrete GPU ordered first. **2b** (AMD / Intel vendor libraries, NVIDIA hotspot
 - [x] Basic memory totals (used / available / committed / cached); full set in P4
 - [x] Dashboard gauges on live data (`VYRO_SIM=1` forces the simulator), per-core and GPU engine
       cards, **Processes** view
-- [ ] 2b: AMD ADLX (hotspot, memory temp, power, voltage), Intel IGCL, NVIDIA NVAPI hotspot /
-      memory temperature / voltage
+- [x] 2b NVIDIA NVAPI (by `nvapi_QueryInterface` id): hotspot + memory-junction temperature
+      (per-generation channel map; RTX 50 exposes no hotspot), core voltage, fan RPM
+- [x] 2b AMD via ADL PMLog (`ADL2_New_QueryPMLogData_Get`): clocks, edge / hotspot / memory
+      temperature, fan, core voltage, board / ASIC power. ADL rather than ADLX: same sensors, plain
+      C ABI; ADLX's COM-style vtables would add risk without new data
+- [x] 2b Intel IGCL (`ControlLib.dll`, matched by LUID): clocks, GPU / VRAM temperature,
+      voltage, power from the energy counter, fan, power / thermal limiters
+- [x] Vendor DLLs loaded from System32 only; struct layouts verified against the vendor headers
+      compiled for x64 Windows; every call degrades to "unavailable" on failure
 
 ### P3 — Displays (M2)
 DisplayConfig + DXGI + EDID/CTA/DisplayID parser, HDR/SDR white level, VRR range + state,

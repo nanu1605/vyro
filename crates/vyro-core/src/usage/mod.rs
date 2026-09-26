@@ -4,6 +4,7 @@
 pub mod engines;
 pub mod gpu;
 pub mod process;
+pub mod vendor;
 
 /// Clamps a utilization reading to 0–100 %. `% Processor Utility` legitimately exceeds 100
 /// while boosting; Task Manager caps it too.

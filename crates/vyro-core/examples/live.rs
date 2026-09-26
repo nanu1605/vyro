@@ -85,14 +85,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         for g in &snap.gpu {
             println!(
-                "     {}: {} @ {} | {} | VRAM {} | {} | fan {}",
+                "     {}: {} @ {} | {} (hotspot {}, mem {}) | {} | VRAM {} | {} | fan {} / {}",
                 g.name,
                 fmt(g.usage, "%"),
                 fmt(g.mhz_core, " MHz"),
                 fmt(g.temp_edge, " °C"),
+                fmt(g.temp_hotspot, " °C"),
+                fmt(g.temp_mem, " °C"),
+                fmt(g.voltage_v, " V"),
                 fmt(g.vram_used_mb, " MB"),
                 fmt(g.power_w, " W"),
-                fmt(g.fan_pct, "%")
+                fmt(g.fan_pct, "%"),
+                fmt(g.fan_rpm, " RPM")
             );
         }
         if let Some(p) = snap.processes.first() {
