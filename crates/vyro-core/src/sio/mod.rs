@@ -107,8 +107,10 @@ pub enum BoardTemp {
 pub struct Layout {
     pub temps: &'static [(u16, &'static str, BoardTemp)],
     pub fans: &'static [(u16, &'static str, FanKind)],
-    /// Voltage inputs checked on this board (name only; +12V/+5V scaling is universal).
-    pub volts: &'static [(u16, &'static str)],
+    /// Voltage channels checked on this board: channel (register 0x120 + 2n), name and the
+    /// board's divider (+12V/+5V scaling is universal and already applied). A board with a
+    /// list shows only these; others show every channel that reads something.
+    pub volts: &'static [(u16, &'static str, f64)],
 }
 
 /// NCT6687 defaults, used on MSI boards (LibreHardwareMonitor's MSI mappings and the
@@ -131,12 +133,22 @@ pub const MSI_NCT6687: Layout = Layout {
     volts: &[],
 };
 
-/// MSI B650M GAMING PLUS WIFI (MS-7E24). Checked against HWMonitor at idle and under an
-/// all-core load: VIN2 holds 1.21 V with VDDCR_SOC at 1.20 V; VIN3 follows VDDCR_VDD from
-/// 1.34 V idle to 1.02 V loaded; VIN6 reads 3.34 V. LibreHardwareMonitor's labels for this
-/// board (Vcore on VIN4, +3.3V on 0x130) do not match these readings.
+/// MSI B650M GAMING PLUS WIFI (MS-7E24), as in LibreHardwareMonitor and checked against a
+/// raw register dump next to HWMonitor (whose "VINn" numbering is not register order: its
+/// VIN3 is 0x128). Vcore (0x128) follows VDDCR_VDD from 1.34 V idle to 1.02 V under load;
+/// SoC (0x124) holds 1.21 V with VDDCR_SOC at 1.20 V; VDDIO (0x126) is halved on the board.
 pub const MSI_B650M_GAMING_PLUS_WIFI: Layout = Layout {
-    volts: &[(2, "CPU SoC"), (3, "Vcore"), (6, "+3.3V")],
+    volts: &[
+        (0, "+12V", 1.0),
+        (1, "+5V", 1.0),
+        (2, "CPU SoC", 1.0),
+        (3, "CPU VDDIO", 2.0),
+        (4, "Vcore", 1.0),
+        (8, "+3.3V", 1.0),
+        (11, "+3.3V Standby", 1.0),
+        (12, "AVSB", 1.0),
+        (14, "CMOS Battery", 1.0),
+    ],
     ..MSI_NCT6687
 };
 
@@ -316,7 +328,7 @@ mod tests {
         assert!(l.volts.is_empty());
         let b650 =
             layout(msi, Some("B650M GAMING PLUS WIFI (MS-7E24)"), Chip::Nct6687).expect("b650");
-        assert_eq!(b650.volts[1], (3, "Vcore"));
+        assert_eq!(b650.volts[4], (4, "Vcore", 1.0));
         assert_eq!(b650.fans, MSI_NCT6687.fans);
         assert!(layout(Some("ASRock"), None, Chip::Nct6687).is_none());
         assert!(layout(None, None, Chip::Nct6687).is_none());
@@ -382,6 +394,56 @@ mod tests {
             assert_eq!(*b, ec.mem[usize::from(a)], "byte at {a:#x}");
         }
         assert_eq!(ec.page_reg, EC_FREE);
+    }
+
+    /// Monitor block (0x100–0x15F) from the MSI B650M GAMING PLUS WIFI via `vyro-live`, with
+    /// HWMonitor alongside: CPU fan 1542 RPM, pump 4411, TMPIN0–5 59/42/40/42/39/81 °C,
+    /// Vcore 1.22 V, SoC 1.21 V, VDDIO/2 0.622 V, +3.3V 3.34 V.
+    const FIELD_BLOCK: [u8; 96] = [
+        0x38, 0x00, 0x2A, 0x80, 0x29, 0x80, 0x2A, 0x00, 0x28, 0x00, 0x51, 0x80, 0, 0, 0, 0, //
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //
+        0x3E, 0xE0, 0x3F, 0x60, 0x4B, 0x60, 0x26, 0xE0, 0x4A, 0xE0, 0x11, 0x80, 0x2C, 0xE0, 0x5F,
+        0x80, //
+        0xD1, 0x00, 0x00, 0x00, 0x00, 0x00, 0xD2, 0x80, 0xD2, 0x40, 0x7F, 0xE0, 0xC1, 0x00, 0,
+        0, //
+        0x05, 0xD8, 0x11, 0x5C, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ];
+
+    #[test]
+    fn decodes_the_field_block_with_the_board_layout() {
+        assert!(plausible(&FIELD_BLOCK));
+        let d = decode(&FIELD_BLOCK);
+        let l = MSI_B650M_GAMING_PLUS_WIFI;
+        let volt = |name: &str| {
+            let (n, _, scale) = *l.volts.iter().find(|c| c.1 == name).expect(name);
+            d.volts
+                .iter()
+                .find(|v| v.0 == n)
+                .map(|v| v.1 * scale)
+                .expect(name)
+        };
+        assert!(close(volt("+12V"), 12.072));
+        assert!(close(volt("+5V"), 5.07));
+        assert!(close(volt("CPU SoC"), 1.206));
+        assert!(close(volt("CPU VDDIO"), 1.244));
+        assert!(close(volt("Vcore"), 1.198));
+        assert!(close(volt("+3.3V"), 3.344));
+        assert!(close(volt("CMOS Battery"), 3.088));
+        let temps: Vec<_> = d.temps.iter().take(6).map(|t| t.1).collect();
+        assert_eq!(
+            temps,
+            [
+                Some(56.0),
+                Some(42.5),
+                Some(41.5),
+                Some(42.0),
+                Some(40.0),
+                Some(81.5)
+            ]
+        );
+        assert_eq!(d.fans[0], (0, Some(1496.0)));
+        assert_eq!(d.fans[1], (1, Some(4444.0)));
     }
 
     #[test]

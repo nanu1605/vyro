@@ -195,17 +195,24 @@ impl SioProvider {
             }
         }
         for &(n, v) in &d.volts {
-            let known = self
-                .keys
-                .volts
-                .get(usize::from(n))
-                .is_some_and(Option::is_some);
-            if v <= 0.0 && !known {
-                continue;
-            }
-            let name = layout
-                .and_then(|l| l.volts.iter().find(|c| c.0 == n))
-                .map_or_else(|| voltage_channel(n).0, |c| c.1.to_owned());
+            let listed = layout.filter(|l| !l.volts.is_empty());
+            let (name, v) = match listed {
+                Some(l) => match l.volts.iter().find(|c| c.0 == n) {
+                    Some(c) => (c.1.to_owned(), v * c.2),
+                    None => continue,
+                },
+                None => {
+                    let known = self
+                        .keys
+                        .volts
+                        .get(usize::from(n))
+                        .is_some_and(Option::is_some);
+                    if v <= 0.0 && !known {
+                        continue;
+                    }
+                    (voltage_channel(n).0, v)
+                }
+            };
             let k = key(&mut self.keys.volts, n, reg, || {
                 SensorDesc::new(
                     format!("voltage.vin{n}"),

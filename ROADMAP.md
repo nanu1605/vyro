@@ -240,9 +240,10 @@ temperatures (DDR5 hub, DDR4 TSOD) and AMD memory timings → Intel CPU when a t
 available.
 
 Status: 6a and 6b done and field-checked on the Ryzen 7 9700X against HWMonitor (Tctl, CCD
-temperature and core VID match; the Zen 5 VID uses the SVI3 formula). 6c reads the NCT6687
-read-only (no monitor-enable or fan writes); only +12V/+5V are named until each board's
-voltage channels are checked against HWiNFO or MSI Center.
+temperature and core VID match; the Zen 5 VID uses the SVI3 formula; package and core power
+match at the 88 W PPT under Cinebench). 6c reads the NCT6687 read-only (no monitor-enable or
+fan writes), field-checked on the MSI B650M GAMING PLUS WIFI: fans, board temperatures and
+voltages match HWMonitor. Other boards show +12V/+5V plus raw channels until checked.
 
 ### P7 — History, health, alerts, sensor explorer (M5)
 ### P8 — Privilege separation: Windows service + ACL'd named pipe (M5)

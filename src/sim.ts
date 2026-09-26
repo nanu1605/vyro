@@ -180,7 +180,7 @@ export function nextSnapshot(st: SimState, ts: number, pollHz: number, rand: () 
   };
   s.voltages = [
     { name: '+12V', value: 12.07 }, { name: '+5V', value: 5.07 }, { name: 'CPU SoC', value: 1.206 },
-    { name: 'Vcore', value: 1.342 }, { name: '+3.3V', value: 3.344 },
+    { name: 'CPU VDDIO', value: 1.244 }, { name: 'Vcore', value: 1.2 - st.cpu * 0.002 }, { name: '+3.3V', value: 3.344 },
   ];
   s.power = { estTotalW: cpuW + gpuW + 45, cpuW, gpuW, ramW: null, storageW: null };
   const down = rand() < 0.2 ? rand() * 600 : rand() * 8;
