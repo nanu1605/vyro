@@ -4,9 +4,9 @@
 use std::time::Duration;
 
 use super::{
-    decode, identify, layout, read_ec, valid_base, voltage_channel, BoardTemp, Chip, Decoded,
-    Layout, PortIo, BLOCK_LEN, BLOCK_START, CONFIG_PORTS, ENTER_KEY, EXIT_KEY, LDN_HWM, REG_BASE,
-    REG_CHIP_ID, REG_CHIP_REV, REG_LDN,
+    decode, identify, layout, plausible, read_ec, valid_base, voltage_channel, BoardTemp, Chip,
+    Decoded, Layout, PortIo, BLOCK_LEN, BLOCK_START, CONFIG_PORTS, ENTER_KEY, EXIT_KEY, LDN_HWM,
+    REG_BASE, REG_CHIP_ID, REG_CHIP_REV, REG_LDN,
 };
 use crate::hwid::smbios;
 use crate::pawnio::{BusLock, Handle, Module, PawnIoError, MUTEX_ISABUS};
@@ -310,7 +310,8 @@ impl Provider for SioProvider {
                 read_block(io, found.base, BLOCK_START, BLOCK_LEN)
             })
             .transpose()?
-            .flatten();
+            .flatten()
+            .filter(|b| plausible(b));
         if let Some(block) = block {
             self.last = self.named(reg, &decode(&block));
             self.stale = 0;

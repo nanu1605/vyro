@@ -161,43 +161,48 @@ pub trait PortIo {
 }
 
 /// Reads `len` bytes of NCT6687 EC space from `start` (base = hardware-monitor I/O base).
-/// The EC latches the index only after a page write, so every byte is page, index, data.
-/// `None` when another program is mid-access (page register not free): the tick is skipped
-/// rather than forcing the page over, which would corrupt that program's read. Call with the
-/// ISA-bus mutex held.
+///
+/// The EC takes a request when its page register goes from free (0xFF) to a page, so every
+/// byte is a full transaction, as in LibreHardwareMonitor: wait for free, page, index, data,
+/// free. Rewriting the page without releasing it first returns the first byte over and over
+/// (seen in the field). `None` when another program holds the EC (page register not free):
+/// the tick is skipped rather than forcing the page, which would corrupt that program's read.
+/// Call with the ISA-bus mutex held.
 pub fn read_ec<P: PortIo>(
     io: &mut P,
     base: u16,
     start: u16,
     len: u16,
 ) -> Result<Option<Vec<u8>>, P::Error> {
-    let mut free = false;
-    for _ in 0..5 {
-        if io.inb(base + EC_PAGE)? == EC_FREE {
-            free = true;
-            break;
-        }
-        io.pause();
-    }
-    if !free {
-        return Ok(None);
-    }
     let mut out = Vec::with_capacity(usize::from(len));
-    let mut read = || {
-        for addr in start..start + len {
-            let [page, index] = addr.to_be_bytes();
-            io.outb(base + EC_PAGE, page)?;
-            io.outb(base + EC_INDEX, index)?;
-            out.push(io.inb(base + EC_DATA)?);
+    for addr in start..start + len {
+        let mut free = false;
+        for _ in 0..5 {
+            if io.inb(base + EC_PAGE)? == EC_FREE {
+                free = true;
+                break;
+            }
+            io.pause();
         }
-        Ok(())
-    };
-    let result = read();
-    // Release the EC for other tools even if a read failed.
-    let release = io.outb(base + EC_PAGE, EC_FREE);
-    result?;
-    release?;
+        if !free {
+            return Ok(None);
+        }
+        let [page, index] = addr.to_be_bytes();
+        io.outb(base + EC_PAGE, page)?;
+        let byte = io
+            .outb(base + EC_INDEX, index)
+            .and_then(|()| io.inb(base + EC_DATA));
+        // Release the EC for other tools even if the read failed.
+        let release = io.outb(base + EC_PAGE, EC_FREE);
+        out.push(byte?);
+        release?;
+    }
     Ok(Some(out))
+}
+
+/// A monitor block where every byte is the same is a stuck read, not sensor data.
+pub fn plausible(block: &[u8]) -> bool {
+    block.first().is_some_and(|b| block.iter().any(|x| x != b))
 }
 
 /// Voltage channel name and divider. Only the two rails every NCT6687 board wires the same
@@ -317,7 +322,8 @@ mod tests {
         assert!(layout(None, None, Chip::Nct6687).is_none());
     }
 
-    /// An NCT6687 EC that, like the real one, only takes a new index right after a page write.
+    /// An NCT6687 EC that, like the real one, takes a request only when the page register goes
+    /// from free to a page; the data register keeps returning the last request's byte.
     struct FakeEc {
         mem: Vec<u8>,
         page_reg: u8,
@@ -350,8 +356,8 @@ mod tests {
         fn outb(&mut self, port: u16, value: u8) -> Result<(), ()> {
             match port - 0xA20 {
                 EC_PAGE => {
+                    self.armed = self.page_reg == EC_FREE && value != EC_FREE;
                     self.page_reg = value;
-                    self.armed = value != EC_FREE;
                 }
                 EC_INDEX if self.armed => {
                     self.addr = Some(u16::from_be_bytes([self.page_reg, value]));
@@ -376,6 +382,26 @@ mod tests {
             assert_eq!(*b, ec.mem[usize::from(a)], "byte at {a:#x}");
         }
         assert_eq!(ec.page_reg, EC_FREE);
+    }
+
+    #[test]
+    fn rejects_stuck_blocks() {
+        assert!(!plausible(&[0x3B; 96]));
+        assert!(!plausible(&[]));
+        assert!(plausible(&[0x3B, 0x00, 0x2A]));
+    }
+
+    #[test]
+    fn fake_ec_reproduces_the_field_failure() {
+        // Writing the page again without releasing it: every byte reads as the first one.
+        let mut ec = FakeEc::new(EC_FREE);
+        let mut bytes = Vec::new();
+        for index in 0..4u8 {
+            ec.outb(0xA20 + EC_PAGE, 0x01).unwrap();
+            ec.outb(0xA20 + EC_INDEX, index).unwrap();
+            bytes.push(ec.inb(0xA20 + EC_DATA).unwrap());
+        }
+        assert!(bytes.iter().all(|b| *b == ec.mem[0x100]), "{bytes:?}");
     }
 
     #[test]
