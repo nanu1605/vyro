@@ -55,6 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut last = SensorSnapshot::default();
     let mut poll_ms = Vec::new();
+    let mut per_provider: std::collections::BTreeMap<&'static str, Vec<f64>> = Default::default();
     for n in 0..samples {
         std::thread::sleep(Duration::from_secs(1));
         let mut snap = SensorSnapshot {
@@ -64,9 +65,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let t = Instant::now();
         for p in &mut active {
             if status[p.name()]["ok"] == true {
+                let t = Instant::now();
                 if let Err(e) = p.poll(&mut reg, &mut snap) {
                     println!("  {} poll error: {e}", p.name());
                 }
+                per_provider
+                    .entry(p.name())
+                    .or_default()
+                    .push(t.elapsed().as_secs_f64() * 1000.0);
             }
         }
         poll_ms.push(t.elapsed().as_secs_f64() * 1000.0);
@@ -104,6 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let json = serde_json::to_string_pretty(&serde_json::json!({
         "providers": status,
         "pollMs": poll_ms,
+        "pollMsByProvider": per_provider,
         "snapshot": last,
         "sensors": reg.tree(),
     }))?;

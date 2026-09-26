@@ -92,8 +92,10 @@ from the board name, NVIDIA GPU BIOS display format.
 - [x] Hardware and System views (tabs), browser-mode sample data
 
 ### P2 — Live usage, clocks, GPU, per-process (M2)
-Status: **2a built** (awaiting check on a physical PC with `vyro-live.exe` / `vyro.exe`);
-**2b** (AMD / Intel vendor libraries, NVIDIA hotspot) next.
+Status: **2a done**, field-checked on the Ryzen 7 9700X / RTX 5060 Ti + Radeon iGPU PC: all
+providers up, poll ≈ 9 ms/tick; NVML matches the card (8 GB, PCIe 5.0 ×8, 180 W limit, GDDR7
+14001 MHz, zero-RPM fan at idle); the iGPU gets temperature and clocks from WDDM perf data;
+discrete GPU ordered first. **2b** (AMD / Intel vendor libraries, NVIDIA hotspot) next.
 
 - [x] CPU total + per-logical-processor utilization from PDH `% Processor Utility` (Task
       Manager's counter), falling back to `% Processor Time` and the legacy `Processor` object

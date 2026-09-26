@@ -173,7 +173,11 @@ pub fn top_processes(
         .into_iter()
         .map(|s| ProcessSnapshot {
             pid: s.pid,
-            gpu_pct: gpu.get(&s.pid).copied(),
+            // With engine data present, a process missing from it is idle on the GPU.
+            gpu_pct: gpu
+                .get(&s.pid)
+                .copied()
+                .or((!gpu.is_empty()).then_some(0.0)),
             name: s.name,
             cpu_pct: s.cpu_pct,
             ram_mb: Some(s.ram_mb),
@@ -375,5 +379,8 @@ mod tests {
         let pids: Vec<u32> = top.iter().map(|p| p.pid).collect();
         assert_eq!(pids, vec![1, 2, 5]);
         assert_eq!(top[2].gpu_pct, Some(30.0));
+        assert_eq!(top[0].gpu_pct, Some(0.0), "idle on the GPU, not unknown");
+        let none = top_processes(vec![s(1, 1.0, 1.0)], &HashMap::new(), 1);
+        assert_eq!(none[0].gpu_pct, None, "no engine data at all");
     }
 }
