@@ -1,7 +1,7 @@
 // Browser-only stand-in for the engine's sensor registry: derives a sensor tree from the
 // simulated snapshot and tracks min / max / avg the way the Rust registry does.
 
-import type { Group, Sensor, SensorSnapshot, SensorTree, Source, Unit } from './types';
+import type { Group, HistoryRange, HistorySeries, Sensor, SensorSnapshot, SensorTree, Source, Unit } from './types';
 
 const GROUP_ORDER: Group[] = ['cpu', 'gpu', 'memory', 'storage', 'board', 'fans', 'voltages', 'network', 'power', 'system', 'app'];
 
@@ -73,4 +73,64 @@ export function simTree(s: SensorSnapshot): SensorTree {
   ];
   const groups = GROUP_ORDER.map((group) => ({ group, sensors: list.filter((x) => x.group === group) })).filter((g) => g.sensors.length);
   return { groups };
+}
+
+/** Same bucket width as the engine's `HistoryRange::step_secs`. */
+const RANGE: Record<HistoryRange, { secs: number; res: number }> = {
+  '5m': { secs: 300, res: 1 },
+  '30m': { secs: 1800, res: 1 },
+  '1h': { secs: 3600, res: 10 },
+  '6h': { secs: 21600, res: 10 },
+  '24h': { secs: 86400, res: 10 },
+  '7d': { secs: 604800, res: 60 },
+};
+
+export function stepSecs(range: HistoryRange): number {
+  const { secs, res } = RANGE[range];
+  const step = Math.max(res, Math.ceil(secs / 600));
+  return Math.ceil(step / res) * res;
+}
+
+/** Typical level and swing per metric, for the browser preview only. */
+function profile(id: string): [number, number] {
+  if (id.endsWith('.usage') || id === 'cpu.usage.total') return [25, 18];
+  if (id.includes('dimm') || id.startsWith('memory.dimm')) return [39, 2];
+  if (id.includes('.temp')) return [id.startsWith('storage') ? 38 : 48, 8];
+  if (id.includes('clock')) return [id.startsWith('gpu') ? 1400 : 3800, 900];
+  if (id.includes('power')) return [45, 25];
+  if (id.includes('vram')) return [3000, 900];
+  if (id === 'memory.used') return [14000, 1500];
+  if (id.startsWith('fan.')) return [1400, 250];
+  if (id === 'cpu.vid') return [1.15, 0.12];
+  if (id.startsWith('voltage.')) return [1.2, 0.02];
+  if (id === 'network.ping') return [11, 2];
+  if (id.startsWith('network.')) return [3, 3];
+  return [10, 5];
+}
+
+function hash(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return (h >>> 0) / 2 ** 32;
+}
+
+/** A plausible, deterministic series so the History view can be previewed without the engine. */
+export function simHistory(metric: string, range: HistoryRange, now = Math.floor(Date.now() / 1000)): HistorySeries {
+  const step = stepSecs(range);
+  const [base, swing] = profile(metric);
+  const seed = hash(metric) * 100;
+  const end = Math.floor(now / step) * step;
+  const start = end - RANGE[range].secs;
+  const points = [];
+  for (let ts = start + step; ts <= end; ts += step) {
+    // App "closed" for a stretch each night, so long ranges show a gap.
+    const hour = new Date(ts * 1000).getHours();
+    if (RANGE[range].secs >= 86400 && hour >= 2 && hour < 7) continue;
+    const t = ts / 60;
+    const load = 0.5 + 0.35 * Math.sin(t / 37 + seed) + 0.15 * Math.sin(t / 5.3 + seed * 2);
+    const avg = Math.max(0, base + swing * (load - 0.5) * 2);
+    const spread = swing * 0.15 * (step > 1 ? 1 : 0);
+    points.push({ ts, avg, min: Math.max(0, avg - spread), max: avg + spread });
+  }
+  return { metric, range, stepSecs: step, points };
 }

@@ -24,7 +24,8 @@ export function setUiVisible(visible: boolean): void {
   if (inTauri) void invoke('set_ui_visible', { visible }).catch(() => {});
 }
 
-export function queryHistory(metric: string, range: HistoryRange): Promise<HistorySeries> {
+export async function queryHistory(metric: string, range: HistoryRange): Promise<HistorySeries> {
+  if (!inTauri) return (await import('./sim-tree')).simHistory(metric, range);
   return invoke<HistorySeries>('query_history', { metric, range });
 }
 

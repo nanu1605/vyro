@@ -18,6 +18,7 @@
   import GpuCard from './components/GpuCard.svelte';
   import ProcessesPanel from './components/ProcessesPanel.svelte';
   import SensorsPanel from './components/SensorsPanel.svelte';
+  import HistoryPanel from './components/HistoryPanel.svelte';
   import { animator } from './anim';
   import { fmt, fmtGB } from './format';
   import { getPawnIoStatus, inTauri, onSensors, setUiVisible } from './ipc';
@@ -25,6 +26,7 @@
 
   const TABS = [
     { id: 'dashboard', label: 'Dashboard' },
+    { id: 'history', label: 'History' },
     { id: 'processes', label: 'Processes' },
     { id: 'hardware', label: 'Hardware' },
     { id: 'storage', label: 'Storage' },
@@ -48,6 +50,7 @@
   // Panels mount on first visit and then stay mounted (keeps fetched data and live history).
   let visited = $state<Record<Tab, boolean>>({
     dashboard: true,
+    history: false,
     processes: false,
     hardware: false,
     storage: false,
@@ -56,6 +59,13 @@
     system: false,
     sensors: false,
   });
+
+  /** Sensor opened from the explorer, charted alone at the top of History. */
+  let historyFocus = $state<string | null>(null);
+  function openHistory(id: string): void {
+    historyFocus = id;
+    select('history');
+  }
 
   function select(t: Tab): void {
     tab = t;
@@ -196,6 +206,12 @@
       </div>
     </div>
 
+    {#if visited.history}
+      <div id="panel-history" role="tabpanel" aria-labelledby="tab-history" hidden={tab !== 'history'}>
+        <HistoryPanel {snap} active={tab === 'history'} focus={historyFocus} onclearfocus={() => (historyFocus = null)} />
+      </div>
+    {/if}
+
     {#if visited.processes}
       <div id="panel-processes" role="tabpanel" aria-labelledby="tab-processes" hidden={tab !== 'processes'}>
         <ProcessesPanel processes={snap?.processes ?? []} />
@@ -229,7 +245,7 @@
     {/if}
     {#if visited.sensors}
       <div id="panel-sensors" role="tabpanel" aria-labelledby="tab-sensors" hidden={tab !== 'sensors'}>
-        <SensorsPanel {snap} active={tab === 'sensors'} />
+        <SensorsPanel {snap} active={tab === 'sensors'} onhistory={openHistory} />
       </div>
     {/if}
   </main>

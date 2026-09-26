@@ -17,6 +17,14 @@
   --warn: #f5b942;
   --hot: #ff5d5d;
 
+  /* History chart series, in order. */
+  --series-1: var(--accent-cpu);
+  --series-2: var(--accent-gpu);
+  --series-3: #c792ea;
+  --series-4: #ffb86b;
+  --series-5: #ff79c6;
+  --series-6: #f1fa8c;
+
   --gauge-track: #18212c;
   --gauge-tick: #334155;
 
