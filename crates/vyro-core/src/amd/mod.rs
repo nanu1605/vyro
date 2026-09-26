@@ -228,4 +228,21 @@ mod tests {
         assert_eq!(watts(Some(1e12), unit, 1000.0), None);
         assert_eq!(watts(None, unit, 1000.0), None);
     }
+
+    #[test]
+    fn decodes_field_registers_from_a_ryzen_9700x() {
+        // vyro-live on a Ryzen 7 9700X (family 0x1A model 0x44) with PawnIO 2.2.
+        let t = tctl(0x74FB_0000);
+        assert!((t - 67.875).abs() < 1e-9, "{t}");
+        let ccd = ccd_temp(0x0000_0B74).expect("valid CCD slot");
+        assert!((ccd - 61.5).abs() < 1e-9, "{ccd}");
+        assert_eq!(ccd_temp(0), None);
+        assert_eq!(ccd_base(0x1A, 0x44), Some(SMN_CCD_TEMP_ZEN4));
+        assert!((energy_unit(0xA_1000) - 1.0 / 65536.0).abs() < 1e-15);
+        assert_eq!(vid(0x0000_0080_0077_4447), 221);
+        assert_eq!(vid(0x0000_0040_0037_4447), 221);
+        assert!(svi3(0x1A, 0x44));
+        // SVI3 gives a plausible boost VID; the SVI2 formula would give 0.17 V.
+        assert!((vid_volts(221, true) - 1.35).abs() < 1e-9);
+    }
 }

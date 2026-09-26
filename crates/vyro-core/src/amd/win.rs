@@ -19,6 +19,8 @@ const MAX_PACKAGE_W: f64 = 1000.0;
 const MAX_CORE_W: f64 = 200.0;
 /// Longest wait for another tool's PCI/SMN access before skipping temperatures this tick.
 const LOCK_MS: u32 = 50;
+/// Ticks the last temperatures stand in while another tool keeps the bus (then `null`).
+const MAX_STALE: u32 = 3;
 
 struct Thread {
     cpu: u32,
@@ -53,6 +55,9 @@ pub struct AmdCpuProvider {
     package: Rate,
     cores: Vec<Core>,
     keys: Option<Keys>,
+    /// Last Tdie and CCD temperatures, and how many ticks they have been reused.
+    temps: (Option<f64>, Vec<f64>),
+    stale: u32,
 }
 
 impl AmdCpuProvider {
@@ -69,6 +74,8 @@ impl AmdCpuProvider {
             package: Rate::default(),
             cores: Vec::new(),
             keys: None,
+            temps: (None, Vec::new()),
+            stale: 0,
         }
     }
 }
@@ -170,8 +177,7 @@ impl Provider for AmdCpuProvider {
             if let Some(key) = k.tctl {
                 reg.set(key, t);
             }
-            cpu.temp_package = reg.set(k.tdie, t.map(|t| t - self.offset));
-            cpu.temp_ccd = ccds
+            let ccds = ccds
                 .iter()
                 .enumerate()
                 .filter_map(|(i, raw)| Some((i, ccd_temp((*raw)?)?)))
@@ -192,7 +198,22 @@ impl Provider for AmdCpuProvider {
                     v
                 })
                 .collect();
+            self.temps = (reg.set(k.tdie, t.map(|t| t - self.offset)), ccds);
+            self.stale = 0;
+        } else if self.stale < MAX_STALE {
+            // Another monitor holds the bus this tick: keep showing the last reading.
+            self.stale += 1;
+        } else {
+            self.temps = (reg.set(k.tdie, None), Vec::new());
+            if let Some(key) = k.tctl {
+                reg.set(key, None);
+            }
+            for key in k.ccd.iter().flatten() {
+                reg.set(*key, None);
+            }
         }
+        cpu.temp_package = self.temps.0;
+        cpu.temp_ccd = self.temps.1.clone();
 
         // Package energy is package-scoped: any processor will do.
         let pkg_raw = msr(io, MSR_PKG_ENERGY);

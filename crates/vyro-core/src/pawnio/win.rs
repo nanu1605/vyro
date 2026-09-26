@@ -12,7 +12,7 @@ use windows::Win32::Storage::FileSystem::{
 use windows::Win32::System::SystemInformation::GROUP_AFFINITY;
 use windows::Win32::System::Threading::{
     CreateMutexW, GetCurrentThread, OpenMutexW, ReleaseMutex, SetThreadGroupAffinity,
-    WaitForSingleObject, SYNCHRONIZATION_SYNCHRONIZE,
+    WaitForSingleObject, MUTEX_MODIFY_STATE, SYNCHRONIZATION_SYNCHRONIZE,
 };
 use windows::Win32::System::IO::DeviceIoControl;
 
@@ -156,9 +156,16 @@ unsafe impl Send for BusLock {}
 impl BusLock {
     pub fn new(name: &str) -> Self {
         let name = HSTRING::from(name);
-        // SAFETY: plain create-or-open of a named mutex; the handle is owned by `self`.
+        // SAFETY: plain create-or-open of a named mutex; the handle is owned by `self`. Opening
+        // needs MODIFY_STATE too, or ReleaseMutex fails and the bus stays locked for everyone.
         let h = unsafe { CreateMutexW(None, false, &name) }
-            .or_else(|_| unsafe { OpenMutexW(SYNCHRONIZATION_SYNCHRONIZE, false, &name) })
+            .or_else(|_| unsafe {
+                OpenMutexW(
+                    SYNCHRONIZATION_SYNCHRONIZE | MUTEX_MODIFY_STATE,
+                    false,
+                    &name,
+                )
+            })
             .ok();
         Self(h)
     }
