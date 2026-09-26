@@ -69,10 +69,13 @@
     return d.bus;
   }
 
-  // Temperature attributes pack min / max into the upper raw bytes; show the current value.
+  // Some attributes pack extra fields into the upper raw bytes: temperatures keep min / max
+  // there, and Seagate stores minutes / seconds above the power-on and head-flying hours.
   function rawValue(d: DriveInfo, id: number, raw: number): string {
     const temp = id === 194 || id === 190 || (id === 231 && d.ssd === false);
-    return temp ? `${raw % 256} °C` : fmt(raw);
+    if (temp) return `${raw % 256} °C`;
+    if (id === 9 || id === 240) return `${fmt(raw % 2 ** 32)} h`;
+    return fmt(raw);
   }
 
   function usedPct(used: number | null | undefined, total: number | null | undefined): number | null {

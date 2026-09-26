@@ -174,7 +174,11 @@ Field check 1 (unelevated; Ryzen 7 9700X, 2× Crucial NVMe + Seagate 2.5" HDD): 
 report the full health log without admin (P3 39 °C / 5 % used, E100 38 °C / 1 % used), volumes
 map to disks, rates and memory lists match Task Manager's shape; the SATA HDD correctly asks for
 admin. The compression process is named "Memory Compression" in the process list, not
-"MemCompression": fixed. Elevated SATA SMART still to check.
+"MemCompression": fixed (now 1361 MB).
+Field check 2 (elevated): Seagate ST1000LM048 2.5" HDD over ATA pass-through — 5400 RPM,
+SATA 6 Gb/s, 31 °C (attr 194), 12,998 power-on hours (low 32 bits of attr 9; Seagate packs
+minutes above), 3,747 power cycles, 53.6 TB written (241 in LBAs), all 24 attributes above
+threshold → good. Table now shows packed hour attributes (9, 240) as hours.
 
 ### P5 — Network, power (partial), self-monitoring (M2)
 IP Helper + PDH + WLAN API, ICMP ping/loss thread, app + WebView2 footprint, power panel (GPU
