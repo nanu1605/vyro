@@ -107,6 +107,8 @@ pub enum BoardTemp {
 pub struct Layout {
     pub temps: &'static [(u16, &'static str, BoardTemp)],
     pub fans: &'static [(u16, &'static str, FanKind)],
+    /// Voltage inputs checked on this board (name only; +12V/+5V scaling is universal).
+    pub volts: &'static [(u16, &'static str)],
 }
 
 /// NCT6687 defaults, used on MSI boards (LibreHardwareMonitor's MSI mappings and the
@@ -126,15 +128,76 @@ pub const MSI_NCT6687: Layout = Layout {
         (3, "System Fan 2", FanKind::Fan),
         (4, "System Fan 3", FanKind::Fan),
     ],
+    volts: &[],
 };
 
-/// Layout for a board, from the SMBIOS board manufacturer.
-pub fn layout(manufacturer: Option<&str>, chip: Chip) -> Option<Layout> {
+/// MSI B650M GAMING PLUS WIFI (MS-7E24). Checked against HWMonitor at idle and under an
+/// all-core load: VIN2 holds 1.21 V with VDDCR_SOC at 1.20 V; VIN3 follows VDDCR_VDD from
+/// 1.34 V idle to 1.02 V loaded; VIN6 reads 3.34 V. LibreHardwareMonitor's labels for this
+/// board (Vcore on VIN4, +3.3V on 0x130) do not match these readings.
+pub const MSI_B650M_GAMING_PLUS_WIFI: Layout = Layout {
+    volts: &[(2, "CPU SoC"), (3, "Vcore"), (6, "+3.3V")],
+    ..MSI_NCT6687
+};
+
+/// Layout for a board, from the SMBIOS board manufacturer and product.
+pub fn layout(manufacturer: Option<&str>, product: Option<&str>, chip: Chip) -> Option<Layout> {
     let msi = manufacturer.is_some_and(|m| m.contains("Micro-Star") || m.contains("MSI"));
+    let product = product.unwrap_or("");
     match chip {
+        Chip::Nct6687 if msi && product.contains("MS-7E24") => Some(MSI_B650M_GAMING_PLUS_WIFI),
         Chip::Nct6687 if msi => Some(MSI_NCT6687),
         Chip::Nct6687 => None,
     }
+}
+
+/// Byte-wide port I/O, so the EC access sequence can be tested without hardware.
+pub trait PortIo {
+    type Error;
+    fn inb(&mut self, port: u16) -> Result<u8, Self::Error>;
+    fn outb(&mut self, port: u16, value: u8) -> Result<(), Self::Error>;
+    /// Pause between polls of a busy EC.
+    fn pause(&mut self) {}
+}
+
+/// Reads `len` bytes of NCT6687 EC space from `start` (base = hardware-monitor I/O base).
+/// The EC latches the index only after a page write, so every byte is page, index, data.
+/// `None` when another program is mid-access (page register not free): the tick is skipped
+/// rather than forcing the page over, which would corrupt that program's read. Call with the
+/// ISA-bus mutex held.
+pub fn read_ec<P: PortIo>(
+    io: &mut P,
+    base: u16,
+    start: u16,
+    len: u16,
+) -> Result<Option<Vec<u8>>, P::Error> {
+    let mut free = false;
+    for _ in 0..5 {
+        if io.inb(base + EC_PAGE)? == EC_FREE {
+            free = true;
+            break;
+        }
+        io.pause();
+    }
+    if !free {
+        return Ok(None);
+    }
+    let mut out = Vec::with_capacity(usize::from(len));
+    let mut read = || {
+        for addr in start..start + len {
+            let [page, index] = addr.to_be_bytes();
+            io.outb(base + EC_PAGE, page)?;
+            io.outb(base + EC_INDEX, index)?;
+            out.push(io.inb(base + EC_DATA)?);
+        }
+        Ok(())
+    };
+    let result = read();
+    // Release the EC for other tools even if a read failed.
+    let release = io.outb(base + EC_PAGE, EC_FREE);
+    result?;
+    release?;
+    Ok(Some(out))
 }
 
 /// Voltage channel name and divider. Only the two rails every NCT6687 board wires the same
@@ -237,10 +300,89 @@ mod tests {
 
     #[test]
     fn msi_boards_get_the_msi_layout() {
-        let l = layout(Some("Micro-Star International Co., Ltd."), Chip::Nct6687).expect("msi");
+        let msi = Some("Micro-Star International Co., Ltd.");
+        let l = layout(
+            msi,
+            Some("MAG X670E TOMAHAWK WIFI (MS-7E12)"),
+            Chip::Nct6687,
+        )
+        .expect("msi");
         assert_eq!(l.fans[1], (1, "Pump Fan", FanKind::Pump));
-        assert!(layout(Some("ASRock"), Chip::Nct6687).is_none());
-        assert!(layout(None, Chip::Nct6687).is_none());
+        assert!(l.volts.is_empty());
+        let b650 =
+            layout(msi, Some("B650M GAMING PLUS WIFI (MS-7E24)"), Chip::Nct6687).expect("b650");
+        assert_eq!(b650.volts[1], (3, "Vcore"));
+        assert_eq!(b650.fans, MSI_NCT6687.fans);
+        assert!(layout(Some("ASRock"), None, Chip::Nct6687).is_none());
+        assert!(layout(None, None, Chip::Nct6687).is_none());
+    }
+
+    /// An NCT6687 EC that, like the real one, only takes a new index right after a page write.
+    struct FakeEc {
+        mem: Vec<u8>,
+        page_reg: u8,
+        addr: Option<u16>,
+        armed: bool,
+    }
+
+    impl FakeEc {
+        fn new(page_reg: u8) -> Self {
+            Self {
+                mem: (0..=0xFFFFu32)
+                    .map(|a| (a as u8) ^ ((a >> 8) as u8))
+                    .collect(),
+                page_reg,
+                addr: None,
+                armed: false,
+            }
+        }
+    }
+
+    impl PortIo for FakeEc {
+        type Error = ();
+        fn inb(&mut self, port: u16) -> Result<u8, ()> {
+            match port - 0xA20 {
+                EC_PAGE => Ok(self.page_reg),
+                EC_DATA => Ok(self.addr.map_or(0xFF, |a| self.mem[usize::from(a)])),
+                _ => Err(()),
+            }
+        }
+        fn outb(&mut self, port: u16, value: u8) -> Result<(), ()> {
+            match port - 0xA20 {
+                EC_PAGE => {
+                    self.page_reg = value;
+                    self.armed = value != EC_FREE;
+                }
+                EC_INDEX if self.armed => {
+                    self.addr = Some(u16::from_be_bytes([self.page_reg, value]));
+                    self.armed = false;
+                }
+                EC_INDEX => {}
+                _ => return Err(()),
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn reads_every_ec_byte_and_releases_the_page() {
+        let mut ec = FakeEc::new(EC_FREE);
+        let block = read_ec(&mut ec, 0xA20, BLOCK_START, BLOCK_LEN)
+            .unwrap()
+            .expect("free");
+        assert_eq!(block.len(), usize::from(BLOCK_LEN));
+        for (i, b) in block.iter().enumerate() {
+            let a = BLOCK_START + u16::try_from(i).unwrap();
+            assert_eq!(*b, ec.mem[usize::from(a)], "byte at {a:#x}");
+        }
+        assert_eq!(ec.page_reg, EC_FREE);
+    }
+
+    #[test]
+    fn skips_while_another_tool_holds_the_ec() {
+        let mut ec = FakeEc::new(0x01);
+        assert_eq!(read_ec(&mut ec, 0xA20, BLOCK_START, 4), Ok(None));
+        assert_eq!(ec.page_reg, 0x01, "never forced");
     }
 
     #[test]

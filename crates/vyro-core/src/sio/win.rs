@@ -4,9 +4,9 @@
 use std::time::Duration;
 
 use super::{
-    decode, identify, layout, valid_base, voltage_channel, BoardTemp, Chip, Decoded, Layout,
-    BLOCK_LEN, BLOCK_START, CONFIG_PORTS, EC_DATA, EC_FREE, EC_INDEX, EC_PAGE, ENTER_KEY, EXIT_KEY,
-    LDN_HWM, REG_BASE, REG_CHIP_ID, REG_CHIP_REV, REG_LDN,
+    decode, identify, layout, read_ec, valid_base, voltage_channel, BoardTemp, Chip, Decoded,
+    Layout, PortIo, BLOCK_LEN, BLOCK_START, CONFIG_PORTS, ENTER_KEY, EXIT_KEY, LDN_HWM, REG_BASE,
+    REG_CHIP_ID, REG_CHIP_REV, REG_LDN,
 };
 use crate::hwid::smbios;
 use crate::pawnio::{BusLock, Handle, Module, PawnIoError, MUTEX_ISABUS};
@@ -83,46 +83,30 @@ pub fn detect(io: &Handle) -> Result<Option<Found>, PawnIoError> {
     Ok(None)
 }
 
-/// Reads `len` bytes of NCT6687 EC space from `start`. `None` when another program is in the
-/// middle of an EC access (its page register is not free); Vyro then skips the tick rather
-/// than forcing the page over, as that would corrupt the other program's read. Call with the
-/// ISA-bus mutex held.
+struct Ports<'a>(&'a Handle);
+
+impl PortIo for Ports<'_> {
+    type Error = PawnIoError;
+    fn inb(&mut self, port: u16) -> Result<u8, PawnIoError> {
+        inb(self.0, port)
+    }
+    fn outb(&mut self, port: u16, value: u8) -> Result<(), PawnIoError> {
+        outb(self.0, port, value)
+    }
+    fn pause(&mut self) {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+}
+
+/// Reads NCT6687 EC space through PawnIO; see [`super::read_ec`]. Call with the ISA-bus
+/// mutex held, after [`detect`] on the same handle.
 pub fn read_block(
     io: &Handle,
     base: u16,
     start: u16,
     len: u16,
 ) -> Result<Option<Vec<u8>>, PawnIoError> {
-    let mut free = false;
-    for _ in 0..5 {
-        if inb(io, base + EC_PAGE)? == EC_FREE {
-            free = true;
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(1));
-    }
-    if !free {
-        return Ok(None);
-    }
-    let read = (|| {
-        let mut page = None;
-        let mut out = Vec::with_capacity(usize::from(len));
-        for addr in start..start + len {
-            let [p, index] = addr.to_be_bytes();
-            if page != Some(p) {
-                outb(io, base + EC_PAGE, p)?;
-                page = Some(p);
-            }
-            outb(io, base + EC_INDEX, index)?;
-            out.push(inb(io, base + EC_DATA)?);
-        }
-        Ok(out)
-    })();
-    // Release the EC for other tools even if a read failed.
-    let release = outb(io, base + EC_PAGE, EC_FREE);
-    let out = read?;
-    release?;
-    Ok(Some(out))
+    read_ec(&mut Ports(io), base, start, len)
 }
 
 #[derive(Default)]
@@ -219,7 +203,9 @@ impl SioProvider {
             if v <= 0.0 && !known {
                 continue;
             }
-            let name = voltage_channel(n).0;
+            let name = layout
+                .and_then(|l| l.volts.iter().find(|c| c.0 == n))
+                .map_or_else(|| voltage_channel(n).0, |c| c.1.to_owned());
             let k = key(&mut self.keys.volts, n, reg, || {
                 SensorDesc::new(
                     format!("voltage.vin{n}"),
@@ -286,11 +272,16 @@ impl Provider for SioProvider {
             .hold(500, || detect(&io))
             .ok_or("ISA bus busy")??
             .ok_or("no supported Super-I/O chip")?;
-        let manufacturer = crate::hwid::win::smbios_raw()
+        let board = crate::hwid::win::smbios_raw()
             .as_deref()
             .and_then(smbios::Smbios::from_raw)
-            .and_then(|s| smbios::board(&s).manufacturer);
-        self.layout = layout(manufacturer.as_deref(), found.chip);
+            .map(|s| smbios::board(&s))
+            .unwrap_or_default();
+        self.layout = layout(
+            board.manufacturer.as_deref(),
+            board.product.as_deref(),
+            found.chip,
+        );
         log::info!(
             "sio: {} (id {:#04x} rev {:#04x}) at {:#x}, monitor base {:#06x}, board layout {}",
             found.chip.name(),
