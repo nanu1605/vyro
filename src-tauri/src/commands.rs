@@ -215,3 +215,33 @@ pub fn set_settings(
 ) -> Result<(), String> {
     store.set(settings)
 }
+
+/// Whether Vyro starts (elevated, in the tray) at sign-in.
+#[tauri::command]
+pub async fn get_autostart() -> bool {
+    #[cfg(windows)]
+    return tauri::async_runtime::spawn_blocking(vyro_core::autostart::is_enabled)
+        .await
+        .unwrap_or(false);
+    #[cfg(not(windows))]
+    false
+}
+
+#[tauri::command]
+pub async fn set_autostart(enabled: bool) -> Result<(), String> {
+    #[cfg(windows)]
+    return tauri::async_runtime::spawn_blocking(move || {
+        if enabled {
+            vyro_core::autostart::enable()
+        } else {
+            vyro_core::autostart::disable()
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    #[cfg(not(windows))]
+    {
+        let _ = enabled;
+        Err("Start with Windows is only available on Windows".into())
+    }
+}

@@ -11,6 +11,23 @@ app or library).
 still simulated. The Hardware and System views show real inventory on Windows (CPU topology,
 caches, memory modules, board/BIOS, GPUs, OS, security posture, startup apps, power history).
 
+## Install (test builds)
+
+Every CI run on this branch uploads `vyro-windows-<commit>` with `Vyro_<version>_x64_en-US.msi`.
+The MSI installs Vyro for all users, adds a Start-menu entry, and installs the signed
+[PawnIO](https://github.com/namazso/PawnIO) driver silently if it is missing (PawnIO is what
+lets Vyro read CPU temperatures and power, fans, voltages and RAM sensors; it stays installed
+when Vyro is removed). Vyro runs with administrator rights. "Start with Windows" (Health →
+Alerts) starts it in the tray at sign-in without a UAC prompt. Builds are not code-signed yet,
+so SmartScreen will warn.
+
+## License
+
+Vyro is licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your
+option. Third-party components and their licenses, including PawnIO, are listed in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) (regenerate with
+`python3 scripts/third_party.py`).
+
 ## Layout
 
 | Path | What |

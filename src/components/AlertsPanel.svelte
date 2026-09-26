@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { GROUP_LABEL } from '../format';
-  import { getAlertLog, getAlertRules, getSensorTree, getSettings, setAlertRules, setSettings, testAlert, type AppSettings } from '../ipc';
+  import { getAlertLog, getAlertRules, getAutostart, getSensorTree, getSettings, setAlertRules, setAutostart, setSettings, testAlert, type AppSettings } from '../ipc';
   import type { AlertFired, AlertRule, Sensor, SensorSnapshot, SensorTree } from '../types';
 
   interface Props {
@@ -20,6 +20,18 @@
   let isNew = $state(false);
   let armedDelete = $state<string | null>(null);
   let settings = $state<AppSettings | null>(null);
+  let autostart = $state<boolean | null>(null);
+
+  async function setStart(on: boolean): Promise<void> {
+    try {
+      await setAutostart(on);
+      autostart = on;
+      error = null;
+    } catch (e) {
+      error = `Start with Windows: ${String(e)}`;
+      autostart = await getAutostart().catch(() => null);
+    }
+  }
 
   async function setTray(on: boolean): Promise<void> {
     if (!settings) return;
@@ -51,6 +63,9 @@
       void reload();
       void getSettings()
         .then((x) => (settings = x))
+        .catch(() => {});
+      void getAutostart()
+        .then((x) => (autostart = x))
         .catch(() => {});
       void getSensorTree(snap).then((t) => (tree = t));
     });
@@ -254,6 +269,12 @@
       Keep running in the tray when the window is closed (alerts need Vyro running; quit from the tray icon)
     </label>
   {/if}
+  {#if autostart != null}
+    <label class="tray">
+      <input type="checkbox" checked={autostart} onchange={(e) => void setStart((e.currentTarget as HTMLInputElement).checked)} />
+      Start with Windows, in the tray (runs with administrator rights for the sensors, without a UAC prompt)
+    </label>
+  {/if}
   {#if error}<p class="err">{error}</p>{/if}
 
   <ul class="rules">
@@ -364,7 +385,7 @@
     display: flex;
     align-items: flex-start;
     gap: 0.45rem;
-    margin: 0 0 0.8rem;
+    margin: 0 0 0.5rem;
     font-size: 0.8rem;
   }
   .tray input {

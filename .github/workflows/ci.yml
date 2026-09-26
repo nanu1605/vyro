@@ -45,6 +45,8 @@ jobs:
       - run: pnpm check
       - run: pnpm test
       - run: pnpm build
+      - name: Third-party notices match Cargo.lock
+        run: python3 scripts/third_party.py --check
 
   tauri-windows:
     name: Tauri app (Windows)
@@ -69,7 +71,11 @@ jobs:
         run: cargo run -p vyro-core --example inventory -- --no-wait
       - name: Live sensors on a real Windows machine (for eyeballing)
         run: cargo run -p vyro-core --example live -- --no-wait --samples 3
-      - run: pnpm tauri build --no-bundle
+      - name: Fetch the bundled PawnIO installer (pinned SHA-256)
+        shell: pwsh
+        run: ./scripts/fetch-pawnio.ps1
+      - name: Build the app and the MSI installer
+        run: pnpm tauri build
 
       # Ready-to-run downloads for checking on a real PC without a toolchain.
       - name: Collect Windows binaries
@@ -79,6 +85,7 @@ jobs:
           Copy-Item target\debug\examples\inventory.exe dist-win\vyro-inventory.exe
           Copy-Item target\debug\examples\live.exe dist-win\vyro-live.exe
           Copy-Item target\release\vyro.exe dist-win\vyro.exe
+          Copy-Item target\release\bundle\msi\*.msi dist-win\
       - uses: actions/upload-artifact@v4
         with:
           name: vyro-windows-${{ github.sha }}

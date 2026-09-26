@@ -18,7 +18,8 @@
         "height": 760,
         "minWidth": 480,
         "minHeight": 520,
-        "backgroundColor": "#0a0d12"
+        "backgroundColor": "#0a0d12",
+        "visible": false
       }
     ],
     "security": {
@@ -27,7 +28,34 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["msi"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"]
+    "targets": [
+      "msi"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "publisher": "Vyro",
+    "copyright": "Vyro contributors, MIT OR Apache-2.0",
+    "license": "MIT OR Apache-2.0",
+    "resources": {
+      "../LICENSE-MIT": "LICENSE-MIT",
+      "../LICENSE-APACHE": "LICENSE-APACHE",
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
+      "../crates/vyro-core/pawnio/COPYING": "COPYING-PawnIO-modules"
+    },
+    "windows": {
+      "wix": {
+        "upgradeCode": "4462867d-695d-5f78-bb13-262590559da4",
+        "fragmentPaths": [
+          "wix/pawnio.wxs"
+        ],
+        "componentRefs": [
+          "PawnIOSetup"
+        ]
+      }
+    }
   }
 }

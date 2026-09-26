@@ -99,6 +99,22 @@ export async function setSettings(settings: AppSettings): Promise<void> {
   await invoke('set_settings', { settings });
 }
 
+let browserAutostart = false;
+
+/** Whether Vyro starts (elevated, in the tray) at sign-in. */
+export async function getAutostart(): Promise<boolean> {
+  if (!inTauri) return browserAutostart;
+  return invoke<boolean>('get_autostart');
+}
+
+export async function setAutostart(enabled: boolean): Promise<void> {
+  if (!inTauri) {
+    browserAutostart = enabled;
+    return;
+  }
+  await invoke('set_autostart', { enabled });
+}
+
 /** Sends a sample Windows notification. */
 export async function testAlert(sound: boolean): Promise<void> {
   if (inTauri) await invoke('test_alert', { sound });

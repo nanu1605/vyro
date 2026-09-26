@@ -27,3 +27,6 @@ Thumbs.db
 # Test output
 /playwright-report/
 /test-results/
+
+# Bundled PawnIO installer (fetched by scripts/fetch-pawnio.ps1)
+src-tauri/pawnio/PawnIO_setup.exe

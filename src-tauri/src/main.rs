@@ -22,6 +22,11 @@ fn main() {
         .build();
 
     let app = tauri::Builder::default()
+        // First: a second launch (Start menu while Vyro sits in the tray) shows the running
+        // copy instead of starting another engine.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            tray::show_main(app);
+        }))
         .plugin(log)
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
@@ -29,6 +34,14 @@ fn main() {
             app.manage(engine);
             app.manage(tray::SettingsStore::load(app.handle()));
             tray::build(app.handle())?;
+            // The window starts hidden (tauri.conf.json); autostart passes --minimized to stay
+            // in the tray.
+            let minimized = std::env::args().any(|a| a == vyro_core::autostart::MINIMIZED_ARG);
+            if minimized {
+                app.state::<Engine>().set_visible(false);
+            } else {
+                tray::show_main(app.handle());
+            }
             Ok(())
         })
         .on_window_event(tray::on_window_event)
@@ -54,6 +67,8 @@ fn main() {
             commands::test_alert,
             commands::get_settings,
             commands::set_settings,
+            commands::get_autostart,
+            commands::set_autostart,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build the Tauri application");

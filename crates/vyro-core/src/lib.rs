@@ -4,6 +4,7 @@
 
 pub mod alerts;
 pub mod amd;
+pub mod autostart;
 pub mod display;
 pub mod health;
 pub mod history;

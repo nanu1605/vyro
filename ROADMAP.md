@@ -22,7 +22,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 9 | Extra Super-I/O coverage | Nuvoton NCT6687D first (MSI AM5), then NCT67xx + ITE IT87xx | default |
 | 10 | Low-level hardware access | **PawnIO** (signed, free, HVCI-compatible) replaces our own KMDF driver | decided |
 | 11 | Code signing | **SignPath Foundation** or **Certum Open Source** (no EV certificate) | decided |
-| 12 | Source availability | **Open source**; license MIT OR Apache-2.0 unless changed before the repo goes public | default |
+| 12 | Source availability | **Open source**; license MIT OR Apache-2.0 (LICENSE files added in P11; can still change before the repo goes public) | default |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -206,6 +206,17 @@ APIPA address hidden on a disconnected adapter, global IPv6 DNS / gateways redac
 inventory. Wi-Fi link details and throughput under load still to check.
 
 ### P11 — Early release (M3)
+In progress. Done: WiX MSI (`pnpm tauri build`, uploaded by CI) with the pinned PawnIO 2.2.0
+installer (`scripts/fetch-pawnio.ps1`, SHA-256 checked) run silently and elevated when PawnIO
+is missing or 1.x (`src-tauri/wix/pawnio.wxs`; a PawnIO failure never fails the install);
+Start-menu shortcut carrying the toast app id; fixed upgrade code; "Start with Windows" as an
+elevated logon task (`vyro_core::autostart`, removed by the uninstaller); single instance;
+license MIT OR Apache-2.0 (decision 12), `THIRD_PARTY_NOTICES.md` generated from Cargo.lock
+and checked in CI. Open: code signing (needs the repo public and a SignPath / Certum
+account), Tauri updater (needs a signing key and a release feed), perf pass, clean-machine
+test with Memory Integrity on, full license texts for dependencies (e.g. cargo-about),
+CONTRIBUTING.
+
 - Signing: SignPath Foundation or Certum Open Source (requires the repo public under an OSI
   license) for vyro.exe and the MSI.
 - WiX MSI; bundles the unmodified signed `PawnIO_setup.exe`, run as an elevated custom action
