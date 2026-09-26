@@ -17,6 +17,7 @@
   import PawnIoBanner from './components/PawnIoBanner.svelte';
   import GpuCard from './components/GpuCard.svelte';
   import ProcessesPanel from './components/ProcessesPanel.svelte';
+  import SensorsPanel from './components/SensorsPanel.svelte';
   import { animator } from './anim';
   import { fmt, fmtGB } from './format';
   import { getPawnIoStatus, inTauri, onSensors, setUiVisible } from './ipc';
@@ -30,6 +31,7 @@
     { id: 'network', label: 'Network' },
     { id: 'displays', label: 'Displays' },
     { id: 'system', label: 'System' },
+    { id: 'sensors', label: 'Sensors' },
   ] as const;
   type Tab = (typeof TABS)[number]['id'];
 
@@ -52,6 +54,7 @@
     network: false,
     displays: false,
     system: false,
+    sensors: false,
   });
 
   function select(t: Tab): void {
@@ -222,6 +225,11 @@
     {#if visited.system}
       <div id="panel-system" role="tabpanel" aria-labelledby="tab-system" hidden={tab !== 'system'}>
         <SystemPanel />
+      </div>
+    {/if}
+    {#if visited.sensors}
+      <div id="panel-sensors" role="tabpanel" aria-labelledby="tab-sensors" hidden={tab !== 'sensors'}>
+        <SensorsPanel {snap} active={tab === 'sensors'} />
       </div>
     {/if}
   </main>

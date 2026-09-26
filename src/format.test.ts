@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NA, fmt, fmtDuration, fmtGB, fmtGBTotal, fmtKB, fmtMB, fmtRate, fmtStorage, hex4 } from './format';
+import { NA, fmt, fmtDuration, fmtGB, fmtGBTotal, fmtKB, fmtMB, fmtRate, fmtStorage, fmtUnit, hex4 } from './format';
 
 describe('fmt', () => {
   it('renders missing and non-finite values as unavailable', () => {
@@ -45,5 +45,15 @@ describe('storage', () => {
     expect(fmtRate(0.5)).toBe('512 KB/s');
     expect(fmtRate(12.44)).toBe('12.4 MB/s');
     expect(fmtRate(2048)).toBe('2.0 GB/s');
+  });
+});
+
+describe('fmtUnit', () => {
+  it('uses per-unit precision and spacing', () => {
+    expect(fmtUnit(41.26, '°C')).toBe('41.3 °C');
+    expect(fmtUnit(12.54, '%')).toBe('12.5%');
+    expect(fmtUnit(1480.4, 'RPM')).toBe('1,480 RPM');
+    expect(fmtUnit(1.2345, 'V')).toBe('1.235 V');
+    expect(fmtUnit(null, 'W')).toBe(NA);
   });
 });

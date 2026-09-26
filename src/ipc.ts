@@ -28,8 +28,16 @@ export function queryHistory(metric: string, range: HistoryRange): Promise<Histo
   return invoke<HistorySeries>('query_history', { metric, range });
 }
 
-export function getSensorTree(): Promise<SensorTree> {
+/** The full sensor registry; in a browser it is derived from the simulated `snap`. */
+export async function getSensorTree(snap: SensorSnapshot | null): Promise<SensorTree> {
+  if (!inTauri) return snap ? (await import('./sim-tree')).simTree(snap) : { groups: [] };
   return invoke<SensorTree>('get_sensor_tree');
+}
+
+/** Restarts min / max / avg for every sensor. */
+export async function resetSensorStats(): Promise<void> {
+  if (!inTauri) return (await import('./sim-tree')).resetSimStats();
+  await invoke('reset_sensor_stats');
 }
 
 export async function getHardwareId(): Promise<HardwareId> {

@@ -32,6 +32,7 @@ fn main() {
             commands::set_ui_visible,
             commands::query_history,
             commands::get_sensor_tree,
+            commands::reset_sensor_stats,
             commands::get_app_metrics,
             commands::get_system_info,
             commands::get_hardware_id,

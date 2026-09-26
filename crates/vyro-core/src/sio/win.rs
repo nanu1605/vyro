@@ -221,6 +221,7 @@ impl SioProvider {
                     Unit::Volt,
                     Source::Driver,
                 )
+                .with_history()
             });
             let value = reg.set(k, Some(v));
             out.voltages.push(VoltageReading { name, value });

@@ -41,6 +41,12 @@ pub async fn get_sensor_tree(engine: State<'_, Engine>) -> Result<SensorTree, St
     Ok(lock(&engine.registry).tree())
 }
 
+/// Restarts min / max / avg for every sensor (Sensor Explorer "Reset").
+#[tauri::command]
+pub fn reset_sensor_stats(engine: State<'_, Engine>) {
+    lock(&engine.registry).reset_stats();
+}
+
 #[tauri::command]
 pub fn get_app_metrics(engine: State<'_, Engine>) -> AppSnapshot {
     engine.latest().map(|s| s.app).unwrap_or_default()

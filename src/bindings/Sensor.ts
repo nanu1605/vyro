@@ -15,4 +15,8 @@ avg: number | null, source: Source,
 /**
  * Whether the latest poll produced a value.
  */
-available: boolean, };
+available: boolean, 
+/**
+ * Readings persist to the history store (queryable with `query_history`).
+ */
+history: boolean, };

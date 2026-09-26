@@ -91,9 +91,8 @@ pub struct Sensor {
     pub source: Source,
     /// Whether the latest poll produced a value.
     pub available: bool,
-    #[serde(skip)]
-    #[ts(skip)]
-    history: bool,
+    /// Readings persist to the history store (queryable with `query_history`).
+    pub history: bool,
     #[serde(skip)]
     #[ts(skip)]
     sum: f64,
