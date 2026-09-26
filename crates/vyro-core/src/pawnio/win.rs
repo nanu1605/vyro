@@ -11,8 +11,9 @@ use windows::Win32::Storage::FileSystem::{
 };
 use windows::Win32::System::SystemInformation::GROUP_AFFINITY;
 use windows::Win32::System::Threading::{
-    CreateMutexW, GetCurrentThread, OpenMutexW, ReleaseMutex, SetThreadGroupAffinity,
-    WaitForSingleObject, MUTEX_MODIFY_STATE, SYNCHRONIZATION_SYNCHRONIZE,
+    CreateMutexW, GetCurrentThread, GetThreadPriority, OpenMutexW, ReleaseMutex,
+    SetThreadGroupAffinity, SetThreadPriority, WaitForSingleObject, MUTEX_MODIFY_STATE,
+    SYNCHRONIZATION_SYNCHRONIZE, THREAD_PRIORITY, THREAD_PRIORITY_TIME_CRITICAL,
 };
 use windows::Win32::System::IO::DeviceIoControl;
 
@@ -203,6 +204,27 @@ impl Drop for BusLock {
 
 /// Runs `f` on logical processor `cpu` (group × 64 + index), restoring the thread's previous
 /// affinity afterwards. `None` if the processor cannot be selected.
+/// Runs `f` at time-critical thread priority, then restores the previous priority. Wrap a
+/// sweep of [`on_cpu`] calls in it: pinned to a core that a normal-priority workload keeps
+/// busy, a normal thread waits for the running thread's time slice to end (tens of ms per core
+/// under a full load); a time-critical one preempts it at once. Keep `f` to a few register
+/// reads — it delays everything else on each core it visits.
+pub fn urgent<R>(f: impl FnOnce() -> R) -> R {
+    // SAFETY: the pseudo-handle for the current thread needs no closing.
+    let previous = unsafe { GetThreadPriority(GetCurrentThread()) };
+    // SAFETY: as above. Failure just leaves the priority unchanged.
+    let raised =
+        unsafe { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL) }.is_ok();
+    let r = f();
+    if raised {
+        // SAFETY: as above; restores the value read before.
+        unsafe {
+            let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY(previous));
+        }
+    }
+    r
+}
+
 pub fn on_cpu<R>(cpu: u32, f: impl FnOnce() -> R) -> Option<R> {
     let target = GROUP_AFFINITY {
         Mask: 1usize << (cpu % 64),

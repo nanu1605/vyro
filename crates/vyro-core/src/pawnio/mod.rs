@@ -7,7 +7,7 @@
 mod win;
 
 #[cfg(windows)]
-pub use win::{on_cpu, status, BusLock, Handle};
+pub use win::{on_cpu, status, urgent, BusLock, Handle};
 
 use crate::info::{PawnIoState, PawnIoStatus};
 

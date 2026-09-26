@@ -9,7 +9,7 @@ use super::{
     MSR_PWR_UNIT, SMN_THM_TCON_CUR_TMP,
 };
 use crate::hwid::{cpuid, topology};
-use crate::pawnio::{on_cpu, BusLock, Handle, Module, MUTEX_PCI};
+use crate::pawnio::{on_cpu, urgent, BusLock, Handle, Module, MUTEX_PCI};
 use crate::provider::{BoxError, Provider};
 use crate::registry::{Group, Registry, SensorDesc, SensorKey, Source, Unit};
 use crate::snapshot::SensorSnapshot;
@@ -25,6 +25,14 @@ const MAX_STALE: u32 = 3;
 struct Thread {
     cpu: u32,
     aperf: Rate,
+}
+
+/// One logical processor's pinned MSR reads: APERF, when they were taken, and (first thread of
+/// a core only) core energy and the P-state status holding the VID.
+struct ThreadRead {
+    aperf: Option<u64>,
+    t: f64,
+    core: Option<(Option<u64>, Option<u64>)>,
 }
 
 struct Core {
@@ -225,22 +233,41 @@ impl Provider for AmdCpuProvider {
         );
         cpu.power_pkg_w = reg.set(k.package, package);
 
-        // Per core: energy and VID from the core's first thread; APERF from every thread.
+        // Per core: energy and VID from the core's first thread; APERF from every thread. The
+        // pinned reads run as one time-critical sweep; the arithmetic happens after it.
         let start = self.start;
+        let reads: Vec<Vec<Option<ThreadRead>>> = urgent(|| {
+            self.cores
+                .iter()
+                .map(|core| {
+                    core.threads
+                        .iter()
+                        .enumerate()
+                        .map(|(i, th)| {
+                            on_cpu(th.cpu, || ThreadRead {
+                                aperf: msr(io, MSR_APERF_RO),
+                                t: start.elapsed().as_secs_f64(),
+                                core: (i == 0).then(|| {
+                                    (msr(io, MSR_CORE_ENERGY), msr(io, MSR_HW_PSTATE_STATUS))
+                                }),
+                            })
+                        })
+                        .collect()
+                })
+                .collect()
+        });
         let unit = self.unit;
         let mut core_w = Vec::with_capacity(self.cores.len());
         let mut vids = Vec::new();
         let mut effective = Vec::new();
-        for (n, core) in self.cores.iter_mut().enumerate() {
-            for (i, th) in core.threads.iter_mut().enumerate() {
-                let read = on_cpu(th.cpu, || {
-                    let aperf = msr(io, MSR_APERF_RO);
-                    let t = start.elapsed().as_secs_f64();
-                    let extra =
-                        (i == 0).then(|| (msr(io, MSR_CORE_ENERGY), msr(io, MSR_HW_PSTATE_STATUS)));
-                    (aperf, t, extra)
-                });
-                let Some((aperf, t, extra)) = read else {
+        for (n, (core, reads)) in self.cores.iter_mut().zip(reads).enumerate() {
+            for (th, read) in core.threads.iter_mut().zip(reads) {
+                let Some(ThreadRead {
+                    aperf,
+                    t,
+                    core: extra,
+                }) = read
+                else {
                     continue;
                 };
                 if let Some(hz) = aperf.and_then(|a| th.aperf.update(a, t, 64)) {
