@@ -100,7 +100,8 @@ list with its GPU share. Follow-ups: NVAPI fan RPM via cooler status (tach read 
 RTX 50); ADL kept headless iGPU adapters and now reports why it did not attach; `vyro-live`
 records engine log lines. Second gaming run: NVIDIA fan 1358 RPM @ 38 % via cooler status ✓;
 ADL loaded but listed no adapters with connected-only enumeration → enumerate all adapters
-(headless iGPU) and log every raw record. Cost per tick under load: GPU ≈ 4–11 ms (PDH engine counters),
+(headless iGPU) and log every raw record. Third run's records showed the real cause: ADL encodes
+the vendor id as decimal 1002 (0x3EA), not 0x1002 — accepted now; iGPU on bus 20 matches D3DKMT. Cost per tick under load: GPU ≈ 4–11 ms (PDH engine counters),
 processes ≈ 7 ms (≈ 450 processes) — revisit in P9.
 
 - [x] CPU total + per-logical-processor utilization from PDH `% Processor Utility` (Task

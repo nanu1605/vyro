@@ -71,6 +71,7 @@ pub struct AdlRecord {
 }
 
 const ADL_NAME: usize = 280;
+const ADL_VENDOR_AMD: i32 = 1002;
 const ADL_MAX_PATH: usize = 256;
 
 /// Every record in an `AdapterInfo` array.
@@ -99,7 +100,8 @@ pub fn adl_adapters(records: &[AdlRecord]) -> Vec<AdlAdapter> {
         let Ok(bus) = u32::try_from(r.bus) else {
             continue;
         };
-        if r.vendor != 0x1002 {
+        // ADL stores AMD's PCI vendor id as the *decimal* number 1002 (0x3EA), not 0x1002.
+        if r.vendor != ADL_VENDOR_AMD && r.vendor != 0x1002 {
             continue;
         }
         let a = AdlAdapter {
@@ -350,6 +352,22 @@ mod tests {
                 },
             ],
             "a present adapter replaces a not-present one on the same bus"
+        );
+        // As reported by a real Radeon iGPU next to an NVIDIA card (vendor ids 1002 and 10
+        // are ADL's decimal-looking encodings).
+        let real = [
+            adl_rec(0, 20, 1002, 1),
+            adl_rec(1, 20, 1002, 1),
+            adl_rec(5, 1, 10, 1),
+        ]
+        .concat();
+        assert_eq!(
+            parse_adl_adapters(&real),
+            vec![AdlAdapter {
+                index: 0,
+                bus: 20,
+                present: true
+            }]
         );
         let headless = adl_rec(7, 14, 0x1002, 0);
         assert_eq!(
