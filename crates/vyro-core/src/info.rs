@@ -309,22 +309,126 @@ pub struct GpuId {
 // Later phases
 // ---------------------------------------------------------------------------------------------
 
+/// A string shown locally but never logged: `Debug` prints `<redacted>` (spec §2.10).
+/// Serializes as the bare string (serde newtype).
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, type = "string")]
+pub struct LocalOnly(pub String);
+
+impl std::fmt::Debug for LocalOnly {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("<redacted>")
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Displays (Phase 3)
+// ---------------------------------------------------------------------------------------------
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct DisplayInfo {
+    /// Stable key for this output within a session (adapter LUID + target id).
+    pub id: String,
     pub name: String,
     pub manufacturer: Option<String>,
+    /// PNP id from the EDID, e.g. "GSM".
+    pub manufacturer_id: Option<String>,
+    /// Monitor name from the EDID, e.g. "LG ULTRAGEAR".
     pub model: Option<String>,
+    pub product_code: Option<String>,
+    /// Local display only; never logged, persisted or transmitted.
+    pub serial: Option<LocalOnly>,
+    pub manufactured: Option<String>,
     pub primary: bool,
+    /// GDI source name, e.g. `\\.\DISPLAY1`.
+    pub gdi_name: Option<String>,
+    /// GPU driving this output.
+    pub adapter: Option<String>,
+    /// "HDMI", "DisplayPort", "Internal (eDP)", ...
+    pub connection: Option<String>,
+    pub internal: bool,
+    /// Desktop resolution.
     pub width: Option<u32>,
     pub height: Option<u32>,
+    pub native_width: Option<u32>,
+    pub native_height: Option<u32>,
     pub refresh_hz: Option<f64>,
+    /// Highest refresh the EDID offers at native resolution.
+    pub max_refresh_hz: Option<f64>,
+    pub bits_per_color: Option<u32>,
+    /// "RGB", "YCbCr 4:4:4", ...
+    pub color_encoding: Option<String>,
+    /// "sRGB", "BT.2100 PQ (HDR10)", ...
+    pub color_space: Option<String>,
+    pub hdr: HdrInfo,
+    pub vrr: VrrInfo,
+    pub dpi: Option<u32>,
     pub scale_pct: Option<u32>,
-    pub hdr: Option<bool>,
-    pub vrr: Option<bool>,
+    /// Degrees clockwise: 0, 90, 180, 270.
+    pub orientation: Option<u32>,
+    #[serde(rename = "widthMM")]
+    #[ts(rename = "widthMM")]
+    pub width_mm: Option<u32>,
+    #[serde(rename = "heightMM")]
+    #[ts(rename = "heightMM")]
+    pub height_mm: Option<u32>,
+    pub diagonal_in: Option<f64>,
+    /// Backlight / DDC/CI brightness, percent.
+    pub brightness_pct: Option<u32>,
     /// Desktop-space rectangle for the arrangement view: `[x, y, width, height]`.
     pub rect: Option<[i32; 4]>,
+    pub edid: Option<EdidInfo>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct HdrInfo {
+    pub supported: Option<bool>,
+    pub enabled: Option<bool>,
+    /// Brightness Windows maps SDR white to while HDR is on.
+    pub sdr_white_nits: Option<f64>,
+    pub max_nits: Option<f64>,
+    pub max_full_frame_nits: Option<f64>,
+    pub min_nits: Option<f64>,
+    /// Transfer functions the EDID declares: "SDR", "PQ (ST 2084)", "HLG", ...
+    pub eotfs: Vec<String>,
+    /// Wide gamuts the EDID declares: "BT.2020", "DCI-P3".
+    pub gamuts: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct VrrInfo {
+    pub supported: Option<bool>,
+    /// Currently active, from the GPU vendor's driver API.
+    pub enabled: Option<bool>,
+    pub min_hz: Option<f64>,
+    pub max_hz: Option<f64>,
+    /// "G-SYNC", "G-SYNC Compatible", "FreeSync", "HDMI VRR", "Adaptive-Sync".
+    pub technology: Option<String>,
+    /// Where the answer came from: "NVAPI", "ADL", "EDID".
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct EdidInfo {
+    pub version: String,
+    pub checksum_ok: bool,
+    /// Declared input (EDID 1.4): "DisplayPort", "HDMI", "DVI".
+    pub interface: Option<String>,
+    pub bits_per_color: Option<u32>,
+    pub gamma: Option<f64>,
+    pub extensions: Vec<String>,
+    /// Vertical range from the range-limits descriptor, Hz.
+    pub range_hz: Option<[u32; 2]>,
+    /// Raw EDID as hex with serial fields zeroed.
+    pub hex: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]

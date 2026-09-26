@@ -61,12 +61,29 @@ pub async fn get_hardware_id(engine: State<'_, Engine>) -> Result<HardwareId, St
         .map_err(|e| e.to_string())
 }
 
-// Filled in by later phases: displays (P3), health (P7).
-
+/// Collected fresh on every call (cheap apart from DDC/CI), so the panel is current when
+/// opened and after each `displays-changed` event.
 #[tauri::command]
-pub fn get_displays() -> Vec<DisplayInfo> {
-    Vec::new()
+pub async fn get_displays() -> Result<Vec<DisplayInfo>, String> {
+    tauri::async_runtime::spawn_blocking(collect_displays)
+        .await
+        .map_err(|e| e.to_string())
 }
+
+#[cfg(windows)]
+fn collect_displays() -> Vec<DisplayInfo> {
+    if std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1") {
+        return vyro_core::display::sample();
+    }
+    vyro_core::display::collect()
+}
+
+#[cfg(not(windows))]
+fn collect_displays() -> Vec<DisplayInfo> {
+    vyro_core::display::sample()
+}
+
+// Filled in by a later phase: health (P7).
 
 #[tauri::command]
 pub fn get_health() -> HealthReport {

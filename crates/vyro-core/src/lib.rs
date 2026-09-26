@@ -2,6 +2,7 @@
 //! data contracts shared with the frontend. Platform-neutral; Windows providers live behind
 //! `#[cfg(windows)]` and the Tauri shell wires this crate to the UI.
 
+pub mod display;
 pub mod history;
 pub mod hwid;
 pub mod info;

@@ -3,7 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { HardwareId, HistoryRange, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { DisplayInfo, HardwareId, HistoryRange, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -44,4 +44,15 @@ export async function getSystemInfo(): Promise<SystemInfo> {
     return { ...sampleSystem, uptimeSecs: sampleSystem.bootTime == null ? null : now - sampleSystem.bootTime };
   }
   return invoke<SystemInfo>('get_system_info');
+}
+
+export async function getDisplays(): Promise<DisplayInfo[]> {
+  if (!inTauri) return (await import('./sample-displays')).sampleDisplays;
+  return invoke<DisplayInfo[]>('get_displays');
+}
+
+/** Fires after monitors are plugged, unplugged or reconfigured (debounced by the engine). */
+export async function onDisplaysChanged(cb: () => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen('displays-changed', () => cb());
 }

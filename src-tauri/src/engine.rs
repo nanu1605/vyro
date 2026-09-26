@@ -10,6 +10,9 @@ use vyro_core::{
 
 /// Event carrying each [`SensorSnapshot`] (spec §4.1).
 pub const SENSORS_EVENT: &str = "sensors";
+/// Emitted (no payload) when the display configuration changes.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub const DISPLAYS_EVENT: &str = "displays-changed";
 
 pub struct Engine {
     pub registry: Arc<Mutex<Registry>>,
@@ -37,6 +40,17 @@ impl Engine {
             with_providers(Poller::new(Arc::clone(&registry), PollerConfig::default()));
         if let Some(history) = &history {
             poller = poller.with_history(Arc::clone(history));
+        }
+
+        // Hot-plug / mode / HDR changes: the UI re-queries `get_displays`.
+        #[cfg(windows)]
+        {
+            let app = app.clone();
+            vyro_core::display::watch(move || {
+                if let Err(e) = app.emit(DISPLAYS_EVENT, ()) {
+                    log::debug!("emit {DISPLAYS_EVENT}: {e}");
+                }
+            });
         }
 
         let emitter = app.clone();

@@ -5,6 +5,7 @@
   import AppStatus from './components/AppStatus.svelte';
   import HardwarePanel from './components/HardwarePanel.svelte';
   import SystemPanel from './components/SystemPanel.svelte';
+  import DisplaysPanel from './components/DisplaysPanel.svelte';
   import CoresCard from './components/CoresCard.svelte';
   import GpuCard from './components/GpuCard.svelte';
   import ProcessesPanel from './components/ProcessesPanel.svelte';
@@ -17,6 +18,7 @@
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'processes', label: 'Processes' },
     { id: 'hardware', label: 'Hardware' },
+    { id: 'displays', label: 'Displays' },
     { id: 'system', label: 'System' },
   ] as const;
   type Tab = (typeof TABS)[number]['id'];
@@ -36,6 +38,7 @@
     dashboard: true,
     processes: false,
     hardware: false,
+    displays: false,
     system: false,
   });
 
@@ -177,6 +180,11 @@
         <HardwarePanel />
       </div>
     {/if}
+    {#if visited.displays}
+      <div id="panel-displays" role="tabpanel" aria-labelledby="tab-displays" hidden={tab !== 'displays'}>
+        <DisplaysPanel />
+      </div>
+    {/if}
     {#if visited.system}
       <div id="panel-system" role="tabpanel" aria-labelledby="tab-system" hidden={tab !== 'system'}>
         <SystemPanel />
@@ -203,7 +211,9 @@
   .tabs {
     display: flex;
     gap: 0.25rem;
+    max-width: 100%;
     margin-left: auto;
+    overflow-x: auto;
     padding: 0.2rem;
     border: 1px solid var(--line);
     border-radius: 10px;
@@ -217,6 +227,7 @@
     color: var(--muted);
     font: inherit;
     font-size: 0.82rem;
+    white-space: nowrap;
     cursor: pointer;
   }
   .tabs button:hover {

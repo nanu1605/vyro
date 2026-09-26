@@ -133,8 +133,16 @@ processes ≈ 7 ms (≈ 450 processes) — revisit in P9.
       compiled for x64 Windows; every call degrades to "unavailable" on failure
 
 ### P3 — Displays (M2)
-DisplayConfig + DXGI + EDID/CTA/DisplayID parser, HDR/SDR white level, VRR range + state,
-G-SYNC/FreeSync via vendor SDK, hot-plug refresh, arrangement view.
+Status: **built**, awaiting field check. `display/edid.rs`: EDID 1.3/1.4 + CTA-861 (HDR static
+metadata, colorimetry, FreeSync / HDMI Forum VRR / NVIDIA vendor blocks) + DisplayID 1.x/2.x
+(Type I/VII timings, Adaptive-Sync) decoder, tested on three real monitor dumps (serials
+replaced). `display/win.rs`: `QueryDisplayConfig` paths (connection, rotation, refresh, desktop
+rect, primary), advanced color info (24H2 `_2` query first), SDR white level, DXGI `GetDesc1`
+(bit depth, color space, luminance), registry EDID, per-monitor DPI, DDC/CI or WMI brightness,
+VRR state via NVAPI `Disp_GetVRRInfo` / ADL `FreeSyncState_Get`; hot-plug through a hidden
+window (`WM_DISPLAYCHANGE`/`SETTINGCHANGE`/`DEVICECHANGE`, debounced) → `displays-changed`.
+Displays tab: arrangement view, per-display signal / HDR / VRR / panel / EDID, serial hidden by
+default. `vyro-inventory` now includes `displays` and collector log lines.
 
 ### P4 — Storage & memory runtime (M2)
 NVMe health log + SATA SMART decoders, PDH disk counters, memory counters, elevated manifest

@@ -68,9 +68,12 @@ pub struct AdlRecord {
     pub vendor: i32,
     pub present: bool,
     pub name: String,
+    /// GDI source this logical adapter drives, e.g. `\\.\DISPLAY1`; empty when none.
+    pub display_name: String,
 }
 
 const ADL_NAME: usize = 280;
+const ADL_DISPLAY_NAME: usize = 536;
 const ADL_VENDOR_AMD: i32 = 1002;
 const ADL_MAX_PATH: usize = 256;
 
@@ -80,14 +83,18 @@ pub fn parse_adl_records(buf: &[u8]) -> Vec<AdlRecord> {
         .0
         .iter()
         .filter_map(|rec| {
-            let name = &rec[ADL_NAME..ADL_NAME + ADL_MAX_PATH];
-            let end = name.iter().position(|&b| b == 0).unwrap_or(name.len());
+            let text = |off: usize| {
+                let raw = &rec[off..off + ADL_MAX_PATH];
+                let end = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
+                String::from_utf8_lossy(&raw[..end]).trim().to_owned()
+            };
             Some(AdlRecord {
                 index: i32_at(rec, ADL_INDEX)?,
                 bus: i32_at(rec, ADL_BUS)?,
                 vendor: i32_at(rec, ADL_VENDOR)?,
                 present: i32_at(rec, ADL_PRESENT)? != 0,
-                name: String::from_utf8_lossy(&name[..end]).trim().to_owned(),
+                name: text(ADL_NAME),
+                display_name: text(ADL_DISPLAY_NAME),
             })
         })
         .collect()
@@ -122,6 +129,23 @@ pub fn adl_adapters(records: &[AdlRecord]) -> Vec<AdlAdapter> {
 /// [`adl_adapters`] straight from the raw buffer.
 pub fn parse_adl_adapters(buf: &[u8]) -> Vec<AdlAdapter> {
     adl_adapters(&parse_adl_records(buf))
+}
+
+/// `sizeof(ADLDisplayInfo)`.
+pub const ADL_DISPLAY_INFO_SIZE: usize = 552;
+
+/// Active display index on ADL logical adapter `adapter`, from an `ADLDisplayInfo` array:
+/// the first display mapped to that adapter and both connected and mapped.
+pub fn adl_active_display(buf: &[u8], adapter: i32) -> Option<i32> {
+    const CONNECTED_MAPPED: i32 = 0x3;
+    buf.as_chunks::<ADL_DISPLAY_INFO_SIZE>()
+        .0
+        .iter()
+        .find(|d| {
+            i32_at(&d[..], 8) == Some(adapter)
+                && i32_at(&d[..], 548).is_some_and(|v| v & CONNECTED_MAPPED == CONNECTED_MAPPED)
+        })
+        .and_then(|d| i32_at(&d[..], 0))
 }
 
 /// `ADL_PMLOG_*` sensor ids used here.
@@ -324,6 +348,24 @@ mod tests {
         v[0x28..0x2C].copy_from_slice(&875_000u32.to_le_bytes());
         assert_eq!(nvapi_core_volts(&v), Some(0.875));
         assert_eq!(nvapi_core_volts(&[0; 0x4C]), None);
+    }
+
+    #[test]
+    fn adl_display_names_and_active_display() {
+        let mut r = adl_rec(3, 1, 1002, 1);
+        r[ADL_DISPLAY_NAME..ADL_DISPLAY_NAME + 13].copy_from_slice(b"\\\\.\\DISPLAY2\0");
+        assert_eq!(parse_adl_records(&r)[0].display_name, r"\\.\DISPLAY2");
+
+        let info = |logical: i32, adapter: i32, value: i32| {
+            let mut d = vec![0u8; ADL_DISPLAY_INFO_SIZE];
+            d[0..4].copy_from_slice(&logical.to_le_bytes());
+            d[8..12].copy_from_slice(&adapter.to_le_bytes());
+            d[548..552].copy_from_slice(&value.to_le_bytes());
+            d
+        };
+        let buf = [info(0, 3, 0x1), info(1, 4, 0x3), info(2, 3, 0x3)].concat();
+        assert_eq!(adl_active_display(&buf, 3), Some(2));
+        assert_eq!(adl_active_display(&buf, 5), None);
     }
 
     fn adl_rec(index: i32, bus: i32, vendor: i32, present: i32) -> Vec<u8> {

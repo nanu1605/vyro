@@ -3,7 +3,7 @@
 
 mod adl;
 mod cpu;
-mod dll;
+pub(crate) mod dll;
 mod gpu;
 mod igcl;
 mod memory;
