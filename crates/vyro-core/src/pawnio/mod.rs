@@ -34,14 +34,16 @@ pub enum Module {
     LpcIo,
     SmbusPiix4,
     RyzenSmu,
+    Nvidia,
 }
 
 impl Module {
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 5] = [
         Self::AmdFamily17,
         Self::LpcIo,
         Self::SmbusPiix4,
         Self::RyzenSmu,
+        Self::Nvidia,
     ];
 
     pub const fn file(self) -> &'static str {
@@ -50,6 +52,7 @@ impl Module {
             Self::LpcIo => "LpcIO.bin",
             Self::SmbusPiix4 => "SmbusPIIX4.bin",
             Self::RyzenSmu => "RyzenSMU.bin",
+            Self::Nvidia => "Nvidia.bin",
         }
     }
 
@@ -61,6 +64,7 @@ impl Module {
             Self::LpcIo => include_bytes!("../../pawnio/LpcIO.bin"),
             Self::SmbusPiix4 => include_bytes!("../../pawnio/SmbusPIIX4.bin"),
             Self::RyzenSmu => include_bytes!("../../pawnio/RyzenSMU.bin"),
+            Self::Nvidia => include_bytes!("../../pawnio/Nvidia.bin"),
         }
     }
 }

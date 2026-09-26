@@ -34,7 +34,7 @@ use crate::usage::engines::{luid_key, parse_adapter_instance, summarize};
 use crate::usage::gpu::{
     kmt_mhz, kmt_rpm, kmt_temp_c, likely_integrated, match_nvml, nvml_throttle, AdapterKey, NvmlPci,
 };
-use crate::usage::vendor::{integrated_only, VendorReadings};
+use crate::usage::vendor::{integrated_only, nvidia_hotspot, VendorReadings};
 use crate::winutil::wide_array;
 
 const MIB: f64 = 1024.0 * 1024.0;
@@ -65,6 +65,11 @@ struct Adapter {
     kmt: Option<u32>,
     /// PCI bus number (from D3DKMT), used to match vendor-library devices.
     bus: Option<u32>,
+    /// PCI device and function (from D3DKMT), for register reads through PawnIO.
+    devfn: Option<(u32, u32)>,
+    /// Read the hotspot from the GPU's thermal registers (NVIDIA RTX 50 via PawnIO); cleared
+    /// after the first refusal (other chips).
+    nv_regs: bool,
     nvml: Option<u32>,
     nvapi: Option<usize>,
     adl: Option<usize>,
@@ -94,6 +99,8 @@ pub struct GpuProvider {
     nvapi: Option<NvApi>,
     adl: Option<Adl>,
     igcl: Option<Igcl>,
+    /// PawnIO `Nvidia` module, for the RTX 50 hotspot NVAPI no longer reports.
+    nv_io: Option<crate::pawnio::Handle>,
     pdh: Option<Counters>,
     /// Last ADL read error, so it is logged once rather than every tick.
     adl_error: Option<String>,
@@ -108,6 +115,7 @@ impl GpuProvider {
             nvapi: None,
             adl: None,
             igcl: None,
+            nv_io: None,
             pdh: None,
             adl_error: None,
         }
@@ -163,14 +171,15 @@ fn enumerate() -> Vec<Adapter> {
         let kmt = unsafe { D3DKMTOpenAdapterFromLuid(&mut open) }
             .is_ok()
             .then_some(open.hAdapter);
-        let bus = kmt.and_then(|h| {
+        let addr = kmt.and_then(|h| {
             kmt_query(
                 h,
                 KMTQAITYPE_ADAPTERADDRESS,
                 D3DKMT_ADAPTERADDRESS::default(),
             )
-            .map(|addr| addr.BusNumber)
         });
+        let bus = addr.map(|a| a.BusNumber);
+        let devfn = addr.map(|a| (a.DeviceNumber, a.FunctionNumber));
         out.push(Adapter {
             integrated: likely_integrated(desc.VendorId, &name, dedicated_mb),
             name,
@@ -181,6 +190,8 @@ fn enumerate() -> Vec<Adapter> {
             dedicated_mb,
             kmt,
             bus,
+            devfn,
+            nv_regs: false,
             nvml: None,
             nvapi: None,
             adl: None,
@@ -407,7 +418,14 @@ impl Provider for GpuProvider {
             self.adl.is_some(),
             self.igcl.is_some()
         );
+        if has(0x10DE) {
+            match crate::pawnio::Handle::open(crate::pawnio::Module::Nvidia) {
+                Ok(io) => self.nv_io = Some(io),
+                Err(e) => log::info!("gpu: no NVIDIA register access ({e})"),
+            }
+        }
         for a in &mut self.adapters {
+            a.nv_regs = a.vendor_id == 0x10DE && a.devfn.is_some() && self.nv_io.is_some();
             match a.vendor_id {
                 0x10DE => a.nvapi = a.bus.and_then(|b| self.nvapi.as_ref()?.find(b)),
                 0x1002 => a.adl = a.bus.and_then(|b| self.adl.as_ref()?.find(b)),
@@ -487,7 +505,7 @@ impl Provider for GpuProvider {
             .map(|s| s.per_pid.clone())
             .unwrap_or_default();
 
-        for a in &self.adapters {
+        for a in &mut self.adapters {
             let Some(k) = &a.keys else { continue };
             let luid = luid_key(a.luid.HighPart, a.luid.LowPart);
             let usage = summary.as_ref().and_then(|s| s.adapters.get(&luid));
@@ -506,6 +524,22 @@ impl Provider for GpuProvider {
             }
             if let (Some(nvapi), Some(idx)) = (&self.nvapi, a.nvapi) {
                 apply(&mut g, nvapi.read(idx, &a.name));
+            }
+            if g.temp_hotspot.is_none() && a.nv_regs {
+                if let (Some(io), Some(bus), Some((dev, func))) = (&self.nv_io, a.bus, a.devfn) {
+                    match io.exec(
+                        "ioctl_read_thermal_registers",
+                        &[u64::from(bus), u64::from(dev), u64::from(func)],
+                        6,
+                    ) {
+                        Ok(raw) => g.temp_hotspot = nvidia_hotspot(&raw),
+                        Err(e) => {
+                            // Not a GB20x chip (or the module refused): stop asking.
+                            log::info!("gpu {}: no thermal registers ({e})", a.name);
+                            a.nv_regs = false;
+                        }
+                    }
+                }
             }
             if let (Some(adl), Some(idx)) = (&self.adl, a.adl) {
                 match adl.read(idx) {

@@ -12,7 +12,8 @@ pub const fn nvapi_version(size: usize, ver: u32) -> u32 {
 }
 
 /// Hotspot and memory-junction temperatures from `NvAPI_GPU_GetThermalSensors` (1/256 °C
-/// units). The channel layout differs by generation; RTX 50 no longer exposes a hotspot.
+/// units). The channel layout differs by generation; RTX 50 no longer exposes a hotspot here
+/// (see [`nvidia_hotspot`]).
 pub fn nvapi_thermal(name: &str, temps: &[i32]) -> (Option<f64>, Option<f64>) {
     let at = |i: usize| {
         temps
@@ -28,6 +29,19 @@ pub fn nvapi_thermal(name: &str, temps: &[i32]) -> (Option<f64>, Option<f64>) {
     } else {
         (at(1), at(9))
     }
+}
+
+/// GPU hotspot from the raw GB20x thermal registers that PawnIO's `Nvidia` module returns
+/// (`ioctl_read_thermal_registers`, BAR0 + 0xAD0A90): channel 0 is the hotspot, valid when
+/// bit 30 is set, in 1/256 °C in the low 16 bits.
+pub fn nvidia_hotspot(raw: &[u64]) -> Option<f64> {
+    let r = *raw.first()?;
+    if r & (1 << 30) == 0 {
+        return None;
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let t = (r & 0xFFFF) as f64 / 256.0;
+    (t > 0.0 && t < 150.0).then_some(t)
 }
 
 /// Core voltage from `NvAPI_GPU_ClientVoltRailsGetStatus` (µV at offset 0x28 of a 0x4C-byte
@@ -348,6 +362,16 @@ mod tests {
         v[0x28..0x2C].copy_from_slice(&875_000u32.to_le_bytes());
         assert_eq!(nvapi_core_volts(&v), Some(0.875));
         assert_eq!(nvapi_core_volts(&[0; 0x4C]), None);
+    }
+
+    #[test]
+    fn decodes_the_gb20x_hotspot_register() {
+        // 43 °C (HWMonitor's "Hot Spot" on the field RTX 5060 Ti) with the valid bit.
+        assert_eq!(nvidia_hotspot(&[0x4000_2B00, 0, 0, 0, 0, 0]), Some(43.0));
+        assert_eq!(nvidia_hotspot(&[0x4000_2B80]), Some(43.5));
+        assert_eq!(nvidia_hotspot(&[0x0000_2B00]), None, "no valid bit");
+        assert_eq!(nvidia_hotspot(&[0x4000_0000]), None, "zero");
+        assert_eq!(nvidia_hotspot(&[]), None);
     }
 
     #[test]

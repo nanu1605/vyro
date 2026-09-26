@@ -257,7 +257,9 @@ Status: 6a and 6b done and field-checked on the Ryzen 7 9700X against HWMonitor 
 temperature and core VID match; the Zen 5 VID uses the SVI3 formula; package and core power match
 at the 88 W PPT under Cinebench). 6c reads the NCT6687 read-only (no monitor-enable or fan writes),
 field-checked on the MSI B650M GAMING PLUS WIFI: fans, board temperatures and voltages match
-HWMonitor. Other boards show +12V/+5V plus raw channels until checked. 6d field-checked on the same
+HWMonitor. Other boards show +12V/+5V plus raw channels until checked. GPU hotspot on RTX 50 (NVAPI
+no longer reports it): read from the GB20x thermal registers through PawnIO's `Nvidia` module
+(channel 0, HWMonitor's "NVIDIA I/O" Hot Spot); awaiting field check. 6d field-checked on the same
 PC: DDR5 module temperatures (38.5 / 37.75 °C vs HWMonitor's PMIC 39 / 38 °C) and timings
 (40-40-40-77 at 5600 MT/s, the kit's XMP). It reads module temperatures from the SPD5 hub sensor
 (read-only: hub registers only, no page or NVM access, skipped while another tool holds the SMBus

@@ -10,7 +10,7 @@ not edit it by hand.
   <https://github.com/namazso/PawnIO.Setup>. The PawnIO driver is licensed under GPL-2.0 with
   an exception for independent programs that communicate with it only through its IOCTL
   interface, which is how Vyro uses it. Driver source: <https://github.com/namazso/PawnIO>.
-- **PawnIO modules** (`AMDFamily17.bin`, `LpcIO.bin`, `SmbusPIIX4.bin`, `RyzenSMU.bin`,
+- **PawnIO modules** (`AMDFamily17.bin`, `LpcIO.bin`, `SmbusPIIX4.bin`, `RyzenSMU.bin`, `Nvidia.bin`,
   embedded in `vyro.exe`, unmodified) from <https://github.com/namazso/PawnIO.Modules>,
   licensed under LGPL-2.1-or-later; the license text is installed as
   `COPYING-PawnIO-modules`. They are loaded into the separately installed driver at run time.
