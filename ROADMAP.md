@@ -240,15 +240,15 @@ temperatures (DDR5 hub, DDR4 TSOD) and AMD memory timings → Intel CPU when a t
 available.
 
 Status: 6a and 6b done and field-checked on the Ryzen 7 9700X against HWMonitor (Tctl, CCD
-temperature and core VID match; the Zen 5 VID uses the SVI3 formula; package and core power
-match at the 88 W PPT under Cinebench). 6c reads the NCT6687 read-only (no monitor-enable or
-fan writes), field-checked on the MSI B650M GAMING PLUS WIFI: fans, board temperatures and
-voltages match HWMonitor. Other boards show +12V/+5V plus raw channels until checked. 6d
-built, awaiting field check: DDR5 module temperatures from the SPD5 hub sensor (read-only: hub
-registers only, no page or NVM access, skipped while another tool holds the SMBus mux on
-another port) and DDR5 timings from the Zen 4/5 memory controller over SMN, shown in the Memory
-card. DDR4 TSOD and DDR4 timings wait for a test machine; DIMM PMIC rails need writes and stay
-out.
+temperature and core VID match; the Zen 5 VID uses the SVI3 formula; package and core power match
+at the 88 W PPT under Cinebench). 6c reads the NCT6687 read-only (no monitor-enable or fan writes),
+field-checked on the MSI B650M GAMING PLUS WIFI: fans, board temperatures and voltages match
+HWMonitor. Other boards show +12V/+5V plus raw channels until checked. 6d field-checked on the same
+PC: DDR5 module temperatures (38.5 / 37.75 °C vs HWMonitor's PMIC 39 / 38 °C) and timings
+(40-40-40-77 at 5600 MT/s, the kit's XMP). It reads module temperatures from the SPD5 hub sensor
+(read-only: hub registers only, no page or NVM access, skipped while another tool holds the SMBus
+mux on another port) and timings from the Zen 4/5 memory controller over SMN, shown in the Memory
+card. DDR4 TSOD and DDR4 timings wait for a test machine; DIMM PMIC rails need writes and stay out.
 
 ### P7 — History, health, alerts, sensor explorer (M5)
 ### P8 — Privilege separation: Windows service + ACL'd named pipe (M5)

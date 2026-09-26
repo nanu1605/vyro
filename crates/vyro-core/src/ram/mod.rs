@@ -274,6 +274,56 @@ mod tests {
         assert!(t.power_down);
     }
 
+    /// UMC channel 0 on the Ryzen 7 9700X with Corsair CMK16GX5M1B5600C40 at XMP (field dump).
+    const FIELD_UMC: [(u32, u32); 20] = [
+        (0x5_0000, 0x0000_0000),
+        (0x5_0008, 0x0000_0001),
+        (0x5_0100, 0x8000_0701),
+        (0x5_012C, 0x0538_1148),
+        (0x5_0200, 0x8005_0AF0),
+        (0x5_0204, 0x2828_4D28),
+        (0x5_0208, 0x0028_0075),
+        (0x5_020C, 0x1500_0E08),
+        (0x5_0210, 0x0000_0020),
+        (0x5_0214, 0x001C_0726),
+        (0x5_0218, 0x0000_0054),
+        (0x5_0230, 0x00C0_2A8C),
+        (0x5_0260, 0x00C0_0138),
+        (0x5_0264, 0x00C0_0138),
+        (0x5_0268, 0x01BF_0338),
+        (0x5_026C, 0x00C0_0138),
+        (0x5_02C0, 0x0000_0000),
+        (0x5_02C4, 0x0000_0000),
+        (0x5_02C8, 0x0054_016C),
+        (0x5_02CC, 0x0000_0000),
+    ];
+
+    #[test]
+    fn decodes_the_field_dump() {
+        let read = |a| FIELD_UMC.iter().find(|r| r.0 == a).map_or(0, |r| r.1);
+        assert!(channel_active(
+            0,
+            read(UMC_DIMM_CS[0]),
+            read(UMC_DIMM_CS[1])
+        ));
+        let t = decode_ddr5(read).unwrap();
+        assert_eq!(t.mts, 5600.0);
+        assert_eq!(
+            (t.cl, t.rcd_rd, t.rcd_wr, t.rp, t.ras, t.rc),
+            (40, 40, 40, 40, 77, 117)
+        );
+        assert_eq!((t.rrd_s, t.rrd_l, t.faw, t.rtp), (8, 14, 32, 21));
+        assert_eq!((t.cwl, t.wtr_s, t.wtr_l, t.wr), (38, 7, 28, 84));
+        // tRFC1 824 clocks = 294 ns at 2800 MHz, the 16 Gb die value; the third copy is set.
+        assert_eq!((t.rfc, t.rfc_sb, t.refi), (824, 364, 10892));
+        assert_eq!(t.command_rate, 1);
+        assert!(t.gear_down);
+        assert!(!t.power_down);
+        // Hub temperature words from the same run (HWMonitor's PMIC sensors: 39 / 38 °C).
+        assert_eq!(spd5_temp(0x0268), Some(38.5));
+        assert_eq!(spd5_temp(0x025C), Some(37.75));
+    }
+
     #[test]
     fn uses_trfc2_with_fine_granularity_refresh() {
         let mut regs = xmp_5600();
