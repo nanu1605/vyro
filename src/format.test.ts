@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NA, fmt, fmtDuration, fmtGB, fmtKB, fmtMB, hex4 } from './format';
+import { NA, fmt, fmtDuration, fmtGB, fmtGBTotal, fmtKB, fmtMB, fmtRate, fmtStorage, hex4 } from './format';
 
 describe('fmt', () => {
   it('renders missing and non-finite values as unavailable', () => {
@@ -30,5 +30,20 @@ describe('durations and sizes', () => {
     expect(fmtMB(16384)).toBe('16 GB');
     expect(fmtMB(512)).toBe('512 MB');
     expect(hex4(0x10de)).toBe('10DE');
+  });
+});
+
+describe('storage', () => {
+  it('formats capacities, traffic and rates', () => {
+    expect(fmtStorage(null)).toBe(NA);
+    expect(fmtStorage(953_870)).toBe('932 GB');
+    expect(fmtStorage(1_907_729)).toBe('1.82 TB');
+    expect(fmtStorage(40 * 1024)).toBe('40.0 GB');
+    expect(fmtGBTotal(812.4)).toBe('812 GB');
+    expect(fmtGBTotal(18_540)).toBe('18.5 TB');
+    expect(fmtRate(0)).toBe('0 KB/s');
+    expect(fmtRate(0.5)).toBe('512 KB/s');
+    expect(fmtRate(12.44)).toBe('12.4 MB/s');
+    expect(fmtRate(2048)).toBe('2.0 GB/s');
   });
 });

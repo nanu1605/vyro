@@ -1,5 +1,6 @@
 //! Live Windows providers (Phase 2): CPU, memory, GPU and per-process readings from OS
-//! counters and vendor libraries. No driver needed.
+//! counters and vendor libraries, plus storage (Phase 4, in [`crate::storage`]). No driver
+//! needed.
 
 mod adl;
 mod cpu;
@@ -8,7 +9,7 @@ mod gpu;
 mod igcl;
 mod memory;
 mod nvapi;
-mod pdh;
+pub(crate) mod pdh;
 mod process;
 
 use std::collections::HashMap;
@@ -31,6 +32,7 @@ pub fn providers() -> Vec<Box<dyn Provider>> {
     vec![
         Box::new(CpuProvider::new()),
         Box::new(MemoryProvider::new()),
+        Box::new(crate::storage::StorageProvider::new()),
         Box::new(GpuProvider::new(Arc::clone(&share))),
         Box::new(ProcessProvider::new(share)),
     ]

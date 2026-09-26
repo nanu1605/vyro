@@ -17,8 +17,9 @@ export function emptySnapshot(ts: number): SensorSnapshot {
     gpu: [],
     memory: {
       totalMB: null, usedMB: null, availableMB: null, cachedMB: null, committedMB: null,
-      commitLimitMB: null, pageFileUsedMB: null, compressedMB: null, pageFaultsPerSec: null,
-      channels: null, dimms: [],
+      commitLimitMB: null, pageFileUsedMB: null, pageFileTotalMB: null, standbyMB: null, modifiedMB: null,
+      freeMB: null, pagedPoolMB: null, nonPagedPoolMB: null, compressedMB: null, pageFaultsPerSec: null,
+      hardFaultsPerSec: null, channels: null, dimms: [],
     },
     storage: [],
     board: {
@@ -124,6 +125,42 @@ export function nextSnapshot(st: SimState, ts: number, pollHz: number, rand: () 
   s.memory.totalMB = 32768;
   s.memory.usedMB = st.mem;
   s.memory.availableMB = 32768 - st.mem;
+  Object.assign(s.memory, {
+    committedMB: st.mem + 3100,
+    commitLimitMB: 37888,
+    cachedMB: 9800,
+    standbyMB: 9100,
+    modifiedMB: 700,
+    freeMB: Math.max(0, 32768 - st.mem - 9100),
+    pagedPoolMB: 1100,
+    nonPagedPoolMB: 610,
+    pageFileUsedMB: 850,
+    pageFileTotalMB: 5120,
+    compressedMB: 380,
+    pageFaultsPerSec: 900 + rand() * 1500,
+    hardFaultsPerSec: rand() < 0.2 ? rand() * 60 : 0,
+  });
+  const io = (busy: number) => (rand() < busy ? rand() * 400 : rand() * 2);
+  const rd = io(0.2);
+  const wr = io(0.15);
+  s.storage = [
+    {
+      id: 'disk0', model: 'Samsung SSD 980 PRO 1TB', volumes: 'C:', health: 'ok', type: 'NVMe',
+      tempC: 41 + (rd + wr) * 0.02, tempControllerC: null, tempNandC: null, healthPct: 98,
+      capacityMB: 953870, usedMB: 440820, freeMB: 512430, readMBs: rd, writeMBs: wr,
+      readIops: rd * 60, writeIops: wr * 40, activityPct: Math.min(100, (rd + wr) / 4),
+      totalReadGB: 18540, totalWriteGB: 15294, powerOnHours: 3456, powerCycles: 812,
+      nvmePctUsed: 2, nvmeAvailableSparePct: 100, nvmeCriticalWarning: 0,
+    },
+    {
+      id: 'disk1', model: 'ST2000DM008-2UB102', volumes: 'D:', health: 'warn', type: 'SATA',
+      tempC: 34, tempControllerC: null, tempNandC: null, healthPct: null,
+      capacityMB: 1907729, usedMB: 885832, freeMB: 1021880, readMBs: rd * 0.1, writeMBs: 0,
+      readIops: rd, writeIops: 0, activityPct: Math.min(100, rd / 2), totalReadGB: null,
+      totalWriteGB: null, powerOnHours: 13210, powerCycles: 1530, nvmePctUsed: null,
+      nvmeAvailableSparePct: null, nvmeCriticalWarning: null,
+    },
+  ];
   s.fans.push({
     name: 'CPU_FAN', rpm: 450 + Math.max(0, st.cpuTemp - 30) * 22, pct: null, pwm: null,
     minRpm: 300, maxRpm: 2000, kind: 'fan', status: 'ok',

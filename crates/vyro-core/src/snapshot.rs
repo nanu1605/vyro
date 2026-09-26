@@ -115,9 +115,25 @@ pub struct MemorySnapshot {
     pub commit_limit_mb: Option<f64>,
     #[serde(rename = "pageFileUsedMB")]
     pub page_file_used_mb: Option<f64>,
+    #[serde(rename = "pageFileTotalMB")]
+    pub page_file_total_mb: Option<f64>,
+    /// Standby list (Task Manager's "Cached" = standby + modified).
+    #[serde(rename = "standbyMB")]
+    pub standby_mb: Option<f64>,
+    #[serde(rename = "modifiedMB")]
+    pub modified_mb: Option<f64>,
+    /// Free + zeroed pages.
+    #[serde(rename = "freeMB")]
+    pub free_mb: Option<f64>,
+    #[serde(rename = "pagedPoolMB")]
+    pub paged_pool_mb: Option<f64>,
+    #[serde(rename = "nonPagedPoolMB")]
+    pub non_paged_pool_mb: Option<f64>,
     #[serde(rename = "compressedMB")]
     pub compressed_mb: Option<f64>,
     pub page_faults_per_sec: Option<f64>,
+    /// Disk reads to resolve hard page faults (`\Memory\Page Reads/sec`).
+    pub hard_faults_per_sec: Option<f64>,
     /// Decoded / heuristic; approximate.
     pub channels: Option<u32>,
     pub dimms: Vec<DimmSnapshot>,
@@ -155,7 +171,13 @@ pub enum StorageKind {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct StorageSnapshot {
+    /// `disk<N>`, matching [`crate::info::DriveInfo::id`].
+    pub id: String,
     pub model: String,
+    /// Drive letters on this disk, e.g. "C: D:".
+    pub volumes: String,
+    /// From SMART / NVMe health; `unknown` when unavailable (e.g. not elevated).
+    pub health: Status,
     #[serde(rename = "type")]
     pub kind: StorageKind,
     pub temp_c: Option<f64>,

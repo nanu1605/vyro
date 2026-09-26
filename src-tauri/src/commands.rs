@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use tauri::State;
-use vyro_core::info::{DisplayInfo, HardwareId, HealthReport, SystemInfo};
+use vyro_core::info::{DisplayInfo, DriveInfo, HardwareId, HealthReport, SystemInfo};
 use vyro_core::snapshot::AppSnapshot;
 use vyro_core::{lock, unix_now, HistoryRange, HistorySeries, SensorSnapshot, SensorTree};
 
@@ -81,6 +81,28 @@ fn collect_displays() -> Vec<DisplayInfo> {
 #[cfg(not(windows))]
 fn collect_displays() -> Vec<DisplayInfo> {
     vyro_core::display::sample()
+}
+
+/// Drives with full health data, read fresh (SMART needs the app elevated). Live rates and
+/// temperature arrive in the `sensors` event.
+#[tauri::command]
+pub async fn get_drives() -> Result<Vec<DriveInfo>, String> {
+    tauri::async_runtime::spawn_blocking(collect_drives)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(windows)]
+fn collect_drives() -> Vec<DriveInfo> {
+    if std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1") {
+        return vyro_core::storage::sample();
+    }
+    vyro_core::storage::collect()
+}
+
+#[cfg(not(windows))]
+fn collect_drives() -> Vec<DriveInfo> {
+    vyro_core::storage::sample()
 }
 
 // Filled in by a later phase: health (P7).

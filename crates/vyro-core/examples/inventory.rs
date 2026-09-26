@@ -1,4 +1,4 @@
-//! Collects the static inventory (hardware, system, displays) and saves it as JSON, for checking against msinfo32 / Task
+//! Collects the static inventory (hardware, system, displays, drives) and saves it as JSON, for checking against msinfo32 / Task
 //! Manager. Double-click friendly: writes `vyro-inventory.json` next to the executable, prints
 //! it, and waits for Enter before closing.
 //!
@@ -43,6 +43,16 @@ fn displays() -> Vec<vyro_core::info::DisplayInfo> {
     display::sample()
 }
 
+#[cfg(windows)]
+fn drives() -> Vec<vyro_core::info::DriveInfo> {
+    vyro_core::storage::collect()
+}
+
+#[cfg(not(windows))]
+fn drives() -> Vec<vyro_core::info::DriveInfo> {
+    vyro_core::storage::sample()
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     let show_serial = args.iter().any(|a| a == "--show-serial");
@@ -76,11 +86,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+    let mut disks = drives();
+    if !show_serial {
+        for d in &mut disks {
+            if d.serial.is_some() {
+                d.serial = Some(LocalOnly("<redacted; pass --show-serial>".to_owned()));
+            }
+        }
+    }
     let log = LOG.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
     let json = serde_json::to_string_pretty(&serde_json::json!({
         "hardware": hw,
         "system": sys,
         "displays": shown,
+        "drives": disks,
         "log": log,
     }))?;
     println!("{json}");

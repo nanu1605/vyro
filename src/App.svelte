@@ -6,6 +6,8 @@
   import HardwarePanel from './components/HardwarePanel.svelte';
   import SystemPanel from './components/SystemPanel.svelte';
   import DisplaysPanel from './components/DisplaysPanel.svelte';
+  import StoragePanel from './components/StoragePanel.svelte';
+  import MemoryCard from './components/MemoryCard.svelte';
   import CoresCard from './components/CoresCard.svelte';
   import GpuCard from './components/GpuCard.svelte';
   import ProcessesPanel from './components/ProcessesPanel.svelte';
@@ -18,6 +20,7 @@
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'processes', label: 'Processes' },
     { id: 'hardware', label: 'Hardware' },
+    { id: 'storage', label: 'Storage' },
     { id: 'displays', label: 'Displays' },
     { id: 'system', label: 'System' },
   ] as const;
@@ -38,6 +41,7 @@
     dashboard: true,
     processes: false,
     hardware: false,
+    storage: false,
     displays: false,
     system: false,
   });
@@ -166,6 +170,7 @@
         {#each snap?.gpu ?? [] as g, i (i)}
           <GpuCard gpu={g} />
         {/each}
+        <MemoryCard {mem} />
       </div>
     </div>
 
@@ -178,6 +183,11 @@
     {#if visited.hardware}
       <div id="panel-hardware" role="tabpanel" aria-labelledby="tab-hardware" hidden={tab !== 'hardware'}>
         <HardwarePanel />
+      </div>
+    {/if}
+    {#if visited.storage}
+      <div id="panel-storage" role="tabpanel" aria-labelledby="tab-storage" hidden={tab !== 'storage'}>
+        <StoragePanel live={snap?.storage ?? []} />
       </div>
     {/if}
     {#if visited.displays}

@@ -3,7 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { DisplayInfo, HardwareId, HistoryRange, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { DisplayInfo, DriveInfo, HardwareId, HistoryRange, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -55,4 +55,10 @@ export async function getDisplays(): Promise<DisplayInfo[]> {
 export async function onDisplaysChanged(cb: () => void): Promise<() => void> {
   if (!inTauri) return () => {};
   return listen('displays-changed', () => cb());
+}
+
+/** Drives with health data, read fresh by the engine (SMART needs the app elevated). */
+export async function getDrives(): Promise<DriveInfo[]> {
+  if (!inTauri) return (await import('./sample-drives')).sampleDrives;
+  return invoke<DriveInfo[]>('get_drives');
 }

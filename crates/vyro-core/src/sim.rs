@@ -334,6 +334,13 @@ impl Provider for SimProvider {
         mem.committed_mb = Some(used + 3000.0);
         mem.commit_limit_mb = Some(40000.0);
         mem.page_file_used_mb = Some(900.0);
+        mem.page_file_total_mb = Some(8192.0);
+        mem.standby_mb = Some(7400.0);
+        mem.modified_mb = Some(700.0);
+        mem.free_mb = Some((MEM_TOTAL_MB - used - 8100.0).max(0.0));
+        mem.paged_pool_mb = Some(1100.0);
+        mem.non_paged_pool_mb = Some(620.0);
+        mem.hard_faults_per_sec = Some(rng.f64() * 40.0);
         mem.compressed_mb = Some(420.0);
         mem.page_faults_per_sec = Some(800.0 + rng.f64() * 800.0);
         mem.channels = Some(2);
@@ -353,7 +360,10 @@ impl Provider for SimProvider {
         let io = self.disk.step(rng, 0.6, 0.5, 0.0, 3500.0);
         let disk_temp = 38.0 + io * 0.02;
         snap.storage.push(StorageSnapshot {
+            id: "disk0".into(),
             model: "Simulated NVMe SSD 1TB".into(),
+            volumes: "C:".into(),
+            health: Status::Ok,
             kind: StorageKind::Nvme,
             temp_c: reg.set(k.disk_temp, Some(disk_temp)),
             temp_controller_c: Some(disk_temp + 2.0),

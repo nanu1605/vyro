@@ -36,6 +36,7 @@ fn main() {
             commands::get_system_info,
             commands::get_hardware_id,
             commands::get_displays,
+            commands::get_drives,
             commands::get_health,
         ])
         .build(tauri::generate_context!())

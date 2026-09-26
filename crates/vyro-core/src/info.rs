@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::snapshot::Status;
+use crate::snapshot::{Status, StorageKind};
 
 // ---------------------------------------------------------------------------------------------
 // System
@@ -431,6 +431,123 @@ pub struct EdidInfo {
     pub range_hz: Option<[u32; 2]>,
     /// Raw EDID as hex with serial fields zeroed.
     pub hex: String,
+}
+
+// ---------------------------------------------------------------------------------------------
+// Storage (Phase 4)
+// ---------------------------------------------------------------------------------------------
+
+/// One physical drive with its health data, served by `get_drives`. Live rates and the
+/// current temperature ride in the `sensors` event instead ([`crate::snapshot::StorageSnapshot`]).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DriveInfo {
+    /// `disk<N>`, matching `\\.\PhysicalDrive<N>` and the snapshot's `id`.
+    pub id: String,
+    pub index: u32,
+    pub model: String,
+    pub vendor: Option<String>,
+    /// Local display only; never logged, persisted or transmitted.
+    pub serial: Option<LocalOnly>,
+    pub firmware: Option<String>,
+    #[serde(rename = "type")]
+    pub kind: StorageKind,
+    /// Windows bus type: "NVMe", "SATA", "USB", "RAID", "SAS", "SD", ...
+    pub bus: String,
+    /// "PCIe NVMe 1.4", "SATA 6.0 Gb/s (at 6.0 Gb/s)".
+    pub interface: Option<String>,
+    pub ssd: Option<bool>,
+    pub rpm: Option<u32>,
+    pub removable: bool,
+    /// Holds the Windows volume.
+    pub system: bool,
+    pub trim: Option<bool>,
+    #[serde(rename = "capacityMB")]
+    pub capacity_mb: Option<f64>,
+    /// Sum over this drive's mounted volumes.
+    #[serde(rename = "usedMB")]
+    pub used_mb: Option<f64>,
+    #[serde(rename = "freeMB")]
+    pub free_mb: Option<f64>,
+    pub volumes: Vec<VolumeInfo>,
+    /// Good / caution / bad in CrystalDiskInfo's sense; `unknown` without SMART data.
+    pub health: Status,
+    /// Remaining life estimate (NVMe `100 - percentage used`, or the SSD wear attribute).
+    pub health_pct: Option<f64>,
+    /// Why the health is what it is, e.g. "3 reallocated sectors".
+    pub health_notes: Vec<String>,
+    pub temp_c: Option<f64>,
+    pub temp_warn_c: Option<f64>,
+    pub temp_crit_c: Option<f64>,
+    pub power_on_hours: Option<f64>,
+    pub power_cycles: Option<f64>,
+    #[serde(rename = "totalReadGB")]
+    pub total_read_gb: Option<f64>,
+    #[serde(rename = "totalWriteGB")]
+    pub total_write_gb: Option<f64>,
+    pub nvme: Option<NvmeHealth>,
+    /// ATA SMART attribute table (SATA drives).
+    pub smart: Vec<SmartAttribute>,
+    /// Why SMART / health data is missing, e.g. "Run Vyro as administrator".
+    pub smart_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct VolumeInfo {
+    /// "C:"; empty for volumes without a letter.
+    pub letter: String,
+    pub label: Option<String>,
+    pub file_system: Option<String>,
+    #[serde(rename = "totalMB")]
+    pub total_mb: Option<f64>,
+    #[serde(rename = "freeMB")]
+    pub free_mb: Option<f64>,
+}
+
+/// NVMe SMART / Health Information log (page 0x02).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct NvmeHealth {
+    pub critical_warning: u32,
+    pub critical_warnings: Vec<String>,
+    pub available_spare_pct: u32,
+    pub spare_threshold_pct: u32,
+    pub percentage_used: u32,
+    pub data_units_read: f64,
+    pub data_units_written: f64,
+    pub host_reads: f64,
+    pub host_writes: f64,
+    pub busy_minutes: f64,
+    pub unsafe_shutdowns: f64,
+    pub media_errors: f64,
+    pub error_log_entries: f64,
+    pub warning_temp_minutes: u32,
+    pub critical_temp_minutes: u32,
+    /// Temperature Sensor 1–8 as reported (`null` = not implemented). Their placement
+    /// (controller, NAND) is vendor-specific.
+    pub sensors_c: Vec<Option<f64>>,
+    pub throttle_events: Vec<u32>,
+    pub throttle_secs: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SmartAttribute {
+    pub id: u32,
+    pub name: String,
+    pub current: u32,
+    pub worst: u32,
+    pub threshold: Option<u32>,
+    pub raw: f64,
+    /// The 48-bit raw field as 12 hex digits.
+    pub raw_hex: String,
+    pub prefail: bool,
+    pub failing: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]

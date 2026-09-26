@@ -77,6 +77,10 @@ impl Provider for ProcessProvider {
         let now = u64::try_from(self.started.elapsed().as_nanos() / 100).unwrap_or(u64::MAX);
         let bytes = self.query()?;
         let list = parse_process_list(bytes, bytes.as_ptr() as usize);
+        // The Memory Compression process's working set is the compressed store.
+        if let Some(p) = list.iter().find(|p| p.name == "MemCompression") {
+            snap.memory.compressed_mb = Some(p.working_set as f64 / (1024.0 * 1024.0));
+        }
         let samples = self.tracker.update(list, now);
         let gpu = lock(&self.gpu).clone();
         snap.processes = top_processes(samples, &gpu, TOP_N);

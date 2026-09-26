@@ -68,3 +68,25 @@ export function fmtMB(mb: number | null | undefined): string {
 export function hex4(v: number): string {
   return v.toString(16).toUpperCase().padStart(4, '0');
 }
+
+/** Storage sizes from MB (binary, as Windows shows them): "931 GB", "1.82 TB". */
+export function fmtStorage(mb: number | null | undefined): string {
+  if (mb == null) return NA;
+  if (mb >= 1024 * 1024) return `${fmt(mb / (1024 * 1024), 2)} TB`;
+  if (mb >= 1024) return `${fmt(mb / 1024, mb >= 100 * 1024 ? 0 : 1)} GB`;
+  return `${fmt(mb)} MB`;
+}
+
+/** Decimal gigabytes (drive traffic counters): "812 GB", "18.5 TB". */
+export function fmtGBTotal(gb: number | null | undefined): string {
+  if (gb == null) return NA;
+  return gb >= 1000 ? `${fmt(gb / 1000, 1)} TB` : `${fmt(gb, gb >= 100 ? 0 : 1)} GB`;
+}
+
+/** Transfer rates from MB/s: "0 KB/s", "812 KB/s", "12.4 MB/s", "1.2 GB/s". */
+export function fmtRate(mbs: number | null | undefined): string {
+  if (mbs == null) return NA;
+  if (mbs >= 1024) return `${fmt(mbs / 1024, 1)} GB/s`;
+  if (mbs >= 1) return `${fmt(mbs, mbs >= 100 ? 0 : 1)} MB/s`;
+  return `${fmt(mbs * 1024)} KB/s`;
+}

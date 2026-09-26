@@ -155,8 +155,21 @@ first. Phase 3 **done**: field-verified on a single HDR / G-SYNC Compatible DP m
 multi-monitor, laptop panels (WMI brightness) and AMD FreeSync state (ADL) unverified here.
 
 ### P4 — Storage & memory runtime (M2)
-NVMe health log + SATA SMART decoders, PDH disk counters, memory counters, elevated manifest
-with graceful unelevated degrade.
+Status: **built, awaiting field check**. `storage/nvme.rs` (SMART / Health log page 0x02,
+Identify Controller) and `storage/ata.rs` (IDENTIFY DEVICE, SMART data + thresholds, attribute
+names, vendor units for host writes, SSD wear attributes) decode raw sectors; `storage::build`
+merges them with the device descriptor and grades health like CrystalDiskInfo (bad: attribute at
+threshold or NVMe critical warning; caution: reallocated / pending / uncorrectable sectors, media
+errors, ≤ 10 % life, temperature warning). `storage/win.rs`: `\\.\PhysicalDriveN` property
+queries (descriptor, seek penalty, temperature), NVMe log pages via
+`StorageDeviceProtocolSpecificProperty`, ATA pass-through (legacy `SMART_RCV_DRIVE_DATA`
+fallback), volumes → disks, `\PhysicalDisk(*)` rates / IOPS / active time. Health refreshes
+every 5 s; spinning disks only every 5 min and never while spun down (CHECK POWER MODE). USB,
+RAID/RST and virtual disks list without SMART and say why. Memory: standby / modified / free
+lists, pools, page file (`SystemPageFileInformation`), page / hard faults, compression store
+(`MemCompression` working set); "Cached" now matches Task Manager (standby + modified).
+Release builds carry a `requireAdministrator` manifest; debug builds (`pnpm tauri dev`) stay
+unelevated and show a banner. Storage tab + dashboard Memory card. Drive serials are local-only.
 
 ### P5 — Network, power (partial), self-monitoring (M2)
 IP Helper + PDH + WLAN API, ICMP ping/loss thread, app + WebView2 footprint, power panel (GPU
