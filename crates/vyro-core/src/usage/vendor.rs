@@ -180,6 +180,15 @@ pub fn decode_pmlog(sensors: &[[i32; 2]]) -> VendorReadings {
     }
 }
 
+/// On an APU, ADL's power and voltage sensors describe the whole package (CPU cores included:
+/// a field test read 42–87 W and 1.2 V on an idle Radeon iGPU next to a busy CPU), so they are
+/// dropped rather than shown as GPU readings.
+pub fn integrated_only(mut r: VendorReadings) -> VendorReadings {
+    r.power_w = None;
+    r.voltage_v = None;
+    r
+}
+
 // ---------------------------------------------------------------------------------------------
 // Intel IGCL
 // ---------------------------------------------------------------------------------------------
@@ -405,6 +414,20 @@ mod tests {
         let r = decode_pmlog(&s);
         assert_eq!(r.power_w, Some(210.0), "board power preferred");
         assert_eq!(r.temp_edge, Some(48.0), "GFX temp as edge fallback (APUs)");
+    }
+
+    #[test]
+    fn apu_package_readings_are_not_gpu_readings() {
+        let r = integrated_only(VendorReadings {
+            temp_edge: Some(46.0),
+            power_w: Some(64.8),
+            voltage_v: Some(1.22),
+            ..Default::default()
+        });
+        assert_eq!(
+            (r.temp_edge, r.power_w, r.voltage_v),
+            (Some(46.0), None, None)
+        );
     }
 
     fn put_item(buf: &mut [u8], off: usize, units: u32, ty: u32, value: [u8; 8]) {

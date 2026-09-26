@@ -34,7 +34,7 @@ use crate::usage::engines::{luid_key, parse_adapter_instance, summarize};
 use crate::usage::gpu::{
     kmt_mhz, kmt_rpm, kmt_temp_c, likely_integrated, match_nvml, nvml_throttle, AdapterKey, NvmlPci,
 };
-use crate::usage::vendor::VendorReadings;
+use crate::usage::vendor::{integrated_only, VendorReadings};
 use crate::winutil::wide_array;
 
 const MIB: f64 = 1024.0 * 1024.0;
@@ -509,6 +509,7 @@ impl Provider for GpuProvider {
             }
             if let (Some(adl), Some(idx)) = (&self.adl, a.adl) {
                 match adl.read(idx) {
+                    Ok(r) if a.integrated => apply(&mut g, integrated_only(r)),
                     Ok(r) => apply(&mut g, r),
                     Err(e) => log_once(&mut self.adl_error, e),
                 }

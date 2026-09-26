@@ -92,7 +92,7 @@ from the board name, NVIDIA GPU BIOS display format.
 - [x] Hardware and System views (tabs), browser-mode sample data
 
 ### P2 — Live usage, clocks, GPU, per-process (M2)
-Status: **done** (2a field-checked on the Ryzen 7 9700X / RTX 5060 Ti + Radeon iGPU PC: all
+Status: **done**, field-verified (2a field-checked on the Ryzen 7 9700X / RTX 5060 Ti + Radeon iGPU PC: all
 providers up, poll ≈ 9 ms/tick, NVML matches the card, iGPU temperature and clocks via WDDM).
 2b field check under load (Rocket League): RTX 5060 Ti at 60–64 % 3D, 2805 MHz, 51 °C, NVAPI
 memory 58 °C and core 1.04 V, hotspot absent as expected on RTX 50; the game tops the process
@@ -101,7 +101,11 @@ RTX 50); ADL kept headless iGPU adapters and now reports why it did not attach; 
 records engine log lines. Second gaming run: NVIDIA fan 1358 RPM @ 38 % via cooler status ✓;
 ADL loaded but listed no adapters with connected-only enumeration → enumerate all adapters
 (headless iGPU) and log every raw record. Third run's records showed the real cause: ADL encodes
-the vendor id as decimal 1002 (0x3EA), not 0x1002 — accepted now; iGPU on bus 20 matches D3DKMT. Cost per tick under load: GPU ≈ 4–11 ms (PDH engine counters),
+the vendor id as decimal 1002 (0x3EA), not 0x1002 — accepted now; iGPU on bus 20 matches D3DKMT.
+Fourth run: ADL attached to the iGPU (clocks, edge temperature via ADL). Its power (42–87 W while
+idle) and voltage (1.2 V) track the whole APU package, not the GPU, so they are dropped for
+integrated adapters. Phase 2 field-verified on NVIDIA (NVML + NVAPI) and AMD iGPU (ADL + WDDM);
+Intel IGCL unverified (no hardware). Cost per tick under load: GPU ≈ 4–11 ms (PDH engine counters),
 processes ≈ 7 ms (≈ 450 processes) — revisit in P9.
 
 - [x] CPU total + per-logical-processor utilization from PDH `% Processor Utility` (Task
