@@ -143,6 +143,11 @@ VRR state via NVAPI `Disp_GetVRRInfo` / ADL `FreeSyncState_Get`; hot-plug throug
 window (`WM_DISPLAYCHANGE`/`SETTINGCHANGE`/`DEVICECHANGE`, debounced) → `displays-changed`.
 Displays tab: arrangement view, per-display signal / HDR / VRR / panel / EDID, serial hidden by
 default. `vyro-inventory` now includes `displays` and collector log lines.
+Field check 1 (LG UltraGear GSM5BB4, DP on the RTX 5060 Ti, HDR on): 2560×1440 @ 143.97 Hz,
+10-bit RGB, BT.2100 PQ, SDR white 240 nits, peak 351 nits, 27.0″, made week 11 2023, DDC/CI
+brightness 100 %, collection 366 ms (DDC/CI dominates). NVAPI reported enabled=0 possible=1
+inVrrMode=1 with G-SYNC Compatible on and the desktop idle: "display in VRR mode" is now the
+enabled state and the old "enabled" bit is reported as *varying now*. EDID kept as a fixture.
 
 ### P4 — Storage & memory runtime (M2)
 NVMe health log + SATA SMART decoders, PDH disk counters, memory counters, elevated manifest

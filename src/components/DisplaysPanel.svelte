@@ -187,6 +187,7 @@
             rows={[
               ['Technology', d.vrr.technology],
               ['Range', vrrRange(d)],
+              ['Varying now', d.vrr.active == null ? null : d.vrr.active ? 'Yes (game or video)' : 'No (desktop idle)'],
               ['Source', d.vrr.source],
             ]}
           />

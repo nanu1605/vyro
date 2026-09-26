@@ -404,8 +404,10 @@ pub struct HdrInfo {
 #[ts(export)]
 pub struct VrrInfo {
     pub supported: Option<bool>,
-    /// Currently active, from the GPU vendor's driver API.
+    /// Switched on for this display, from the GPU vendor's driver API.
     pub enabled: Option<bool>,
+    /// Refresh rate is varying right now (a game or video drives it); NVIDIA only.
+    pub active: Option<bool>,
     pub min_hz: Option<f64>,
     pub max_hz: Option<f64>,
     /// "G-SYNC", "G-SYNC Compatible", "FreeSync", "HDMI VRR", "Adaptive-Sync".

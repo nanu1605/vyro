@@ -475,8 +475,12 @@ impl NvDisplay {
         Some(VendorVrr {
             api: "NVAPI",
             // A clear flag may just mean G-SYNC is switched off: unknown, not "unsupported".
-            possible: (f & 0x3 != 0).then_some(true),
-            enabled: Some(f & 0x1 != 0),
+            possible: (f & 0x13 != 0).then_some(true),
+            // Field PC (G-SYNC Compatible on, desktop idle): bIsVRREnabled=0 while
+            // bIsDisplayInVRRMode=1. The display being in VRR mode is the setting; the
+            // "enabled" bit only rises while an application drives variable refresh.
+            enabled: Some(f & 0x11 != 0),
+            active: Some(f & 0x1 != 0),
             min_hz: None,
             max_hz: None,
         })
@@ -572,6 +576,7 @@ impl AdlDisplay {
                 api: "ADL",
                 possible: Some(true),
                 enabled: Some(cur != 0),
+                active: None,
                 min_hz: hz(min),
                 max_hz: hz(max),
             }),

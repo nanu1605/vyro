@@ -2,9 +2,13 @@
 
 export type VrrInfo = { supported: boolean | null, 
 /**
- * Currently active, from the GPU vendor's driver API.
+ * Switched on for this display, from the GPU vendor's driver API.
  */
-enabled: boolean | null, minHz: number | null, maxHz: number | null, 
+enabled: boolean | null, 
+/**
+ * Refresh rate is varying right now (a game or video drives it); NVIDIA only.
+ */
+active: boolean | null, minHz: number | null, maxHz: number | null, 
 /**
  * "G-SYNC", "G-SYNC Compatible", "FreeSync", "HDMI VRR", "Adaptive-Sync".
  */

@@ -69,6 +69,7 @@ export const sampleDisplays: DisplayInfo[] = [
     "scalePct": 100,
     "serial": null,
     "vrr": {
+      "active": null,
       "enabled": true,
       "maxHz": 144.0,
       "minHz": 48.0,
@@ -146,6 +147,7 @@ export const sampleDisplays: DisplayInfo[] = [
     "scalePct": 150,
     "serial": null,
     "vrr": {
+      "active": null,
       "enabled": true,
       "maxHz": 120.0,
       "minHz": 48.0,

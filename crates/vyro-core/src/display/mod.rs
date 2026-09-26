@@ -43,7 +43,10 @@ pub struct VendorVrr {
     /// "NVAPI" or "ADL".
     pub api: &'static str,
     pub possible: Option<bool>,
+    /// Switched on for the display (driver setting in effect).
     pub enabled: Option<bool>,
+    /// Refresh is varying right now (a game or video is driving it).
+    pub active: Option<bool>,
     pub min_hz: Option<f64>,
     pub max_hz: Option<f64>,
 }
@@ -152,6 +155,7 @@ fn vrr(raw: &RawDisplay, e: Option<&Edid>) -> VrrInfo {
         None
     };
     v.enabled = vendor.and_then(|x| x.enabled);
+    v.active = vendor.and_then(|x| x.active);
     v.source = vendor
         .filter(|x| x.possible.is_some() || x.enabled.is_some())
         .map(|x| x.api.to_owned())
@@ -495,6 +499,65 @@ mod tests {
         b.iter().map(|b| format!("{b:02x}")).collect()
     }
 
+    /// The field PC: LG UltraGear (GSM5BB4) on the RTX 5060 Ti, HDR on, G-SYNC Compatible on
+    /// with the desktop idle. Values from its `vyro-inventory.json`.
+    #[test]
+    fn field_lg_5bb4_hdr_on_vrr_idle() {
+        let raw = RawDisplay {
+            key: "0:12d01:4355".into(),
+            adapter_vendor: Some(0x10DE),
+            output_technology: Some(10),
+            rotation: Some(1),
+            refresh_hz: Some(143.973),
+            desktop: Some([0, 0, 2560, 1440]),
+            color: Some(AdvancedColor {
+                supported: true,
+                enabled: true,
+                hdr_supported: Some(true),
+                active_mode: Some(2),
+                bits_per_color: 10,
+                ..Default::default()
+            }),
+            sdr_white_level: Some(3000),
+            dxgi: Some(DxgiOutput {
+                bits_per_color: 10,
+                color_space: 12,
+                min_nits: 0.2496,
+                max_nits: 351.3,
+                max_full_frame_nits: 351.3,
+            }),
+            dpi: Some(96),
+            edid: Some(hex_fixture(include_str!(
+                "fixtures/lg_ultragear_5bb4_field.hex"
+            ))),
+            // NVAPI flags: enabled=0 possible=1 inVrrMode=1.
+            vendor_vrr: Some(VendorVrr {
+                api: "NVAPI",
+                possible: Some(true),
+                enabled: Some(true),
+                active: Some(false),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let d = build(&raw);
+        assert_eq!(d.name, "LG ULTRAGEAR");
+        assert_eq!(d.product_code.as_deref(), Some("5BB4"));
+        assert_eq!(d.manufactured.as_deref(), Some("Week 11, 2023"));
+        assert_eq!(d.max_refresh_hz, Some(143.97));
+        assert_eq!(d.diagonal_in, Some(27.0));
+        assert_eq!(d.hdr.enabled, Some(true));
+        assert_eq!(d.hdr.sdr_white_nits, Some(240.0));
+        assert_eq!(d.hdr.max_nits, Some(351.3));
+        assert_eq!(d.color_space.as_deref(), Some("BT.2100 PQ (HDR10)"));
+        assert_eq!(
+            (d.vrr.supported, d.vrr.enabled, d.vrr.active),
+            (Some(true), Some(true), Some(false))
+        );
+        assert_eq!((d.vrr.min_hz, d.vrr.max_hz), (Some(48.0), Some(144.0)));
+        assert_eq!(d.vrr.technology.as_deref(), Some("G-SYNC Compatible"));
+    }
+
     #[test]
     fn serial_never_reaches_debug_output() {
         let d = build(&lg_raw());
@@ -586,6 +649,7 @@ mod tests {
                 api: "ADL",
                 possible: Some(true),
                 enabled: Some(false),
+                active: None,
                 min_hz: Some(60.0),
                 max_hz: Some(144.0),
             }),
