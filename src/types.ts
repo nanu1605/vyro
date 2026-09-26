@@ -36,3 +36,8 @@ export type { SmartAttribute } from './bindings/SmartAttribute';
 export type { StorageSnapshot } from './bindings/StorageSnapshot';
 export type { VolumeInfo } from './bindings/VolumeInfo';
 export type { Status } from './bindings/Status';
+export type { NetAdapterInfo } from './bindings/NetAdapterInfo';
+export type { NetworkSnapshot } from './bindings/NetworkSnapshot';
+export type { PingSnapshot } from './bindings/PingSnapshot';
+export type { WifiInfo } from './bindings/WifiInfo';
+export type { PowerSnapshot } from './bindings/PowerSnapshot';

@@ -34,6 +34,8 @@ pub fn providers() -> Vec<Box<dyn Provider>> {
         Box::new(MemoryProvider::new()),
         Box::new(crate::storage::StorageProvider::new()),
         Box::new(GpuProvider::new(Arc::clone(&share))),
+        Box::new(crate::power::PowerProvider::new()),
+        Box::new(crate::network::NetworkProvider::new()),
         Box::new(ProcessProvider::new(share)),
     ]
 }

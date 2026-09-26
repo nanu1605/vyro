@@ -181,8 +181,17 @@ minutes above), 3,747 power cycles, 53.6 TB written (241 in LBAs), all 24 attrib
 threshold → good. Table now shows packed hour attributes (9, 240) as hours.
 
 ### P5 — Network, power (partial), self-monitoring (M2)
-IP Helper + PDH + WLAN API, ICMP ping/loss thread, app + WebView2 footprint, power panel (GPU
-now, CPU after P6).
+Status: **built, awaiting field check**. `network/mod.rs`: counter → Mbit/s rates (reset-safe),
+utilization (busier direction vs link), Wi-Fi band / channel from centre frequency, PHY →
+Wi-Fi generation, auth → security label, RSSI → quality, rolling 60-probe ping window (last /
+avg / min / max / jitter / loss). `network/win.rs`: `GetIfTable2` (counters, link, state; filter
+shadows dropped; VPNs with a default route kept), `GetAdaptersAddresses` (IPs, gateways, DNS,
+DHCP), `GetBestInterface` for the primary adapter, WLAN API (RSSI, channel, SSID / BSSID / signal
+/ rates / security; notes when Windows location access hides them), ICMP echo on its own thread
+(1 / s, default 1.1.1.1, host names resolved, changeable from the UI and remembered). MAC,
+IPv6, SSID and BSSID are local-only. Self-monitoring: app + descendants (WebView2) CPU / RAM /
+GPU from the process walk. Power: GPU sum now; CPU and total stay "needs driver". Network tab,
+dashboard Power and "Vyro itself" cards.
 
 ### P11a — Early release (M3)
 EV code-signing, WiX MSI, Tauri updater, elevated autostart via Task Scheduler, perf pass

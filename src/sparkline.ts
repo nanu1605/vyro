@@ -18,6 +18,8 @@ export interface SparkStyle {
   color: string;
   min?: number;
   max?: number;
+  /** Draw over what is already on the canvas (second series). */
+  keep?: boolean;
 }
 
 /**
@@ -32,7 +34,7 @@ export function drawSparkline(
   capacity: number,
   style: SparkStyle,
 ): void {
-  ctx.clearRect(0, 0, w, h);
+  if (!style.keep) ctx.clearRect(0, 0, w, h);
   const nums = data.filter((v): v is number => v != null);
   if (nums.length < 2) return;
   const lo = style.min ?? Math.min(...nums);

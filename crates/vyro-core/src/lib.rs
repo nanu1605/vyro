@@ -9,7 +9,9 @@ pub mod info;
 pub mod inventory;
 #[cfg(windows)]
 pub mod live;
+pub mod network;
 pub mod poller;
+pub mod power;
 pub mod provider;
 pub mod registry;
 pub mod sim;

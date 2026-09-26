@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::snapshot::{Status, StorageKind};
+use crate::snapshot::{NetKind, Status, StorageKind};
 
 // ---------------------------------------------------------------------------------------------
 // System
@@ -548,6 +548,64 @@ pub struct SmartAttribute {
     pub raw_hex: String,
     pub prefail: bool,
     pub failing: bool,
+}
+
+// ---------------------------------------------------------------------------------------------
+// Network (Phase 5)
+// ---------------------------------------------------------------------------------------------
+
+/// One network adapter's configuration, served by `get_network`. Rates, signal and ping ride
+/// in the `sensors` event ([`crate::snapshot::NetworkSnapshot`]).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct NetAdapterInfo {
+    /// `if<N>` (interface index).
+    pub id: String,
+    /// Windows connection name, e.g. "Ethernet", "Wi-Fi".
+    pub name: String,
+    /// Driver description, e.g. "Realtek Gaming 2.5GbE Family Controller".
+    pub description: String,
+    #[serde(rename = "type")]
+    pub kind: NetKind,
+    pub connected: bool,
+    pub primary: bool,
+    /// Not a physical NIC (VPN, Hyper-V switch, ...).
+    pub virtual_adapter: bool,
+    /// Local display only.
+    pub mac: Option<LocalOnly>,
+    pub link_mbps: Option<f64>,
+    pub mtu: Option<u32>,
+    pub dhcp: Option<bool>,
+    pub ipv4: Vec<String>,
+    /// Local display only (global addresses identify the connection).
+    pub ipv6: Vec<LocalOnly>,
+    pub gateways: Vec<String>,
+    pub dns: Vec<String>,
+    pub wifi: Option<WifiInfo>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct WifiInfo {
+    /// Local display only.
+    pub ssid: Option<LocalOnly>,
+    /// Local display only.
+    pub bssid: Option<LocalOnly>,
+    /// "Wi-Fi 6 (802.11ax)".
+    pub standard: Option<String>,
+    pub band: Option<String>,
+    pub channel: Option<u32>,
+    pub frequency_mhz: Option<u32>,
+    pub signal_pct: Option<f64>,
+    pub rssi_dbm: Option<f64>,
+    pub rx_mbps: Option<f64>,
+    pub tx_mbps: Option<f64>,
+    /// "WPA3-Personal", "WPA2-Personal", "Open", ...
+    pub security: Option<String>,
+    /// Why some details are missing, e.g. Windows location access being off.
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]

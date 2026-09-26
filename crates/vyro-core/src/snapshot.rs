@@ -20,6 +20,7 @@ pub struct SensorSnapshot {
     pub fans: Vec<FanSnapshot>,
     pub voltages: Vec<VoltageReading>,
     pub network: Vec<NetworkSnapshot>,
+    pub ping: PingSnapshot,
     pub power: PowerSnapshot,
     pub processes: Vec<ProcessSnapshot>,
     pub app: AppSnapshot,
@@ -278,18 +279,52 @@ pub enum NetKind {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct NetworkSnapshot {
+    /// `if<N>` (interface index), matching [`crate::info::NetAdapterInfo::id`].
+    pub id: String,
     pub adapter: String,
     #[serde(rename = "type")]
     pub kind: NetKind,
+    pub connected: bool,
+    /// Carries the default route (the ping is attributed to it).
+    pub primary: bool,
     pub down_mbps: Option<f64>,
     pub up_mbps: Option<f64>,
+    /// Busier direction against the link speed, as Task Manager does.
     pub utilization_pct: Option<f64>,
     pub link_mbps: Option<f64>,
+    /// Since the adapter came up, decimal MB.
+    #[serde(rename = "receivedMB")]
+    pub received_mb: Option<f64>,
+    #[serde(rename = "sentMB")]
+    pub sent_mb: Option<f64>,
     pub ping_ms: Option<f64>,
     /// Sampled over a rolling window of ICMP probes, not exact.
     pub packet_loss_pct: Option<f64>,
     pub wifi_signal_pct: Option<f64>,
+    pub wifi_rssi_dbm: Option<f64>,
     pub wifi_channel: Option<u32>,
+    /// "2.4 GHz", "5 GHz", "6 GHz".
+    pub wifi_band: Option<String>,
+}
+
+/// ICMP echo against the configured host, over a rolling window of probes (1 per second).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PingSnapshot {
+    pub host: String,
+    /// Latest reply; `null` when the last probe was lost.
+    pub rtt_ms: Option<f64>,
+    pub avg_ms: Option<f64>,
+    pub min_ms: Option<f64>,
+    pub max_ms: Option<f64>,
+    /// Mean difference between consecutive replies.
+    pub jitter_ms: Option<f64>,
+    pub loss_pct: Option<f64>,
+    /// Probes in the window.
+    pub samples: u32,
+    /// Why probes fail, e.g. "host not found".
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]

@@ -4,7 +4,9 @@
 use std::sync::Arc;
 
 use tauri::State;
-use vyro_core::info::{DisplayInfo, DriveInfo, HardwareId, HealthReport, SystemInfo};
+use vyro_core::info::{
+    DisplayInfo, DriveInfo, HardwareId, HealthReport, NetAdapterInfo, SystemInfo,
+};
 use vyro_core::snapshot::AppSnapshot;
 use vyro_core::{lock, unix_now, HistoryRange, HistorySeries, SensorSnapshot, SensorTree};
 
@@ -103,6 +105,42 @@ fn collect_drives() -> Vec<DriveInfo> {
 #[cfg(not(windows))]
 fn collect_drives() -> Vec<DriveInfo> {
     vyro_core::storage::sample()
+}
+
+/// Adapters with addresses and Wi-Fi details, read fresh. Rates and ping arrive in `sensors`.
+#[tauri::command]
+pub async fn get_network() -> Result<Vec<NetAdapterInfo>, String> {
+    tauri::async_runtime::spawn_blocking(collect_network)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(windows)]
+fn collect_network() -> Vec<NetAdapterInfo> {
+    if std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1") {
+        return vyro_core::network::sample();
+    }
+    vyro_core::network::collect()
+}
+
+#[cfg(not(windows))]
+fn collect_network() -> Vec<NetAdapterInfo> {
+    vyro_core::network::sample()
+}
+
+/// Changes the ping target (IPv4 address or host name).
+#[tauri::command]
+pub fn set_ping_host(host: String) -> Result<(), String> {
+    #[cfg(windows)]
+    return vyro_core::network::set_ping_host(&host);
+    #[cfg(not(windows))]
+    {
+        if vyro_core::network::valid_host(&host) {
+            Ok(())
+        } else {
+            Err("Enter an IPv4 address or a host name".into())
+        }
+    }
 }
 
 // Filled in by a later phase: health (P7).

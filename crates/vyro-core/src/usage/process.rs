@@ -15,6 +15,7 @@ const KERNEL_TIME: usize = 48;
 const IMAGE_NAME_LEN: usize = 56;
 const IMAGE_NAME_PTR: usize = 64;
 const PID: usize = 80;
+const PARENT_PID: usize = 88;
 const WORKING_SET: usize = 144;
 const WORKING_SET_PRIVATE: usize = 8;
 /// Fixed part of a record (thread records follow it).
@@ -23,6 +24,8 @@ pub const RECORD_SIZE: usize = 256;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RawProcess {
     pub pid: u32,
+    /// Creator's pid (may have exited and been reused; check `create_time` order).
+    pub parent: u32,
     pub name: String,
     /// Distinguishes a reused pid.
     pub create_time: u64,
@@ -61,6 +64,7 @@ pub fn parse_process_list(buf: &[u8], base: usize) -> Vec<RawProcess> {
         };
         out.push(RawProcess {
             pid,
+            parent: u64_at(rec, PARENT_PID).map_or(0, |p| u32::try_from(p).unwrap_or(0)),
             name,
             create_time: u64_at(rec, CREATE_TIME).unwrap_or(0),
             cpu_time: u64_at(rec, USER_TIME)
@@ -98,6 +102,8 @@ fn image_name(buf: &[u8], base: usize, rec: &[u8]) -> Option<String> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProcessSample {
     pub pid: u32,
+    pub parent: u32,
+    pub create_time: u64,
     pub name: String,
     /// Share of total machine CPU, %; `None` on a process's first sample.
     pub cpu_pct: Option<f64>,
@@ -144,6 +150,8 @@ impl ProcessTracker {
                 next.insert(key, p.cpu_time);
                 ProcessSample {
                     pid: p.pid,
+                    parent: p.parent,
+                    create_time: p.create_time,
                     name: p.name,
                     cpu_pct,
                     // Private working set is what Task Manager shows; some kernels (and Wine)
@@ -161,6 +169,37 @@ impl ProcessTracker {
         self.prev_at = Some(now);
         out
     }
+}
+
+/// CPU %, RAM MB and GPU % of `root` and every process it started, directly or through
+/// children (the WebView2 browser and its renderers, for the app). A child must be younger
+/// than its parent, which guards against a reused parent pid.
+pub fn footprint(
+    root: u32,
+    samples: &[ProcessSample],
+    gpu: &HashMap<u32, f64>,
+) -> Option<(f64, f64, f64)> {
+    let created: HashMap<u32, u64> = samples.iter().map(|s| (s.pid, s.create_time)).collect();
+    created.get(&root)?;
+    let mut members = vec![root];
+    let mut i = 0;
+    while i < members.len() {
+        let p = members[i];
+        let born = created.get(&p).copied().unwrap_or(0);
+        for s in samples {
+            if s.parent == p && s.pid != p && s.create_time >= born && !members.contains(&s.pid) {
+                members.push(s.pid);
+            }
+        }
+        i += 1;
+    }
+    let (mut cpu, mut ram, mut g) = (0.0, 0.0, 0.0);
+    for s in samples.iter().filter(|s| members.contains(&s.pid)) {
+        cpu += s.cpu_pct.unwrap_or(0.0);
+        ram += s.ram_mb;
+        g += gpu.get(&s.pid).copied().unwrap_or(0.0);
+    }
+    Some((cpu, ram, g.min(100.0)))
 }
 
 /// The union of the top `n` processes by CPU, by RAM and by GPU, ordered by CPU then RAM.
@@ -360,6 +399,8 @@ mod tests {
     fn top_n_is_a_union() {
         let s = |pid, cpu, ram| ProcessSample {
             pid,
+            parent: 0,
+            create_time: 0,
             name: format!("p{pid}"),
             cpu_pct: Some(cpu),
             ram_mb: ram,
@@ -382,5 +423,30 @@ mod tests {
         assert_eq!(top[0].gpu_pct, Some(0.0), "idle on the GPU, not unknown");
         let none = top_processes(vec![s(1, 1.0, 1.0)], &HashMap::new(), 1);
         assert_eq!(none[0].gpu_pct, None, "no engine data at all");
+    }
+
+    #[test]
+    fn footprint_follows_the_process_tree() {
+        let s = |pid, parent, created, cpu, ram| ProcessSample {
+            pid,
+            parent,
+            create_time: created,
+            name: format!("p{pid}"),
+            cpu_pct: Some(cpu),
+            ram_mb: ram,
+        };
+        let samples = [
+            s(100, 4, 10, 1.0, 40.0),   // vyro.exe
+            s(200, 100, 20, 0.5, 90.0), // msedgewebview2 (browser)
+            s(300, 200, 30, 2.0, 60.0), // renderer
+            s(400, 200, 5, 9.0, 999.0), // older than its "parent": pid reuse, not ours
+            s(500, 7, 40, 3.0, 10.0),   // unrelated
+        ];
+        let gpu = HashMap::from([(300, 1.5), (500, 20.0)]);
+        let (cpu, ram, g) = footprint(100, &samples, &gpu).expect("root present");
+        assert!((cpu - 3.5).abs() < 1e-9);
+        assert!((ram - 190.0).abs() < 1e-9);
+        assert!((g - 1.5).abs() < 1e-9);
+        assert!(footprint(999, &samples, &gpu).is_none());
     }
 }

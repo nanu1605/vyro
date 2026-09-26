@@ -120,6 +120,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 fmt(g.fan_rpm, " RPM")
             );
         }
+        for n in snap.network.iter().filter(|n| n.connected) {
+            println!(
+                "     {}: down {} up {} (link {}){}",
+                n.adapter,
+                fmt(n.down_mbps, " Mbps"),
+                fmt(n.up_mbps, " Mbps"),
+                fmt(n.link_mbps, " Mbps"),
+                n.wifi_signal_pct
+                    .map_or(String::new(), |s| format!(", signal {s:.0}%")),
+            );
+        }
+        println!(
+            "     ping {}: {} (avg {}, loss {}){}",
+            snap.ping.host,
+            fmt(snap.ping.rtt_ms, " ms"),
+            fmt(snap.ping.avg_ms, " ms"),
+            fmt(snap.ping.loss_pct, "%"),
+            snap.ping
+                .error
+                .as_deref()
+                .map_or(String::new(), |e| format!(" [{e}]")),
+        );
+        println!(
+            "     self: CPU {} RAM {} | GPU power {}",
+            fmt(snap.app.cpu_pct, "%"),
+            fmt(snap.app.ram_mb, " MB"),
+            fmt(snap.power.gpu_w, " W"),
+        );
         if let Some(p) = snap.processes.first() {
             println!(
                 "     top process: {} (pid {}) {} CPU, {} RAM",

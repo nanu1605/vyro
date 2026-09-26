@@ -8,6 +8,9 @@
   import DisplaysPanel from './components/DisplaysPanel.svelte';
   import StoragePanel from './components/StoragePanel.svelte';
   import MemoryCard from './components/MemoryCard.svelte';
+  import NetworkPanel from './components/NetworkPanel.svelte';
+  import PowerCard from './components/PowerCard.svelte';
+  import SelfCard from './components/SelfCard.svelte';
   import CoresCard from './components/CoresCard.svelte';
   import GpuCard from './components/GpuCard.svelte';
   import ProcessesPanel from './components/ProcessesPanel.svelte';
@@ -21,6 +24,7 @@
     { id: 'processes', label: 'Processes' },
     { id: 'hardware', label: 'Hardware' },
     { id: 'storage', label: 'Storage' },
+    { id: 'network', label: 'Network' },
     { id: 'displays', label: 'Displays' },
     { id: 'system', label: 'System' },
   ] as const;
@@ -42,6 +46,7 @@
     processes: false,
     hardware: false,
     storage: false,
+    network: false,
     displays: false,
     system: false,
   });
@@ -173,6 +178,8 @@
           <GpuCard gpu={g} />
         {/each}
         <MemoryCard {mem} />
+        <PowerCard power={snap?.power ?? null} gpus={snap?.gpu ?? []} />
+        <SelfCard app={snap?.app ?? null} {uiFps} />
       </div>
     </div>
 
@@ -190,6 +197,11 @@
     {#if visited.storage}
       <div id="panel-storage" role="tabpanel" aria-labelledby="tab-storage" hidden={tab !== 'storage'}>
         <StoragePanel live={snap?.storage ?? []} />
+      </div>
+    {/if}
+    {#if visited.network}
+      <div id="panel-network" role="tabpanel" aria-labelledby="tab-network" hidden={tab !== 'network'}>
+        <NetworkPanel ts={snap?.ts ?? 0} live={snap?.network ?? []} ping={snap?.ping ?? null} />
       </div>
     {/if}
     {#if visited.displays}

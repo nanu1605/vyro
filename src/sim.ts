@@ -29,6 +29,7 @@ export function emptySnapshot(ts: number): SensorSnapshot {
     fans: [],
     voltages: [],
     network: [],
+    ping: { host: '1.1.1.1', rttMs: null, avgMs: null, minMs: null, maxMs: null, jitterMs: null, lossPct: null, samples: 0, error: null },
     power: { estTotalW: null, cpuW: null, gpuW: null, ramW: null, storageW: null },
     processes: [],
     app: {
@@ -166,6 +167,29 @@ export function nextSnapshot(st: SimState, ts: number, pollHz: number, rand: () 
     minRpm: 300, maxRpm: 2000, kind: 'fan', status: 'ok',
   });
   s.power = { estTotalW: cpuW + gpuW + 45, cpuW, gpuW, ramW: null, storageW: null };
+  const down = rand() < 0.2 ? rand() * 600 : rand() * 8;
+  const rtt = 11 + rand() * 6;
+  const lost = rand() < 0.02;
+  s.ping = {
+    host: '1.1.1.1', rttMs: lost ? null : rtt, avgMs: 13.1, minMs: 10.4, maxMs: 19.8, jitterMs: 1.7,
+    lossPct: lost ? 1.7 : 0, samples: 60, error: lost ? 'request timed out' : null,
+  };
+  s.network = [
+    {
+      id: 'if12', adapter: 'Ethernet', type: 'ethernet', connected: true, primary: true, downMbps: down,
+      upMbps: down * 0.06 + rand(), utilizationPct: down / 10, linkMbps: 1000, receivedMB: 18_400, sentMB: 2_100,
+      pingMs: s.ping.rttMs, packetLossPct: s.ping.lossPct, wifiSignalPct: null, wifiRssiDbm: null,
+      wifiChannel: null, wifiBand: null,
+    },
+    {
+      id: 'if18', adapter: 'Wi-Fi', type: 'wifi', connected: true, primary: false, downMbps: rand() * 0.2,
+      upMbps: rand() * 0.1, utilizationPct: 0, linkMbps: 1201, receivedMB: 310, sentMB: 42, pingMs: null,
+      packetLossPct: null, wifiSignalPct: 84 + rand() * 4, wifiRssiDbm: -53, wifiChannel: 36, wifiBand: '5 GHz',
+    },
+  ];
+  s.app.cpuPct = 0.4 + rand() * 0.6;
+  s.app.ramMB = 96 + rand() * 4;
+  s.app.gpuPct = rand() * 0.8;
   s.app.pollHz = pollHz;
   s.app.activeSensors = 14;
   s.app.engine = 'running';

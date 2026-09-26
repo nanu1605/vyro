@@ -419,18 +419,34 @@ impl Provider for SimProvider {
 
         // Network
         let down = self.net.step(rng, 0.5, 0.5, 0.0, 940.0);
+        let ping = reg.set(k.net_ping, Some(12.0 + (rng.f64() - 0.5) * 6.0));
         snap.network.push(NetworkSnapshot {
+            id: "if12".into(),
             adapter: "Ethernet (simulated)".into(),
             kind: NetKind::Ethernet,
+            connected: true,
+            primary: true,
             down_mbps: reg.set(k.net_down, Some(down)),
             up_mbps: reg.set(k.net_up, Some(down * 0.08)),
             utilization_pct: Some(down / 10.0),
             link_mbps: Some(1000.0),
-            ping_ms: reg.set(k.net_ping, Some(12.0 + (rng.f64() - 0.5) * 6.0)),
+            received_mb: Some(18_400.0),
+            sent_mb: Some(2_100.0),
+            ping_ms: ping,
             packet_loss_pct: Some(0.0),
-            wifi_signal_pct: None,
-            wifi_channel: None,
+            ..Default::default()
         });
+        snap.ping = crate::snapshot::PingSnapshot {
+            host: crate::network::DEFAULT_PING_HOST.into(),
+            rtt_ms: ping,
+            avg_ms: Some(12.0),
+            min_ms: Some(9.1),
+            max_ms: Some(15.2),
+            jitter_ms: Some(1.8),
+            loss_pct: Some(0.0),
+            samples: 60,
+            error: None,
+        };
 
         // Processes: (name, pid, share of CPU load, RAM MB, share of GPU load)
         const PROCS: [(&str, u32, f64, f64, f64); 8] = [

@@ -6,6 +6,7 @@ import type { FanSnapshot } from "./FanSnapshot";
 import type { GpuSnapshot } from "./GpuSnapshot";
 import type { MemorySnapshot } from "./MemorySnapshot";
 import type { NetworkSnapshot } from "./NetworkSnapshot";
+import type { PingSnapshot } from "./PingSnapshot";
 import type { PowerSnapshot } from "./PowerSnapshot";
 import type { ProcessSnapshot } from "./ProcessSnapshot";
 import type { StorageSnapshot } from "./StorageSnapshot";
@@ -15,4 +16,4 @@ export type SensorSnapshot = {
 /**
  * Unix time, seconds.
  */
-ts: number, cpu: CpuSnapshot, gpu: Array<GpuSnapshot>, memory: MemorySnapshot, storage: Array<StorageSnapshot>, board: BoardSnapshot, fans: Array<FanSnapshot>, voltages: Array<VoltageReading>, network: Array<NetworkSnapshot>, power: PowerSnapshot, processes: Array<ProcessSnapshot>, app: AppSnapshot, };
+ts: number, cpu: CpuSnapshot, gpu: Array<GpuSnapshot>, memory: MemorySnapshot, storage: Array<StorageSnapshot>, board: BoardSnapshot, fans: Array<FanSnapshot>, voltages: Array<VoltageReading>, network: Array<NetworkSnapshot>, ping: PingSnapshot, power: PowerSnapshot, processes: Array<ProcessSnapshot>, app: AppSnapshot, };

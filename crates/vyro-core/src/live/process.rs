@@ -1,4 +1,5 @@
-//! Top processes by CPU, RAM and GPU from one `NtQuerySystemInformation` call per tick.
+//! Top processes by CPU, RAM and GPU from one `NtQuerySystemInformation` call per tick, plus
+//! the app's own footprint (itself and its WebView2 processes).
 
 use std::time::Instant;
 
@@ -10,7 +11,7 @@ use crate::lock;
 use crate::provider::{BoxError, Provider};
 use crate::registry::Registry;
 use crate::snapshot::SensorSnapshot;
-use crate::usage::process::{parse_process_list, top_processes, ProcessTracker};
+use crate::usage::process::{footprint, parse_process_list, top_processes, ProcessTracker};
 
 /// How many processes each ranking (CPU, RAM, GPU) contributes to the snapshot.
 const TOP_N: usize = 25;
@@ -86,6 +87,11 @@ impl Provider for ProcessProvider {
         }
         let samples = self.tracker.update(list, now);
         let gpu = lock(&self.gpu).clone();
+        if let Some((cpu, ram, g)) = footprint(std::process::id(), &samples, &gpu) {
+            snap.app.cpu_pct = Some(cpu);
+            snap.app.ram_mb = Some(ram);
+            snap.app.gpu_pct = (!gpu.is_empty()).then_some(g);
+        }
         snap.processes = top_processes(samples, &gpu, TOP_N);
         Ok(())
     }

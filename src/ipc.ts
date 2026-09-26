@@ -3,7 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { DisplayInfo, DriveInfo, HardwareId, HistoryRange, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -61,4 +61,19 @@ export async function onDisplaysChanged(cb: () => void): Promise<() => void> {
 export async function getDrives(): Promise<DriveInfo[]> {
   if (!inTauri) return (await import('./sample-drives')).sampleDrives;
   return invoke<DriveInfo[]>('get_drives');
+}
+
+/** Adapters with addresses and Wi-Fi details (rates and ping arrive in `sensors`). */
+export async function getNetwork(): Promise<NetAdapterInfo[]> {
+  if (!inTauri) return (await import('./sample-network')).sampleNetwork;
+  return invoke<NetAdapterInfo[]>('get_network');
+}
+
+/** Changes the ping target; rejects with a message for an invalid host. */
+export async function setPingHost(host: string): Promise<void> {
+  if (!inTauri) {
+    if (!/^[A-Za-z0-9.-]{1,253}$/.test(host.trim())) throw new Error('Enter an IPv4 address or a host name');
+    return;
+  }
+  await invoke('set_ping_host', { host });
 }

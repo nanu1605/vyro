@@ -1,4 +1,4 @@
-//! Collects the static inventory (hardware, system, displays, drives) and saves it as JSON, for checking against msinfo32 / Task
+//! Collects the static inventory (hardware, system, displays, drives, network) and saves it as JSON, for checking against msinfo32 / Task
 //! Manager. Double-click friendly: writes `vyro-inventory.json` next to the executable, prints
 //! it, and waits for Enter before closing.
 //!
@@ -41,6 +41,16 @@ fn displays() -> Vec<vyro_core::info::DisplayInfo> {
 #[cfg(not(windows))]
 fn displays() -> Vec<vyro_core::info::DisplayInfo> {
     display::sample()
+}
+
+#[cfg(windows)]
+fn network() -> Vec<vyro_core::info::NetAdapterInfo> {
+    vyro_core::network::collect()
+}
+
+#[cfg(not(windows))]
+fn network() -> Vec<vyro_core::info::NetAdapterInfo> {
+    vyro_core::network::sample()
 }
 
 #[cfg(windows)]
@@ -94,12 +104,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+    let mut nets = network();
+    if !show_serial {
+        let hide = || LocalOnly("<redacted; pass --show-serial>".to_owned());
+        for n in &mut nets {
+            n.mac = n.mac.as_ref().map(|_| hide());
+            for ip in &mut n.ipv6 {
+                // Keep link-local (fe80::) addresses; global ones identify the connection.
+                if !ip.0.starts_with("fe80:") {
+                    *ip = hide();
+                }
+            }
+            if let Some(w) = &mut n.wifi {
+                w.ssid = w.ssid.as_ref().map(|_| hide());
+                w.bssid = w.bssid.as_ref().map(|_| hide());
+            }
+        }
+    }
     let log = LOG.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
     let json = serde_json::to_string_pretty(&serde_json::json!({
         "hardware": hw,
         "system": sys,
         "displays": shown,
         "drives": disks,
+        "network": nets,
         "log": log,
     }))?;
     println!("{json}");
