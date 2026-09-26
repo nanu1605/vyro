@@ -60,29 +60,52 @@ fn i32_at(b: &[u8], off: usize) -> Option<i32> {
     Some(i32::from_le_bytes(b.get(off..off + 4)?.try_into().ok()?))
 }
 
-/// AMD adapters from an `AdapterInfo` array, one per PCI bus (ADL lists a logical
-/// adapter per display output).
-pub fn parse_adl_adapters(buf: &[u8]) -> Vec<AdlAdapter> {
+/// One raw `AdapterInfo` record (for diagnostics and matching).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdlRecord {
+    pub index: i32,
+    pub bus: i32,
+    pub vendor: i32,
+    pub present: bool,
+    pub name: String,
+}
+
+const ADL_NAME: usize = 280;
+const ADL_MAX_PATH: usize = 256;
+
+/// Every record in an `AdapterInfo` array.
+pub fn parse_adl_records(buf: &[u8]) -> Vec<AdlRecord> {
+    buf.as_chunks::<ADL_ADAPTER_INFO_SIZE>()
+        .0
+        .iter()
+        .filter_map(|rec| {
+            let name = &rec[ADL_NAME..ADL_NAME + ADL_MAX_PATH];
+            let end = name.iter().position(|&b| b == 0).unwrap_or(name.len());
+            Some(AdlRecord {
+                index: i32_at(rec, ADL_INDEX)?,
+                bus: i32_at(rec, ADL_BUS)?,
+                vendor: i32_at(rec, ADL_VENDOR)?,
+                present: i32_at(rec, ADL_PRESENT)? != 0,
+                name: String::from_utf8_lossy(&name[..end]).trim().to_owned(),
+            })
+        })
+        .collect()
+}
+
+/// AMD adapters, one per PCI bus (ADL lists a logical adapter per display output).
+pub fn adl_adapters(records: &[AdlRecord]) -> Vec<AdlAdapter> {
     let mut out: Vec<AdlAdapter> = Vec::new();
-    for rec in buf.as_chunks::<ADL_ADAPTER_INFO_SIZE>().0 {
-        let (Some(index), Some(bus), Some(vendor), Some(present)) = (
-            i32_at(rec, ADL_INDEX),
-            i32_at(rec, ADL_BUS),
-            i32_at(rec, ADL_VENDOR),
-            i32_at(rec, ADL_PRESENT),
-        ) else {
+    for r in records {
+        let Ok(bus) = u32::try_from(r.bus) else {
             continue;
         };
-        let Ok(bus) = u32::try_from(bus) else {
-            continue;
-        };
-        if vendor != 0x1002 {
+        if r.vendor != 0x1002 {
             continue;
         }
         let a = AdlAdapter {
-            index,
+            index: r.index,
             bus,
-            present: present != 0,
+            present: r.present,
         };
         match out.iter_mut().find(|x| x.bus == bus) {
             // Prefer a present logical adapter over a not-present one on the same device.
@@ -92,6 +115,11 @@ pub fn parse_adl_adapters(buf: &[u8]) -> Vec<AdlAdapter> {
         }
     }
     out
+}
+
+/// [`adl_adapters`] straight from the raw buffer.
+pub fn parse_adl_adapters(buf: &[u8]) -> Vec<AdlAdapter> {
+    adl_adapters(&parse_adl_records(buf))
 }
 
 /// `ADL_PMLOG_*` sensor ids used here.
@@ -289,6 +317,7 @@ mod tests {
 
     fn adl_rec(index: i32, bus: i32, vendor: i32, present: i32) -> Vec<u8> {
         let mut r = vec![0u8; ADL_ADAPTER_INFO_SIZE];
+        r[ADL_NAME..ADL_NAME + 9].copy_from_slice(b"Radeon X\0");
         r[ADL_INDEX..ADL_INDEX + 4].copy_from_slice(&index.to_le_bytes());
         r[ADL_BUS..ADL_BUS + 4].copy_from_slice(&bus.to_le_bytes());
         r[ADL_VENDOR..ADL_VENDOR + 4].copy_from_slice(&vendor.to_le_bytes());

@@ -7,7 +7,8 @@ use windows::Win32::System::Com::CoTaskMemAlloc;
 
 use super::dll::Library;
 use crate::usage::vendor::{
-    decode_pmlog, parse_adl_adapters, pmlog, AdlAdapter, VendorReadings, ADL_ADAPTER_INFO_SIZE,
+    adl_adapters, decode_pmlog, parse_adl_records, pmlog, AdlAdapter, VendorReadings,
+    ADL_ADAPTER_INFO_SIZE,
 };
 
 type Context = *mut c_void;
@@ -57,8 +58,9 @@ impl Adl {
             .ok_or_else(|| missing("New_QueryPMLogData_Get"))?;
 
         let mut ctx: Context = std::ptr::null_mut();
-        // SAFETY: valid callback and out-pointer; 1 = connected adapters only.
-        let rc = unsafe { create(adl_malloc, 1, &mut ctx) };
+        // SAFETY: valid callback and out-pointer. 0 = all adapters: a headless iGPU (no
+        // monitor attached) is not "connected" but still has sensors.
+        let rc = unsafe { create(adl_malloc, 0, &mut ctx) };
         if rc < 0 || ctx.is_null() {
             return Err(format!("ADL2_Main_Control_Create failed ({rc})"));
         }
@@ -74,6 +76,7 @@ impl Adl {
         if rc != 0 || n <= 0 {
             return Err(format!("no ADL adapters (rc {rc}, count {n})"));
         }
+        log::info!("gpu: ADL reports {n} logical adapters");
         let mut buf = vec![0u8; ADL_ADAPTER_INFO_SIZE * n as usize];
         let len = i32::try_from(buf.len()).map_err(|e| e.to_string())?;
         // SAFETY: buffer of `len` bytes for `n` AdapterInfo records.
@@ -81,8 +84,19 @@ impl Adl {
         if rc != 0 {
             return Err(format!("ADL2_Adapter_AdapterInfo_Get failed ({rc})"));
         }
-        adl.adapters = parse_adl_adapters(&buf);
-        log::info!("gpu: ADL adapters (index, bus): {:?}", adl.adapters);
+        let records = parse_adl_records(&buf);
+        for r in &records {
+            log::info!(
+                "gpu: ADL record index={} bus={} vendor={:#x} present={} name={:?}",
+                r.index,
+                r.bus,
+                r.vendor,
+                r.present,
+                r.name
+            );
+        }
+        adl.adapters = adl_adapters(&records);
+        log::info!("gpu: ADL adapters: {:?}", adl.adapters);
         Ok(adl)
     }
 
