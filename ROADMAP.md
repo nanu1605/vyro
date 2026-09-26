@@ -4,19 +4,25 @@ Execution tracker for [`PROJECT_PLAN.md`](PROJECT_PLAN.md) (the build spec, v2).
 source of truth for *what* to build; this file records *in what order*, what is done, and which
 open decisions (spec §12) have been answered.
 
+Deviation from the spec: the custom kernel driver (spec P6) and its attestation signing (spec
+P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P6 section.
+
 ## Decision log (spec §12)
 
 | # | Decision | Answer | Status |
 |---|---|---|---|
 | 1 | Product name / codename | **Vyro** (repo name) | decided |
-| 2 | First release cut | **Early no-driver release** after P5 → P11 split into **11a** (app) and **11b** (driver) | decided |
+| 2 | First release cut | **Early release** after P5 (P11), before the low-level sensors; the former P11b (own driver signing) is dropped | decided |
 | 3 | Gaming module (P10) in v1? | Decide at milestone M5 | open |
 | 4 | Fan control (v2 write path) | Not built without explicit go-ahead | default: no |
 | 5 | Ping target host | `1.1.1.1`, user-configurable | default |
 | 6 | History tiers / cap | raw ≤ 30 min · 10 s avg ≤ 24 h · 1 min avg ≤ 7 d · ≤ 200 MB | default |
 | 7 | Frontend framework | **Svelte 5** + strict TS + Vite | decided |
-| 8 | Installer | **WiX (MSI)** — better service/driver install story | default |
-| 9 | Extra Super-I/O coverage | None beyond one Nuvoton NCT67xx + one ITE IT87xx | default |
+| 8 | Installer | **WiX (MSI)**; bundles `PawnIO_setup.exe` and runs `-install -silent` when PawnIO is missing or older | default |
+| 9 | Extra Super-I/O coverage | Nuvoton NCT6687D first (MSI AM5), then NCT67xx + ITE IT87xx | default |
+| 10 | Low-level hardware access | **PawnIO** (signed, free, HVCI-compatible) replaces our own KMDF driver | decided |
+| 11 | Code signing | **SignPath Foundation** or **Certum Open Source** (no EV certificate) | decided |
+| 12 | Source availability | **Open source**; license MIT OR Apache-2.0 unless changed before the repo goes public | default |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -27,8 +33,8 @@ the §4.3 animation spec in Phase 0.
 |---|---|---|:-:|---|
 | **M1** Foundation | P0 | Pipeline + animated gauges on simulated data | – | – |
 | **M2** No-driver app | P1 → P5 | Inventory, usage, GPU, displays, storage, memory, network, self-monitoring | – | – |
-| **M3** Early release | P11a | EV-signed app + MSI + updater (runs elevated) | – | EV cert |
-| **M4** Driver | P6 → P11b | CPU temps/power/voltage, Super-I/O fans/temps, SPD timings + DIMM temps | test-sign → attestation | Partner Center |
+| **M3** Early release | P11 | Signed app + MSI (+ PawnIO prerequisite) + updater (runs elevated) | PawnIO | SignPath / Certum OSS |
+| **M4** Low-level sensors | P6 | CPU temps/power/voltage, Super-I/O fans/temps/voltages, SPD + DIMM temps, RAM timings | PawnIO | – |
 | **M5** Insight | P7, P8, P9 | History/health/alerts/explorer, privilege split, profiles, analysis, polish | – | – |
 | **M6** Gaming | P10 | PresentMon FPS + companion overlay (deferrable) | – | – |
 
@@ -199,18 +205,39 @@ default route), disconnected Wi-Fi listed; network poll ≈ 2 ms. Fixes: MTU fro
 APIPA address hidden on a disconnected adapter, global IPv6 DNS / gateways redacted in the
 inventory. Wi-Fi link details and throughput under load still to check.
 
-### P11a — Early release (M3)
-EV code-signing, WiX MSI, Tauri updater, elevated autostart via Task Scheduler, perf pass
-against spec §8.
+### P11 — Early release (M3)
+- Signing: SignPath Foundation or Certum Open Source (requires the repo public under an OSI
+  license) for vyro.exe and the MSI.
+- WiX MSI; bundles the unmodified signed `PawnIO_setup.exe`, run as an elevated custom action
+  with `-install -silent` when the uninstall key `PawnIO\DisplayVersion` is missing or older.
+- Tauri updater (signed manifest); elevated autostart via a Task Scheduler "highest privileges"
+  task; perf pass against spec §8; verify on a clean Win11 24H2+ with Memory Integrity on.
+- LICENSE, THIRD_PARTY_NOTICES (PawnIO driver GPL-2.0 with IOCTL exception, PawnIO modules
+  LGPL-2.1, with source links), CONTRIBUTING.
 
-### P6 — Kernel driver (M4)
-KMDF, semantic read-only IOCTLs (whitelisted MSRs, validated Super-I/O banks, SMBus reads to
-0x18–0x1F / 0x50–0x57 only, whitelisted AMD SMN); all port writes internal to the driver;
-coexistence mutexes; rejection tests. Order: skeleton → Rust client → Intel CPU → AMD CPU →
-NCT67xx → IT87xx → SPD/TSOD.
+### P6 — Low-level sensors via PawnIO (M4)
+Our own KMDF driver and its attestation signing are dropped. Vyro talks to the PawnIO driver
+(`\\?\GLOBALROOT\Device\PawnIO`) through its IOCTLs and loads the signed modules it needs,
+embedded from `crates/vyro-core/pawnio/` (PawnIO.Modules release, LGPL-2.1). Missing PawnIO →
+those sensors stay `null` and the UI says "needs PawnIO". Vyro only issues reads, except SMBus
+page-select writes that SPD reads require, and holds the `Access_ISABUS` / `Access_SMBUS`
+coexistence mutexes around bus access.
 
-### P11b — Driver attestation (M4)
-Partner Center, attestation signing, driver in MSI, verify on clean Win11 24H2+ with HVCI.
+PawnIO check (2026-09):
+
+| Point | Result |
+|---|---|
+| License | Driver GPL-2.0 with an exception for programs using only its IOCTLs; modules and PawnIOLib LGPL-2.1. Shipping the signed setup and module binaries with license texts and source links is allowed; Vyro's own license is unconstrained. |
+| Silent install | `PawnIO_setup.exe -install -silent` (`-uninstall -silent`); installed version in the Uninstall registry key. |
+| Ryzen 9700X (family 1Ah, model 44h) | `AMDFamily17` accepts families 17h–1Ah: whitelisted MSRs (RAPL, P-state, APERF/MPERF) and SMN reads → Tctl, CCD temps, package/core power, VID, effective clocks. SoC rails via `RyzenSMU` (later). |
+| MSI B650M (MS-7E24) | `LpcIO` Super-I/O access at 0x2E/0x4E with chip-ID check and HWM BAR discovery → NCT6687D. `SmbusPIIX4` covers the AMD FCH SMBus → DDR5 SPD / hub temperature; UMC timings via SMN. |
+| Defender / HVCI | Signed, not on the vulnerable-driver blocklist, works with Memory Integrity on. |
+| Anti-cheat | FACEIT blocks PawnIO (its certificate also signed cheats). Riot Vanguard: no reports either way — field test pending. |
+
+Order: **6a** Rust client (status, module loading, execute, mutexes) → **6b** AMD CPU (Zen 2–5)
+→ **6c** NCT6687D fans/temps/voltages, then other NCT67xx / IT87xx → **6d** SPD + DIMM
+temperatures (DDR5 hub, DDR4 TSOD) and AMD memory timings → Intel CPU when a test machine is
+available.
 
 ### P7 — History, health, alerts, sensor explorer (M5)
 ### P8 — Privilege separation: Windows service + ACL'd named pipe (M5)
@@ -225,4 +252,7 @@ Partner Center, attestation signing, driver in MSI, verify on clean Win11 24H2+ 
   Windows as soon as P0 runs there.
 - Hardware acceptance criteria require real machines from the §9 test matrix; CI can only prove
   compilation and unit tests.
-- EV certificate issuance and Partner Center onboarding take weeks — start during M2.
+- Anti-cheat: FACEIT refuses to run with PawnIO loaded; Vanguard untested. Low-level sensors
+  must be switchable off, and PawnIO must be removable from the installer.
+- PawnIO has a single upstream maintainer; module ABI or signing changes need a Vyro update.
+- SignPath / Certum OSS require a public repo with an OSI license and a verifiable build.
