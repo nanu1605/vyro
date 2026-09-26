@@ -640,3 +640,38 @@ mod tests {
         assert!(text.contains("<redacted>"));
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// Low-level access (Phase 6, PawnIO)
+// ---------------------------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum PawnIoState {
+    /// Driver reachable and the modules Vyro needs load.
+    Ready,
+    /// Not installed (no uninstall entry and no device).
+    #[default]
+    NotInstalled,
+    /// Installed but older than Vyro's minimum.
+    Outdated,
+    /// Installed but its device is not running.
+    NotRunning,
+    /// The device refuses this process (Vyro is not elevated).
+    NoAccess,
+    /// Anything else; see `detail`.
+    Error,
+    /// Not applicable on this platform.
+    Unsupported,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PawnIoStatus {
+    pub state: PawnIoState,
+    /// Installed version from the PawnIO uninstall entry.
+    pub version: Option<String>,
+    pub detail: Option<String>,
+}

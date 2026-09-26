@@ -3,7 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -76,4 +76,10 @@ export async function setPingHost(host: string): Promise<void> {
     return;
   }
   await invoke('set_ping_host', { host });
+}
+
+/** PawnIO driver state; the browser preview behaves as if it were installed. */
+export async function getPawnIoStatus(): Promise<PawnIoStatus> {
+  if (!inTauri) return { state: 'ready', version: '2.0.0 (simulated)', detail: null };
+  return invoke<PawnIoStatus>('get_pawnio_status');
 }

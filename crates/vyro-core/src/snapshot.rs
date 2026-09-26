@@ -40,13 +40,21 @@ pub struct CpuSnapshot {
     pub bclk_mhz: Option<f64>,
     pub mhz_base: Option<f64>,
     pub mhz_boost: Option<f64>,
+    /// Tdie (AMD) / package (Intel), °C.
     pub temp_package: Option<f64>,
     pub temp_per_core: Vec<f64>,
+    /// AMD per-CCD (chiplet) temperatures, °C.
+    pub temp_ccd: Vec<f64>,
     pub power_pkg_w: Option<f64>,
+    /// Sum of the cores' power.
     pub power_core_w: Option<f64>,
+    /// Per physical core, W.
+    pub power_per_core_w: Vec<f64>,
     pub power_soc_w: Option<f64>,
     pub voltage_pkg: Option<f64>,
     pub voltage_core: Option<f64>,
+    /// Highest core voltage the cores request (VID), V. Not a measurement of the rail.
+    pub vid_core: Option<f64>,
     pub throttle_thermal: Option<bool>,
     pub throttle_power_limit: Option<bool>,
     pub throttle_current_limit: Option<bool>,

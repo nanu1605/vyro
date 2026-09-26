@@ -12,12 +12,14 @@
   import PowerCard from './components/PowerCard.svelte';
   import SelfCard from './components/SelfCard.svelte';
   import CoresCard from './components/CoresCard.svelte';
+  import CpuSensorsCard from './components/CpuSensorsCard.svelte';
+  import PawnIoBanner from './components/PawnIoBanner.svelte';
   import GpuCard from './components/GpuCard.svelte';
   import ProcessesPanel from './components/ProcessesPanel.svelte';
   import { animator } from './anim';
   import { fmt, fmtGB } from './format';
-  import { inTauri, onSensors, setUiVisible } from './ipc';
-  import type { SensorSnapshot } from './types';
+  import { getPawnIoStatus, inTauri, onSensors, setUiVisible } from './ipc';
+  import type { PawnIoStatus, SensorSnapshot } from './types';
 
   const TABS = [
     { id: 'dashboard', label: 'Dashboard' },
@@ -78,12 +80,16 @@
   const cpu = $derived(snap?.cpu ?? null);
   const gpu = $derived(snap?.gpu[0] ?? null);
   const mem = $derived(snap?.memory ?? null);
-  // CPU temperature / power and board fans come from the kernel driver (Phase 6).
-  const NEEDS_DRIVER = 'needs Vyro driver';
+  // CPU temperature / power and board fans come through PawnIO (Phase 6).
+  let pawnio = $state.raw<PawnIoStatus | null>(null);
+  const NEEDS_DRIVER = $derived(pawnio?.state === 'ready' ? 'not reported' : 'needs PawnIO');
   const cpuFan = $derived(snap?.fans.find((f) => f.kind === 'fan') ?? null);
 
   onMount(() => {
     visited[tab] = true;
+    getPawnIoStatus()
+      .then((s) => (pawnio = s))
+      .catch(() => {});
     let stop: (() => void) | undefined;
     let disposed = false;
     void onSensors((s) => {
@@ -130,6 +136,7 @@
 
   <main>
     <div id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard" hidden={tab !== 'dashboard'}>
+      <PawnIoBanner status={pawnio} />
       <div class="gauges">
         <GaugePanel
           label="CPU"
@@ -174,6 +181,7 @@
 
       <div class="cards">
         <CoresCard {cpu} />
+        <CpuSensorsCard {cpu} />
         {#each snap?.gpu ?? [] as g, i (i)}
           <GpuCard gpu={g} />
         {/each}

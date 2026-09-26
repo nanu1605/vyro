@@ -31,6 +31,7 @@ pub fn providers() -> Vec<Box<dyn Provider>> {
     let share = GpuShare::default();
     vec![
         Box::new(CpuProvider::new()),
+        Box::new(crate::amd::AmdCpuProvider::new()),
         Box::new(MemoryProvider::new()),
         Box::new(crate::storage::StorageProvider::new()),
         Box::new(GpuProvider::new(Arc::clone(&share))),

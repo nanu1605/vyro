@@ -38,6 +38,7 @@ fn main() {
             commands::get_displays,
             commands::get_drives,
             commands::get_network,
+            commands::get_pawnio_status,
             commands::set_ping_host,
             commands::get_health,
         ])

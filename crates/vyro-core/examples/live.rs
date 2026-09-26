@@ -41,6 +41,52 @@ fn providers() -> Vec<Box<dyn Provider>> {
     vec![Box::new(vyro_core::SimProvider::new())]
 }
 
+/// Raw AMD registers, to check decoding (VID formula, CCD slots) against HWiNFO.
+#[cfg(windows)]
+fn amd_raw() -> serde_json::Value {
+    use vyro_core::amd::{self, MSR_HW_PSTATE_STATUS, MSR_PWR_UNIT, SMN_THM_TCON_CUR_TMP};
+    use vyro_core::pawnio::{on_cpu, Handle, Module};
+    let id = vyro_core::hwid::cpuid::read_live();
+    if !amd::supported(&id.vendor, id.family) {
+        return serde_json::Value::Null;
+    }
+    let io = match Handle::open(Module::AmdFamily17) {
+        Ok(io) => io,
+        Err(e) => return serde_json::json!({ "error": e.to_string() }),
+    };
+    let msr = |i: u32| io.exec1("ioctl_read_msr", &[u64::from(i)]).ok();
+    let smn = |a: u32| io.exec1("ioctl_read_smn", &[u64::from(a)]).ok();
+    let ccd = amd::ccd_base(id.family, id.model);
+    let pstates: Vec<_> = (0..vyro_core::live::logical_processors())
+        .map(|cpu| {
+            let raw = on_cpu(cpu, || msr(MSR_HW_PSTATE_STATUS)).flatten();
+            let vid = raw.map(amd::vid);
+            serde_json::json!({
+                "cpu": cpu,
+                "raw": raw.map(|r| format!("{r:#018x}")),
+                "vid": vid,
+                "svi2V": vid.map(|v| amd::vid_volts(v, false)),
+                "svi3V": vid.map(|v| amd::vid_volts(v, true)),
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "family": format!("{:#x}", id.family),
+        "model": format!("{:#x}", id.model),
+        "svi3Assumed": amd::svi3(id.family, id.model),
+        "pwrUnit": msr(MSR_PWR_UNIT).map(|r| format!("{r:#x}")),
+        "tctlRaw": smn(SMN_THM_TCON_CUR_TMP).map(|r| format!("{r:#010x}")),
+        "ccdBase": ccd.map(|b| format!("{b:#x}")),
+        "ccdRaw": ccd.map(|b| (0..amd::MAX_CCDS).map(|i| smn(b + i * 4).map(|r| format!("{r:#010x}"))).collect::<Vec<_>>()),
+        "pstate": pstates,
+    })
+}
+
+#[cfg(not(windows))]
+fn amd_raw() -> serde_json::Value {
+    serde_json::Value::Null
+}
+
 fn fmt(v: Option<f64>, unit: &str) -> String {
     v.map_or_else(|| "—".to_owned(), |v| format!("{v:.1}{unit}"))
 }
@@ -56,6 +102,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .max(1);
 
     let _ = log::set_logger(&LOG).map(|()| log::set_max_level(log::LevelFilter::Info));
+    let pawnio = vyro_core::pawnio::status();
+    println!(
+        "PawnIO: {:?}{}{}",
+        pawnio.state,
+        pawnio
+            .version
+            .as_deref()
+            .map_or(String::new(), |v| format!(" {v}")),
+        pawnio
+            .detail
+            .as_deref()
+            .map_or(String::new(), |d| format!(" ({d})")),
+    );
     let mut reg = Registry::new();
     let mut active = Vec::new();
     let mut status = serde_json::Map::new();
@@ -103,6 +162,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             fmt(c.usage_total, "%"),
             fmt(c.mhz_current, " MHz"),
             snap.gpu.len()
+        );
+        println!(
+            "     CPU Tdie {} CCD {:?} | package {} cores {} | VID {} | effective {}",
+            fmt(c.temp_package, " °C"),
+            c.temp_ccd,
+            fmt(c.power_pkg_w, " W"),
+            fmt(c.power_core_w, " W"),
+            c.vid_core
+                .map_or_else(|| "—".to_owned(), |v| format!("{v:.3} V")),
+            fmt(c.mhz_effective, " MHz"),
         );
         for g in &snap.gpu {
             println!(
@@ -161,6 +230,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let json = serde_json::to_string_pretty(&serde_json::json!({
+        "pawnio": pawnio,
+        "amdRaw": amd_raw(),
         "providers": status,
         "pollMs": poll_ms,
         "pollMsByProvider": per_provider,

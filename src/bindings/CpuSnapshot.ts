@@ -4,4 +4,24 @@ export type CpuSnapshot = { usageTotal: number | null, usagePerCore: Array<numbe
 /**
  * Derived; approximate.
  */
-bclkMhz: number | null, mhzBase: number | null, mhzBoost: number | null, tempPackage: number | null, tempPerCore: Array<number>, powerPkgW: number | null, powerCoreW: number | null, powerSocW: number | null, voltagePkg: number | null, voltageCore: number | null, throttleThermal: boolean | null, throttlePowerLimit: boolean | null, throttleCurrentLimit: boolean | null, };
+bclkMhz: number | null, mhzBase: number | null, mhzBoost: number | null, 
+/**
+ * Tdie (AMD) / package (Intel), °C.
+ */
+tempPackage: number | null, tempPerCore: Array<number>, 
+/**
+ * AMD per-CCD (chiplet) temperatures, °C.
+ */
+tempCcd: Array<number>, powerPkgW: number | null, 
+/**
+ * Sum of the cores' power.
+ */
+powerCoreW: number | null, 
+/**
+ * Per physical core, W.
+ */
+powerPerCoreW: Array<number>, powerSocW: number | null, voltagePkg: number | null, voltageCore: number | null, 
+/**
+ * Highest core voltage the cores request (VID), V. Not a measurement of the rail.
+ */
+vidCore: number | null, throttleThermal: boolean | null, throttlePowerLimit: boolean | null, throttleCurrentLimit: boolean | null, };

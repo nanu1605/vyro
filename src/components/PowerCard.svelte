@@ -10,11 +10,11 @@
   }
   let { power, gpus }: Props = $props();
 
-  const PENDING = 'needs Vyro driver';
+  const PENDING = 'needs PawnIO';
   const watts = (w: number | null | undefined) => (w == null ? null : `${fmt(w, 1)} W`);
 </script>
 
-<Card title="Power" subtitle={power?.estTotalW != null ? `${fmt(power.estTotalW)} W estimated` : 'Partial: GPU only'}>
+<Card title="Power" subtitle={power?.estTotalW != null ? `${fmt(power.estTotalW)} W estimated` : power?.cpuW != null ? 'CPU + GPU' : 'Partial: GPU only'}>
   <KV
     rows={[
       ['System total', power?.estTotalW != null ? `${fmt(power.estTotalW)} W` : PENDING],
@@ -27,7 +27,7 @@
     ]}
   />
   {#if power?.cpuW == null}
-    <p class="note">CPU power and the system total need the Vyro driver (coming in a later update).</p>
+    <p class="note">CPU power and the system total need PawnIO (free, signed driver from pawnio.eu).</p>
   {/if}
 </Card>
 

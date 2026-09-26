@@ -11,8 +11,8 @@ export function emptySnapshot(ts: number): SensorSnapshot {
     cpu: {
       usageTotal: null, usagePerCore: [], mhzCurrent: null, mhzPerCore: [], mhzEffective: null,
       multiplier: null, bclkMhz: null, mhzBase: null, mhzBoost: null, tempPackage: null,
-      tempPerCore: [], powerPkgW: null, powerCoreW: null, powerSocW: null, voltagePkg: null,
-      voltageCore: null, throttleThermal: null, throttlePowerLimit: null, throttleCurrentLimit: null,
+      tempPerCore: [], tempCcd: [], powerPkgW: null, powerCoreW: null, powerPerCoreW: [], powerSocW: null,
+      voltagePkg: null, voltageCore: null, vidCore: null, throttleThermal: null, throttlePowerLimit: null, throttleCurrentLimit: null,
     },
     gpu: [],
     memory: {
@@ -87,6 +87,11 @@ export function nextSnapshot(st: SimState, ts: number, pollHz: number, rand: () 
   s.cpu.mhzBoost = 5400;
   s.cpu.tempPackage = st.cpuTemp;
   s.cpu.powerPkgW = cpuW;
+  s.cpu.tempCcd = [st.cpuTemp + 1.5];
+  s.cpu.powerCoreW = cpuW * 0.7;
+  s.cpu.powerPerCoreW = Array.from({ length: 8 }, (_, i) => (cpuW * 0.7) / 8 + (i % 3) * 0.2);
+  s.cpu.vidCore = 0.9 + (st.cpu / 100) * 0.4;
+  s.cpu.mhzEffective = mhz * 0.8;
   s.gpu.push({
     name: 'Simulated GPU (browser)',
     vendor: 'Simulated',

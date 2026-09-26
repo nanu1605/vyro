@@ -134,6 +134,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "displays": shown,
         "drives": disks,
         "network": nets,
+        "pawnio": vyro_core::pawnio::status(),
         "log": log,
     }))?;
     println!("{json}");

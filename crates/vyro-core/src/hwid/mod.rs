@@ -7,7 +7,7 @@ pub mod pci;
 pub mod smbios;
 pub mod topology;
 #[cfg(windows)]
-mod win;
+pub(crate) mod win;
 
 use crate::info::HardwareId;
 

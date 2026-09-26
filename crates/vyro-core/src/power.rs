@@ -1,6 +1,6 @@
-//! Power (spec §2 Power, Phase 5 partial). Sums what the other providers measured: GPU board
-//! power now; CPU package power arrives with the driver (Phase 6), and until then the total
-//! stays `null` rather than a guess that leaves the CPU out. Runs after the GPU provider.
+//! Power (spec §2 Power). Sums what the other providers measured: GPU board power, and CPU
+//! package power when PawnIO provides it (Phase 6). Without CPU power the total stays `null`
+//! rather than a guess that leaves the CPU out. Runs after the CPU and GPU providers.
 
 use crate::provider::{BoxError, Provider};
 use crate::registry::{Group, Registry, SensorDesc, SensorKey, Source, Unit};
@@ -49,6 +49,7 @@ impl Provider for PowerProvider {
     fn poll(&mut self, reg: &mut Registry, snap: &mut SensorSnapshot) -> Result<(), BoxError> {
         let gpu = gpu_total(snap);
         snap.power.gpu_w = self.gpu.map_or(gpu, |k| reg.set(k, gpu));
+        snap.power.cpu_w = snap.cpu.power_pkg_w;
         if let (Some(cpu), Some(gpu)) = (snap.power.cpu_w, snap.power.gpu_w) {
             // Board, RAM, drives and fans: a flat allowance until they are measured.
             snap.power.est_total_w = Some(cpu + gpu + 40.0);
@@ -86,5 +87,10 @@ mod tests {
         p.poll(&mut reg, &mut snap).expect("poll");
         assert_eq!(snap.power.gpu_w, Some(75.0));
         assert_eq!(snap.power.est_total_w, None);
+
+        snap.cpu.power_pkg_w = Some(60.0);
+        p.poll(&mut reg, &mut snap).expect("poll");
+        assert_eq!(snap.power.cpu_w, Some(60.0));
+        assert_eq!(snap.power.est_total_w, Some(175.0));
     }
 }

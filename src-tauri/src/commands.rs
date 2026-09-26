@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use tauri::State;
 use vyro_core::info::{
-    DisplayInfo, DriveInfo, HardwareId, HealthReport, NetAdapterInfo, SystemInfo,
+    DisplayInfo, DriveInfo, HardwareId, HealthReport, NetAdapterInfo, PawnIoStatus, SystemInfo,
 };
 use vyro_core::snapshot::AppSnapshot;
 use vyro_core::{lock, unix_now, HistoryRange, HistorySeries, SensorSnapshot, SensorTree};
@@ -148,4 +148,12 @@ pub fn set_ping_host(host: String) -> Result<(), String> {
 #[tauri::command]
 pub fn get_health() -> HealthReport {
     HealthReport::default()
+}
+
+/// Whether PawnIO (low-level sensors: CPU temperature and power, board fans) is usable.
+#[tauri::command]
+pub async fn get_pawnio_status() -> Result<PawnIoStatus, String> {
+    tauri::async_runtime::spawn_blocking(vyro_core::pawnio::status)
+        .await
+        .map_err(|e| e.to_string())
 }
