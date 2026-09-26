@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use crate::alerts::{AlertEngine, Reading};
 use crate::health::{HealthEvent, HealthMonitor};
 use crate::history::History;
 use crate::provider::Provider;
@@ -69,6 +70,7 @@ pub struct Poller {
     history: Option<Arc<Mutex<History>>>,
     history_error: Option<String>,
     health: Arc<Mutex<HealthMonitor>>,
+    alerts: Option<Arc<Mutex<AlertEngine>>>,
     cfg: PollerConfig,
 }
 
@@ -80,6 +82,7 @@ impl Poller {
             history: None,
             history_error: None,
             health: Arc::new(Mutex::new(HealthMonitor::new())),
+            alerts: None,
             cfg,
         }
     }
@@ -99,6 +102,12 @@ impl Poller {
 
     pub fn with_history(mut self, history: Arc<Mutex<History>>) -> Self {
         self.history = Some(history);
+        self
+    }
+
+    /// Evaluates these alert rules every tick; fired alerts go out in `SensorSnapshot::alerts`.
+    pub fn with_alerts(mut self, alerts: Arc<Mutex<AlertEngine>>) -> Self {
+        self.alerts = Some(alerts);
         self
     }
 
@@ -222,6 +231,19 @@ impl Poller {
         };
 
         snap.health = lock(&self.health).update(&snap);
+        if let Some(alerts) = &self.alerts {
+            let reading = |id: &str| {
+                reg.get(id).and_then(|s| {
+                    s.value.map(|value| Reading {
+                        value,
+                        unit: s.unit,
+                        name: s.name.clone(),
+                    })
+                })
+            };
+            let health = lock(&self.health);
+            snap.alerts = lock(alerts).evaluate(snap.ts, reading, health.fresh());
+        }
 
         if let Some(history) = &self.history {
             let result = lock(history).record(snap.ts, reg.history_values());
@@ -306,6 +328,7 @@ mod tests {
     use crate::history::{HistoryConfig, HistoryRange};
     use crate::provider::BoxError;
     use crate::sim::SimProvider;
+    use crate::snapshot::Status;
     use std::sync::atomic::{AtomicU32, Ordering};
 
     const WAIT: Duration = Duration::from_secs(5);
@@ -366,6 +389,38 @@ mod tests {
         let snap = rx.recv_timeout(Duration::from_secs(1)).unwrap();
         assert_eq!(snap.app.engine, EngineStatus::Running);
         handle.stop();
+    }
+
+    #[test]
+    fn evaluates_alert_rules_and_grades_health_each_tick() {
+        use crate::alerts::{AlertKind, AlertRule};
+        let registry = Arc::new(Mutex::new(Registry::new()));
+        let rule = AlertRule {
+            id: "busy".into(),
+            name: "Busy CPU".into(),
+            enabled: true,
+            kind: AlertKind::Threshold {
+                sensor: "cpu.usage.total".into(),
+                above: true,
+                value: -1.0,
+            },
+            for_secs: 0,
+            cooldown_secs: 3600,
+            sound: false,
+        };
+        let alerts = Arc::new(Mutex::new(AlertEngine::new(vec![rule])));
+        let poller = Poller::new(registry, fast())
+            .with_provider(SimProvider::with_seed(3))
+            .with_alerts(Arc::clone(&alerts));
+        let (handle, rx) = spawn(poller);
+        let snaps: Vec<_> = (0..3).map(|_| rx.recv_timeout(WAIT).unwrap()).collect();
+        handle.stop();
+        // Fires on the first tick, then stays quiet (latched).
+        assert_eq!(snaps[0].alerts.len(), 1);
+        assert!(snaps[0].alerts[0].message.starts_with("CPU Total at"));
+        assert!(snaps[1..].iter().all(|s| s.alerts.is_empty()));
+        assert_eq!(lock(&alerts).log().len(), 1);
+        assert_ne!(snaps[0].health.overall, Status::Unknown);
     }
 
     struct Failing;

@@ -1,14 +1,15 @@
 <script lang="ts">
+  import AlertsPanel from './AlertsPanel.svelte';
   import { getHealthEvents } from '../ipc';
-  import type { HealthEvent, HealthReport, Status } from '../types';
+  import type { HealthEvent, SensorSnapshot, Status } from '../types';
 
   interface Props {
-    health: HealthReport | null;
-    /** Snapshot time; events refresh once per tick while shown. */
-    ts: number;
+    snap: SensorSnapshot | null;
     active: boolean;
   }
-  let { health, ts, active }: Props = $props();
+  let { snap, active }: Props = $props();
+  const health = $derived(snap?.health ?? null);
+  const ts = $derived(snap?.ts ?? 0);
 
   let events = $state<HealthEvent[]>([]);
   let busy = false;
@@ -83,9 +84,11 @@
     <p class="fine">No thermal limits, throttling, stopped fans or rail problems since Vyro started.</p>
   {/if}
   <p class="note">
-    Limits: CPU 90 °C (warning) / 95 °C, GPU 85 / 92 °C, hotspot 100 / 108 °C, NVMe 75 / 85 °C, VRM 95 / 105 °C,
+    Limits (warning / problem): CPU 90 / 99 °C (Ryzen 7000/9000 run at 95 °C under full load by design), GPU 85 / 92 °C, hotspot 100 / 108 °C, NVMe 75 / 85 °C, VRM 95 / 105 °C,
     DIMM 75 / 85 °C, supply rails ±5 % / ±10 %. A fan that was spinning and reads 0 RPM counts as stopped.
   </p>
+
+  <AlertsPanel {snap} {active} />
 </section>
 
 <style>

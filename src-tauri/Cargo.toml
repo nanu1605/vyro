@@ -15,6 +15,7 @@ log = "0.4.34"
 serde_json = "1.0.151"
 tauri = "2.11.6"
 tauri-plugin-log = "2.9.2"
+tauri-plugin-notification = "2.4.0"
 vyro-core = { path = "../crates/vyro-core" }
 
 [lints]

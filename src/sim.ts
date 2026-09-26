@@ -37,6 +37,7 @@ export function emptySnapshot(ts: number): SensorSnapshot {
       engine: 'starting',
     },
     health: { overall: 'unknown', subsystems: [] },
+    alerts: [],
   };
 }
 
@@ -232,7 +233,7 @@ export function simHealth(s: SensorSnapshot): HealthReport {
   });
   const t = s.cpu.tempPackage;
   const subsystems = [
-    sub('CPU', true, t != null && t >= 90 ? [[t >= 95 ? 'fail' : 'warn', `CPU running hot: ${t.toFixed(0)} °C`]] : []),
+    sub('CPU', true, t != null && t >= 90 ? [[t >= 99 ? 'fail' : 'warn', `CPU running hot: ${t.toFixed(0)} °C`]] : []),
     sub('GPU', s.gpu.length > 0, s.gpu.filter((g) => (g.tempEdge ?? 0) >= 85).map((g) => ['warn', `${g.name} running hot`])),
     sub('Memory', s.memory.totalMB != null, []),
     sub(

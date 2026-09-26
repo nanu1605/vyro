@@ -26,6 +26,8 @@ pub struct SensorSnapshot {
     pub app: AppSnapshot,
     /// System Health, graded from this snapshot (see [`crate::health`]).
     pub health: crate::info::HealthReport,
+    /// Alerts that fired on this tick (usually none).
+    pub alerts: Vec<crate::alerts::AlertFired>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]

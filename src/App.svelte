@@ -23,7 +23,7 @@
   import { animator } from './anim';
   import { fmt, fmtGB } from './format';
   import { getPawnIoStatus, inTauri, onSensors, setUiVisible } from './ipc';
-  import type { PawnIoStatus, SensorSnapshot } from './types';
+  import type { AlertFired, PawnIoStatus, SensorSnapshot } from './types';
 
   const TABS = [
     { id: 'dashboard', label: 'Dashboard' },
@@ -62,6 +62,15 @@
     system: false,
     sensors: false,
   });
+
+  /** Alerts that fired while the window is open, shown briefly in the corner. */
+  let toasts = $state<Array<AlertFired & { key: number }>>([]);
+  let toastSeq = 0;
+  function showToast(a: AlertFired): void {
+    const key = ++toastSeq;
+    toasts = [...toasts.slice(-2), { ...a, key }];
+    setTimeout(() => (toasts = toasts.filter((t) => t.key !== key)), 10_000);
+  }
 
   /** Sensor opened from the explorer, charted alone at the top of History. */
   let historyFocus = $state<string | null>(null);
@@ -121,6 +130,7 @@
     void onSensors((s) => {
       snap = s;
       uiFps = animator.fps;
+      for (const a of s.alerts) showToast(a);
     }).then((fn) => {
       if (disposed) fn();
       else stop = fn;
@@ -236,7 +246,7 @@
 
     {#if visited.health}
       <div id="panel-health" role="tabpanel" aria-labelledby="tab-health" hidden={tab !== 'health'}>
-        <HealthPanel health={snap?.health ?? null} ts={snap?.ts ?? 0} active={tab === 'health'} />
+        <HealthPanel {snap} active={tab === 'health'} />
       </div>
     {/if}
 
@@ -279,6 +289,15 @@
   </main>
 
   <AppStatus app={snap?.app ?? null} {uiFps} source={inTauri ? 'engine' : 'browser sim'} />
+
+  <div class="toasts" role="status" aria-live="polite">
+    {#each toasts as t (t.key)}
+      <button type="button" class="toast" onclick={() => select('health')}>
+        <b>{t.title}</b>
+        <span>{t.message}</span>
+      </button>
+    {/each}
+  </div>
 </div>
 
 <style>
@@ -334,6 +353,34 @@
   }
   .alert-dot.fail {
     background: var(--hot);
+  }
+  .toasts {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: min(22rem, calc(100vw - 2rem));
+  }
+  .toast {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid color-mix(in srgb, var(--hot) 50%, var(--line));
+    border-radius: 10px;
+    background: var(--panel);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.82rem;
+    text-align: left;
+    cursor: pointer;
+  }
+  .toast span {
+    color: var(--muted);
   }
   .health-strip {
     display: flex;

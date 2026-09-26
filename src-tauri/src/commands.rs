@@ -4,6 +4,7 @@
 use std::sync::Arc;
 
 use tauri::State;
+use vyro_core::alerts::{AlertFired, AlertRule};
 use vyro_core::health::HealthEvent;
 use vyro_core::info::{
     DisplayInfo, DriveInfo, HardwareId, HealthReport, NetAdapterInfo, PawnIoStatus, SystemInfo,
@@ -154,6 +155,38 @@ pub fn set_ping_host(host: String) -> Result<(), String> {
 #[tauri::command]
 pub fn get_health(engine: State<'_, Engine>) -> HealthReport {
     engine.latest().map(|s| s.health).unwrap_or_default()
+}
+
+#[tauri::command]
+pub fn get_alert_rules(engine: State<'_, Engine>) -> Vec<AlertRule> {
+    engine.alert_rules()
+}
+
+/// Replaces the alert rules (validated, then saved to `alerts.json`).
+#[tauri::command]
+pub fn set_alert_rules(engine: State<'_, Engine>, rules: Vec<AlertRule>) -> Result<(), String> {
+    engine.set_alert_rules(rules)
+}
+
+/// Alerts fired since start, oldest first.
+#[tauri::command]
+pub fn get_alert_log(engine: State<'_, Engine>) -> Vec<AlertFired> {
+    engine.alert_log()
+}
+
+/// Sends a sample notification so the user can check Windows lets Vyro notify.
+#[tauri::command]
+pub fn test_alert(app: tauri::AppHandle, sound: bool) {
+    crate::engine::notify(
+        &app,
+        &AlertFired {
+            ts: unix_now(),
+            rule_id: "test".into(),
+            title: "Vyro test alert".into(),
+            message: "Alerts will look like this.".into(),
+            sound,
+        },
+    );
 }
 
 /// Recent health changes (thermal limits, throttling, stopped fans…), oldest first.

@@ -251,6 +251,27 @@ mux on another port) and timings from the Zen 4/5 memory controller over SMN, sh
 card. DDR4 TSOD and DDR4 timings wait for a test machine; DIMM PMIC rails need writes and stay out.
 
 ### P7 — History, health, alerts, sensor explorer (M5)
+Built; awaiting a run of the desktop app on Windows (the pieces are unit-tested and previewed in
+the browser build).
+
+- [x] **Sensor Explorer** (Sensors tab): every registered sensor by group with value, min, max,
+      avg, source; filter, collapsible groups, "Reset min/max"; history-tracked sensors link to
+      their history.
+- [x] **History** tab: 5 min / 30 min / 1 h / 6 h / 24 h / 7 days from the SQLite store; SVG
+      charts (average + min–max band, gaps where the app was closed, hover readout) for usage,
+      temperatures, power, clocks, RAM/VRAM, board + DIMM temps, drive temps, fans, core
+      voltages, disk and network throughput, ping. Board voltages are now history-tracked.
+- [x] **System Health** (`vyro_core::health`, Health tab): per-subsystem status with fixed,
+      hysteresis-damped limits; event log of the last 200 changes; dashboard strip and tab dot
+      when something needs attention. CPU limit 90 °C warning / 99 °C problem, since Ryzen
+      7000/9000 hold 95 °C under full load by design.
+- [x] **Alerts** (`vyro_core::alerts`, Health tab): sensor-threshold rules (above / below, hold
+      time, cooldown, sound) and System Health forwarding; saved to `alerts.json` in the app
+      config folder (a bad file is moved aside, defaults used); Windows toast notifications via
+      `tauri-plugin-notification`, silent unless the rule asks for sound; in-app toasts; test
+      button. Defaults: CPU > 95 °C and GPU > 90 °C for 30 s, hardware problems; warnings off.
+- [ ] Not yet: health events and fired alerts are kept in memory only (not across restarts);
+      tray icon (alerts fire while minimised, not after the window is closed).
 ### P8 — Privilege separation: Windows service + ACL'd named pipe (M5)
 ### P9 — Performance hardening, profiles, intelligent analysis, polish (M5)
 ### P10 — Gaming capture + companion overlay (M6, deferrable)

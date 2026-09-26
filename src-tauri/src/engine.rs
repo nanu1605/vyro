@@ -1,8 +1,11 @@
 //! Wires the platform-neutral sensor engine (`vyro-core`) into the Tauri app.
 
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_notification::NotificationExt;
+use vyro_core::alerts::{self, AlertEngine, AlertFired, AlertRule};
 use vyro_core::health::HealthEvent;
 use vyro_core::{
     lock, History, HistoryConfig, Inventory, Poller, PollerConfig, PollerHandle, Registry,
@@ -21,6 +24,9 @@ pub struct Engine {
     pub history: Option<Arc<Mutex<History>>>,
     /// Static hardware / system inventory, collected once in the background at startup.
     pub inventory: Arc<Inventory>,
+    alerts: Arc<Mutex<AlertEngine>>,
+    /// `alerts.json` in the app config folder; `None` if that folder is unavailable.
+    alerts_path: Option<PathBuf>,
     poller: Mutex<Option<PollerHandle>>,
 }
 
@@ -37,8 +43,21 @@ impl Engine {
             .name("vyro-inventory".into())
             .spawn(move || warm.warm())?;
 
+        let alerts_path = app
+            .path()
+            .app_config_dir()
+            .map(|d| d.join("alerts.json"))
+            .inspect_err(|e| log::warn!("alert rules will not be saved: {e}"))
+            .ok();
+        let rules = alerts_path
+            .as_deref()
+            .map_or_else(alerts::default_rules, alerts::load);
+        log::info!("alerts: {} rule(s)", rules.len());
+        let alerts = Arc::new(Mutex::new(AlertEngine::new(rules)));
+
         let mut poller =
-            with_providers(Poller::new(Arc::clone(&registry), PollerConfig::default()));
+            with_providers(Poller::new(Arc::clone(&registry), PollerConfig::default()))
+                .with_alerts(Arc::clone(&alerts));
         if let Some(history) = &history {
             poller = poller.with_history(Arc::clone(history));
         }
@@ -59,12 +78,17 @@ impl Engine {
             if let Err(e) = emitter.emit(SENSORS_EVENT, snap) {
                 log::debug!("emit {SENSORS_EVENT}: {e}");
             }
+            for alert in &snap.alerts {
+                notify(&emitter, alert);
+            }
         })?;
 
         Ok(Self {
             registry,
             history,
             inventory,
+            alerts,
+            alerts_path,
             poller: Mutex::new(Some(handle)),
         })
     }
@@ -80,6 +104,24 @@ impl Engine {
             .unwrap_or_default()
     }
 
+    pub fn alert_rules(&self) -> Vec<AlertRule> {
+        lock(&self.alerts).rules().to_vec()
+    }
+
+    /// Applies and saves a new rule set.
+    pub fn set_alert_rules(&self, rules: Vec<AlertRule>) -> Result<(), String> {
+        lock(&self.alerts).set_rules(rules.clone())?;
+        match &self.alerts_path {
+            Some(path) => alerts::save(path, &rules)
+                .map_err(|e| format!("rules applied but not saved ({}): {e}", path.display())),
+            None => Err("rules applied but not saved: no config folder".into()),
+        }
+    }
+
+    pub fn alert_log(&self) -> Vec<AlertFired> {
+        lock(&self.alerts).log()
+    }
+
     pub fn set_visible(&self, visible: bool) {
         if let Some(poller) = lock(&self.poller).as_ref() {
             poller.set_visible(visible);
@@ -91,6 +133,22 @@ impl Engine {
         if let Some(poller) = lock(&self.poller).take() {
             poller.stop();
         }
+    }
+}
+
+/// Shows a fired alert as a Windows notification (silent unless the rule asks for sound).
+pub fn notify(app: &AppHandle, alert: &AlertFired) {
+    log::info!("alert: {}: {}", alert.title, alert.message);
+    let mut n = app
+        .notification()
+        .builder()
+        .title(&alert.title)
+        .body(&alert.message);
+    if alert.sound {
+        n = n.sound("Default");
+    }
+    if let Err(e) = n.show() {
+        log::warn!("alert notification failed: {e}");
     }
 }
 

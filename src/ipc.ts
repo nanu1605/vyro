@@ -3,7 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -48,6 +48,41 @@ export async function getHealthEvents(): Promise<HealthEvent[]> {
     ];
   }
   return invoke<HealthEvent[]>('get_health_events');
+}
+
+// Browser preview only: rules live in memory, mirroring the engine's first-run defaults.
+let browserRules: AlertRule[] = [
+  { id: 'cpu-temp', name: 'CPU temperature', enabled: true, kind: { type: 'threshold', sensor: 'cpu.temp.package', above: true, value: 95 }, forSecs: 30, cooldownSecs: 600, sound: true },
+  { id: 'gpu-temp', name: 'GPU temperature', enabled: true, kind: { type: 'threshold', sensor: 'gpu.0.temp.edge', above: true, value: 90 }, forSecs: 30, cooldownSecs: 600, sound: true },
+  { id: 'health-problems', name: 'Hardware problems', enabled: true, kind: { type: 'health', problems: true }, forSecs: 0, cooldownSecs: 600, sound: true },
+  { id: 'health-warnings', name: 'Health warnings', enabled: false, kind: { type: 'health', problems: false }, forSecs: 0, cooldownSecs: 1800, sound: false },
+];
+
+export async function getAlertRules(): Promise<AlertRule[]> {
+  if (!inTauri) return JSON.parse(JSON.stringify(browserRules)) as AlertRule[];
+  return invoke<AlertRule[]>('get_alert_rules');
+}
+
+/** Replaces all rules; the engine validates and saves them. */
+export async function setAlertRules(rules: AlertRule[]): Promise<void> {
+  if (!inTauri) {
+    browserRules = JSON.parse(JSON.stringify(rules)) as AlertRule[];
+    return;
+  }
+  await invoke('set_alert_rules', { rules });
+}
+
+export async function getAlertLog(): Promise<AlertFired[]> {
+  if (!inTauri) {
+    const now = Math.floor(Date.now() / 1000);
+    return [{ ts: now - 3890, ruleId: 'cpu-temp', title: 'CPU temperature', message: 'CPU (Tdie) at 95.4 °C (above 95.0 °C for 10 s)', sound: true }];
+  }
+  return invoke<AlertFired[]>('get_alert_log');
+}
+
+/** Sends a sample Windows notification. */
+export async function testAlert(sound: boolean): Promise<void> {
+  if (inTauri) await invoke('test_alert', { sound });
 }
 
 /** Restarts min / max / avg for every sensor. */

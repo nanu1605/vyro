@@ -134,6 +134,8 @@ pub struct HealthMonitor {
     active: HashMap<String, (Status, String, Subsystem)>,
     spun: HashMap<String, u32>,
     events: VecDeque<HealthEvent>,
+    /// Events logged by the latest `update` (fed to alert rules).
+    fresh: Vec<HealthEvent>,
 }
 
 struct Ctx<'a> {
@@ -187,20 +189,26 @@ impl HealthMonitor {
         self.events.iter().cloned().collect()
     }
 
+    /// Changes logged by the latest [`Self::update`].
+    pub fn fresh(&self) -> &[HealthEvent] {
+        &self.fresh
+    }
+
     fn findings(&mut self, s: &SensorSnapshot) -> Vec<Finding> {
         let mut c = Ctx {
             prev: &self.active,
             out: Vec::new(),
         };
 
-        // CPU
+        // CPU. Ryzen 7000/9000 hold 95 °C under full load by design (a warning, not a problem);
+        // Intel parts throttle at 100 °C.
         c.temp(
             Subsystem::Cpu,
             "cpu.temp",
             "CPU",
             s.cpu.temp_package,
             90.0,
-            95.0,
+            99.0,
         );
         if s.cpu.throttle_thermal == Some(true) {
             c.push(
@@ -370,6 +378,7 @@ impl HealthMonitor {
 
     /// Grades `snap`, logs what changed since the last call, and returns the report.
     pub fn update(&mut self, snap: &SensorSnapshot) -> HealthReport {
+        self.fresh.clear();
         let findings = self.findings(snap);
         let ts = snap.ts;
         let mut next = HashMap::new();
@@ -398,12 +407,14 @@ impl HealthMonitor {
         if self.events.len() == MAX_EVENTS {
             self.events.pop_front();
         }
-        self.events.push_back(HealthEvent {
+        let e = HealthEvent {
             ts,
             subsystem: sub.name().to_owned(),
             status,
             message,
-        });
+        };
+        self.fresh.push(e.clone());
+        self.events.push_back(e);
     }
 }
 
@@ -536,25 +547,30 @@ mod tests {
     fn cpu_at_its_limit_logs_one_event_then_clears() {
         let mut h = HealthMonitor::new();
         let mut s = snap(0);
-        s.cpu.temp_package = Some(96.0);
+        s.cpu.temp_package = Some(99.5);
         let r = h.update(&s);
         assert_eq!(r.overall, Status::Fail);
-        assert!(sub(&r, "CPU").messages[0].contains("96 °C"));
+        assert!(sub(&r, "CPU").messages[0].contains("100 °C"));
         // Hovering around the limit does not add events.
-        for (ts, t) in [(1, 95.5), (2, 94.0), (3, 93.0)] {
+        for (ts, t) in [(1, 98.5), (2, 97.0), (3, 96.5)] {
             s.ts = ts;
             s.cpu.temp_package = Some(t);
             h.update(&s);
         }
         assert_eq!(h.events().len(), 1);
+        // Back to a Ryzen's designed 95 °C: a warning, not a problem.
         s.ts = 4;
+        s.cpu.temp_package = Some(95.0);
+        assert_eq!(h.update(&s).overall, Status::Warn);
+        assert_eq!(h.events().len(), 2);
+        s.ts = 6;
         s.cpu.temp_package = Some(60.0);
         let r = h.update(&s);
         assert_eq!(r.overall, Status::Ok);
         let ev = h.events();
-        assert_eq!(ev.len(), 2);
-        assert_eq!(ev[1].status, Status::Ok);
-        assert!(ev[1].message.starts_with("Cleared: CPU"));
+        assert_eq!(ev.len(), 3);
+        assert_eq!(ev[2].status, Status::Ok);
+        assert!(ev[2].message.starts_with("Cleared: CPU"));
     }
 
     #[test]

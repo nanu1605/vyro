@@ -22,6 +22,7 @@ fn main() {
 
     let app = tauri::Builder::default()
         .plugin(log)
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let engine = Engine::start(app.handle())?;
             app.manage(engine);
@@ -43,6 +44,10 @@ fn main() {
             commands::set_ping_host,
             commands::get_health,
             commands::get_health_events,
+            commands::get_alert_rules,
+            commands::set_alert_rules,
+            commands::get_alert_log,
+            commands::test_alert,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build the Tauri application");
