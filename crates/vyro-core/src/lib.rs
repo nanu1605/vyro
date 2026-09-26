@@ -17,6 +17,7 @@ pub mod power;
 pub mod provider;
 pub mod registry;
 pub mod sim;
+pub mod sio;
 pub mod snapshot;
 pub mod storage;
 pub mod sysinfo;

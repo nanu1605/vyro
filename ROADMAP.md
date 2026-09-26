@@ -232,12 +232,17 @@ PawnIO check (2026-09):
 | Ryzen 9700X (family 1Ah, model 44h) | `AMDFamily17` accepts families 17h–1Ah: whitelisted MSRs (RAPL, P-state, APERF/MPERF) and SMN reads → Tctl, CCD temps, package/core power, VID, effective clocks. SoC rails via `RyzenSMU` (later). |
 | MSI B650M (MS-7E24) | `LpcIO` Super-I/O access at 0x2E/0x4E with chip-ID check and HWM BAR discovery → NCT6687D. `SmbusPIIX4` covers the AMD FCH SMBus → DDR5 SPD / hub temperature; UMC timings via SMN. |
 | Defender / HVCI | Signed, not on the vulnerable-driver blocklist, works with Memory Integrity on. |
-| Anti-cheat | FACEIT blocks PawnIO (its certificate also signed cheats). Riot Vanguard: no reports either way — field test pending. |
+| Anti-cheat | FACEIT blocks PawnIO (its certificate also signed cheats). Riot Vanguard: Valorant runs with PawnIO 2.2 installed (field test, 2026-09). |
 
 Order: **6a** Rust client (status, module loading, execute, mutexes) → **6b** AMD CPU (Zen 2–5)
 → **6c** NCT6687D fans/temps/voltages, then other NCT67xx / IT87xx → **6d** SPD + DIMM
 temperatures (DDR5 hub, DDR4 TSOD) and AMD memory timings → Intel CPU when a test machine is
 available.
+
+Status: 6a and 6b done and field-checked on the Ryzen 7 9700X against HWMonitor (Tctl, CCD
+temperature and core VID match; the Zen 5 VID uses the SVI3 formula). 6c reads the NCT6687
+read-only (no monitor-enable or fan writes); only +12V/+5V are named until each board's
+voltage channels are checked against HWiNFO or MSI Center.
 
 ### P7 — History, health, alerts, sensor explorer (M5)
 ### P8 — Privilege separation: Windows service + ACL'd named pipe (M5)

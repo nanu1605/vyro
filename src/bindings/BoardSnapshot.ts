@@ -3,4 +3,8 @@
 /**
  * Motherboard sensors; most are `null` unless the board wires them to the Super-I/O.
  */
-export type BoardSnapshot = { tempChipset: number | null, tempVrm: number | null, tempVrmMos: number | null, tempPch: number | null, tempSocket: number | null, tempPcie: number | null, tempM2: number | null, };
+export type BoardSnapshot = { 
+/**
+ * Motherboard ("System") sensor.
+ */
+tempSystem: number | null, tempChipset: number | null, tempVrm: number | null, tempVrmMos: number | null, tempPch: number | null, tempSocket: number | null, tempPcie: number | null, tempM2: number | null, };

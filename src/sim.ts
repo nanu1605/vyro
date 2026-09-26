@@ -23,7 +23,7 @@ export function emptySnapshot(ts: number): SensorSnapshot {
     },
     storage: [],
     board: {
-      tempChipset: null, tempVrm: null, tempVrmMos: null, tempPch: null, tempSocket: null,
+      tempSystem: null, tempChipset: null, tempVrm: null, tempVrmMos: null, tempPch: null, tempSocket: null,
       tempPcie: null, tempM2: null,
     },
     fans: [],
@@ -167,10 +167,21 @@ export function nextSnapshot(st: SimState, ts: number, pollHz: number, rand: () 
       nvmeAvailableSparePct: null, nvmeCriticalWarning: null,
     },
   ];
-  s.fans.push({
-    name: 'CPU_FAN', rpm: 450 + Math.max(0, st.cpuTemp - 30) * 22, pct: null, pwm: null,
-    minRpm: 300, maxRpm: 2000, kind: 'fan', status: 'ok',
-  });
+  s.fans.push(
+    {
+      name: 'CPU Fan', rpm: 450 + Math.max(0, st.cpuTemp - 30) * 22, pct: null, pwm: null,
+      minRpm: null, maxRpm: null, kind: 'fan', status: 'unknown',
+    },
+    { name: 'Pump Fan', rpm: 4460, pct: null, pwm: null, minRpm: null, maxRpm: null, kind: 'pump', status: 'unknown' },
+    { name: 'System Fan 1', rpm: 0, pct: null, pwm: null, minRpm: null, maxRpm: null, kind: 'fan', status: 'unknown' },
+  );
+  s.board = {
+    ...s.board, tempSystem: 42, tempVrmMos: 41 + st.cpu * 0.1, tempChipset: 41, tempSocket: 39,
+  };
+  s.voltages = [
+    { name: '+12V', value: 12.07 }, { name: '+5V', value: 5.07 }, { name: 'VIN2', value: 1.206 },
+    { name: 'VIN3', value: 1.342 }, { name: 'VIN6', value: 3.344 },
+  ];
   s.power = { estTotalW: cpuW + gpuW + 45, cpuW, gpuW, ramW: null, storageW: null };
   const down = rand() < 0.2 ? rand() * 600 : rand() * 8;
   const rtt = 11 + rand() * 6;

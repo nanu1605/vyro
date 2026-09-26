@@ -222,6 +222,8 @@ pub struct StorageSnapshot {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct BoardSnapshot {
+    /// Motherboard ("System") sensor.
+    pub temp_system: Option<f64>,
     pub temp_chipset: Option<f64>,
     pub temp_vrm: Option<f64>,
     pub temp_vrm_mos: Option<f64>,

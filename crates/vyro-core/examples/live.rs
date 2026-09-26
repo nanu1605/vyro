@@ -87,6 +87,47 @@ fn amd_raw() -> serde_json::Value {
     serde_json::Value::Null
 }
 
+/// Raw Super-I/O monitor registers, to name each board's voltage and temperature channels
+/// against HWiNFO or MSI Center.
+#[cfg(windows)]
+fn sio_raw() -> serde_json::Value {
+    use vyro_core::pawnio::{BusLock, Handle, Module, MUTEX_ISABUS};
+    use vyro_core::sio::{self, BLOCK_LEN, BLOCK_START};
+    let io = match Handle::open(Module::LpcIo) {
+        Ok(io) => io,
+        Err(e) => return serde_json::json!({ "error": e.to_string() }),
+    };
+    let lock = BusLock::new(MUTEX_ISABUS);
+    let Some(result) = lock.hold(500, || {
+        let found = sio::detect(&io)?;
+        let block = match found {
+            Some(f) => sio::read_block(&io, f.base, BLOCK_START, BLOCK_LEN)?,
+            None => None,
+        };
+        Ok::<_, vyro_core::pawnio::PawnIoError>((found, block))
+    }) else {
+        return serde_json::json!({ "error": "ISA bus busy" });
+    };
+    match result {
+        Ok((None, _)) => serde_json::json!({ "chip": null }),
+        Ok((Some(f), block)) => serde_json::json!({
+            "chip": f.chip.name(),
+            "id": format!("{:#04x}", f.id),
+            "rev": format!("{:#04x}", f.rev),
+            "configPort": format!("{:#x}", f.config_port),
+            "base": format!("{:#06x}", f.base),
+            "start": format!("{BLOCK_START:#05x}"),
+            "block": block.map(|b| b.chunks(16).map(|row| row.iter().map(|x| format!("{x:02X}")).collect::<Vec<_>>().join(" ")).collect::<Vec<_>>()),
+        }),
+        Err(e) => serde_json::json!({ "error": e.to_string() }),
+    }
+}
+
+#[cfg(not(windows))]
+fn sio_raw() -> serde_json::Value {
+    serde_json::Value::Null
+}
+
 fn fmt(v: Option<f64>, unit: &str) -> String {
     v.map_or_else(|| "—".to_owned(), |v| format!("{v:.1}{unit}"))
 }
@@ -173,6 +214,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map_or_else(|| "—".to_owned(), |v| format!("{v:.3} V")),
             fmt(c.mhz_effective, " MHz"),
         );
+        if !snap.fans.is_empty() || !snap.voltages.is_empty() {
+            let b = &snap.board;
+            println!(
+                "     board: system {} VRM {} chipset {} socket {} | fans {} | volts {}",
+                fmt(b.temp_system, " °C"),
+                fmt(b.temp_vrm_mos, " °C"),
+                fmt(b.temp_chipset, " °C"),
+                fmt(b.temp_socket, " °C"),
+                snap.fans
+                    .iter()
+                    .map(|f| format!("{} {}", f.name, fmt(f.rpm, "")))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                snap.voltages
+                    .iter()
+                    .map(|v| format!(
+                        "{} {}",
+                        v.name,
+                        v.value.map_or("—".into(), |v| format!("{v:.3}"))
+                    ))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            );
+        }
         for g in &snap.gpu {
             println!(
                 "     {}: {} @ {} | {} (hotspot {}, mem {}) | {} | VRAM {} | {} | fan {} / {}",
@@ -232,6 +297,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let json = serde_json::to_string_pretty(&serde_json::json!({
         "pawnio": pawnio,
         "amdRaw": amd_raw(),
+        "sioRaw": sio_raw(),
         "providers": status,
         "pollMs": poll_ms,
         "pollMsByProvider": per_provider,

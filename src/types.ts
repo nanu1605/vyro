@@ -43,3 +43,6 @@ export type { PawnIoStatus } from './bindings/PawnIoStatus';
 export type { PingSnapshot } from './bindings/PingSnapshot';
 export type { WifiInfo } from './bindings/WifiInfo';
 export type { PowerSnapshot } from './bindings/PowerSnapshot';
+export type { BoardSnapshot } from './bindings/BoardSnapshot';
+export type { FanSnapshot } from './bindings/FanSnapshot';
+export type { VoltageReading } from './bindings/VoltageReading';

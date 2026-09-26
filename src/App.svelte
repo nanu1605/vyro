@@ -13,6 +13,7 @@
   import SelfCard from './components/SelfCard.svelte';
   import CoresCard from './components/CoresCard.svelte';
   import CpuSensorsCard from './components/CpuSensorsCard.svelte';
+  import BoardCard from './components/BoardCard.svelte';
   import PawnIoBanner from './components/PawnIoBanner.svelte';
   import GpuCard from './components/GpuCard.svelte';
   import ProcessesPanel from './components/ProcessesPanel.svelte';
@@ -187,6 +188,7 @@
         {/each}
         <MemoryCard {mem} />
         <PowerCard power={snap?.power ?? null} gpus={snap?.gpu ?? []} />
+        <BoardCard board={snap?.board ?? null} fans={snap?.fans ?? []} voltages={snap?.voltages ?? []} pending={NEEDS_DRIVER} />
         <SelfCard app={snap?.app ?? null} {uiFps} />
       </div>
     </div>
