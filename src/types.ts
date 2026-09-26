@@ -10,6 +10,8 @@ export type { HistoryPoint } from './bindings/HistoryPoint';
 export type { HistoryRange } from './bindings/HistoryRange';
 export type { HistorySeries } from './bindings/HistorySeries';
 export type { MemorySnapshot } from './bindings/MemorySnapshot';
+export type { MemTimings } from './bindings/MemTimings';
+export type { DimmSnapshot } from './bindings/DimmSnapshot';
 export type { Sensor } from './bindings/Sensor';
 export type { SensorSnapshot } from './bindings/SensorSnapshot';
 export type { SensorTree } from './bindings/SensorTree';

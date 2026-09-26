@@ -146,6 +146,40 @@ pub struct MemorySnapshot {
     /// Decoded / heuristic; approximate.
     pub channels: Option<u32>,
     pub dimms: Vec<DimmSnapshot>,
+    /// Memory-controller timings (AMD Zen 4/5 DDR5 through PawnIO); `null` elsewhere.
+    pub timings: Option<MemTimings>,
+}
+
+/// Running DRAM timings as programmed in the memory controller, in memory clocks.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct MemTimings {
+    /// Data rate in MT/s (twice the memory clock).
+    pub mts: f64,
+    pub cl: u32,
+    pub rcd_rd: u32,
+    pub rcd_wr: u32,
+    pub rp: u32,
+    pub ras: u32,
+    pub rc: u32,
+    pub rrd_s: u32,
+    pub rrd_l: u32,
+    pub faw: u32,
+    pub wtr_s: u32,
+    pub wtr_l: u32,
+    pub wr: u32,
+    pub rtp: u32,
+    pub cwl: u32,
+    /// Refresh cycle time for the refresh mode in use (tRFC1, or tRFC2 with fine granularity).
+    pub rfc: u32,
+    /// Same-bank refresh cycle time (tRFCsb).
+    pub rfc_sb: u32,
+    pub refi: u32,
+    /// Command rate: 1 or 2 ("1T"/"2T").
+    pub command_rate: u32,
+    pub gear_down: bool,
+    pub power_down: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]

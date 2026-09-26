@@ -19,7 +19,7 @@ export function emptySnapshot(ts: number): SensorSnapshot {
       totalMB: null, usedMB: null, availableMB: null, cachedMB: null, committedMB: null,
       commitLimitMB: null, pageFileUsedMB: null, pageFileTotalMB: null, standbyMB: null, modifiedMB: null,
       freeMB: null, pagedPoolMB: null, nonPagedPoolMB: null, compressedMB: null, pageFaultsPerSec: null,
-      hardFaultsPerSec: null, channels: null, dimms: [],
+      hardFaultsPerSec: null, channels: null, dimms: [], timings: null,
     },
     storage: [],
     board: {
@@ -145,6 +145,14 @@ export function nextSnapshot(st: SimState, ts: number, pollHz: number, rand: () 
     compressedMB: 380,
     pageFaultsPerSec: 900 + rand() * 1500,
     hardFaultsPerSec: rand() < 0.2 ? rand() * 60 : 0,
+    dimms: ['DIMMA2', 'DIMMB2'].map((slot, i) => ({
+      slot, manufacturer: null, model: null, sizeMB: null, speedMHz: null, tempC: 40 + i + st.mem / 4000,
+    })),
+    timings: {
+      mts: 5600, cl: 40, rcdRd: 40, rcdWr: 40, rp: 40, ras: 77, rc: 117, rrdS: 8, rrdL: 14, faw: 32,
+      wtrS: 7, wtrL: 28, wr: 84, rtp: 21, cwl: 38, rfc: 868, rfcSb: 364, refi: 10920,
+      commandRate: 1, gearDown: false, powerDown: true,
+    },
   });
   const io = (busy: number) => (rand() < busy ? rand() * 400 : rand() * 2);
   const rd = io(0.2);

@@ -13,6 +13,9 @@
   const of = (a: number | null | undefined, b: number | null | undefined) =>
     a == null ? null : b == null ? gb(a) : `${fmtGB(a)} / ${fmtGB(b)} GB`;
 
+  const dimms = $derived((mem?.dimms ?? []).filter((d) => d.tempC != null));
+  const t = $derived(mem?.timings ?? null);
+
   // Task Manager's composition bar: in use (without modified) | modified | standby | free.
   const parts = $derived.by(() => {
     const m = mem;
@@ -53,9 +56,50 @@
       ['Hard faults', mem?.hardFaultsPerSec != null ? `${fmt(mem.hardFaultsPerSec)} /s` : null],
     ]}
   />
+  {#if dimms.length}
+    <h3>Modules</h3>
+    <KV rows={dimms.map((d): [string, string | null] => [d.slot, d.tempC == null ? null : `${fmt(d.tempC, 1)} °C`])} />
+  {/if}
+  {#if t}
+    <h3>Timings</h3>
+    <p class="primary" title="CL-tRCD-tRP-tRAS">
+      <b>{t.cl}-{t.rcdRd}-{t.rp}-{t.ras}</b> @ {fmt(t.mts)} MT/s · {t.commandRate}T{t.gearDown ? ' · GDM' : ''}
+    </p>
+    <KV
+      rows={[
+        ['tRC', `${t.rc}`],
+        ['tRCDWR', `${t.rcdWr}`],
+        ['tRRD S / L', `${t.rrdS} / ${t.rrdL}`],
+        ['tFAW', `${t.faw}`],
+        ['tWTR S / L', `${t.wtrS} / ${t.wtrL}`],
+        ['tWR / tRTP', `${t.wr} / ${t.rtp}`],
+        ['tCWL', `${t.cwl}`],
+        ['tRFC / tRFCsb', `${t.rfc} / ${t.rfcSb}`],
+        ['tREFI', `${t.refi}`],
+      ]}
+    />
+  {/if}
 </Card>
 
 <style>
+  h3 {
+    margin: 0.9rem 0 0.45rem;
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .primary {
+    margin: 0 0 0.4rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .primary b {
+    color: var(--text);
+    font-size: 1rem;
+    font-variant-numeric: tabular-nums;
+  }
   .bar {
     display: flex;
     height: 0.7rem;

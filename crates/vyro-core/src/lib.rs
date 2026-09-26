@@ -15,6 +15,7 @@ pub mod pawnio;
 pub mod poller;
 pub mod power;
 pub mod provider;
+pub mod ram;
 pub mod registry;
 pub mod sim;
 pub mod sio;

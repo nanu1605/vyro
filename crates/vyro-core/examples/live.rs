@@ -128,6 +128,58 @@ fn sio_raw() -> serde_json::Value {
     serde_json::Value::Null
 }
 
+/// Raw SPD hub registers (no NVM, so no serial numbers) and UMC timing registers, to check the
+/// DIMM temperatures and timings against HWiNFO or ZenTimings.
+#[cfg(windows)]
+fn ram_raw() -> serde_json::Value {
+    use vyro_core::pawnio::{BusLock, Handle, Module, MUTEX_PCI, MUTEX_SMBUS};
+    use vyro_core::ram;
+    let hex8 = |v: Option<u8>| v.map(|v| format!("{v:#04x}"));
+    let spd = match Handle::open(Module::SmbusPiix4) {
+        Ok(io) => match BusLock::new(MUTEX_SMBUS).hold(500, || ram::probe_spd(&io)) {
+            Some(Some(found)) => serde_json::json!(found
+                .iter()
+                .map(|s| serde_json::json!({
+                    "addr": format!("{:#04x}", s.addr),
+                    "mr0": format!("{:#04x}", s.mr0),
+                    "mr1": format!("{:#04x}", s.mr1),
+                    "mr5": hex8(s.mr5),
+                    "mr26": hex8(s.mr26),
+                    "temp": s.temp.map(|t| format!("{t:#06x}")),
+                    "tempC": s.temp.and_then(ram::spd5_temp),
+                }))
+                .collect::<Vec<_>>()),
+            Some(None) => serde_json::json!({ "error": "SMBus mux not on the SPD port" }),
+            None => serde_json::json!({ "error": "SMBus busy" }),
+        },
+        Err(e) => serde_json::json!({ "error": e.to_string() }),
+    };
+    let id = vyro_core::hwid::cpuid::read_live();
+    let umc = if vyro_core::amd::supported(&id.vendor, id.family) {
+        match Handle::open(Module::AmdFamily17) {
+            Ok(io) => match BusLock::new(MUTEX_PCI).hold(500, || ram::read_umc(&io)) {
+                Some(channels) => serde_json::json!(channels
+                    .iter()
+                    .map(|c| serde_json::json!({
+                        "channel": c.channel,
+                        "regs": c.regs.iter().map(|(a, v)| (format!("{a:#07x}"), serde_json::Value::from(format!("{v:#010x}")))).collect::<serde_json::Map<_, _>>(),
+                    }))
+                    .collect::<Vec<_>>()),
+                None => serde_json::json!({ "error": "PCI bus busy" }),
+            },
+            Err(e) => serde_json::json!({ "error": e.to_string() }),
+        }
+    } else {
+        serde_json::Value::Null
+    };
+    serde_json::json!({ "spd": spd, "umc": umc })
+}
+
+#[cfg(not(windows))]
+fn ram_raw() -> serde_json::Value {
+    serde_json::Value::Null
+}
+
 fn fmt(v: Option<f64>, unit: &str) -> String {
     v.map_or_else(|| "—".to_owned(), |v| format!("{v:.1}{unit}"))
 }
@@ -238,6 +290,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .join(", "),
             );
         }
+        let m = &snap.memory;
+        if !m.dimms.is_empty() || m.timings.is_some() {
+            println!(
+                "     RAM: {} | {}",
+                m.dimms
+                    .iter()
+                    .map(|d| format!("{} {}", d.slot, fmt(d.temp_c, " °C")))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                m.timings.as_ref().map_or_else(
+                    || "timings —".to_owned(),
+                    |t| format!(
+                        "{:.0} MT/s {}-{}-{}-{} tRC {} tRFC {} {}T",
+                        t.mts, t.cl, t.rcd_rd, t.rp, t.ras, t.rc, t.rfc, t.command_rate
+                    )
+                ),
+            );
+        }
         for g in &snap.gpu {
             println!(
                 "     {}: {} @ {} | {} (hotspot {}, mem {}) | {} | VRAM {} | {} | fan {} / {}",
@@ -298,6 +368,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "pawnio": pawnio,
         "amdRaw": amd_raw(),
         "sioRaw": sio_raw(),
+        "ramRaw": ram_raw(),
         "providers": status,
         "pollMs": poll_ms,
         "pollMsByProvider": per_provider,

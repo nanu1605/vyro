@@ -7,8 +7,9 @@
 use crate::provider::{BoxError, Provider};
 use crate::registry::{Group, Registry, SensorDesc, SensorKey, Source, Unit};
 use crate::snapshot::{
-    DimmSnapshot, FanKind, FanSnapshot, GpuEngines, GpuSnapshot, NetKind, NetworkSnapshot,
-    ProcessSnapshot, SensorSnapshot, Status, StorageKind, StorageSnapshot, VoltageReading,
+    DimmSnapshot, FanKind, FanSnapshot, GpuEngines, GpuSnapshot, MemTimings, NetKind,
+    NetworkSnapshot, ProcessSnapshot, SensorSnapshot, Status, StorageKind, StorageSnapshot,
+    VoltageReading,
 };
 
 const MHZ_BASE: f64 = 3600.0;
@@ -355,6 +356,29 @@ impl Provider for SimProvider {
                 temp_c: Some(38.0 + load * 0.05),
             })
             .collect();
+        mem.timings = Some(MemTimings {
+            mts: 6000.0,
+            cl: 30,
+            rcd_rd: 36,
+            rcd_wr: 36,
+            rp: 36,
+            ras: 76,
+            rc: 112,
+            rrd_s: 8,
+            rrd_l: 15,
+            faw: 32,
+            wtr_s: 8,
+            wtr_l: 30,
+            wr: 90,
+            rtp: 23,
+            cwl: 28,
+            rfc: 884,
+            rfc_sb: 390,
+            refi: 11700,
+            command_rate: 1,
+            gear_down: false,
+            power_down: false,
+        });
 
         // Storage
         let io = self.disk.step(rng, 0.6, 0.5, 0.0, 3500.0);
