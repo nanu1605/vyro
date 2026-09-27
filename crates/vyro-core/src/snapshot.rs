@@ -410,6 +410,20 @@ pub enum EngineStatus {
     Stopped,
 }
 
+/// One executable among the app's processes (the service, the app, WebView2's helpers).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AppPart {
+    /// Executable name, e.g. `msedgewebview2.exe`.
+    pub name: String,
+    /// Processes with that name.
+    pub count: u32,
+    pub cpu_pct: f64,
+    #[serde(rename = "ramMB")]
+    pub ram_mb: f64,
+}
+
 /// The app's own footprint (spec §1 "App self-monitoring").
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -431,6 +445,8 @@ pub struct AppSnapshot {
     pub ram_peak_mb: Option<f64>,
     /// Process start to the first snapshot, in milliseconds.
     pub startup_ms: Option<f64>,
+    /// Where `cpu_pct` / `ram_mb` go, per executable, largest memory first.
+    pub parts: Vec<AppPart>,
 }
 
 #[cfg(test)]

@@ -71,15 +71,98 @@ impl SettingsStore {
 }
 
 pub fn show_main(app: &AppHandle) {
+    if let Some(engine) = app.try_state::<Engine>() {
+        engine.set_visible(true);
+    }
     if let Some(w) = app.get_webview_window("main") {
+        set_webview_active(&w, true);
         let _ = w.unminimize();
         let _ = w.show();
         let _ = w.set_focus();
     }
+}
+
+/// Hides the window to the tray. Monitoring and alerts go on in the engine; the page gets no
+/// more snapshots, and WebView2 is told to trim its memory and suspend until shown again.
+pub fn hide_main(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+        set_webview_active(&w, false);
+    }
     if let Some(engine) = app.try_state::<Engine>() {
-        engine.set_visible(true);
+        engine.set_visible(false);
     }
 }
+
+/// `--minimized` start: the window never showed, so park its WebView2 once the page has had
+/// time to load (suspending a page mid-load fails).
+pub fn park_after_start(app: &AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        let still_hidden = app.try_state::<Engine>().is_some_and(|e| !e.visible());
+        if still_hidden {
+            if let Some(w) = app.get_webview_window("main") {
+                set_webview_active(&w, false);
+            }
+        }
+    });
+}
+
+/// WebView2 while the window is hidden: invisible to the compositor, low memory target, and
+/// suspended (no timers or rendering). Undone before the window shows. Best effort: older
+/// WebView2 runtimes lack some of these calls.
+#[cfg(windows)]
+fn set_webview_active(window: &tauri::WebviewWindow, active: bool) {
+    let result = window.with_webview(move |webview| {
+        use webview2_com::Microsoft::Web::WebView2::Win32::{
+            ICoreWebView2_19, ICoreWebView2_3, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+        };
+        use windows_core::Interface;
+
+        let controller = webview.controller();
+        // SAFETY: COM calls on the thread that owns the WebView2 controller (with_webview runs
+        // the closure there); every interface stays alive for the duration of its call.
+        unsafe {
+            let Ok(core) = controller.CoreWebView2() else {
+                return;
+            };
+            let level = if active {
+                COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL
+            } else {
+                COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
+            };
+            if active {
+                if let Ok(w3) = core.cast::<ICoreWebView2_3>() {
+                    let _ = w3.Resume();
+                }
+                let _ = controller.SetIsVisible(true);
+            } else {
+                // Suspending requires an invisible WebView.
+                let _ = controller.SetIsVisible(false);
+            }
+            if let Ok(w19) = core.cast::<ICoreWebView2_19>() {
+                let _ = w19.SetMemoryUsageTargetLevel(level);
+            }
+            if !active {
+                if let Ok(w3) = core.cast::<ICoreWebView2_3>() {
+                    let done =
+                        webview2_com::TrySuspendCompletedHandler::create(Box::new(|_, _| Ok(())));
+                    if let Err(e) = w3.TrySuspend(&done) {
+                        log::debug!("webview: suspend: {e}");
+                    }
+                }
+            }
+        }
+    });
+    if let Err(e) = result {
+        log::debug!("webview: {e}");
+    }
+}
+
+#[cfg(not(windows))]
+fn set_webview_active(_window: &tauri::WebviewWindow, _active: bool) {}
 
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "Show Vyro", true, None::<&str>)?;
@@ -124,10 +207,7 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
         return;
     }
     api.prevent_close();
-    let _ = window.hide();
-    if let Some(engine) = app.try_state::<Engine>() {
-        engine.set_visible(false);
-    }
+    hide_main(app);
     if !store.hinted.swap(true, Ordering::Relaxed) {
         notify(
             app,

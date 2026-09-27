@@ -1,6 +1,7 @@
 //! Connects the app to the sensor engine: the Vyro service when it runs (the app itself stays
 //! unelevated), else an in-process engine without the privileged sensors.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -30,6 +31,9 @@ pub struct Engine {
     /// needs no privileges, and parts of it (startup apps) belong to the signed-in user.
     pub inventory: Arc<Inventory>,
     status: Arc<Mutex<BackendStatus>>,
+    /// Whether the window shows. While it does not, snapshots are not sent to it (alerts still
+    /// notify) and the engine polls at the tray rate.
+    visible: Arc<AtomicBool>,
 }
 
 impl Engine {
@@ -48,7 +52,8 @@ impl Engine {
         }
 
         let status = Arc::new(Mutex::new(BackendStatus::default()));
-        let api: Arc<dyn EngineApi> = match connect_service(app, visible, &status) {
+        let shown = Arc::new(AtomicBool::new(visible));
+        let api: Arc<dyn EngineApi> = match connect_service(app, visible, &status, &shown) {
             Ok(remote) => {
                 log::info!("sensors: from the Vyro service");
                 let remote: Arc<dyn EngineApi> = Arc::new(remote);
@@ -63,7 +68,7 @@ impl Engine {
                     service_version: None,
                     detail: Some(reason),
                 };
-                let local = start_local(app)?;
+                let local = start_local(app, &shown)?;
                 local.set_visible(visible);
                 Arc::new(local)
             }
@@ -84,6 +89,7 @@ impl Engine {
             api,
             inventory,
             status,
+            visible: shown,
         })
     }
 
@@ -92,7 +98,12 @@ impl Engine {
     }
 
     pub fn set_visible(&self, visible: bool) {
+        self.visible.store(visible, Ordering::SeqCst);
         self.api.set_visible(visible);
+    }
+
+    pub fn visible(&self) -> bool {
+        self.visible.load(Ordering::SeqCst)
     }
 
     pub fn shutdown(&self) {
@@ -100,12 +111,15 @@ impl Engine {
     }
 }
 
-/// Emits each snapshot to the UI and shows the alerts it fired.
-fn sink(app: &AppHandle) -> impl Fn(&SensorSnapshot) + Send + 'static {
+/// Emits each snapshot to the UI while it shows, and shows the alerts it fired.
+fn sink(app: &AppHandle, shown: &Arc<AtomicBool>) -> impl Fn(&SensorSnapshot) + Send + 'static {
     let app = app.clone();
+    let shown = Arc::clone(shown);
     move |snap: &SensorSnapshot| {
-        if let Err(e) = app.emit(SENSORS_EVENT, snap) {
-            log::debug!("emit {SENSORS_EVENT}: {e}");
+        if shown.load(Ordering::SeqCst) {
+            if let Err(e) = app.emit(SENSORS_EVENT, snap) {
+                log::debug!("emit {SENSORS_EVENT}: {e}");
+            }
         }
         for alert in &snap.alerts {
             notify(&app, alert);
@@ -123,6 +137,7 @@ fn connect_service(
     app: &AppHandle,
     visible: bool,
     status: &Arc<Mutex<BackendStatus>>,
+    shown: &Arc<AtomicBool>,
 ) -> Result<RemoteEngine, String> {
     use vyro_core::ipc::transport::{service_state, ServiceState};
 
@@ -156,7 +171,7 @@ fn connect_service(
                 }
             }
         };
-        match RemoteEngine::connect(&endpoint, visible, sink(app), on_status) {
+        match RemoteEngine::connect(&endpoint, visible, sink(app, shown), on_status) {
             Ok(remote) => {
                 *lock(status) = service_status(&remote.status());
                 return Ok(remote);
@@ -184,7 +199,7 @@ fn service_status(s: &RemoteStatus) -> BackendStatus {
 }
 
 /// The fallback: this process reads what it can, and keeps its own history and rules.
-fn start_local(app: &AppHandle) -> std::io::Result<LocalEngine> {
+fn start_local(app: &AppHandle, shown: &Arc<AtomicBool>) -> std::io::Result<LocalEngine> {
     let data_dir = app
         .path()
         .app_data_dir()
@@ -199,7 +214,7 @@ fn start_local(app: &AppHandle) -> std::io::Result<LocalEngine> {
         },
         providers,
         clients,
-        sink(app),
+        sink(app, shown),
     )
 }
 

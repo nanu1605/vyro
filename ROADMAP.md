@@ -339,6 +339,18 @@ Footprint with the service: 185 MB (service + app + WebView2), above the §8 120
 - [x] Field check: history with the app closed; `sc stop` / `sc start VyroService` while the app
       runs; "Start with Windows" re-enabled after the upgrade.
 ### P9 — Performance hardening, profiles, intelligent analysis, polish (M5)
+In progress.
+
+- [x] P9a Footprint breakdown per executable (service, app, WebView2 helpers) in "Vyro itself"
+      (IPC protocol 2). Hidden to the tray: no snapshots sent to the page, engine at the tray
+      rate, WebView2 invisible + low memory target + suspended; resumed before showing.
+      `--minimized` starts park the page after 5 s.
+- [ ] P9a Measure on the reference PC (visible and in the tray) and decide the next trims.
+- [ ] P9b Settings: °C/°F, per-sensor show/hide, start minimized; empty/error states;
+      accessibility pass.
+- [ ] P9c Profiles (Desktop / Gaming / Work / Benchmark / Silent).
+- [ ] P9d Analysis: baselines, unusual temperatures, throttling and cooling anomalies, power
+      changes explained from the history store.
 ### P10 — Gaming capture + companion overlay (M6, deferrable)
 
 **Deferred to v2:** fan/pump control (driver write path), injected in-game overlay.

@@ -34,7 +34,7 @@ export function emptySnapshot(ts: number): SensorSnapshot {
     processes: [],
     app: {
       cpuPct: null, ramMB: null, gpuPct: null, pollHz: null, uiFps: null, activeSensors: 0,
-      engine: 'starting', cpuAvgPct: null, ramPeakMB: null, startupMs: null,
+      engine: 'starting', cpuAvgPct: null, ramPeakMB: null, startupMs: null, parts: [],
     },
     health: { overall: 'unknown', subsystems: [] },
     alerts: [],
@@ -222,6 +222,11 @@ export function nextSnapshot(st: SimState, ts: number, pollHz: number, rand: () 
   s.app.cpuAvgPct = 0.7;
   s.app.ramPeakMB = 100;
   s.app.startupMs = 850;
+  s.app.parts = [
+    { name: 'msedgewebview2.exe', count: 5, cpuPct: s.app.cpuPct * 0.6, ramMB: 62 },
+    { name: 'vyro-service.exe', count: 1, cpuPct: s.app.cpuPct * 0.3, ramMB: 22 },
+    { name: 'vyro.exe', count: 1, cpuPct: s.app.cpuPct * 0.1, ramMB: s.app.ramMB - 84 },
+  ];
   s.health = simHealth(s);
   return s;
 }

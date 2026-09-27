@@ -38,7 +38,9 @@ fn main() {
             app.manage(engine);
             app.manage(tray::SettingsStore::load(app.handle()));
             tray::build(app.handle())?;
-            if !minimized {
+            if minimized {
+                tray::park_after_start(app.handle());
+            } else {
                 tray::show_main(app.handle());
             }
             Ok(())

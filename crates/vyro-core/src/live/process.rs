@@ -93,10 +93,11 @@ impl Provider for ProcessProvider {
         let gpu = lock(&self.gpu).clone();
         let mut roots = vec![std::process::id()];
         roots.extend(lock(&self.clients).iter().copied());
-        if let Some((cpu, ram, g)) = footprint(&roots, &samples, &gpu) {
-            snap.app.cpu_pct = Some(cpu);
-            snap.app.ram_mb = Some(ram);
-            snap.app.gpu_pct = (!gpu.is_empty()).then_some(g);
+        if let Some(f) = footprint(&roots, &samples, &gpu) {
+            snap.app.cpu_pct = Some(f.cpu_pct);
+            snap.app.ram_mb = Some(f.ram_mb);
+            snap.app.gpu_pct = (!gpu.is_empty()).then_some(f.gpu_pct);
+            snap.app.parts = f.parts;
         }
         snap.processes = top_processes(samples, &gpu, TOP_N);
         Ok(())

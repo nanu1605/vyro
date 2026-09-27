@@ -171,6 +171,16 @@ impl ProcessTracker {
     }
 }
 
+/// The app's processes, totalled and per executable name.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Footprint {
+    pub cpu_pct: f64,
+    pub ram_mb: f64,
+    pub gpu_pct: f64,
+    /// Largest memory first.
+    pub parts: Vec<crate::snapshot::AppPart>,
+}
+
 /// CPU %, RAM MB and GPU % of the `roots` (the sensor service and each connected UI) and every
 /// process they started, directly or through children (the WebView2 browser and its
 /// renderers, for the UI). A child must be younger than its parent, which guards against a
@@ -179,7 +189,7 @@ pub fn footprint(
     roots: &[u32],
     samples: &[ProcessSample],
     gpu: &HashMap<u32, f64>,
-) -> Option<(f64, f64, f64)> {
+) -> Option<Footprint> {
     let created: HashMap<u32, u64> = samples.iter().map(|s| (s.pid, s.create_time)).collect();
     let mut members: Vec<u32> = Vec::new();
     for root in roots {
@@ -202,12 +212,40 @@ pub fn footprint(
         i += 1;
     }
     let (mut cpu, mut ram, mut g) = (0.0, 0.0, 0.0);
+    let mut parts: Vec<crate::snapshot::AppPart> = Vec::new();
     for s in samples.iter().filter(|s| members.contains(&s.pid)) {
-        cpu += s.cpu_pct.unwrap_or(0.0);
+        let c = s.cpu_pct.unwrap_or(0.0);
+        cpu += c;
         ram += s.ram_mb;
         g += gpu.get(&s.pid).copied().unwrap_or(0.0);
+        match parts
+            .iter_mut()
+            .find(|p| p.name.eq_ignore_ascii_case(&s.name))
+        {
+            Some(p) => {
+                p.count += 1;
+                p.cpu_pct += c;
+                p.ram_mb += s.ram_mb;
+            }
+            None => parts.push(crate::snapshot::AppPart {
+                name: s.name.clone(),
+                count: 1,
+                cpu_pct: c,
+                ram_mb: s.ram_mb,
+            }),
+        }
     }
-    Some((cpu, ram, g.min(100.0)))
+    parts.sort_by(|a, b| {
+        b.ram_mb
+            .total_cmp(&a.ram_mb)
+            .then_with(|| a.name.cmp(&b.name))
+    });
+    Some(Footprint {
+        cpu_pct: cpu,
+        ram_mb: ram,
+        gpu_pct: g.min(100.0),
+        parts,
+    })
 }
 
 /// The union of the top `n` processes by CPU, by RAM and by GPU, ordered by CPU then RAM.
@@ -451,14 +489,21 @@ mod tests {
             s(500, 7, 40, 3.0, 10.0),   // unrelated
         ];
         let gpu = HashMap::from([(300, 1.5), (500, 20.0)]);
-        let (cpu, ram, g) = footprint(&[100], &samples, &gpu).expect("root present");
-        assert!((cpu - 3.5).abs() < 1e-9);
-        assert!((ram - 190.0).abs() < 1e-9);
-        assert!((g - 1.5).abs() < 1e-9);
+        let f = footprint(&[100], &samples, &gpu).expect("root present");
+        assert!((f.cpu_pct - 3.5).abs() < 1e-9);
+        assert!((f.ram_mb - 190.0).abs() < 1e-9);
+        assert!((f.gpu_pct - 1.5).abs() < 1e-9);
+        let names: Vec<(&str, u32)> = f.parts.iter().map(|p| (p.name.as_str(), p.count)).collect();
+        assert_eq!(
+            names,
+            vec![("p200", 1), ("p300", 1), ("p100", 1)],
+            "largest memory first"
+        );
         assert!(footprint(&[999], &samples, &gpu).is_none());
         // Service plus a UI: both trees, each process counted once; gone roots are skipped.
-        let (cpu, ram, _) = footprint(&[500, 100, 999, 200], &samples, &gpu).expect("roots");
-        assert!((cpu - 6.5).abs() < 1e-9);
-        assert!((ram - 200.0).abs() < 1e-9);
+        let f = footprint(&[500, 100, 999, 200], &samples, &gpu).expect("roots");
+        assert!((f.cpu_pct - 6.5).abs() < 1e-9);
+        assert!((f.ram_mb - 200.0).abs() < 1e-9);
+        assert_eq!(f.parts.len(), 4);
     }
 }

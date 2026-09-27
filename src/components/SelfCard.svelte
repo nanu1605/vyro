@@ -35,8 +35,17 @@
       ['Startup to first data (< 2 s)', budget(app?.startupMs != null ? app.startupMs / 1000 : null, 2, `${fmt(app?.startupMs != null ? app.startupMs / 1000 : null, 2)} s`)],
     ]}
   />
+  {#if app?.parts.length}
+    <h4>Processes</h4>
+    <KV
+      rows={app.parts.map((p) => [
+        p.count > 1 ? `${p.name} ×${p.count}` : p.name,
+        `${fmt(p.ramMB)} MB · ${fmt(p.cpuPct, 2)}%`,
+      ])}
+    />
+  {/if}
   <p class="note">
-    Includes the app's WebView2 processes. Averages and peaks run since start (reset them in
+    Includes the sensor service and the app's WebView2 processes. Averages and peaks run since start (reset them in
     Sensors); the budget assumes the window stays open. The UI only redraws while values change.
   </p>
 </Card>

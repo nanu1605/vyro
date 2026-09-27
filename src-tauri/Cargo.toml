@@ -22,3 +22,8 @@ vyro-core = { path = "../crates/vyro-core" }
 
 [lints]
 workspace = true
+
+# Trimming and suspending WebView2 while the window is hidden (same versions wry uses).
+[target."cfg(windows)".dependencies]
+webview2-com = "0.38"
+windows-core = "0.61"
