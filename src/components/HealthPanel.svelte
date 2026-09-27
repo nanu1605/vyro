@@ -107,6 +107,7 @@
         <li class="tone-{ins.status}">
           <span class="dot" aria-hidden="true"></span>
           <div>
+            <span class="sr-only">{LABEL[ins.status]}:</span>
             <b>{tempText(ins.title)}</b>{#if ins.ts != null}<time>{when(ins.ts)}</time>{/if}
             <p>{tempText(ins.detail)}</p>
             {#if onhistory && ins.metrics[0]}
@@ -125,7 +126,7 @@
         <li class="tone-{e.status}">
           <time>{when(e.ts)}</time>
           <span class="dot" aria-hidden="true"></span>
-          <span class="what"><b>{e.subsystem}</b> {tempText(e.message)}</span>
+          <span class="what"><span class="sr-only">{LABEL[e.status]}:</span> <b>{e.subsystem}</b> {tempText(e.message)}</span>
         </li>
       {/each}
     </ol>

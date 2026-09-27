@@ -1,6 +1,7 @@
 <script lang="ts">
   import Card from './Card.svelte';
   import KV from './KV.svelte';
+  import LoadState from './LoadState.svelte';
   import Pill from './Pill.svelte';
   import { fmt, NA } from '../format';
   import { getDisplays, onDisplaysChanged } from '../ipc';
@@ -91,12 +92,8 @@
   }
 </script>
 
-{#if error}
-  <p class="error" role="alert">Could not read displays: {error}</p>
-{:else if !displays}
-  <p class="loading" aria-live="polite">Reading displays…</p>
-{:else if displays.length === 0}
-  <p class="loading">No active displays found.</p>
+{#if error || !displays || displays.length === 0}
+  <LoadState what="displays" {error} loading={!displays || loading} empty="No active displays found." retry={load} />
 {:else}
   <div class="grid">
     <Card title="Arrangement" subtitle="{displays.length} display{displays.length === 1 ? '' : 's'}" wide>
@@ -369,11 +366,5 @@
     font-family: var(--font-num);
     font-size: 0.68rem;
     line-height: 1.45;
-  }
-  .error {
-    color: var(--hot);
-  }
-  .loading {
-    color: var(--muted);
   }
 </style>

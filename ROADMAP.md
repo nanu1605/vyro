@@ -351,7 +351,12 @@ In progress.
       Windows notifications; the engine stays in °C), hidden sensors (× in Sensors, listed in
       Settings to bring back, left out of History presets), sensor service status. Saved in the
       app's `settings.json`; field-checked: °F and a hidden sensor survive a restart.
-- [ ] P9b Empty/error states and accessibility pass.
+- [x] P9b Empty/error states and accessibility pass: one loading / error / nothing-found block
+      with Try again for Hardware, System, Storage, Network and Displays; Sensors and History
+      say why a list is empty (filter, all hidden, first reading) and announce errors; the
+      dashboard says it is waiting for the first reading or the service. Tabs take Home/End;
+      tile warnings and Health statuses are written out, not colour only; heading order and a
+      low-contrast disabled-rule text fixed. axe-core: no violations on any tab.
 - [x] P9c Profiles (`vyro_core::profiles`): Desktop (1 s, all alerts, full animation, full
       dashboard), Gaming (2 s, hardware problems only, reduced, compact), Work (2 s, silent
       alerts, reduced, full), Benchmark (0.5 s, silent alerts, no animation, full), Silent (5 s,

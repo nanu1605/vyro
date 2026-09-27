@@ -27,7 +27,7 @@
       ['Engine', app?.engine ?? null],
     ]}
   />
-  <h4>Budget</h4>
+  <h3>Budget</h3>
   <KV
     rows={[
       ['Average CPU (< 1.5%)', budget(app?.cpuAvgPct, 1.5, `${fmt(app?.cpuAvgPct, 2)}%`)],
@@ -36,7 +36,7 @@
     ]}
   />
   {#if app?.parts.length}
-    <h4>Processes</h4>
+    <h3>Processes</h3>
     <KV
       rows={app.parts.map((p) => [
         p.count > 1 ? `${p.name} ×${p.count}` : p.name,
@@ -51,7 +51,7 @@
 </Card>
 
 <style>
-  h4 {
+  h3 {
     margin: 0.9rem 0 0.4rem;
     font-size: 0.75rem;
     font-weight: 600;

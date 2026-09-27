@@ -50,7 +50,12 @@
   });
 
   async function reset(): Promise<void> {
-    await resetSensorStats();
+    try {
+      await resetSensorStats();
+    } catch (e) {
+      error = String(e);
+      return;
+    }
     await refresh();
   }
 
@@ -91,11 +96,19 @@
   </div>
 
   {#if error}
-    <p class="empty">Sensor list unavailable: {error}</p>
+    <p class="empty" role="alert">Sensor list unavailable: {error}. Vyro keeps trying every reading.</p>
   {:else if !tree}
-    <p class="empty">Waiting for data…</p>
+    <p class="empty" role="status">Waiting for the first reading…</p>
   {:else if groups.length === 0}
-    <p class="empty">No sensors match “{filter}”.</p>
+    <p class="empty" role="status">
+      {#if filter.trim()}
+        No sensors match “{filter.trim()}”.
+      {:else if total > 0}
+        Every sensor is hidden. Tick “Show hidden” to see them.
+      {:else}
+        No sensors reported yet.
+      {/if}
+    </p>
   {/if}
 
   {#each groups as g (g.group)}

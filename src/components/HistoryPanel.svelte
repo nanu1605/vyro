@@ -137,11 +137,13 @@
   </div>
 
   {#if error}
-    <p class="empty">History unavailable: {error}</p>
+    <p class="empty" role="alert">History unavailable: {error}. Vyro tries again shortly.</p>
   {:else if tree && charts.length === 0}
-    <p class="empty">No history-tracked sensors yet.</p>
+    <p class="empty" role="status">
+      No history-tracked sensors yet{prefs.hiddenSensors.length ? ' (hidden sensors are left out; see Settings)' : ''}.
+    </p>
   {:else if !tree}
-    <p class="empty">Waiting for data…</p>
+    <p class="empty" role="status">Waiting for the first reading…</p>
   {/if}
 
   <div class="grid">

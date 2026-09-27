@@ -377,8 +377,9 @@
   .rules > li + li {
     border-top: 1px solid var(--line);
   }
-  .rules > li.off .desc {
-    opacity: 0.55;
+  /* Switched-off rules: the name fades, the description stays readable (contrast). */
+  .rules > li.off .desc b {
+    color: var(--muted);
   }
   .rules > li.empty {
     color: var(--muted);

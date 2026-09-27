@@ -1,6 +1,7 @@
 <script lang="ts">
   import Card from './Card.svelte';
   import KV from './KV.svelte';
+  import LoadState from './LoadState.svelte';
   import { fmt, fmtKB, fmtMB, hex4, NA } from '../format';
   import { getHardwareId } from '../ipc';
   import type { CacheInfo, HardwareId } from '../types';
@@ -9,11 +10,13 @@
   let error = $state<string | null>(null);
   let showSerial = $state(false);
 
-  $effect(() => {
+  function load(): void {
+    error = null;
     getHardwareId()
       .then((v) => (hw = v))
       .catch((e: unknown) => (error = String(e)));
-  });
+  }
+  $effect(load);
 
   const cpu = $derived(hw?.cpu ?? null);
   const mem = $derived(hw?.memory ?? null);
@@ -39,10 +42,8 @@
   );
 </script>
 
-{#if error}
-  <p class="error" role="alert">Could not read hardware information: {error}</p>
-{:else if !hw}
-  <p class="loading" aria-live="polite">Reading hardware…</p>
+{#if error || !hw}
+  <LoadState what="hardware information" {error} loading={!hw} retry={load} />
 {:else}
   <div class="grid">
     <Card title="Processor" subtitle={cpu?.brand ?? 'Unknown CPU'} wide>
@@ -320,13 +321,9 @@
   button:hover {
     border-color: var(--accent);
   }
-  .note,
-  .loading {
+  .note {
     margin: 0.6rem 0 0;
     color: var(--muted);
     font-size: 0.75rem;
-  }
-  .error {
-    color: var(--hot);
   }
 </style>

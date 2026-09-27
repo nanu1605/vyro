@@ -20,7 +20,11 @@
 </script>
 
 <div class="panel tile {level}">
-  <span class="label">{label}</span>
+  <span class="label">
+    {label}
+    <!-- Not by colour alone: the level is also written out. -->
+    {#if level === 'warn'}<span class="lvl">high</span>{:else if level === 'hot'}<span class="lvl">very high</span>{/if}
+  </span>
   <span class="value">{fmt(value, digits)}<small>{value == null ? '' : unit}</small></span>
   {#if sub}<span class="sub">{sub}</span>{/if}
 </div>
@@ -50,6 +54,20 @@
     color: var(--muted);
     font-size: 0.6em;
     font-weight: 500;
+  }
+  .lvl {
+    margin-left: 0.35em;
+    padding: 0 0.3em;
+    border-radius: 4px;
+    background: color-mix(in srgb, currentColor 18%, transparent);
+    font-size: 0.9em;
+    letter-spacing: 0.03em;
+  }
+  .warn .lvl {
+    color: var(--warn);
+  }
+  .hot .lvl {
+    color: var(--hot);
   }
   .sub {
     color: var(--muted);

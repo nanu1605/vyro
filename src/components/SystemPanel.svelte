@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import Card from './Card.svelte';
   import KV from './KV.svelte';
+  import LoadState from './LoadState.svelte';
   import Pill from './Pill.svelte';
   import { fmt, fmtDate, fmtDateTime, fmtDuration, NA } from '../format';
   import { getBackendStatus, getSystemInfo } from '../ipc';
@@ -14,10 +15,15 @@
   let error = $state<string | null>(null);
   let now = $state(Math.floor(Date.now() / 1000));
 
-  onMount(() => {
+  function load(): void {
+    error = null;
     getSystemInfo()
       .then((v) => (sys = v))
       .catch((e: unknown) => (error = String(e)));
+  }
+
+  onMount(() => {
+    load();
     getBackendStatus()
       .then((b) => (backend = b))
       .catch(() => {});
@@ -46,10 +52,8 @@
   };
 </script>
 
-{#if error}
-  <p class="error" role="alert">Could not read system information: {error}</p>
-{:else if !sys}
-  <p class="muted" aria-live="polite">Reading system information…</p>
+{#if error || !sys}
+  <LoadState what="system information" {error} loading={!sys} retry={load} />
 {:else}
   <div class="grid">
     <Card title="Operating system" subtitle={sys.os.name}>
@@ -231,8 +235,5 @@
   .note {
     margin: 0.6rem 0 0;
     font-size: 0.75rem;
-  }
-  .error {
-    color: var(--hot);
   }
 </style>

@@ -97,10 +97,19 @@
     }
   }
 
+  /** Tab list keys (WAI-ARIA tabs pattern): arrows move and wrap, Home/End jump to the ends. */
   function onTabKey(e: KeyboardEvent): void {
-    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
     const i = TABS.findIndex((x) => x.id === tab);
-    const next = TABS[(i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length];
+    const at: Record<string, number> = {
+      ArrowRight: (i + 1) % TABS.length,
+      ArrowLeft: (i + TABS.length - 1) % TABS.length,
+      Home: 0,
+      End: TABS.length - 1,
+    };
+    const to = at[e.key];
+    if (to == null) return;
+    e.preventDefault();
+    const next = TABS[to];
     if (next) {
       select(next.id);
       document.getElementById(`tab-${next.id}`)?.focus();
@@ -199,7 +208,8 @@
         >
           {t.label}
           {#if t.id === 'health' && (overall === 'warn' || overall === 'fail')}
-            <span class="alert-dot {overall}" aria-label={overall === 'fail' ? 'problem' : 'warning'}></span>
+            <span class="alert-dot {overall}" aria-hidden="true"></span>
+            <span class="sr-only">({overall === 'fail' ? 'problem' : 'warning'})</span>
           {/if}
         </button>
       {/each}
@@ -209,6 +219,11 @@
   <main>
     <div id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard" hidden={tab !== 'dashboard'}>
       <ServiceBanner status={backend} />
+      {#if !snap}
+        <p class="waiting" role="status">
+          {backend && !backend.connected ? 'Connecting to the Vyro Sensor Service…' : 'Waiting for the first reading…'}
+        </p>
+      {/if}
       <PawnIoBanner status={pawnioShown} />
       {#if attention.length}
         <button type="button" class="health-strip {overall}" onclick={() => select('health')}>
@@ -495,6 +510,11 @@
     grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
     gap: 0.75rem;
     margin-top: 1rem;
+  }
+  .waiting {
+    margin: 0 0 0.9rem;
+    color: var(--muted);
+    font-size: 0.85rem;
   }
   .compact-note {
     margin: 0.75rem 0 0;

@@ -1,6 +1,7 @@
 <script lang="ts">
   import Card from './Card.svelte';
   import KV from './KV.svelte';
+  import LoadState from './LoadState.svelte';
   import Meter from './Meter.svelte';
   import Spark from './Spark.svelte';
   import { fmt, NA } from '../format';
@@ -128,10 +129,14 @@
     />
   </Card>
 
-  {#if error}
-    <p class="error" role="alert">Could not read network adapters: {error}</p>
-  {:else if !adapters}
-    <p class="muted" aria-live="polite">Reading network adapters…</p>
+  {#if error || !adapters || adapters.length === 0}
+    <LoadState
+      what="network adapters"
+      {error}
+      loading={!adapters || loading}
+      empty="No network adapters found."
+      retry={load}
+    />
   {:else}
     {#each adapters as a (a.id)}
       {@const n = byId.get(a.id)}

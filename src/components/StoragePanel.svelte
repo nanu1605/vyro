@@ -1,6 +1,7 @@
 <script lang="ts">
   import Card from './Card.svelte';
   import KV from './KV.svelte';
+  import LoadState from './LoadState.svelte';
   import Meter from './Meter.svelte';
   import { fmt, fmtGBTotal, fmtRate, fmtStorage, NA } from '../format';
   import { fmtTemp } from '../prefs.svelte';
@@ -82,12 +83,8 @@
   }
 </script>
 
-{#if error}
-  <p class="error" role="alert">Could not read drives: {error}</p>
-{:else if !drives}
-  <p class="muted" aria-live="polite">Reading drives…</p>
-{:else if drives.length === 0}
-  <p class="muted">No drives found.</p>
+{#if error || !drives || drives.length === 0}
+  <LoadState what="drives" {error} loading={!drives || loading} empty="No drives found." retry={load} />
 {:else}
   <div class="toolbar">
     <button type="button" onclick={load} disabled={loading}>{loading ? 'Reading…' : 'Re-read health'}</button>
