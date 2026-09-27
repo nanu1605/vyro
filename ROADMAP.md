@@ -350,7 +350,7 @@ In progress.
       °C/°F everywhere (tiles, cards, Sensors, History, alert limits, health and alert texts,
       Windows notifications; the engine stays in °C), hidden sensors (× in Sensors, listed in
       Settings to bring back, left out of History presets), sensor service status. Saved in the
-      app's `settings.json`.
+      app's `settings.json`; field-checked: °F and a hidden sensor survive a restart.
 - [ ] P9b Empty/error states and accessibility pass.
 - [x] P9c Profiles (`vyro_core::profiles`): Desktop (1 s, all alerts, full animation, full
       dashboard), Gaming (2 s, hardware problems only, reduced, compact), Work (2 s, silent
