@@ -259,12 +259,13 @@ at the 88 W PPT under Cinebench). 6c reads the NCT6687 read-only (no monitor-ena
 field-checked on the MSI B650M GAMING PLUS WIFI: fans, board temperatures and voltages match
 HWMonitor. Other boards show +12V/+5V plus raw channels until checked. GPU hotspot on RTX 50 (NVAPI
 no longer reports it): read from the GB20x thermal registers through PawnIO's `Nvidia` module
-(channel 0, HWMonitor's "NVIDIA I/O" Hot Spot); awaiting field check. 6d field-checked on the same
-PC: DDR5 module temperatures (38.5 / 37.75 °C vs HWMonitor's PMIC 39 / 38 °C) and timings
-(40-40-40-77 at 5600 MT/s, the kit's XMP). It reads module temperatures from the SPD5 hub sensor
-(read-only: hub registers only, no page or NVM access, skipped while another tool holds the SMBus
-mux on another port) and timings from the Zen 4/5 memory controller over SMN, shown in the Memory
-card. DDR4 TSOD and DDR4 timings wait for a test machine; DIMM PMIC rails need writes and stay out.
+(channel 0, HWMonitor's "NVIDIA I/O" Hot Spot), field-checked on the RTX 5060 Ti. 6d field-checked
+on the same PC: DDR5 module temperatures (38.5 / 37.75 °C vs HWMonitor's PMIC 39 / 38 °C) and
+timings (40-40-40-77 at 5600 MT/s, the kit's XMP). It reads module temperatures from the SPD5 hub
+sensor (read-only: hub registers only, no page or NVM access, skipped while another tool holds the
+SMBus mux on another port) and timings from the Zen 4/5 memory controller over SMN, shown in the
+Memory card. DDR4 TSOD and DDR4 timings wait for a test machine; DIMM PMIC rails need writes and
+stay out.
 
 ### P7 — History, health, alerts, sensor explorer (M5)
 Built; awaiting a run of the desktop app on Windows (the pieces are unit-tested and previewed in
