@@ -34,7 +34,7 @@ export function emptySnapshot(ts: number): SensorSnapshot {
     processes: [],
     app: {
       cpuPct: null, ramMB: null, gpuPct: null, pollHz: null, uiFps: null, activeSensors: 0,
-      engine: 'starting',
+      engine: 'starting', cpuAvgPct: null, ramPeakMB: null, startupMs: null,
     },
     health: { overall: 'unknown', subsystems: [] },
     alerts: [],
@@ -219,6 +219,9 @@ export function nextSnapshot(st: SimState, ts: number, pollHz: number, rand: () 
   s.app.pollHz = pollHz;
   s.app.activeSensors = 14;
   s.app.engine = 'running';
+  s.app.cpuAvgPct = 0.7;
+  s.app.ramPeakMB = 100;
+  s.app.startupMs = 850;
   s.health = simHealth(s);
   return s;
 }

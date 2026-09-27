@@ -424,6 +424,13 @@ pub struct AppSnapshot {
     pub ui_fps: Option<f64>,
     pub active_sensors: u32,
     pub engine: EngineStatus,
+    /// Mean of `cpu_pct` since start (or the last stats reset), for the spec §8 budget.
+    pub cpu_avg_pct: Option<f64>,
+    /// Highest `ram_mb` since start (or the last stats reset).
+    #[serde(rename = "ramPeakMB")]
+    pub ram_peak_mb: Option<f64>,
+    /// Process start to the first snapshot, in milliseconds.
+    pub startup_ms: Option<f64>,
 }
 
 #[cfg(test)]

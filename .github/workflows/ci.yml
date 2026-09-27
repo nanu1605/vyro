@@ -76,6 +76,15 @@ jobs:
         run: ./scripts/fetch-pawnio.ps1
       - name: Build the app and the MSI installer
         run: pnpm tauri build
+      - name: Installer size budget (spec §8, < 20 MB)
+        shell: pwsh
+        run: |
+          $msi = Get-Item target\release\bundle\msi\*.msi | Select-Object -First 1
+          $exe = Get-Item target\release\vyro.exe
+          $mb = [math]::Round($msi.Length / 1MB, 2)
+          "Installer: $($msi.Name) $mb MB; vyro.exe $([math]::Round($exe.Length / 1MB, 2)) MB" |
+            Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
+          if ($msi.Length -ge 20MB) { throw "installer is $mb MB, over the 20 MB budget" }
 
       # Ready-to-run downloads for checking on a real PC without a toolchain.
       - name: Collect Windows binaries

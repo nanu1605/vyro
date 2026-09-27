@@ -15,9 +15,9 @@ use crate::alerts::{AlertEngine, Reading};
 use crate::health::{HealthEvent, HealthMonitor};
 use crate::history::History;
 use crate::provider::Provider;
-use crate::registry::Registry;
+use crate::registry::{Group, Registry, SensorDesc, SensorKey, Source, Unit};
 use crate::snapshot::{EngineStatus, SensorSnapshot};
-use crate::{lock, unix_now};
+use crate::{lock, process_start, unix_now};
 
 /// History-store event kinds: System Health changes and fired alerts.
 pub const EVENT_HEALTH: &str = "health";
@@ -76,6 +76,9 @@ pub struct Poller {
     health: Arc<Mutex<HealthMonitor>>,
     alerts: Option<Arc<Mutex<AlertEngine>>>,
     cfg: PollerConfig,
+    /// `app.cpu` / `app.ram`: the footprint as sensors, for averages, peaks and history.
+    app_keys: Option<(SensorKey, SensorKey)>,
+    startup_ms: Option<f64>,
 }
 
 impl Poller {
@@ -88,6 +91,8 @@ impl Poller {
             health: Arc::new(Mutex::new(HealthMonitor::new())),
             alerts: None,
             cfg,
+            app_keys: None,
+            startup_ms: None,
         }
     }
 
@@ -226,6 +231,26 @@ impl Poller {
             }
         }
 
+        let (cpu_key, ram_key) = *self.app_keys.get_or_insert_with(|| {
+            let mut app = |id: &str, name: &str, unit| {
+                reg.register(
+                    SensorDesc::new(id, Group::App, name, unit, Source::App).with_history(),
+                )
+            };
+            (
+                app("app.cpu", "Vyro CPU", Unit::Percent),
+                app("app.ram", "Vyro Memory", Unit::Megabyte),
+            )
+        });
+        reg.set(cpu_key, snap.app.cpu_pct);
+        reg.set(ram_key, snap.app.ram_mb);
+        snap.app.cpu_avg_pct = reg.get("app.cpu").and_then(|s| s.avg);
+        snap.app.ram_peak_mb = reg.get("app.ram").and_then(|s| s.max);
+        snap.app.startup_ms = Some(
+            *self
+                .startup_ms
+                .get_or_insert_with(|| process_start().elapsed().as_secs_f64() * 1000.0),
+        );
         snap.app.poll_hz = poll_hz;
         snap.app.active_sensors = u32::try_from(reg.available_count()).unwrap_or(u32::MAX);
         snap.app.engine = if visible {
@@ -374,6 +399,10 @@ mod tests {
         assert!(last.app.poll_hz.is_some());
         assert!(last.app.active_sensors > 0);
         assert_eq!(last.app.engine, EngineStatus::Running);
+        // Startup is measured once and repeated; the footprint sensors exist for history.
+        assert!(last.app.startup_ms.is_some_and(|ms| ms >= 0.0));
+        assert_eq!(snaps[0].app.startup_ms, last.app.startup_ms);
+        assert!(lock(&registry).get("app.cpu").is_some_and(|s| s.history));
         assert!(lock(&registry)
             .get("cpu.usage.total")
             .unwrap()

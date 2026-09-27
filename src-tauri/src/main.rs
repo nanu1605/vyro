@@ -11,6 +11,7 @@ use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 use engine::Engine;
 
 fn main() {
+    vyro_core::process_start();
     let log = tauri_plugin_log::Builder::new()
         .targets([
             Target::new(TargetKind::Stdout),

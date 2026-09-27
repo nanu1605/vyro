@@ -37,6 +37,14 @@ pub use registry::{Group, Registry, Sensor, SensorDesc, SensorKey, SensorTree, S
 pub use sim::SimProvider;
 pub use snapshot::SensorSnapshot;
 
+static PROCESS_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
+/// When the process started, for "startup to first data" (spec §8). Call it first thing in
+/// `main`; otherwise the first call (the poller's) stands in.
+pub fn process_start() -> std::time::Instant {
+    *PROCESS_START.get_or_init(std::time::Instant::now)
+}
+
 /// Current Unix time in seconds.
 pub fn unix_now() -> i64 {
     std::time::SystemTime::now()

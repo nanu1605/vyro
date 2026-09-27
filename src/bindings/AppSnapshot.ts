@@ -8,4 +8,16 @@ export type AppSnapshot = { cpuPct: number | null, ramMB: number | null, gpuPct:
 /**
  * Reported by the frontend; the backend leaves it `null`.
  */
-uiFps: number | null, activeSensors: number, engine: EngineStatus, };
+uiFps: number | null, activeSensors: number, engine: EngineStatus, 
+/**
+ * Mean of `cpu_pct` since start (or the last stats reset), for the spec §8 budget.
+ */
+cpuAvgPct: number | null, 
+/**
+ * Highest `ram_mb` since start (or the last stats reset).
+ */
+ramPeakMB: number | null, 
+/**
+ * Process start to the first snapshot, in milliseconds.
+ */
+startupMs: number | null, };
