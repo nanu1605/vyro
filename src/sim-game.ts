@@ -7,13 +7,19 @@ const STARTED = Math.floor(Date.now() / 1000) - 1260;
 
 export function simGame(ts: number, gpuLoad: number, rand: () => number): GameSnapshot {
   const base = 1000 / (150 - gpuLoad * 0.35);
-  const recentMs = Array.from({ length: 240 }, (_, i) =>
-    (i + ts) % 97 === 0 ? base * 3.2 : base * (0.94 + rand() * 0.12),
-  );
-  const last = recentMs.slice(-Math.round(1000 / base));
-  const frameMs = last.reduce((a, b) => a + b, 0) / last.length;
-  const sorted = [...recentMs].sort((a, b) => a - b);
-  const at = (p: number) => sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)]!;
+  // 100 ms buckets on a fixed clock: each keeps its value as the graph scrolls.
+  const end = Math.floor(Date.now() / 100);
+  const timeline = Array.from({ length: 100 }, (_, i) => {
+    const k = end - 100 + i;
+    const wobble = Math.sin(k * 0.21) * 0.25 + Math.sin(k * 0.047) * 0.35;
+    const avgMs = base + wobble;
+    const hitch = k % 53 === 0;
+    return { avgMs: hitch ? avgMs * 1.35 : avgMs, maxMs: hitch ? base * 3.2 : avgMs + 0.6 + Math.abs(Math.sin(k)) * 0.8 };
+  });
+  const recent = timeline.slice(-10);
+  const frameMs = recent.reduce((a, p) => a + p.avgMs, 0) / recent.length;
+  const maxes = timeline.map((p) => p.maxMs).sort((a, b) => a - b);
+  void rand;
   return {
     state: 'capturing',
     detail: null,
@@ -23,8 +29,8 @@ export function simGame(ts: number, gpuLoad: number, rand: () => number): GameSn
     presentMode: 'Hardware: Independent Flip',
     fps: 1000 / frameMs,
     frameMs,
-    low1Fps: 1000 / at(99),
-    low01Fps: 1000 / at(99.9),
+    low1Fps: 1000 / maxes[Math.floor(maxes.length * 0.9)]!,
+    low01Fps: 1000 / maxes[maxes.length - 1]!,
     cpuBusyMs: frameMs * 0.52,
     gpuBusyMs: frameMs * 0.94,
     latencyMs: frameMs + 9.5,
@@ -34,7 +40,7 @@ export function simGame(ts: number, gpuLoad: number, rand: () => number): GameSn
     frames: (ts - STARTED) * 138,
     sessionFps: 138.4,
     sessionLow1Fps: 96.2,
-    recentMs,
+    timeline,
   };
 }
 

@@ -5,14 +5,16 @@
 use std::collections::VecDeque;
 
 use super::csv::Frame;
-use super::Bound;
+use super::{Bound, FramePoint};
 
 /// Averages (FPS, busy times, latency) cover the last second.
 pub const AVG_MS: f64 = 1_000.0;
 /// Lows cover the last ten seconds, so one hitch stays visible for a while.
 pub const LOWS_MS: f64 = 10_000.0;
-/// Frame times kept for the live frame-time graph.
-pub const RECENT: usize = 240;
+/// Frame-time graph: the last ten seconds in 100 ms buckets, aligned to the capture clock so a
+/// bucket keeps its value as the graph scrolls.
+pub const BUCKET_MS: f64 = 100.0;
+pub const TIMELINE_LEN: usize = 100;
 /// A busy share of the frame time at or above this marks the limiting side.
 const BOUND_SHARE: f64 = 0.85;
 
@@ -44,7 +46,8 @@ pub struct Live {
     pub latency_ms: Option<f64>,
     pub displayed_fps: Option<f64>,
     pub bound: Option<Bound>,
-    pub recent_ms: Vec<f32>,
+    /// Oldest first; `None` for a bucket without frames.
+    pub timeline: Vec<Option<FramePoint>>,
 }
 
 impl Window {
@@ -61,7 +64,8 @@ impl Window {
             latency: f.display_latency_ms,
             displayed: f.displayed_ms.is_some(),
         });
-        let oldest = f.start_ms - LOWS_MS;
+        // A bucket more than the lows need, so the oldest graph bucket is whole.
+        let oldest = f.start_ms - LOWS_MS - BUCKET_MS;
         while self.samples.front().is_some_and(|s| s.start < oldest) {
             self.samples.pop_front();
         }
@@ -91,7 +95,13 @@ impl Window {
         let frame_ms = (n > 0.0).then(|| total / n);
         let cpu = mean(|s| s.cpu);
         let gpu = mean(|s| s.gpu);
-        let mut all: Vec<f64> = self.samples.iter().map(|s| s.frame).collect();
+        let lows_from = last.start - LOWS_MS;
+        let mut all: Vec<f64> = self
+            .samples
+            .iter()
+            .filter(|s| s.start >= lows_from)
+            .map(|s| s.frame)
+            .collect();
         all.sort_by(f64::total_cmp);
         Live {
             fps: rate(n),
@@ -103,15 +113,32 @@ impl Window {
             latency_ms: mean(|s| s.latency),
             displayed_fps: rate(recent.iter().filter(|s| s.displayed).count() as f64),
             bound: bound(frame_ms, cpu, gpu),
-            recent_ms: self
-                .samples
-                .iter()
-                .rev()
-                .take(RECENT)
-                .rev()
-                .map(|s| s.frame as f32)
-                .collect(),
+            timeline: self.timeline(last.start),
         }
+    }
+
+    /// Average and worst frame time per complete bucket; the bucket still filling is left out.
+    fn timeline(&self, now: f64) -> Vec<Option<FramePoint>> {
+        let end = (now / BUCKET_MS).floor() as i64;
+        let first = end - TIMELINE_LEN as i64;
+        let mut sums = vec![(0.0f64, 0u32, 0.0f64); TIMELINE_LEN];
+        for s in &self.samples {
+            let k = (s.start / BUCKET_MS).floor() as i64;
+            if k >= first && k < end {
+                let b = &mut sums[(k - first) as usize];
+                b.0 += s.frame;
+                b.1 += 1;
+                b.2 = b.2.max(s.frame);
+            }
+        }
+        sums.into_iter()
+            .map(|(sum, n, max)| {
+                (n > 0).then(|| FramePoint {
+                    avg_ms: (sum / f64::from(n)) as f32,
+                    max_ms: max as f32,
+                })
+            })
+            .collect()
     }
 }
 
@@ -264,8 +291,11 @@ mod tests {
         // …the 99.9th (rank 1439 of 1440) too; only the max is the hitch.
         assert!(l.low01_fps.unwrap() > 140.0);
         assert_eq!(l.bound, Some(Bound::Gpu));
-        assert_eq!(l.recent_ms.len(), RECENT);
-        assert_eq!(*l.recent_ms.last().unwrap(), 50.0);
+        assert_eq!(l.timeline.len(), TIMELINE_LEN);
+        // The hitch starts the bucket still filling, so it is not drawn yet.
+        let last = l.timeline.last().unwrap().unwrap();
+        assert!((last.avg_ms - 1000.0 / 144.0).abs() < 0.01);
+        assert!(l.timeline.iter().flatten().all(|p| p.max_ms < 7.0));
         assert_eq!(t.frames, 1440);
         assert!(
             (t.fps().unwrap() - 1440.0 * 1000.0 / (1439.0 * 1000.0 / 144.0 + 50.0)).abs() < 1e-6
@@ -301,6 +331,31 @@ mod tests {
         w.push(&frame(5.0, 10.0));
         assert_eq!(w.samples.len(), 1, "clock went back: new capture");
         assert!(Window::default().live().fps.is_none());
+    }
+
+    #[test]
+    fn timeline_buckets_average_and_keep_the_worst_frame() {
+        let mut w = Window::default();
+        let mut at = 0.0;
+        // 2.5 ms frames for 3 s, one 30 ms hitch at 1.5 s.
+        while at < 3_000.0 {
+            let ms = if (1_500.0..1_502.5).contains(&at) {
+                30.0
+            } else {
+                2.5
+            };
+            w.push(&frame(at, ms));
+            at += ms;
+        }
+        let t = w.live().timeline;
+        assert_eq!(t.len(), TIMELINE_LEN);
+        // 3 s of capture: the 29 complete buckets are the newest; older ones are empty.
+        let filled: Vec<FramePoint> = t.iter().flatten().copied().collect();
+        assert_eq!(filled.len(), 29);
+        assert!(t[..TIMELINE_LEN - 29].iter().all(Option::is_none));
+        let hitch = filled.iter().filter(|p| p.max_ms == 30.0).count();
+        assert_eq!(hitch, 1);
+        assert!(filled.iter().all(|p| p.avg_ms >= 2.5 && p.avg_ms < 4.0));
     }
 
     #[test]

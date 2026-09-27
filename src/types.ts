@@ -13,6 +13,7 @@ export type { Density } from './bindings/Density';
 export type { NotifyPolicy } from './bindings/NotifyPolicy';
 export type { AppPart } from './bindings/AppPart';
 export type { Bound } from './bindings/Bound';
+export type { FramePoint } from './bindings/FramePoint';
 export type { CaptureState } from './bindings/CaptureState';
 export type { GameSession } from './bindings/GameSession';
 export type { GameSnapshot } from './bindings/GameSnapshot';

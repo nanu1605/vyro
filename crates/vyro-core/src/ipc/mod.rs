@@ -30,7 +30,8 @@ pub use server::{Hub, Server};
 pub use transport::{connect, default_endpoint, Conn, Listener};
 
 /// 2: `AppSnapshot::parts`. 3: `SensorSnapshot::game`, capture target and game sessions.
-pub const PROTOCOL_VERSION: u32 = 3;
+/// 4: `GameSnapshot::timeline` replaces the raw frame times.
+pub const PROTOCOL_VERSION: u32 = 4;
 /// Windows service name (installed by the MSI).
 pub const SERVICE_NAME: &str = "VyroService";
 /// Largest request the server accepts (alert rules are the biggest, a few KB).
@@ -220,7 +221,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&hello).unwrap(),
-            r#"{"protocol":3,"role":"snapshots","session":7,"pid":42,"visible":false}"#
+            r#"{"protocol":4,"role":"snapshots","session":7,"pid":42,"visible":false}"#
         );
         let reply: Reply = Err("nope".into());
         assert_eq!(serde_json::to_string(&reply).unwrap(), r#"{"Err":"nope"}"#);

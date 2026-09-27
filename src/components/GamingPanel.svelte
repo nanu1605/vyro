@@ -145,8 +145,11 @@
 
     <div class="grid">
       <Card title="Frame times" wide>
-        <FrameTimeGraph frames={game.recentMs} height={140} />
-        <p class="note">Latest {game.recentMs.length} frames; the dashed line is the average, spikes are stutters.</p>
+        <FrameTimeGraph points={game.timeline} height={140} />
+        <p class="note">
+          Last 10 seconds: the line is the average frame time per 0.1 s, the shaded band reaches the slowest frame, so
+          stutters show as spikes.
+        </p>
       </Card>
 
       <Card title="What limits the frame rate" subtitle={live ? boundLabel(game.bound) : null}>

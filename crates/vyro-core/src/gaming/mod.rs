@@ -98,8 +98,18 @@ pub struct GameSnapshot {
     /// Whole session so far.
     pub session_fps: Option<f64>,
     pub session_low1_fps: Option<f64>,
-    /// Latest frame times (ms), oldest first, for the frame-time graph.
-    pub recent_ms: Vec<f32>,
+    /// Frame times over the last ten seconds in 100 ms buckets, oldest first, for the graph.
+    pub timeline: Vec<Option<FramePoint>>,
+}
+
+/// One 100 ms stretch of the frame-time graph.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FramePoint {
+    pub avg_ms: f32,
+    /// Worst frame in the stretch (a stutter shows here first).
+    pub max_ms: f32,
 }
 
 /// Summary of one game session, kept in the engine's data folder.
@@ -413,7 +423,7 @@ impl Gaming {
             frames: s.totals.frames,
             session_fps: s.totals.fps(),
             session_low1_fps: s.totals.low(99.0),
-            recent_ms: live.recent_ms,
+            timeline: live.timeline,
         })
     }
 

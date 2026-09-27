@@ -35,7 +35,7 @@
       <i>1% {fmt(g.low1Fps)} · {fmt(g.frameMs, 1)} ms</i>
     </div>
     {#if data?.detailed}
-      <FrameTimeGraph frames={g.recentMs.slice(-120)} height={44} bare />
+      <FrameTimeGraph points={g.timeline.slice(-50)} height={44} bare />
       <dl>
         <dt>CPU</dt>
         <dd>{fmtTemp(data.cpuTemp) ?? '—'}</dd>

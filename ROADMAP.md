@@ -383,16 +383,16 @@ In progress.
       ETW session `VyroCapture`, ended on stop) and parses its CSV by column name (8-bit or
       UTF-16). Live, every tick: FPS and frame time over the last second, 1 % / 0.1 % lows (FPS
       at the 99th / 99.9th percentile frame time) over 10 s, CPU / GPU busy, latency, displayed
-      FPS, what limits the frame rate (GPU or CPU busy ≥ 85 % of the frame, else capped), the
-      last 240 frame times. `game.fps`, `game.frametime`, `game.low1` are history sensors.
+      FPS, what limits the frame rate (GPU or CPU busy ≥ 85 % of the frame, else capped), and
+      a frame-time timeline (last 10 s in 100 ms buckets on the capture clock: average and
+      worst frame; IPC protocol 4) drawn as a steady, scrolling graph. `game.fps`, `game.frametime`, `game.low1` are history sensors.
       Sessions ≥ 30 s are logged (`games.json`, last 100) with averages, lows from a 0.1 ms
       histogram, max frame time, max CPU / GPU temperature and average load. Gaming tab (live
       figures, frame-time graph, limiter, session log), a Game FPS dashboard tile, a Settings
       switch; PresentMon fetched with a pinned SHA-256 and installed by the MSI.
       `vyro-remote --capture <exe|pid>` checks capture through the service without the app.
 - [x] P10a Field-checked: FPS matches the game's own counter.
-- [ ] P10a Field check: session logged after quitting; anti-cheat games (FACEIT excepted, as
-      with PawnIO) unaffected.
+- [ ] P10a Field check: anti-cheat games (FACEIT excepted, as with PawnIO) unaffected.
 - [x] P10b Companion overlay (off by default; Settings → Gaming or the tray's "Game overlay"):
       a transparent, always-on-top, click-through window in a chosen corner of the game's
       monitor with FPS, 1 % low and frame time, optionally a frame-time graph and CPU / GPU
@@ -405,8 +405,8 @@ In progress.
       fullscreen (present mode "Hardware: Legacy …") and the overlay cannot show.
 - [x] P10b Field-checked: overlay shows over Rocket League in borderless mode; in its
       exclusive "Fullscreen" mode it cannot, as expected.
-- [ ] P10b Field check: never steals focus or clicks, disappears on alt-tab and when the game
-      exits.
+- [x] P10b Field-checked: never steals focus; sessions are logged after quitting.
+- [ ] Frame-time graph smooth in the overlay at high frame rates (was jittery with raw frames).
 
 **Deferred to v2:** fan/pump control (driver write path), injected in-game overlay.
 
