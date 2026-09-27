@@ -98,7 +98,7 @@ pub struct GameSnapshot {
     /// Whole session so far.
     pub session_fps: Option<f64>,
     pub session_low1_fps: Option<f64>,
-    /// Frame times over the last ten seconds in 100 ms buckets, oldest first, for the graph.
+    /// Frame times over the last 15 s in 100 ms buckets, oldest first, for the graph.
     pub timeline: Vec<Option<FramePoint>>,
 }
 

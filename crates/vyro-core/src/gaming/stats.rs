@@ -11,10 +11,11 @@ use super::{Bound, FramePoint};
 pub const AVG_MS: f64 = 1_000.0;
 /// Lows cover the last ten seconds, so one hitch stays visible for a while.
 pub const LOWS_MS: f64 = 10_000.0;
-/// Frame-time graph: the last ten seconds in 100 ms buckets, aligned to the capture clock so a
-/// bucket keeps its value as the graph scrolls.
+/// Frame-time graph: the last 15 s in 100 ms buckets, aligned to the capture clock so a bucket
+/// keeps its value as the graph scrolls. The graphs show 5-10 s; the rest is drawn just past
+/// the left edge, so scrolling between updates never uncovers an empty strip.
 pub const BUCKET_MS: f64 = 100.0;
-pub const TIMELINE_LEN: usize = 100;
+pub const TIMELINE_LEN: usize = 150;
 /// A busy share of the frame time at or above this marks the limiting side.
 const BOUND_SHARE: f64 = 0.85;
 
@@ -64,8 +65,8 @@ impl Window {
             latency: f.display_latency_ms,
             displayed: f.displayed_ms.is_some(),
         });
-        // A bucket more than the lows need, so the oldest graph bucket is whole.
-        let oldest = f.start_ms - LOWS_MS - BUCKET_MS;
+        // What the timeline needs (a bucket more, so the oldest is whole); the lows use less.
+        let oldest = f.start_ms - (TIMELINE_LEN as f64 + 1.0) * BUCKET_MS;
         while self.samples.front().is_some_and(|s| s.start < oldest) {
             self.samples.pop_front();
         }

@@ -9,8 +9,8 @@ export function simGame(ts: number, gpuLoad: number, rand: () => number): GameSn
   const base = 1000 / (150 - gpuLoad * 0.35);
   // 100 ms buckets on a fixed clock: each keeps its value as the graph scrolls.
   const end = Math.floor(Date.now() / 100);
-  const timeline = Array.from({ length: 100 }, (_, i) => {
-    const k = end - 100 + i;
+  const timeline = Array.from({ length: 150 }, (_, i) => {
+    const k = end - 150 + i;
     const wobble = Math.sin(k * 0.21) * 0.25 + Math.sin(k * 0.047) * 0.35;
     const avgMs = base + wobble;
     const hitch = k % 53 === 0;

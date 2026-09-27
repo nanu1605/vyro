@@ -36,6 +36,6 @@ started: number, frames: number,
  */
 sessionFps: number | null, sessionLow1Fps: number | null, 
 /**
- * Frame times over the last ten seconds in 100 ms buckets, oldest first, for the graph.
+ * Frame times over the last 15 s in 100 ms buckets, oldest first, for the graph.
  */
 timeline: Array<FramePoint | null>, };

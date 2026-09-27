@@ -145,7 +145,7 @@
 
     <div class="grid">
       <Card title="Frame times" wide>
-        <FrameTimeGraph points={game.timeline} height={140} />
+        <FrameTimeGraph points={game.timeline} span={100} height={140} />
         <p class="note">
           Last 10 seconds: the line is the average frame time per 0.1 s, the shaded band reaches the slowest frame, so
           stutters show as spikes.

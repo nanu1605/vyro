@@ -11,20 +11,26 @@
   interface Props {
     /** Oldest first, one per 100 ms; `null` where no frames came. */
     points: Array<FramePoint | null>;
+    /** Buckets across the visible width; older ones are drawn left of it and scroll in. */
+    span?: number;
     height?: number;
     /** Hide the axis labels (compact overlay). */
     bare?: boolean;
   }
-  let { points, height = 120, bare = false }: Props = $props();
+  let { points, span = 100, height = 120, bare = false }: Props = $props();
 
   const W = 1000;
   const uid = Math.random().toString(36).slice(2);
   const BUCKET_MS = 100;
   const STEPS = [4, 5, 8, 10, 12.5, 16.7, 20, 25, 33.3, 50, 100, 200];
 
+  /** The newest `span` buckets fill the width; older ones sit at negative x. */
+  const first = $derived(Math.max(0, points.length - span));
+  const visible = $derived(points.slice(first));
+
   let scale = $state(16.7);
   $effect(() => {
-    const avgs = points.flatMap((p) => (p ? [p.avgMs] : [])).sort((a, b) => a - b);
+    const avgs = visible.flatMap((p) => (p ? [p.avgMs] : [])).sort((a, b) => a - b);
     if (!avgs.length) return;
     const median = avgs[Math.floor(avgs.length / 2)]!;
     const need = median * 2.2;
@@ -36,7 +42,7 @@
   });
 
   const y = (ms: number) => height - 2 - (Math.min(ms, scale) / scale) * (height - 6);
-  const x = (i: number) => (points.length > 1 ? (i / (points.length - 1)) * W : 0);
+  const x = (i: number) => ((i - (points.length - span)) / (span - 1)) * W;
 
   /** Runs of consecutive points, so gaps (no frames) break the line. */
   const runs = $derived.by(() => {
@@ -63,7 +69,7 @@
         .map(([i, p]) => `${x(i).toFixed(1)},${y(p.avgMs).toFixed(1)}`),
     ].join(' ');
 
-  const filled = $derived(points.filter((p): p is FramePoint => p != null));
+  const filled = $derived(visible.filter((p): p is FramePoint => p != null));
   const avg = $derived(filled.length ? filled.reduce((a, p) => a + p.avgMs, 0) / filled.length : null);
   const worst = $derived(filled.length ? Math.max(...filled.map((p) => p.maxMs)) : null);
 
@@ -79,7 +85,7 @@
       lastAt = now;
       if (!dt || profileSpec().motion === 'off' || points.length < 2) return;
       glideMs = 0;
-      shift = (dt / (BUCKET_MS * (points.length - 1))) * W;
+      shift = (dt / (BUCKET_MS * (span - 1))) * W;
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
           glideMs = dt;
@@ -95,7 +101,7 @@
     viewBox="0 0 {W} {height}"
     preserveAspectRatio="none"
     role="img"
-    aria-label="Frame times over the last {points.length / 10} seconds: average {fmt(avg, 1)} ms, worst {fmt(worst, 1)} ms"
+    aria-label="Frame times over the last {span / 10} seconds: average {fmt(avg, 1)} ms, worst {fmt(worst, 1)} ms"
   >
     <defs>
       <!-- Fades the left edge, where old data scrolls out. -->
