@@ -2,7 +2,7 @@
   import { untrack } from 'svelte';
   import Card from './Card.svelte';
   import { getAutostart, getSensorTree, setAutostart } from '../ipc';
-  import { prefs, savePrefs } from '../prefs.svelte';
+  import { prefs, profiles, savePrefs } from '../prefs.svelte';
   import type { BackendStatus, SensorSnapshot, SensorTree, TempUnit } from '../types';
 
   interface Props {
@@ -51,6 +51,24 @@
 </script>
 
 <section class="grid">
+  <Card title="Profile" subtitle={profiles.list.find((p) => p.id === prefs.profile)?.name ?? null}>
+    <fieldset>
+      <legend>Poll rate, notifications, animation, dashboard</legend>
+      {#each profiles.list as p (p.id)}
+        <label class="check">
+          <input
+            type="radio"
+            name="profile"
+            checked={prefs.profile === p.id}
+            onchange={() => void save('Profile', () => savePrefs({ profile: p.id }))}
+          />
+          <span>{p.name}<small>{p.description}</small></span>
+        </label>
+      {/each}
+    </fieldset>
+    <p class="note">Also in the tray icon's menu.</p>
+  </Card>
+
   <Card title="General">
     <label class="check">
       <input

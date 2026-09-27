@@ -179,7 +179,7 @@ pub async fn get_alert_log(engine: State<'_, Engine>) -> Result<Vec<AlertFired>,
 /// Sends a sample notification so the user can check Windows lets Vyro notify.
 #[tauri::command]
 pub fn test_alert(app: tauri::AppHandle, sound: bool) {
-    crate::engine::notify(
+    crate::engine::show_notification(
         &app,
         &AlertFired {
             ts: unix_now(),
@@ -188,6 +188,7 @@ pub fn test_alert(app: tauri::AppHandle, sound: bool) {
             message: "Alerts will look like this.".into(),
             sound,
         },
+        true,
     );
 }
 
@@ -210,11 +211,17 @@ pub fn get_settings(store: State<'_, crate::tray::SettingsStore>) -> crate::tray
 }
 
 #[tauri::command]
-pub fn set_settings(
-    store: State<'_, crate::tray::SettingsStore>,
-    settings: crate::tray::Settings,
-) -> Result<(), String> {
-    store.set(settings)
+pub fn set_settings(app: tauri::AppHandle, settings: crate::tray::Settings) -> Result<(), String> {
+    crate::tray::apply(&app, settings)
+}
+
+/// The profile presets (the chosen one is in the settings).
+#[tauri::command]
+pub fn get_profiles() -> Vec<vyro_core::profiles::ProfileSpec> {
+    vyro_core::profiles::Profile::ALL
+        .iter()
+        .map(|p| p.spec())
+        .collect()
 }
 
 /// Whether Vyro starts (in the tray) at sign-in.

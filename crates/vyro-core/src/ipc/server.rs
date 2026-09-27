@@ -256,6 +256,10 @@ impl Server {
                 });
                 json(Ok(()))
             }
+            Request::SetPollInterval { millis } => {
+                e.set_poll_interval(millis);
+                json(Ok(()))
+            }
             Request::QueryHistory { metric, range } => json(e.query_history(&metric, range)),
             Request::SensorTree => json(e.sensor_tree()),
             Request::ResetStats => json(e.reset_stats()),

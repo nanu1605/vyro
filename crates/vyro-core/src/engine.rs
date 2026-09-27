@@ -21,6 +21,10 @@ use crate::{
 /// Process ids of the connected UIs, counted in the app footprint with the engine's own.
 pub type ClientPids = Arc<Mutex<Vec<u32>>>;
 
+/// Poll interval bounds a client may ask for.
+pub const MIN_POLL_MS: u32 = 250;
+pub const MAX_POLL_MS: u32 = 10_000;
+
 /// History database and alert rules, inside the engine's data folder.
 pub const HISTORY_FILE: &str = "history.sqlite";
 pub const ALERTS_FILE: &str = "alerts.json";
@@ -55,8 +59,10 @@ pub struct BackendStatus {
 pub trait EngineApi: Send + Sync {
     /// Most recent snapshot, so a freshly loaded UI need not wait for the next tick.
     fn latest(&self) -> Option<SensorSnapshot>;
-    /// Visible → 1 Hz polling; hidden → the slow tray interval.
+    /// Visible → the poll interval; hidden → the slow tray interval.
     fn set_visible(&self, visible: bool);
+    /// Poll interval while visible (profiles), clamped to [`MIN_POLL_MS`, `MAX_POLL_MS`].
+    fn set_poll_interval(&self, millis: u32);
     fn query_history(&self, metric: &str, range: HistoryRange) -> Result<HistorySeries, String>;
     fn sensor_tree(&self) -> Result<SensorTree, String>;
     /// Restarts min / max / avg for every sensor.
@@ -170,6 +176,13 @@ impl EngineApi for LocalEngine {
     fn set_visible(&self, visible: bool) {
         if let Some(poller) = lock(&self.poller).as_ref() {
             poller.set_visible(visible);
+        }
+    }
+
+    fn set_poll_interval(&self, millis: u32) {
+        let ms = millis.clamp(MIN_POLL_MS, MAX_POLL_MS);
+        if let Some(poller) = lock(&self.poller).as_ref() {
+            poller.set_interval(std::time::Duration::from_millis(u64::from(ms)));
         }
     }
 

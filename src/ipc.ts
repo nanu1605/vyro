@@ -3,7 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { AlertFired, AlertRule, BackendStatus, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -100,8 +100,35 @@ export interface AppSettings {
   temperatureUnit: TempUnit;
   /** Sensor ids left out of the Sensors and History views. */
   hiddenSensors: string[];
+  /** Poll rate, notifications, animation and dashboard density. */
+  profile: Profile;
 }
-let browserSettings: AppSettings = { closeToTray: true, temperatureUnit: 'c', hiddenSensors: [] };
+let browserSettings: AppSettings = { closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop' };
+const settingsListeners = new Set<(s: AppSettings) => void>();
+
+/** Settings changed elsewhere (the tray's Profile menu, another view). */
+export async function onSettingsChanged(cb: (s: AppSettings) => void): Promise<() => void> {
+  if (!inTauri) {
+    settingsListeners.add(cb);
+    return () => settingsListeners.delete(cb);
+  }
+  return listen<AppSettings>('settings-changed', (e) => cb(e.payload));
+}
+
+// Browser preview: mirrors `vyro_core::profiles`.
+const BROWSER_PROFILES: ProfileSpec[] = [
+  { id: 'desktop', name: 'Desktop', description: 'Everyday use: live gauges every second, every alert.', pollMs: 1000, notifications: 'all', motion: 'full', dashboard: 'full' },
+  { id: 'gaming', name: 'Gaming', description: 'Light while you play: readings every 2 s, only hardware problems notify.', pollMs: 2000, notifications: 'critical', motion: 'reduced', dashboard: 'compact' },
+  { id: 'work', name: 'Work', description: 'Readings every 2 s, alerts without sound, calmer animation.', pollMs: 2000, notifications: 'quiet', motion: 'reduced', dashboard: 'full' },
+  { id: 'benchmark', name: 'Benchmark', description: 'Readings twice a second for test runs; alerts silent, no animation.', pollMs: 500, notifications: 'quiet', motion: 'off', dashboard: 'full' },
+  { id: 'silent', name: 'Silent', description: 'Smallest footprint: readings every 5 s, no notifications (alerts still logged).', pollMs: 5000, notifications: 'off', motion: 'off', dashboard: 'compact' },
+];
+
+/** The profile presets. */
+export async function getProfiles(): Promise<ProfileSpec[]> {
+  if (!inTauri) return BROWSER_PROFILES;
+  return invoke<ProfileSpec[]>('get_profiles');
+}
 
 export async function getSettings(): Promise<AppSettings> {
   if (!inTauri) return { ...browserSettings };
@@ -111,6 +138,7 @@ export async function getSettings(): Promise<AppSettings> {
 export async function setSettings(settings: AppSettings): Promise<void> {
   if (!inTauri) {
     browserSettings = { ...settings };
+    for (const cb of settingsListeners) cb({ ...browserSettings });
     return;
   }
   await invoke('set_settings', { settings });

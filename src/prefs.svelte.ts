@@ -2,13 +2,41 @@
 // (`settings.json`). Components read them through these helpers so they follow changes live.
 
 import { fmt, fmtUnit, NA } from './format';
-import { getSettings, setSettings, type AppSettings } from './ipc';
+import { getProfiles, getSettings, onSettingsChanged, setSettings, type AppSettings } from './ipc';
+import type { ProfileSpec } from './types';
 import { fromUnit, tempSymbol, tempsIn, toUnit } from './units';
 
-export const prefs = $state<AppSettings>({ closeToTray: true, temperatureUnit: 'c', hiddenSensors: [] });
+export const prefs = $state<AppSettings>({ closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop' });
 
+/** Profile presets, loaded with the preferences. */
+export const profiles = $state<{ list: ProfileSpec[] }>({ list: [] });
+
+let listening = false;
+
+/** Loads the settings and follows later changes (tray menu, other views). */
 export async function loadPrefs(): Promise<void> {
-  Object.assign(prefs, await getSettings());
+  if (!listening) {
+    listening = true;
+    void onSettingsChanged((s) => Object.assign(prefs, s));
+  }
+  const [s, list] = await Promise.all([getSettings(), getProfiles()]);
+  profiles.list = list;
+  Object.assign(prefs, s);
+}
+
+/** The chosen profile's preset (Desktop until loaded). */
+export function profileSpec(): ProfileSpec {
+  return (
+    profiles.list.find((p) => p.id === prefs.profile) ?? {
+      id: 'desktop',
+      name: 'Desktop',
+      description: '',
+      pollMs: 1000,
+      notifications: 'all',
+      motion: 'full',
+      dashboard: 'full',
+    }
+  );
 }
 
 /** Saves a change; the views update once it is stored. */

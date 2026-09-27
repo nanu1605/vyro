@@ -28,6 +28,17 @@ describe('Tween', () => {
     expect(frames).toBeLessThan(120);
   });
 
+  it('settles in about a third of the frames at the reduced level', () => {
+    const count = (tau: number) => {
+      const t = new Tween(0);
+      t.set(50);
+      let frames = 0;
+      while (t.step(1 / 60, false, tau)) frames++;
+      return frames;
+    };
+    expect(count(0.08)).toBeLessThan(count(0.22) / 2);
+  });
+
   it('snaps immediately when motion is reduced', () => {
     const t = new Tween(0);
     t.set(80);

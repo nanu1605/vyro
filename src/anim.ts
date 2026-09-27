@@ -32,12 +32,12 @@ export class Tween {
   }
 
   /** Advances by `dt` seconds. Returns true while still moving. */
-  step(dt: number, snap = false): boolean {
+  step(dt: number, snap = false, tau = TAU): boolean {
     if (snap || Math.abs(this.target - this.cur) < EPSILON) {
       this.cur = this.target;
       return false;
     }
-    this.cur = ease(this.cur, this.target, dt);
+    this.cur = ease(this.cur, this.target, dt, tau);
     return true;
   }
 }
@@ -45,8 +45,16 @@ export class Tween {
 /** Per-frame callback; return true to request another frame. */
 export type FrameFn = (dt: number) => boolean;
 
+/** Animation level (profiles): full easing, shorter easing, or none. */
+export type MotionLevel = 'full' | 'reduced' | 'off';
+
+/** Easing time constant for the reduced level: settles in about a third of the time. */
+const TAU_REDUCED = 0.08;
+
 export class Animator {
+  /** The OS asks for reduced motion (always treated as off). */
   readonly reducedMotion: boolean;
+  private level: MotionLevel = 'full';
   private subs = new Set<FrameFn>();
   private raf = 0;
   private last = 0;
@@ -57,6 +65,21 @@ export class Animator {
 
   constructor(reducedMotion = false) {
     this.reducedMotion = reducedMotion;
+  }
+
+  setMotion(level: MotionLevel): void {
+    this.level = level;
+    this.wake();
+  }
+
+  /** Jump to new values instead of easing. */
+  get snap(): boolean {
+    return this.reducedMotion || this.level === 'off';
+  }
+
+  /** Easing time constant for the current level. */
+  get tau(): number {
+    return this.level === 'reduced' ? TAU_REDUCED : TAU;
   }
 
   add(fn: FrameFn): () => void {

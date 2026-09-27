@@ -25,7 +25,7 @@
   import { animator } from './anim';
   import { fmt, fmtGB } from './format';
   import { getBackendStatus, getPawnIoStatus, inTauri, onBackendStatus, onSensors, setUiVisible } from './ipc';
-  import { loadPrefs, temp, tempOrNull, tempText, tempUnit } from './prefs.svelte';
+  import { loadPrefs, profileSpec, temp, tempOrNull, tempText, tempUnit } from './prefs.svelte';
   import type { AlertFired, BackendStatus, PawnIoStatus, SensorSnapshot } from './types';
 
   const TABS = [
@@ -72,6 +72,9 @@
   let toasts = $state<Array<AlertFired & { key: number }>>([]);
   let toastSeq = 0;
   function showToast(a: AlertFired): void {
+    // Same policy as Windows notifications: the profile decides what interrupts.
+    const policy = profileSpec().notifications;
+    if (policy === 'off' || (policy === 'critical' && a.ruleId !== 'health-problems')) return;
     const key = ++toastSeq;
     toasts = [...toasts.slice(-2), { ...a, key }];
     setTimeout(() => (toasts = toasts.filter((t) => t.key !== key)), 10_000);
@@ -116,6 +119,11 @@
   );
 
   let uiFps = $state(0);
+
+  // Profile: animation level and dashboard density.
+  const spec = $derived(profileSpec());
+  const compact = $derived(spec.dashboard === 'compact');
+  $effect(() => animator.setMotion(spec.motion));
 
   const cpu = $derived(snap?.cpu ?? null);
   const gpu = $derived(snap?.gpu[0] ?? null);
@@ -252,16 +260,24 @@
       </div>
 
       <div class="cards">
-        <CoresCard {cpu} />
+        {#if !compact}<CoresCard {cpu} />{/if}
         <CpuSensorsCard {cpu} />
         {#each snap?.gpu ?? [] as g, i (i)}
           <GpuCard gpu={g} />
         {/each}
-        <MemoryCard {mem} />
-        <PowerCard power={snap?.power ?? null} gpus={snap?.gpu ?? []} />
-        <BoardCard board={snap?.board ?? null} fans={snap?.fans ?? []} voltages={snap?.voltages ?? []} pending={NEEDS_DRIVER} />
-        <SelfCard app={snap?.app ?? null} {uiFps} />
+        {#if !compact}
+          <MemoryCard {mem} />
+          <PowerCard power={snap?.power ?? null} gpus={snap?.gpu ?? []} />
+          <BoardCard board={snap?.board ?? null} fans={snap?.fans ?? []} voltages={snap?.voltages ?? []} pending={NEEDS_DRIVER} />
+          <SelfCard app={snap?.app ?? null} {uiFps} />
+        {/if}
       </div>
+      {#if compact}
+        <p class="compact-note">
+          {spec.name} profile: compact dashboard.
+          <button type="button" class="link" onclick={() => select('settings')}>Change profile</button>
+        </p>
+      {/if}
     </div>
 
     {#if visited.history}
@@ -479,6 +495,21 @@
     grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
     gap: 0.75rem;
     margin-top: 1rem;
+  }
+  .compact-note {
+    margin: 0.75rem 0 0;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  .compact-note .link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    text-decoration: underline dotted var(--muted);
+    text-underline-offset: 3px;
+    cursor: pointer;
   }
   @media (max-width: 720px) {
     .gauges {

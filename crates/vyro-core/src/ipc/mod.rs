@@ -75,6 +75,11 @@ pub enum Request {
     SetVisible {
         visible: bool,
     },
+    /// Poll interval while visible (profiles); the service clamps it.
+    #[serde(rename_all = "camelCase")]
+    SetPollInterval {
+        millis: u32,
+    },
     #[serde(rename_all = "camelCase")]
     QueryHistory {
         metric: String,
@@ -181,6 +186,10 @@ mod tests {
         // A change here breaks older clients: bump PROTOCOL_VERSION with it.
         let json = |v: &Request| serde_json::to_string(v).unwrap();
         assert_eq!(json(&Request::SensorTree), r#"{"method":"sensorTree"}"#);
+        assert_eq!(
+            json(&Request::SetPollInterval { millis: 500 }),
+            r#"{"method":"setPollInterval","params":{"millis":500}}"#
+        );
         assert_eq!(
             json(&Request::SetVisible { visible: true }),
             r#"{"method":"setVisible","params":{"visible":true}}"#

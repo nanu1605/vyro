@@ -38,6 +38,10 @@ fn main() {
             app.manage(engine);
             app.manage(tray::SettingsStore::load(app.handle()));
             tray::build(app.handle())?;
+            let settings = app.state::<tray::SettingsStore>().get();
+            if let Err(e) = tray::apply(app.handle(), settings) {
+                log::warn!("settings: {e}");
+            }
             if minimized {
                 tray::park_after_start(app.handle());
             } else {
@@ -69,6 +73,7 @@ fn main() {
             commands::test_alert,
             commands::get_settings,
             commands::set_settings,
+            commands::get_profiles,
             commands::get_autostart,
             commands::set_autostart,
         ])

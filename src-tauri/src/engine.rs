@@ -102,6 +102,10 @@ impl Engine {
         self.api.set_visible(visible);
     }
 
+    pub fn set_poll_interval(&self, millis: u32) {
+        self.api.set_poll_interval(millis);
+    }
+
     pub fn visible(&self) -> bool {
         self.visible.load(Ordering::SeqCst)
     }
@@ -256,16 +260,33 @@ fn migrate_alert_rules(app: &AppHandle, api: &Arc<dyn EngineApi>) {
     });
 }
 
-/// Shows a fired alert as a Windows notification (silent unless the rule asks for sound).
+/// Shows a fired alert as a Windows notification, if the profile lets it through (silent
+/// unless the rule and the profile ask for sound).
 pub fn notify(app: &AppHandle, alert: &AlertFired) {
+    show_notification(app, alert, false);
+}
+
+/// `always`: the Test button, which shows whatever the profile says.
+pub fn show_notification(app: &AppHandle, alert: &AlertFired, always: bool) {
     log::info!("alert: {}: {}", alert.title, alert.message);
-    let unit = app
+    let settings = app
         .try_state::<crate::tray::SettingsStore>()
-        .map_or_else(Default::default, |s| s.get().temperature_unit);
+        .map(|s| s.get())
+        .unwrap_or_default();
+    // The profile decides whether this alert notifies (it is logged either way).
+    let policy = settings.profile.spec().notifications;
+    let Some(sound) = (if always {
+        Some(alert.sound)
+    } else {
+        policy.notify(alert)
+    }) else {
+        return;
+    };
+    let unit = settings.temperature_unit;
     let title = vyro_core::units::temps_in(&alert.title, unit);
     let body = vyro_core::units::temps_in(&alert.message, unit);
     let mut n = app.notification().builder().title(&title).body(&body);
-    if alert.sound {
+    if sound {
         n = n.sound("Default");
     }
     if let Err(e) = n.show() {

@@ -33,6 +33,8 @@ struct Shared {
     endpoint: String,
     session: u64,
     visible: AtomicBool,
+    /// Poll interval asked for (0: the service's default); sent again after a reconnect.
+    poll_ms: std::sync::atomic::AtomicU32,
     stop: AtomicBool,
     latest: Mutex<Option<SensorSnapshot>>,
     status: Mutex<RemoteStatus>,
@@ -55,6 +57,32 @@ impl Shared {
         let welcome: Result<Welcome, String> =
             recv(&mut conn, MAX_MESSAGE).map_err(|e| e.to_string())?;
         Ok((conn, welcome?))
+    }
+
+    /// Sends visibility and the poll interval on a short-lived commands connection (after a
+    /// change, or to a service that restarted).
+    fn push_state(self: &Arc<Self>) {
+        let shared = Arc::clone(self);
+        let _ = std::thread::Builder::new()
+            .name("vyro-state".into())
+            .spawn(move || {
+                if let Ok((mut conn, _)) = shared.open(Role::Commands) {
+                    let mut reqs = vec![Request::SetVisible {
+                        visible: shared.visible.load(Ordering::SeqCst),
+                    }];
+                    let ms = shared.poll_ms.load(Ordering::SeqCst);
+                    if ms > 0 {
+                        reqs.push(Request::SetPollInterval { millis: ms });
+                    }
+                    for req in reqs {
+                        let sent =
+                            send(&mut conn, &req).and_then(|()| read_frame(&mut conn, MAX_MESSAGE));
+                        if sent.is_err() {
+                            break;
+                        }
+                    }
+                }
+            });
     }
 
     /// Records a status change; true if it changed.
@@ -87,6 +115,7 @@ impl RemoteEngine {
             endpoint: endpoint.to_owned(),
             session: fastrand::u64(..),
             visible: AtomicBool::new(visible),
+            poll_ms: std::sync::atomic::AtomicU32::new(0),
             stop: AtomicBool::new(false),
             latest: Mutex::new(None),
             status: Mutex::new(RemoteStatus::default()),
@@ -145,7 +174,7 @@ impl RemoteEngine {
 
 /// Reads snapshots until told to stop, reconnecting with backoff whenever the stream breaks.
 fn stream(
-    shared: &Shared,
+    shared: &Arc<Shared>,
     mut conn: Option<Box<dyn Conn>>,
     sink: &impl SnapshotSink,
     on_status: &impl Fn(&RemoteStatus),
@@ -167,6 +196,8 @@ fn stream(
                     if shared.set_status(status.clone()) {
                         on_status(&status);
                     }
+                    // A restarted service starts at its defaults.
+                    shared.push_state();
                     c
                 }
                 Err(e) => {
@@ -228,19 +259,14 @@ impl EngineApi for RemoteEngine {
     /// Remembered for reconnects and sent in the background (never blocks the caller).
     fn set_visible(&self, visible: bool) {
         self.shared.visible.store(visible, Ordering::SeqCst);
-        let shared = Arc::clone(&self.shared);
-        // A short-lived thread: visibility changes are rare, and a slow service must not hold
-        // up the window.
-        let _ = std::thread::Builder::new()
-            .name("vyro-visible".into())
-            .spawn(move || {
-                if let Ok((mut conn, _)) = shared.open(Role::Commands) {
-                    let req = Request::SetVisible {
-                        visible: shared.visible.load(Ordering::SeqCst),
-                    };
-                    let _ = send(&mut conn, &req).and_then(|()| read_frame(&mut conn, MAX_MESSAGE));
-                }
-            });
+        // In the background: a slow service must not hold up the window.
+        self.shared.push_state();
+    }
+
+    /// Remembered for reconnects and sent in the background.
+    fn set_poll_interval(&self, millis: u32) {
+        self.shared.poll_ms.store(millis, Ordering::SeqCst);
+        self.shared.push_state();
     }
 
     fn query_history(&self, metric: &str, range: HistoryRange) -> Result<HistorySeries, String> {

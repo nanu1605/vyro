@@ -352,7 +352,13 @@ In progress.
       Settings to bring back, left out of History presets), sensor service status. Saved in the
       app's `settings.json`.
 - [ ] P9b Empty/error states and accessibility pass.
-- [ ] P9c Profiles (Desktop / Gaming / Work / Benchmark / Silent).
+- [x] P9c Profiles (`vyro_core::profiles`): Desktop (1 s, all alerts, full animation, full
+      dashboard), Gaming (2 s, hardware problems only, reduced, compact), Work (2 s, silent
+      alerts, reduced, full), Benchmark (0.5 s, silent alerts, no animation, full), Silent (5 s,
+      no notifications but alerts logged, no animation, compact). Poll rate goes to the service
+      (`SetPollInterval`, clamped 250 ms–10 s, re-sent after reconnects); notifications and
+      in-window toasts follow the policy (Test always shows); chosen in Settings or the tray's
+      Profile menu.
 - [ ] P9d Analysis: baselines, unusual temperatures, throttling and cooling anomalies, power
       changes explained from the history store.
 ### P10 — Gaming capture + companion overlay (M6, deferrable)

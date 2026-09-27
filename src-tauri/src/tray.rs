@@ -1,15 +1,17 @@
-//! Tray icon and "keep running in the tray": closing the window hides it, so monitoring and
-//! alerts continue until Quit. The choice is saved in `settings.json` (app config folder).
+//! Tray icon, settings and "keep running in the tray": closing the window hides it, so
+//! monitoring and alerts continue until Quit. Settings are saved in `settings.json` (app config
+//! folder); the tray menu also switches profiles.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
-use tauri::menu::{Menu, MenuItem};
+use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, Window, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, Window, WindowEvent, Wry};
 use vyro_core::alerts::AlertFired;
+use vyro_core::profiles::Profile;
 use vyro_core::units::TempUnit;
 use vyro_core::{lock, unix_now};
 
@@ -24,7 +26,12 @@ pub struct Settings {
     pub temperature_unit: TempUnit,
     /// Sensor ids left out of the Sensors and History views.
     pub hidden_sensors: Vec<String>,
+    /// Poll rate, notifications, animation and dashboard density.
+    pub profile: Profile,
 }
+
+/// Emitted with the new [`Settings`] after any change (window or tray menu).
+pub const SETTINGS_EVENT: &str = "settings-changed";
 
 impl Default for Settings {
     fn default() -> Self {
@@ -32,6 +39,7 @@ impl Default for Settings {
             close_to_tray: true,
             temperature_unit: TempUnit::C,
             hidden_sensors: Vec::new(),
+            profile: Profile::Desktop,
         }
     }
 }
@@ -171,10 +179,60 @@ fn set_webview_active(window: &tauri::WebviewWindow, active: bool) {
 #[cfg(not(windows))]
 fn set_webview_active(_window: &tauri::WebviewWindow, _active: bool) {}
 
+/// The tray's profile items, kept to move the check mark.
+pub struct ProfileItems(Vec<(Profile, CheckMenuItem<Wry>)>);
+
+/// Saves `settings` and applies them: the profile's poll rate, the tray check mark, and the
+/// window's view (via [`SETTINGS_EVENT`]).
+pub fn apply(app: &AppHandle, settings: Settings) -> Result<(), String> {
+    let saved = match app.try_state::<SettingsStore>() {
+        Some(store) => store.set(settings.clone()),
+        None => Ok(()),
+    };
+    if let Some(engine) = app.try_state::<Engine>() {
+        engine.set_poll_interval(settings.profile.spec().poll_ms);
+    }
+    if let Some(items) = app.try_state::<ProfileItems>() {
+        for (p, item) in &items.0 {
+            let _ = item.set_checked(*p == settings.profile);
+        }
+    }
+    if let Err(e) = app.emit(SETTINGS_EVENT, &settings) {
+        log::debug!("emit {SETTINGS_EVENT}: {e}");
+    }
+    saved
+}
+
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
+    let current = app
+        .try_state::<SettingsStore>()
+        .map(|s| s.get().profile)
+        .unwrap_or_default();
+    let mut items = Vec::new();
+    for p in Profile::ALL {
+        let spec = p.spec();
+        let id = format!(
+            "profile:{}",
+            serde_json::to_string(&p)
+                .unwrap_or_default()
+                .trim_matches('"')
+        );
+        items.push((
+            p,
+            CheckMenuItem::with_id(app, id, spec.name, true, p == current, None::<&str>)?,
+        ));
+    }
+    let refs: Vec<&dyn IsMenuItem<Wry>> = items
+        .iter()
+        .map(|(_, i)| i as &dyn IsMenuItem<Wry>)
+        .collect();
+    let profiles = Submenu::with_items(app, "Profile", true, &refs)?;
+    app.manage(ProfileItems(items));
+
     let show = MenuItem::with_id(app, "show", "Show Vyro", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Vyro", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &quit])?;
+    let sep = PredefinedMenuItem::separator(app)?;
+    let menu = Menu::with_items(app, &[&show, &profiles, &sep, &quit])?;
     let mut tray = TrayIconBuilder::with_id("main")
         .tooltip("Vyro")
         .menu(&menu)
@@ -182,7 +240,23 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, e| match e.id.as_ref() {
             "show" => show_main(app),
             "quit" => app.exit(0),
-            _ => {}
+            id => {
+                let Some(name) = id.strip_prefix("profile:") else {
+                    return;
+                };
+                let Ok(profile) = serde_json::from_value::<Profile>(name.into()) else {
+                    return;
+                };
+                if let Some(store) = app.try_state::<SettingsStore>() {
+                    let settings = Settings {
+                        profile,
+                        ..store.get()
+                    };
+                    if let Err(e) = apply(app, settings) {
+                        log::warn!("settings: {e}");
+                    }
+                }
+            }
         })
         .on_tray_icon_event(|tray, e| {
             if let TrayIconEvent::Click {

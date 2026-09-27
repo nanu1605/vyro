@@ -19,6 +19,7 @@ pub mod network;
 pub mod pawnio;
 pub mod poller;
 pub mod power;
+pub mod profiles;
 pub mod provider;
 pub mod ram;
 pub mod registry;
