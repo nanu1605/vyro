@@ -416,7 +416,8 @@ In progress.
   Windows as soon as P0 runs there.
 - Hardware acceptance criteria require real machines from the §9 test matrix; CI can only prove
   compilation and unit tests.
-- Anti-cheat: FACEIT refuses to run with PawnIO loaded; Vanguard untested. Low-level sensors
-  must be switchable off, and PawnIO must be removable from the installer.
+- Anti-cheat: FACEIT refuses to run with PawnIO loaded; Valorant (Vanguard) runs with it.
+  PawnIO has its own entry in Installed apps, so FACEIT players can remove it; Vyro then runs
+  without the low-level sensors and says so.
 - PawnIO has a single upstream maintainer; module ABI or signing changes need a Vyro update.
 - SignPath / Certum OSS require a public repo with an OSI license and a verifiable build.
