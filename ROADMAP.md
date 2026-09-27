@@ -363,7 +363,7 @@ In progress.
       no notifications but alerts logged, no animation, compact). Poll rate goes to the service
       (`SetPollInterval`, clamped 250 ms–10 s, re-sent after reconnects); notifications and
       in-window toasts follow the policy (Test always shows); chosen in Settings or the tray's
-      Profile menu. Field-checked: Gaming from the tray switches the dashboard to compact.
+      Profile menu. Field-checked: Gaming from the tray switches the dashboard to compact and History to 2 s readings.
 - [x] P9d Insights (`vyro_core::analysis`, pure and tested; `EngineApi::insights`, Health
       tab, refreshed every minute): CPU / GPU running hotter than usual for their load (a
       straight-line fit of temperature on load over the past week vs the last 30 min); heat
