@@ -25,8 +25,9 @@ so SmartScreen will warn.
 
 Vyro is licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your
 option. Third-party components and their licenses, including PawnIO, are listed in
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) (regenerate with
-`python3 scripts/third_party.py`).
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md), with the full texts in
+[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) (regenerate both with
+`python3 scripts/third_party.py`; CI checks they are current).
 
 ## Layout
 

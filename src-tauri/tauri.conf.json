@@ -44,6 +44,7 @@
       "../LICENSE-MIT": "LICENSE-MIT",
       "../LICENSE-APACHE": "LICENSE-APACHE",
       "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
+      "../THIRD_PARTY_LICENSES.md": "THIRD_PARTY_LICENSES.md",
       "../crates/vyro-core/pawnio/COPYING": "COPYING-PawnIO-modules"
     },
     "windows": {
