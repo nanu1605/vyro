@@ -358,15 +358,15 @@ In progress.
       no notifications but alerts logged, no animation, compact). Poll rate goes to the service
       (`SetPollInterval`, clamped 250 ms–10 s, re-sent after reconnects); notifications and
       in-window toasts follow the policy (Test always shows); chosen in Settings or the tray's
-      Profile menu.
+      Profile menu. Field-checked: Gaming from the tray switches the dashboard to compact.
 - [x] P9d Insights (`vyro_core::analysis`, pure and tested; `EngineApi::insights`, Health
       tab, refreshed every minute): CPU / GPU running hotter than usual for their load (a
       straight-line fit of temperature on load over the past week vs the last 30 min); heat
       throttling (full load, high temperature, clock ≤ 90 % of the usual full-load clock);
       fans much slower than usual at the current CPU temperature; sustained CPU + GPU power
       steps explained by the component and load that changed. Each links to History.
-- [ ] Field check: profiles on the reference PC; insights after a few days of history; the
-      footprint breakdown visible and in the tray.
+- [ ] Field check: insights after a few days of history; the footprint breakdown visible and
+      in the tray.
 ### P10 — Gaming capture + companion overlay (M6, deferrable)
 
 **Deferred to v2:** fan/pump control (driver write path), injected in-game overlay.
