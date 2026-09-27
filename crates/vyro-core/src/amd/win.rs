@@ -17,10 +17,12 @@ use crate::snapshot::SensorSnapshot;
 /// Package power above this is a counter glitch, not a reading.
 const MAX_PACKAGE_W: f64 = 1000.0;
 const MAX_CORE_W: f64 = 200.0;
-/// Longest wait for another tool's PCI/SMN access before skipping temperatures this tick.
-const LOCK_MS: u32 = 50;
+/// Longest wait for another tool's PCI/SMN access before skipping temperatures this tick. Kept
+/// short: a background service in the field held the mutex for ~150 ms at a time, and waiting
+/// that out stalled every poll it hit.
+const LOCK_MS: u32 = 5;
 /// Ticks the last temperatures stand in while another tool keeps the bus (then `null`).
-const MAX_STALE: u32 = 3;
+const MAX_STALE: u32 = 5;
 
 struct Thread {
     cpu: u32,
