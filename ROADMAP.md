@@ -403,8 +403,10 @@ In progress.
       not exclusive fullscreen. Re-raised every tick (a fullscreen game activated after the
       overlay appeared sits above it); the Gaming tab says when a game is in exclusive
       fullscreen (present mode "Hardware: Legacy …") and the overlay cannot show.
-- [ ] P10b Field check: overlay appears over a borderless game in the chosen corner, never
-      steals focus or clicks, disappears on alt-tab and when the game exits.
+- [x] P10b Field-checked: overlay shows over Rocket League in borderless mode; in its
+      exclusive "Fullscreen" mode it cannot, as expected.
+- [ ] P10b Field check: never steals focus or clicks, disappears on alt-tab and when the game
+      exits.
 
 **Deferred to v2:** fan/pump control (driver write path), injected in-game overlay.
 
