@@ -4573,6 +4573,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "vyro-service"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "tempfile",
+ "vyro-core",
+ "windows 0.62.2",
+]
+
+[[package]]
 name = "walkdir"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -3,7 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { AlertFired, AlertRule, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -17,6 +17,19 @@ export async function onSensors(cb: (s: SensorSnapshot) => void): Promise<() => 
   const latest = await invoke<SensorSnapshot | null>('get_latest');
   if (latest) cb(latest);
   return unlisten;
+}
+
+/** Where sensor data comes from: the Vyro service, or the app itself without it. `null` in the
+ * browser preview. */
+export async function getBackendStatus(): Promise<BackendStatus | null> {
+  if (!inTauri) return null;
+  return invoke<BackendStatus>('get_backend_status');
+}
+
+/** Service connection changes (lost, reconnected). */
+export async function onBackendStatus(cb: (s: BackendStatus) => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<BackendStatus>('backend-status', (e) => cb(e.payload));
 }
 
 /** Tells the engine whether the UI is visible, so it can poll slower while hidden. */
@@ -101,7 +114,7 @@ export async function setSettings(settings: AppSettings): Promise<void> {
 
 let browserAutostart = false;
 
-/** Whether Vyro starts (elevated, in the tray) at sign-in. */
+/** Whether Vyro starts (in the tray) at sign-in. */
 export async function getAutostart(): Promise<boolean> {
   if (!inTauri) return browserAutostart;
   return invoke<boolean>('get_autostart');
@@ -151,7 +164,7 @@ export async function onDisplaysChanged(cb: () => void): Promise<() => void> {
   return listen('displays-changed', () => cb());
 }
 
-/** Drives with health data, read fresh by the engine (SMART needs the app elevated). */
+/** Drives with health data, read fresh by the engine (SMART needs the sensor service). */
 export async function getDrives(): Promise<DriveInfo[]> {
   if (!inTauri) return (await import('./sample-drives')).sampleDrives;
   return invoke<DriveInfo[]>('get_drives');

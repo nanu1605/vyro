@@ -15,6 +15,7 @@
   import CpuSensorsCard from './components/CpuSensorsCard.svelte';
   import BoardCard from './components/BoardCard.svelte';
   import PawnIoBanner from './components/PawnIoBanner.svelte';
+  import ServiceBanner from './components/ServiceBanner.svelte';
   import GpuCard from './components/GpuCard.svelte';
   import ProcessesPanel from './components/ProcessesPanel.svelte';
   import SensorsPanel from './components/SensorsPanel.svelte';
@@ -22,8 +23,8 @@
   import HealthPanel from './components/HealthPanel.svelte';
   import { animator } from './anim';
   import { fmt, fmtGB } from './format';
-  import { getPawnIoStatus, inTauri, onSensors, setUiVisible } from './ipc';
-  import type { AlertFired, PawnIoStatus, SensorSnapshot } from './types';
+  import { getBackendStatus, getPawnIoStatus, inTauri, onBackendStatus, onSensors, setUiVisible } from './ipc';
+  import type { AlertFired, BackendStatus, PawnIoStatus, SensorSnapshot } from './types';
 
   const TABS = [
     { id: 'dashboard', label: 'Dashboard' },
@@ -117,16 +118,34 @@
   const mem = $derived(snap?.memory ?? null);
   // CPU temperature / power and board fans come through PawnIO (Phase 6).
   let pawnio = $state.raw<PawnIoStatus | null>(null);
+  // Sensor service connection (P8); without it the app reads unprivileged sensors itself.
+  let backend = $state.raw<BackendStatus | null>(null);
+  // Without the service, PawnIO's "no access" is explained by the service banner.
+  const pawnioShown = $derived(backend?.mode === 'local' && pawnio?.state === 'noAccess' ? null : pawnio);
+  const loadPawnIo = () =>
+    getPawnIoStatus()
+      .then((s) => (pawnio = s))
+      .catch(() => {});
   const NEEDS_DRIVER = $derived(pawnio?.state === 'ready' ? 'not reported' : 'needs PawnIO');
   const cpuFan = $derived(snap?.fans.find((f) => f.kind === 'fan') ?? null);
 
   onMount(() => {
     visited[tab] = true;
-    getPawnIoStatus()
-      .then((s) => (pawnio = s))
-      .catch(() => {});
+    loadPawnIo();
     let stop: (() => void) | undefined;
+    let stopBackend: (() => void) | undefined;
     let disposed = false;
+    getBackendStatus()
+      .then((s) => (backend = s))
+      .catch(() => {});
+    void onBackendStatus((s) => {
+      backend = s;
+      // A restarted service may see PawnIO differently.
+      if (s.connected) loadPawnIo();
+    }).then((fn) => {
+      if (disposed) fn();
+      else stopBackend = fn;
+    });
     void onSensors((s) => {
       snap = s;
       uiFps = animator.fps;
@@ -144,6 +163,7 @@
     return () => {
       disposed = true;
       stop?.();
+      stopBackend?.();
       document.removeEventListener('visibilitychange', onVisibility);
     };
   });
@@ -175,7 +195,8 @@
 
   <main>
     <div id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard" hidden={tab !== 'dashboard'}>
-      <PawnIoBanner status={pawnio} />
+      <ServiceBanner status={backend} />
+      <PawnIoBanner status={pawnioShown} />
       {#if attention.length}
         <button type="button" class="health-strip {overall}" onclick={() => select('health')}>
           <span class="alert-dot {overall}" aria-hidden="true"></span>

@@ -3,8 +3,9 @@
 use windows::core::{HSTRING, PCWSTR, PWSTR};
 use windows::Win32::Foundation::{ERROR_MORE_DATA, ERROR_SUCCESS};
 use windows::Win32::System::Registry::{
-    RegCloseKey, RegEnumKeyExW, RegEnumValueW, RegGetValueW, RegOpenKeyExW, RegSetKeyValueW, HKEY,
-    KEY_READ, REG_DWORD, REG_EXPAND_SZ, REG_MULTI_SZ, REG_SZ, REG_VALUE_TYPE, RRF_RT_ANY,
+    RegCloseKey, RegDeleteKeyValueW, RegEnumKeyExW, RegEnumValueW, RegGetValueW, RegOpenKeyExW,
+    RegSetKeyValueW, HKEY, KEY_READ, REG_DWORD, REG_EXPAND_SZ, REG_MULTI_SZ, REG_SZ,
+    REG_VALUE_TYPE, RRF_RT_ANY,
 };
 
 pub use windows::Win32::System::Registry::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
@@ -73,6 +74,12 @@ pub fn set_string(root: HKEY, path: &str, name: &str, value: &str) -> windows::c
         )
     }
     .ok()
+}
+
+/// Deletes a value (the key stays).
+pub fn delete_value(root: HKEY, path: &str, name: &str) -> windows::core::Result<()> {
+    // SAFETY: path and name are NUL-terminated HSTRINGs.
+    unsafe { RegDeleteKeyValueW(root, &HSTRING::from(path), &HSTRING::from(name)) }.ok()
 }
 
 /// An open registry key, closed on drop. Read-only.

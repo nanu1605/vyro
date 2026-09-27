@@ -42,7 +42,7 @@
   });
 
   const byId = $derived(new Map(live.map((s) => [s.id, s])));
-  const needsAdmin = $derived(drives?.some((d) => d.smartError?.startsWith('Run Vyro as administrator')) ?? false);
+  const needsAdmin = $derived(drives?.some((d) => d.smartError?.startsWith('SMART / health data needs')) ?? false);
 
   const HEALTH: Record<Status, string> = { ok: 'Good', warn: 'Caution', fail: 'Bad', unknown: 'Unknown' };
 
@@ -96,8 +96,8 @@
   </div>
   {#if needsAdmin}
     <p class="notice" role="status">
-      Vyro is not running as administrator, so SMART health, drive history counters and some temperatures are
-      hidden. Restart it with <b>Run as administrator</b> to see them.
+      The Vyro sensor service is not running, so SMART health, drive history counters and some temperatures are
+      hidden. Reinstall Vyro or start <b>Vyro Sensor Service</b> in Services, then restart Vyro.
     </p>
   {/if}
 

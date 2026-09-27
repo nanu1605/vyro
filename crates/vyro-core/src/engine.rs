@@ -1,0 +1,354 @@
+//! The sensor engine as one object: registry, poller with its providers, history store,
+//! System Health and alert rules. The sensor service runs it and serves it over IPC
+//! ([`crate::ipc`]); the desktop app talks to it through [`EngineApi`], either in-process
+//! ([`LocalEngine`], the fallback without the service) or remotely.
+
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
+
+use crate::alerts::{self, AlertEngine, AlertFired, AlertRule};
+use crate::health::{self, HealthEvent};
+use crate::info::{DriveInfo, PawnIoStatus};
+use crate::poller::{EVENT_ALERT, EVENT_HEALTH};
+use crate::{
+    lock, unix_now, History, HistoryConfig, HistoryRange, HistorySeries, Poller, PollerConfig,
+    PollerHandle, Provider, Registry, SensorSnapshot, SensorTree, SnapshotSink,
+};
+
+/// Process ids of the connected UIs, counted in the app footprint with the engine's own.
+pub type ClientPids = Arc<Mutex<Vec<u32>>>;
+
+/// History database and alert rules, inside the engine's data folder.
+pub const HISTORY_FILE: &str = "history.sqlite";
+pub const ALERTS_FILE: &str = "alerts.json";
+
+/// Where the app's sensor data comes from.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum BackendMode {
+    /// The Vyro sensor service (full sensor set, history kept while the app is closed).
+    Service,
+    /// This app reads the sensors itself: without administrator rights, PawnIO and SMART
+    /// sensors are missing.
+    #[default]
+    Local,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BackendStatus {
+    pub mode: BackendMode,
+    /// Service mode: whether the connection is up (it reconnects by itself).
+    pub connected: bool,
+    pub service_version: Option<String>,
+    /// Local mode: why the service is not used. Service mode: why the connection dropped.
+    pub detail: Option<String>,
+}
+
+/// What the desktop app needs from the engine, wherever it runs. Remote calls can fail (the
+/// service restarting), hence `Result`s even where the local engine cannot fail.
+pub trait EngineApi: Send + Sync {
+    /// Most recent snapshot, so a freshly loaded UI need not wait for the next tick.
+    fn latest(&self) -> Option<SensorSnapshot>;
+    /// Visible → 1 Hz polling; hidden → the slow tray interval.
+    fn set_visible(&self, visible: bool);
+    fn query_history(&self, metric: &str, range: HistoryRange) -> Result<HistorySeries, String>;
+    fn sensor_tree(&self) -> Result<SensorTree, String>;
+    /// Restarts min / max / avg for every sensor.
+    fn reset_stats(&self) -> Result<(), String>;
+    /// Recent System Health changes, oldest first.
+    fn health_events(&self) -> Result<Vec<HealthEvent>, String>;
+    fn alert_rules(&self) -> Result<Vec<AlertRule>, String>;
+    /// Validates, applies and saves a new rule set.
+    fn set_alert_rules(&self, rules: Vec<AlertRule>) -> Result<(), String>;
+    /// Fired alerts, oldest first.
+    fn alert_log(&self) -> Result<Vec<AlertFired>, String>;
+    /// Drives with full health data, read fresh (SMART needs administrator rights).
+    fn drives(&self) -> Result<Vec<DriveInfo>, String>;
+    /// Whether the engine can use PawnIO (CPU temperature and power, board and RAM sensors).
+    fn pawnio_status(&self) -> Result<PawnIoStatus, String>;
+    /// Changes the ping target (IPv4 address or host name).
+    fn set_ping_host(&self, host: &str) -> Result<(), String>;
+    /// BitLocker protection of the system drive (needs administrator rights).
+    fn bitlocker_system_drive(&self) -> Result<Option<bool>, String>;
+    /// Stops polling and flushes history. Safe to call more than once.
+    fn shutdown(&self);
+}
+
+/// Where the engine keeps its files and how often it polls.
+#[derive(Debug, Clone, Default)]
+pub struct EngineConfig {
+    /// Folder for the history database and alert rules; `None` keeps both in memory only.
+    pub data_dir: Option<PathBuf>,
+    pub poller: PollerConfig,
+}
+
+/// The engine running in this process.
+pub struct LocalEngine {
+    registry: Arc<Mutex<Registry>>,
+    history: Option<Arc<Mutex<History>>>,
+    alerts: Arc<Mutex<AlertEngine>>,
+    alerts_path: Option<PathBuf>,
+    poller: Mutex<Option<PollerHandle>>,
+    clients: ClientPids,
+}
+
+impl LocalEngine {
+    /// Opens the data folder, loads the alert rules and starts polling `providers`. Every
+    /// snapshot goes to `sink`. A data folder that cannot be used only disables history and
+    /// saving rules.
+    pub fn start(
+        cfg: EngineConfig,
+        providers: Vec<Box<dyn Provider>>,
+        clients: ClientPids,
+        sink: impl SnapshotSink,
+    ) -> std::io::Result<Self> {
+        let registry = Arc::new(Mutex::new(Registry::new()));
+        let dir = cfg.data_dir.as_deref().and_then(usable_dir);
+        let history = dir.and_then(open_history).map(|h| Arc::new(Mutex::new(h)));
+        let alerts_path = dir.map(|d| d.join(ALERTS_FILE));
+        let rules = alerts_path
+            .as_deref()
+            .map_or_else(alerts::default_rules, alerts::load);
+        log::info!("alerts: {} rule(s)", rules.len());
+        let alerts = Arc::new(Mutex::new(AlertEngine::new(rules)));
+
+        let mut poller = providers
+            .into_iter()
+            .fold(
+                Poller::new(Arc::clone(&registry), cfg.poller),
+                Poller::with_boxed,
+            )
+            .with_alerts(Arc::clone(&alerts));
+        if let Some(history) = &history {
+            poller = poller.with_history(Arc::clone(history));
+        }
+        let handle = poller.spawn(sink)?;
+        Ok(Self {
+            registry,
+            history,
+            alerts,
+            alerts_path,
+            poller: Mutex::new(Some(handle)),
+            clients,
+        })
+    }
+
+    /// The real providers on Windows (the simulator with `VYRO_SIM=1`); the simulator
+    /// elsewhere.
+    pub fn default_providers(clients: &ClientPids) -> Vec<Box<dyn Provider>> {
+        #[cfg(windows)]
+        if std::env::var_os("VYRO_SIM").is_none_or(|v| v != "1") {
+            log::info!("sensors: live providers");
+            return crate::live::providers(Arc::clone(clients));
+        }
+        let _ = clients;
+        log::info!("sensors: simulated");
+        vec![Box::new(crate::SimProvider::new())]
+    }
+
+    /// The connected UI processes (for the app footprint).
+    pub fn set_clients(&self, pids: Vec<u32>) {
+        *lock(&self.clients) = pids;
+    }
+
+    fn simulated() -> bool {
+        !cfg!(windows) || std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1")
+    }
+}
+
+impl EngineApi for LocalEngine {
+    fn latest(&self) -> Option<SensorSnapshot> {
+        lock(&self.poller).as_ref().and_then(PollerHandle::latest)
+    }
+
+    fn set_visible(&self, visible: bool) {
+        if let Some(poller) = lock(&self.poller).as_ref() {
+            poller.set_visible(visible);
+        }
+    }
+
+    fn query_history(&self, metric: &str, range: HistoryRange) -> Result<HistorySeries, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history)
+            .query(metric, range, unix_now())
+            .map_err(|e| e.to_string())
+    }
+
+    fn sensor_tree(&self) -> Result<SensorTree, String> {
+        Ok(lock(&self.registry).tree())
+    }
+
+    fn reset_stats(&self) -> Result<(), String> {
+        lock(&self.registry).reset_stats();
+        Ok(())
+    }
+
+    /// From the history store (kept across restarts), else from memory.
+    fn health_events(&self) -> Result<Vec<HealthEvent>, String> {
+        let stored = self.history.as_ref().and_then(|h| {
+            lock(h)
+                .events(EVENT_HEALTH, health::MAX_EVENTS as i64)
+                .inspect_err(|e| log::warn!("health events: {e}"))
+                .ok()
+        });
+        Ok(stored.unwrap_or_else(|| {
+            lock(&self.poller)
+                .as_ref()
+                .map(PollerHandle::health_events)
+                .unwrap_or_default()
+        }))
+    }
+
+    fn alert_rules(&self) -> Result<Vec<AlertRule>, String> {
+        Ok(lock(&self.alerts).rules().to_vec())
+    }
+
+    fn set_alert_rules(&self, rules: Vec<AlertRule>) -> Result<(), String> {
+        lock(&self.alerts).set_rules(rules.clone())?;
+        match &self.alerts_path {
+            Some(path) => alerts::save(path, &rules)
+                .map_err(|e| format!("rules applied but not saved ({}): {e}", path.display())),
+            None => Err("rules applied but not saved: no data folder".into()),
+        }
+    }
+
+    /// From the history store (kept across restarts), else from memory.
+    fn alert_log(&self) -> Result<Vec<AlertFired>, String> {
+        Ok(self
+            .history
+            .as_ref()
+            .and_then(|h| {
+                lock(h)
+                    .events(EVENT_ALERT, alerts::MAX_LOG as i64)
+                    .inspect_err(|e| log::warn!("alert log: {e}"))
+                    .ok()
+            })
+            .unwrap_or_else(|| lock(&self.alerts).log()))
+    }
+
+    fn drives(&self) -> Result<Vec<DriveInfo>, String> {
+        #[cfg(windows)]
+        if !Self::simulated() {
+            return Ok(crate::storage::collect());
+        }
+        Ok(crate::storage::sample())
+    }
+
+    fn pawnio_status(&self) -> Result<PawnIoStatus, String> {
+        Ok(crate::pawnio::status())
+    }
+
+    fn set_ping_host(&self, host: &str) -> Result<(), String> {
+        #[cfg(windows)]
+        return crate::network::set_ping_host(host);
+        #[cfg(not(windows))]
+        {
+            if crate::network::valid_host(host) {
+                Ok(())
+            } else {
+                Err("Enter an IPv4 address or a host name".into())
+            }
+        }
+    }
+
+    fn bitlocker_system_drive(&self) -> Result<Option<bool>, String> {
+        Ok(if Self::simulated() {
+            None
+        } else {
+            crate::sysinfo::bitlocker_system_drive()
+        })
+    }
+
+    fn shutdown(&self) {
+        if let Some(poller) = lock(&self.poller).take() {
+            poller.stop();
+        }
+    }
+}
+
+impl Drop for LocalEngine {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
+}
+
+fn usable_dir(dir: &Path) -> Option<&Path> {
+    match std::fs::create_dir_all(dir) {
+        Ok(()) => Some(dir),
+        Err(e) => {
+            log::warn!("data folder {} unusable: {e}", dir.display());
+            None
+        }
+    }
+}
+
+fn open_history(dir: &Path) -> Option<History> {
+    let path = dir.join(HISTORY_FILE);
+    match History::open(&path, HistoryConfig::default()) {
+        Ok(history) => {
+            log::info!("history store: {}", path.display());
+            Some(history)
+        }
+        Err(e) => {
+            log::warn!("history disabled: {}: {e}", path.display());
+            None
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::SimProvider;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    fn fast() -> PollerConfig {
+        PollerConfig {
+            interval: Duration::from_millis(10),
+            hidden_interval: Duration::from_secs(60),
+        }
+    }
+
+    #[test]
+    fn runs_polls_and_keeps_rules_and_history_in_the_data_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let (tx, rx) = mpsc::channel();
+        let cfg = EngineConfig {
+            data_dir: Some(dir.path().join("data")),
+            poller: fast(),
+        };
+        let engine = LocalEngine::start(
+            cfg,
+            vec![Box::new(SimProvider::with_seed(4))],
+            ClientPids::default(),
+            move |s: &SensorSnapshot| {
+                let _ = tx.send(s.clone());
+            },
+        )
+        .unwrap();
+        rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(engine.latest().is_some());
+        assert!(!engine.sensor_tree().unwrap().groups.is_empty());
+
+        let mut rules = engine.alert_rules().unwrap();
+        rules.retain(|r| r.id != "gpu-temp");
+        engine.set_alert_rules(rules.clone()).unwrap();
+        assert_eq!(engine.alert_rules().unwrap(), rules);
+        assert!(engine.set_ping_host("not a host!").is_err());
+        engine.shutdown();
+        engine.shutdown();
+
+        assert!(dir.path().join("data").join(HISTORY_FILE).exists());
+        assert_eq!(
+            alerts::load(&dir.path().join("data").join(ALERTS_FILE)),
+            rules
+        );
+    }
+}

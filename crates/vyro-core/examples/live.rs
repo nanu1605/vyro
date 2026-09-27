@@ -36,7 +36,7 @@ static LOG: Capture = Capture(Mutex::new(Vec::new()));
 fn providers() -> Vec<Box<dyn Provider>> {
     #[cfg(windows)]
     if std::env::var_os("VYRO_SIM").is_none_or(|v| v != "1") {
-        return vyro_core::live::providers();
+        return vyro_core::live::providers(Default::default());
     }
     vec![Box::new(vyro_core::SimProvider::new())]
 }

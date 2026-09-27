@@ -1,6 +1,8 @@
 // Data contracts shared with the Rust core. The bindings are generated from the Rust structs by
 // ts-rs (`cargo test -p vyro-core`); never edit them by hand.
 export type { AppSnapshot } from './bindings/AppSnapshot';
+export type { BackendMode } from './bindings/BackendMode';
+export type { BackendStatus } from './bindings/BackendStatus';
 export type { CpuSnapshot } from './bindings/CpuSnapshot';
 export type { EngineStatus } from './bindings/EngineStatus';
 export type { GpuSnapshot } from './bindings/GpuSnapshot';

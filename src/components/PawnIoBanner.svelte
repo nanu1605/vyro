@@ -15,7 +15,7 @@
       case 'notRunning':
         return 'PawnIO is installed but its driver is not running. Restart Windows or reinstall PawnIO.';
       case 'noAccess':
-        return 'Run Vyro as administrator to read CPU temperature and power through PawnIO.';
+        return 'Vyro could not open PawnIO. Restart the Vyro sensor service (or Windows).';
       case 'error':
         return `PawnIO could not be used${status.detail ? `: ${status.detail}` : '.'}`;
       default:

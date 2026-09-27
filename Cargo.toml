@@ -1,8 +1,8 @@
 [workspace]
 resolver = "2"
-members = ["crates/vyro-core", "src-tauri"]
+members = ["crates/vyro-core", "crates/vyro-service", "src-tauri"]
 # src-tauri needs WebView2 (Windows) / webkit2gtk (Linux) to build; the core crate builds anywhere.
-default-members = ["crates/vyro-core", "src-tauri"]
+default-members = ["crates/vyro-core", "crates/vyro-service", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0"

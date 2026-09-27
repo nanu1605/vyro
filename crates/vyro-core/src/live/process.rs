@@ -7,6 +7,7 @@ use windows::Wdk::System::SystemInformation::{NtQuerySystemInformation, SystemPr
 use windows::Win32::Foundation::STATUS_INFO_LENGTH_MISMATCH;
 
 use super::{logical_processors, GpuShare};
+use crate::engine::ClientPids;
 use crate::lock;
 use crate::provider::{BoxError, Provider};
 use crate::registry::Registry;
@@ -18,6 +19,8 @@ const TOP_N: usize = 25;
 
 pub struct ProcessProvider {
     gpu: GpuShare,
+    /// Connected UI processes, counted in the app footprint with this process.
+    clients: ClientPids,
     tracker: ProcessTracker,
     /// Reused between ticks; u64 storage keeps the records 8-byte aligned.
     buf: Vec<u64>,
@@ -25,9 +28,10 @@ pub struct ProcessProvider {
 }
 
 impl ProcessProvider {
-    pub fn new(gpu: GpuShare) -> Self {
+    pub fn new(gpu: GpuShare, clients: ClientPids) -> Self {
         Self {
             gpu,
+            clients,
             tracker: ProcessTracker::new(logical_processors()),
             buf: vec![0; 64 * 1024],
             started: Instant::now(),
@@ -87,7 +91,9 @@ impl Provider for ProcessProvider {
         }
         let samples = self.tracker.update(list, now);
         let gpu = lock(&self.gpu).clone();
-        if let Some((cpu, ram, g)) = footprint(std::process::id(), &samples, &gpu) {
+        let mut roots = vec![std::process::id()];
+        roots.extend(lock(&self.clients).iter().copied());
+        if let Some((cpu, ram, g)) = footprint(&roots, &samples, &gpu) {
             snap.app.cpu_pct = Some(cpu);
             snap.app.ram_mb = Some(ram);
             snap.app.gpu_pct = (!gpu.is_empty()).then_some(g);

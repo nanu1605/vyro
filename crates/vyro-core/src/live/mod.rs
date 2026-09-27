@@ -27,7 +27,7 @@ pub use process::ProcessProvider;
 pub type GpuShare = Arc<Mutex<HashMap<u32, f64>>>;
 
 /// The real providers, in poll order (GPU before processes so per-process GPU is current).
-pub fn providers() -> Vec<Box<dyn Provider>> {
+pub fn providers(clients: crate::engine::ClientPids) -> Vec<Box<dyn Provider>> {
     let share = GpuShare::default();
     vec![
         Box::new(CpuProvider::new()),
@@ -39,7 +39,7 @@ pub fn providers() -> Vec<Box<dyn Provider>> {
         Box::new(GpuProvider::new(Arc::clone(&share))),
         Box::new(crate::power::PowerProvider::new()),
         Box::new(crate::network::NetworkProvider::new()),
-        Box::new(ProcessProvider::new(share)),
+        Box::new(ProcessProvider::new(share, clients)),
     ]
 }
 

@@ -38,6 +38,18 @@ pub fn collect(hypervisor_present: Option<bool>) -> SystemInfo {
     info
 }
 
+/// BitLocker protection of the system drive. Needs administrator rights, so the sensor service
+/// answers it for the unelevated UI; `None` when unknown.
+pub fn bitlocker_system_drive() -> Option<bool> {
+    #[cfg(windows)]
+    {
+        win::init_com();
+        win::bitlocker_system_drive()
+    }
+    #[cfg(not(windows))]
+    None
+}
+
 /// Fills the time-dependent fields for a response produced at `now`.
 pub fn with_uptime(mut info: SystemInfo, now: i64) -> SystemInfo {
     info.uptime_secs = info.boot_time.map(|b| (now - b).max(0));

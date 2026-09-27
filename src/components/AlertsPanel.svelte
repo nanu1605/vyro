@@ -272,7 +272,7 @@
   {#if autostart != null}
     <label class="tray">
       <input type="checkbox" checked={autostart} onchange={(e) => void setStart((e.currentTarget as HTMLInputElement).checked)} />
-      Start with Windows, in the tray (runs with administrator rights for the sensors, without a UAC prompt)
+      Start with Windows, in the tray
     </label>
   {/if}
   {#if error}<p class="err">{error}</p>{/if}

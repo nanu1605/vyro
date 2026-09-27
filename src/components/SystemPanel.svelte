@@ -4,10 +4,13 @@
   import KV from './KV.svelte';
   import Pill from './Pill.svelte';
   import { fmt, fmtDate, fmtDateTime, fmtDuration, NA } from '../format';
-  import { getSystemInfo } from '../ipc';
-  import type { PowerEvent, StartupSource, SystemInfo } from '../types';
+  import { getBackendStatus, getSystemInfo } from '../ipc';
+  import type { BackendStatus, PowerEvent, StartupSource, SystemInfo } from '../types';
 
   let sys = $state.raw<SystemInfo | null>(null);
+  let backend = $state.raw<BackendStatus | null>(null);
+  /** Admin-only data (BitLocker) comes from the sensor service. */
+  const service = $derived(backend ? backend.mode === 'service' && backend.connected : null);
   let error = $state<string | null>(null);
   let now = $state(Math.floor(Date.now() / 1000));
 
@@ -15,6 +18,9 @@
     getSystemInfo()
       .then((v) => (sys = v))
       .catch((e: unknown) => (error = String(e)));
+    getBackendStatus()
+      .then((b) => (backend = b))
+      .catch(() => {});
     // Uptime ticks locally; no need to ask the engine every second.
     const id = setInterval(() => (now = Math.floor(Date.now() / 1000)), 1000);
     return () => clearInterval(id);
@@ -83,10 +89,12 @@
         <dd><Pill value={sec?.hypervisorPresent} on="Running" off="None" /></dd>
         <dt>BitLocker ({'C:'})</dt>
         <dd>
-          <Pill value={sec?.bitlockerSystemDrive} on="Protected" off="Off" unknown={sys.elevated === false ? 'Needs admin' : 'Unknown'} />
+          <Pill value={sec?.bitlockerSystemDrive} on="Protected" off="Off" unknown={service === false ? 'Needs the service' : 'Unknown'} />
         </dd>
-        <dt>Running as admin</dt>
-        <dd><Pill value={sys.elevated} on="Yes" off="No" /></dd>
+        {#if backend}
+          <dt>Sensor service</dt>
+          <dd><Pill value={service} on={backend.serviceVersion ? `Connected (${backend.serviceVersion})` : 'Connected'} off="Not running" warnOff /></dd>
+        {/if}
       </dl>
     </Card>
 

@@ -6,11 +6,13 @@ pub mod alerts;
 pub mod amd;
 pub mod autostart;
 pub mod display;
+pub mod engine;
 pub mod health;
 pub mod history;
 pub mod hwid;
 pub mod info;
 pub mod inventory;
+pub mod ipc;
 #[cfg(windows)]
 pub mod live;
 pub mod network;

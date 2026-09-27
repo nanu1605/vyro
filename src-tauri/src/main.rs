@@ -31,16 +31,14 @@ fn main() {
         .plugin(log)
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
-            let engine = Engine::start(app.handle())?;
-            app.manage(engine);
-            app.manage(tray::SettingsStore::load(app.handle()));
-            tray::build(app.handle())?;
             // The window starts hidden (tauri.conf.json); autostart passes --minimized to stay
             // in the tray.
             let minimized = std::env::args().any(|a| a == vyro_core::autostart::MINIMIZED_ARG);
-            if minimized {
-                app.state::<Engine>().set_visible(false);
-            } else {
+            let engine = Engine::start(app.handle(), !minimized)?;
+            app.manage(engine);
+            app.manage(tray::SettingsStore::load(app.handle()));
+            tray::build(app.handle())?;
+            if !minimized {
                 tray::show_main(app.handle());
             }
             Ok(())
@@ -49,6 +47,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::get_latest,
             commands::set_ui_visible,
+            commands::get_backend_status,
             commands::query_history,
             commands::get_sensor_tree,
             commands::reset_sensor_stats,

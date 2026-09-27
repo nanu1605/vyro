@@ -159,7 +159,7 @@ struct EncryptableVolume {
 }
 
 /// Requires elevation; `None` when WMI refuses or the volume is unknown.
-fn bitlocker_system_drive() -> Option<bool> {
+pub fn bitlocker_system_drive() -> Option<bool> {
     let con =
         wmi::WMIConnection::with_namespace_path(r"ROOT\CIMV2\Security\MicrosoftVolumeEncryption")
             .map_err(|e| log::info!("bitlocker: WMI unavailable: {e}"))

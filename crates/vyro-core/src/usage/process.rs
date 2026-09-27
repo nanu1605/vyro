@@ -171,17 +171,25 @@ impl ProcessTracker {
     }
 }
 
-/// CPU %, RAM MB and GPU % of `root` and every process it started, directly or through
-/// children (the WebView2 browser and its renderers, for the app). A child must be younger
-/// than its parent, which guards against a reused parent pid.
+/// CPU %, RAM MB and GPU % of the `roots` (the sensor service and each connected UI) and every
+/// process they started, directly or through children (the WebView2 browser and its
+/// renderers, for the UI). A child must be younger than its parent, which guards against a
+/// reused parent pid. `None` when no root is running.
 pub fn footprint(
-    root: u32,
+    roots: &[u32],
     samples: &[ProcessSample],
     gpu: &HashMap<u32, f64>,
 ) -> Option<(f64, f64, f64)> {
     let created: HashMap<u32, u64> = samples.iter().map(|s| (s.pid, s.create_time)).collect();
-    created.get(&root)?;
-    let mut members = vec![root];
+    let mut members: Vec<u32> = Vec::new();
+    for root in roots {
+        if created.contains_key(root) && !members.contains(root) {
+            members.push(*root);
+        }
+    }
+    if members.is_empty() {
+        return None;
+    }
     let mut i = 0;
     while i < members.len() {
         let p = members[i];
@@ -443,10 +451,14 @@ mod tests {
             s(500, 7, 40, 3.0, 10.0),   // unrelated
         ];
         let gpu = HashMap::from([(300, 1.5), (500, 20.0)]);
-        let (cpu, ram, g) = footprint(100, &samples, &gpu).expect("root present");
+        let (cpu, ram, g) = footprint(&[100], &samples, &gpu).expect("root present");
         assert!((cpu - 3.5).abs() < 1e-9);
         assert!((ram - 190.0).abs() < 1e-9);
         assert!((g - 1.5).abs() < 1e-9);
-        assert!(footprint(999, &samples, &gpu).is_none());
+        assert!(footprint(&[999], &samples, &gpu).is_none());
+        // Service plus a UI: both trees, each process counted once; gone roots are skipped.
+        let (cpu, ram, _) = footprint(&[500, 100, 999, 200], &samples, &gpu).expect("roots");
+        assert!((cpu - 6.5).abs() < 1e-9);
+        assert!((ram - 200.0).abs() < 1e-9);
     }
 }

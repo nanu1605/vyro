@@ -58,7 +58,8 @@ const NVME_LOG_PAGE: u32 = 2;
 const NVME_CNS_CONTROLLER: u32 = 1;
 const NVME_LOG_HEALTH: u32 = 2;
 
-const NEED_ADMIN: &str = "Run Vyro as administrator to read SMART / health data";
+const NEED_ADMIN: &str =
+    "SMART / health data needs the Vyro sensor service (or administrator rights)";
 
 /// An open device handle, closed on drop.
 struct Handle(HANDLE);

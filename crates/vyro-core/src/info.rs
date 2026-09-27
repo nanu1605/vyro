@@ -489,7 +489,7 @@ pub struct DriveInfo {
     pub nvme: Option<NvmeHealth>,
     /// ATA SMART attribute table (SATA drives).
     pub smart: Vec<SmartAttribute>,
-    /// Why SMART / health data is missing, e.g. "Run Vyro as administrator".
+    /// Why SMART / health data is missing, e.g. "… needs the Vyro sensor service".
     pub smart_error: Option<String>,
 }
 
