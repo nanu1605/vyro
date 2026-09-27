@@ -153,8 +153,9 @@ impl Poller {
             last_tick = Some(started);
 
             let snap = self.tick(visible, poll_hz);
+            // Stored first, so whoever the sink wakes sees it as the latest.
+            *lock(latest) = Some(snap.clone());
             sink.emit(&snap);
-            *lock(latest) = Some(snap);
 
             loop {
                 let interval = if visible {

@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm build && cargo build --release -p vyro-service",
     "frontendDist": "../dist"
   },
   "app": {
@@ -51,10 +51,11 @@
       "wix": {
         "upgradeCode": "4462867d-695d-5f78-bb13-262590559da4",
         "fragmentPaths": [
-          "wix/pawnio.wxs"
+          "wix/vyro.wxs"
         ],
         "componentRefs": [
-          "PawnIOSetup"
+          "PawnIOSetup",
+          "VyroService"
         ]
       }
     }

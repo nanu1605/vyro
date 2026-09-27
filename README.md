@@ -7,20 +7,25 @@ app or library).
 - **Build spec:** [`PROJECT_PLAN.md`](PROJECT_PLAN.md) — what to build and why.
 - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — milestones, phase tracker, decision log.
 
-**Status:** early release (P11). Live CPU, GPU, board, fan, voltage, RAM, storage and network
-sensors on Windows (low-level ones through PawnIO), history, System Health, alerts, tray and an
-MSI installer. See [`ROADMAP.md`](ROADMAP.md) for what is verified on which hardware.
+**Status:** early release (P11) with the privilege split (P8). Live CPU, GPU, board, fan,
+voltage, RAM, storage and network sensors on Windows (low-level ones through PawnIO, read by the
+Vyro Sensor Service), history, System Health, alerts, tray and an MSI installer. See [`ROADMAP.md`](ROADMAP.md) for what is verified on which hardware.
 Contributions: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Install (test builds)
 
 Every CI run on this branch uploads `vyro-windows-<commit>` with `Vyro_<version>_x64_en-US.msi`.
-The MSI installs Vyro for all users, adds a Start-menu entry, and installs the signed
-[PawnIO](https://github.com/namazso/PawnIO) driver silently if it is missing (PawnIO is what
-lets Vyro read CPU temperatures and power, fans, voltages and RAM sensors; it stays installed
-when Vyro is removed). Vyro runs with administrator rights. "Start with Windows" (Health →
-Alerts) starts it in the tray at sign-in without a UAC prompt. Builds are not code-signed yet,
-so SmartScreen will warn.
+The MSI installs Vyro for all users with a Start-menu entry, installs the signed
+[PawnIO](https://github.com/namazso/PawnIO) driver silently if it is missing (it reads CPU
+temperature and power, fans, voltages and RAM sensors; it stays installed when Vyro is removed),
+and installs the **Vyro Sensor Service**. The service runs the sensor engine with the rights
+PawnIO and SMART need, keeps history while the app is closed, and serves the app over a local
+named pipe; the app itself runs without administrator rights. Without the service the app still
+starts, reads what it can, and says what is missing. "Start with Windows" (Health → Alerts)
+opens it in the tray at sign-in. Builds are not code-signed yet, so SmartScreen will warn.
+
+`vyro-remote.exe` in the same artifact checks the service from the outside (state, connection,
+sensors). The service logs to `%ProgramData%\Vyro\service.log`.
 
 ## License
 
@@ -34,8 +39,9 @@ option. Third-party components and their licenses, including PawnIO, are listed 
 
 | Path | What |
 |---|---|
-| `crates/vyro-core/` | Sensor engine, platform-neutral: registry, provider trait, poller, SQLite history, simulator, data contracts |
-| `src-tauri/` | Tauri 2 shell: starts the engine, emits the `sensors` event, serves commands |
+| `crates/vyro-core/` | Sensor engine, platform-neutral: registry, provider trait, poller, SQLite history, simulator, data contracts, service IPC |
+| `crates/vyro-service/` | The Windows service that runs the engine with the rights PawnIO and SMART need |
+| `src-tauri/` | Tauri 2 shell: connects to the service (or starts the engine), emits the `sensors` event, serves commands |
 | `src/` | Svelte 5 + TypeScript UI; canvas gauges and sparklines, no chart library |
 | `src/bindings/` | TypeScript types **generated** from the Rust structs by ts-rs — never edit by hand |
 
@@ -51,12 +57,22 @@ pnpm tauri dev          # desktop app with hot reload
 pnpm dev                # UI only, in a browser, fed by an in-page simulator
 ```
 
+The app uses the installed sensor service when it runs and otherwise starts its own engine
+(`VYRO_LOCAL=1` forces that). To develop against a service you build yourself:
+
+```sh
+cargo run -p vyro-service -- --console          # Windows: as administrator; Linux: simulated sensors
+VYRO_DEV_PIPE=1 pnpm tauri dev                  # Windows: trust the console service's pipe
+VYRO_SOCKET=/run/user/$UID/vyro-engine.sock pnpm tauri dev   # Linux
+```
+
 Checks (what CI runs):
 
 ```sh
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test -p vyro-core   # also regenerates src/bindings — commit any changes
+cargo test -p vyro-service
 pnpm check && pnpm test && pnpm build
 ```
 
@@ -66,8 +82,9 @@ Linux with `rustup target add x86_64-pc-windows-gnu` plus mingw-w64:
 `cargo clippy --workspace --target x86_64-pc-windows-gnu`.
 
 **No toolchain?** Every CI run uploads a `vyro-windows-<sha>` artifact (Actions → run →
-Artifacts) with `vyro-inventory.exe` (double-click; saves `vyro-inventory.json` beside it) and
-`vyro.exe` (the app; needs WebView2, preinstalled on Windows 11).
+Artifacts) with the MSI, `vyro-inventory.exe` (double-click; saves `vyro-inventory.json` beside
+it), `vyro-live.exe` (samples the sensors in-process, as administrator), `vyro-remote.exe`
+(checks the installed service) and the bare `vyro.exe` / `vyro-service.exe`.
 
 To see exactly what Vyro reads on a machine (e.g. to compare with `msinfo32`):
 
@@ -78,7 +95,10 @@ cargo run -p vyro-core --example inventory -- --show-serial
 
 ## Architecture in brief
 
-Providers register sensors in a unified registry and fill a `SensorSnapshot` each tick. A
+The **Vyro Sensor Service** (`crates/vyro-service`, LocalSystem) runs the engine; the app
+(`src-tauri`, unelevated) receives its snapshots and calls it over `\\.\pipe\vyro-engine`
+(`vyro_core::ipc`, one commands and one snapshot connection per app). Without the service the
+app runs the same engine in-process. Providers register sensors in a unified registry and fill a `SensorSnapshot` each tick. A
 background poller runs at 1 Hz (5 s while the window is hidden), isolates failing providers,
 records history to SQLite (raw ≤ 30 min, 10 s ≤ 24 h, 1 min ≤ 7 days, ≤ 200 MB) and emits the
 snapshot. The UI eases gauges toward each new value on a single `requestAnimationFrame` loop

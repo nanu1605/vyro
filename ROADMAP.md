@@ -23,6 +23,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 10 | Low-level hardware access | **PawnIO** (signed, free, HVCI-compatible) replaces our own KMDF driver | decided |
 | 11 | Code signing | **SignPath Foundation** or **Certum Open Source** (no EV certificate) | decided |
 | 12 | Source availability | **Open source**; license MIT OR Apache-2.0 (LICENSE files added in P11; can still change before the repo goes public) | default |
+| 13 | Privilege split (P8) | **LocalSystem service `VyroService`** runs the whole engine (sensors, history, health, alerts) and serves it over `\\.\pipe\vyro-engine`; the app runs unelevated and falls back to an in-process engine without the privileged sensors when the service is missing | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -33,9 +34,9 @@ the §4.3 animation spec in Phase 0.
 |---|---|---|:-:|---|
 | **M1** Foundation | P0 | Pipeline + animated gauges on simulated data | – | – |
 | **M2** No-driver app | P1 → P5 | Inventory, usage, GPU, displays, storage, memory, network, self-monitoring | – | – |
-| **M3** Early release | P11 | Signed app + MSI (+ PawnIO prerequisite) + updater (runs elevated) | PawnIO | SignPath / Certum OSS |
+| **M3** Early release | P11 | Signed app + MSI (+ PawnIO prerequisite) + updater (elevated until P8) | PawnIO | SignPath / Certum OSS |
 | **M4** Low-level sensors | P6 | CPU temps/power/voltage, Super-I/O fans/temps/voltages, SPD + DIMM temps, RAM timings | PawnIO | – |
-| **M5** Insight | P7, P8, P9 | History/health/alerts/explorer, privilege split, profiles, analysis, polish | – | – |
+| **M5** Insight | P7, P8, P9 | History/health/alerts/explorer, privilege split (service + unelevated app), profiles, analysis, polish | PawnIO (via the service) | – |
 | **M6** Gaming | P10 | PresentMon FPS + companion overlay (deferrable) | – | – |
 
 P7 has no hard dependency on P6 (it operates on whatever sensors are registered) and can be
@@ -208,9 +209,9 @@ inventory. Wi-Fi link details and throughput under load still to check.
 ### P11 — Early release (M3)
 In progress. Done: WiX MSI (`pnpm tauri build`, uploaded by CI) with the pinned PawnIO 2.2.0
 installer (`scripts/fetch-pawnio.ps1`, SHA-256 checked) run silently and elevated when PawnIO
-is missing or 1.x (`src-tauri/wix/pawnio.wxs`; a PawnIO failure never fails the install);
+is missing or 1.x (`src-tauri/wix/vyro.wxs`; a PawnIO failure never fails the install);
 Start-menu shortcut carrying the toast app id; fixed upgrade code; "Start with Windows" as an
-elevated logon task (`vyro_core::autostart`); uninstall removes that task and the user's toast
+elevated logon task (a per-user Run entry since P8); uninstall removes that task and the user's toast
 registration and keeps settings and history; single instance; license MIT OR Apache-2.0
 (decision 12); `THIRD_PARTY_NOTICES.md` and full texts in `THIRD_PARTY_LICENSES.md`, generated
 from Cargo.lock and the UI packages and checked in CI; `CONTRIBUTING.md`; spec §8 budget
@@ -230,8 +231,8 @@ an update signing key); clean-machine test with Memory Integrity on.
 - LICENSE, THIRD_PARTY_NOTICES (PawnIO driver GPL-2.0 with IOCTL exception, PawnIO modules
   LGPL-2.1, with source links), CONTRIBUTING.
 - Uninstall removes the per-user toast registration Vyro writes at start
-  (`HKCU\Software\Classes\AppUserModelId\app.vyro.monitor`); settings, alert rules and the
-  history database stay in `%APPDATA%\app.vyro.monitor`.
+  (`HKCU\Software\Classes\AppUserModelId\app.vyro.monitor`); history and alert rules
+  (`%ProgramData%\Vyro` since P8) and settings (`%APPDATA%\app.vyro.monitor`) stay.
 
 ### P6 — Low-level sensors via PawnIO (M4)
 Our own KMDF driver and its attestation signing are dropped. Vyro talks to the PawnIO driver
@@ -297,6 +298,39 @@ the browser build).
       so monitoring and alerts continue (setting, on by default, `settings.json`); a one-time
       notification says so.
 ### P8 — Privilege separation: Windows service + ACL'd named pipe (M5)
+In progress: built and tested (Linux, Wine, CI); awaiting the field check on the reference PC.
+
+- [x] `vyro_core::engine`: the engine as one object (`LocalEngine`: registry, poller and
+      providers, history, health, alert rules) behind `EngineApi`, moved out of the Tauri shell.
+- [x] `vyro_core::ipc`: protocol v1, length-prefixed JSON. Per client session one commands
+      connection (request → reply) and one snapshot stream (server → client), so both ends use
+      plain blocking I/O. The server polls at 1 Hz while any client window is visible, at the
+      tray rate otherwise, and counts client processes in the app footprint. Unknown methods
+      and other protocol versions are refused; requests are capped at 1 MB and connections at
+      32.
+- [x] Pipe security: protected DACL (SYSTEM, administrators and owner full control; interactive
+      users read/write only, without `FILE_CREATE_PIPE_INSTANCE`), `PIPE_REJECT_REMOTE_CLIENTS`,
+      first instance claimed with `FILE_FLAG_FIRST_PIPE_INSTANCE`; clients open it with
+      identification-level impersonation only and check that the server process is the
+      running `VyroService` (`GetNamedPipeServerProcessId` vs the SCM's process id).
+- [x] `crates/vyro-service`: SCM glue (stop / shutdown), `--console` mode, rotating
+      `service.log`; data in `%ProgramData%\Vyro`, created with a protected ACL (users read
+      only); a pre-existing folder not owned by SYSTEM / administrators, or a link, is moved
+      aside. Retries the pipe for 10 s at start so a restart never races a stale client handle.
+- [x] App: `asInvoker`; connects to the service (waits up to 5 s while it starts), reconnects by
+      itself, and otherwise runs the engine in-process with a banner explaining what is
+      missing. BitLocker status, drive health and PawnIO status come from the service. "Start
+      with Windows" is now an `HKCU\…\Run` entry. Alert rules from before the service are
+      handed to it once.
+- [x] MSI: installs and starts the service (start failures never fail the install), restart
+      on failure (5 s, 5 s, 60 s), stops it before upgrades, removes it on uninstall; removes
+      the legacy elevated logon task; removes the user's Run entry on uninstall.
+- [x] Tests: framing and wire shapes; end-to-end over a Unix socket and, on Windows CI, a named
+      pipe (snapshots, every command, visibility, reconnect after a service restart, version
+      refusal); the service binary end to end. Checked under Wine with the real SCM: install,
+      start, client verification, stop.
+- [ ] Field check: fresh install and upgrade from the elevated build; sensors and history with
+      the app closed; `sc stop` / `sc start VyroService` while the app runs; `vyro-remote.exe`.
 ### P9 — Performance hardening, profiles, intelligent analysis, polish (M5)
 ### P10 — Gaming capture + companion overlay (M6, deferrable)
 

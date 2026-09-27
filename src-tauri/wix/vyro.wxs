@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Vyro MSI additions (referenced from tauri.conf.json → bundle.windows.wix):
+  - ships the signed PawnIO installer and runs it silently, elevated, when PawnIO is missing or
+    is a 1.x release. A PawnIO failure never fails the Vyro install (Return="ignore"); the app
+    then shows its "needs PawnIO" banner. PawnIO installs before the service starts.
+  - installs vyro-service.exe as "VyroService" (LocalSystem, automatic start, restarted on
+    failure) and starts it without waiting: if it cannot start, the install still succeeds and
+    the app falls back to reading unprivileged sensors itself, with a banner saying so.
+  - removes the elevated "Vyro" logon task of versions before the service, on every install
+    and uninstall (not on the uninstall half of an upgrade).
+  - on uninstall, for the user running it, removes the per-user toast registration and the
+    "Start with Windows" Run entry. Settings, alert rules and history (%ProgramData%\Vyro and
+    %APPDATA%\app.vyro.monitor) are kept, as usual for user data.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <Property Id="PAWNIO_VERSION">
+      <RegistrySearch Id="PawnIOVersion" Root="HKLM" Win64="yes"
+                      Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO"
+                      Name="DisplayVersion" Type="raw" />
+    </Property>
+
+    <DirectoryRef Id="INSTALLDIR">
+      <Directory Id="PawnIODir" Name="pawnio">
+        <Component Id="PawnIOSetup" Guid="{6F2B7F5C-3C0B-4E53-9B1E-2E8A5C7D4A11}" Win64="yes">
+          <File Id="PawnIOSetupExe" Name="PawnIO_setup.exe" KeyPath="yes"
+                Source="$(sys.SOURCEFILEDIR)..\pawnio\PawnIO_setup.exe" />
+        </Component>
+      </Directory>
+
+      <!-- Built by tauri.conf.json → build.beforeBuildCommand. -->
+      <Component Id="VyroService" Guid="{5355C655-ABE9-4732-840C-FF61D9DBD922}" Win64="yes">
+        <File Id="VyroServiceExe" Name="vyro-service.exe" KeyPath="yes"
+              Source="$(sys.SOURCEFILEDIR)..\..\target\release\vyro-service.exe" />
+        <ServiceInstall Id="VyroServiceInstall" Name="VyroService"
+                        DisplayName="Vyro Sensor Service"
+                        Description="Reads hardware sensors for Vyro (CPU, board, memory and drive health) and keeps their history."
+                        Type="ownProcess" Start="auto" ErrorControl="normal"
+                        Account="LocalSystem" Vital="yes" />
+        <!-- Stop and remove wait, so files are free before they are replaced or removed. -->
+        <ServiceControl Id="VyroServiceStop" Name="VyroService" Stop="both" Remove="uninstall"
+                        Wait="yes" />
+        <!-- Start does not wait: a service that fails to start must not fail the install. -->
+        <ServiceControl Id="VyroServiceStart" Name="VyroService" Start="install" Wait="no" />
+      </Component>
+    </DirectoryRef>
+
+    <CustomAction Id="InstallPawnIO" FileKey="PawnIOSetupExe" ExeCommand="-install -silent"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
+    <!-- Restart after 5 s, 5 s and 60 s; the failure count resets after a day. -->
+    <CustomAction Id="ConfigureServiceRecovery" Directory="INSTALLDIR"
+                  ExeCommand="&quot;[SystemFolder]sc.exe&quot; failure VyroService reset= 86400 actions= restart/5000/restart/5000/restart/60000"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
+    <CustomAction Id="RemoveLegacyAutostartTask" Directory="INSTALLDIR"
+                  ExeCommand="&quot;[SystemFolder]schtasks.exe&quot; /Delete /TN &quot;Vyro&quot; /F"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
+    <!-- Impersonated, so HKCU is the uninstalling user's hive. -->
+    <CustomAction Id="RemoveToastRegistration" Directory="INSTALLDIR"
+                  ExeCommand="&quot;[SystemFolder]reg.exe&quot; delete &quot;HKCU\Software\Classes\AppUserModelId\app.vyro.monitor&quot; /f"
+                  Execute="deferred" Impersonate="yes" Return="ignore" />
+    <CustomAction Id="RemoveRunEntry" Directory="INSTALLDIR"
+                  ExeCommand="&quot;[SystemFolder]reg.exe&quot; delete &quot;HKCU\Software\Microsoft\Windows\CurrentVersion\Run&quot; /v Vyro /f"
+                  Execute="deferred" Impersonate="yes" Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="InstallPawnIO" After="InstallFiles">
+        <![CDATA[NOT REMOVE AND (NOT PAWNIO_VERSION OR PAWNIO_VERSION << "1.")]]>
+      </Custom>
+      <Custom Action="ConfigureServiceRecovery" After="InstallServices">
+        <![CDATA[NOT REMOVE]]>
+      </Custom>
+      <Custom Action="RemoveLegacyAutostartTask" Before="RemoveFiles">
+        <![CDATA[NOT UPGRADINGPRODUCTCODE]]>
+      </Custom>
+      <Custom Action="RemoveToastRegistration" Before="RemoveFiles">
+        <![CDATA[REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE]]>
+      </Custom>
+      <Custom Action="RemoveRunEntry" Before="RemoveFiles">
+        <![CDATA[REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE]]>
+      </Custom>
+    </InstallExecuteSequence>
+  </Fragment>
+</Wix>

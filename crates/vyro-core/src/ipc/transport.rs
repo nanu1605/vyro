@@ -141,9 +141,10 @@ mod win {
     /// no one else can add server instances to the pipe.
     const CLIENT_ACCESS: u32 = 0x0012_0083;
 
-    /// Protected DACL: SYSTEM and administrators full control; interactive users talk only.
+    /// Protected DACL: SYSTEM, administrators and the pipe's owner (the service; a developer's
+    /// console run) full control; interactive users talk only.
     fn pipe_sddl() -> String {
-        format!("D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;{CLIENT_ACCESS:#x};;;IU)")
+        format!("D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;OW)(A;;{CLIENT_ACCESS:#x};;;IU)")
     }
 
     struct SecurityDescriptor(PSECURITY_DESCRIPTOR);

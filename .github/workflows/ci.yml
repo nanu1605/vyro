@@ -29,11 +29,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - run: cargo fmt --all --check
-      - run: cargo clippy -p vyro-core --all-targets -- -D warnings
+      - run: cargo clippy -p vyro-core -p vyro-service --all-targets -- -D warnings
       - name: Test core (regenerates TypeScript bindings from scratch)
         run: |
           rm -rf src/bindings
           cargo test -p vyro-core
+      - name: Test the sensor service (serves a simulated engine over a Unix socket)
+        run: cargo test -p vyro-service
       - name: TypeScript bindings match the Rust structs
         run: |
           if [ -n "$(git status --porcelain -- src/bindings)" ]; then
@@ -66,7 +68,9 @@ jobs:
 
       - run: pnpm build
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test -p vyro-core
+      - name: Test core (includes the named-pipe IPC tests)
+        run: cargo test -p vyro-core
+      - run: cargo test -p vyro-service
       - name: Inventory on a real Windows machine (for eyeballing)
         run: cargo run -p vyro-core --example inventory -- --no-wait
       - name: Live sensors on a real Windows machine (for eyeballing)
@@ -93,6 +97,9 @@ jobs:
           New-Item -ItemType Directory -Force dist-win | Out-Null
           Copy-Item target\debug\examples\inventory.exe dist-win\vyro-inventory.exe
           Copy-Item target\debug\examples\live.exe dist-win\vyro-live.exe
+          cargo build -p vyro-core --example remote
+          Copy-Item target\debug\examples\remote.exe dist-win\vyro-remote.exe
+          Copy-Item target\release\vyro-service.exe dist-win\vyro-service.exe
           Copy-Item target\release\vyro.exe dist-win\vyro.exe
           Copy-Item target\release\bundle\msi\*.msi dist-win\
       - uses: actions/upload-artifact@v4

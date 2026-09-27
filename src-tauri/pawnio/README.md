@@ -4,7 +4,7 @@
 [PawnIO.Setup 2.2.0](https://github.com/namazso/PawnIO.Setup/releases/tag/2.2.0), fetched and
 hash-checked by [`scripts/fetch-pawnio.ps1`](../../scripts/fetch-pawnio.ps1). The MSI installs it
 into `pawnio\` next to `vyro.exe` and runs it with `-install -silent` when PawnIO is missing or
-older than 2.0 ([`../wix/pawnio.wxs`](../wix/pawnio.wxs)). Uninstalling Vyro leaves PawnIO in
+older than 2.0 ([`../wix/vyro.wxs`](../wix/vyro.wxs)). Uninstalling Vyro leaves PawnIO in
 place, since other tools (LibreHardwareMonitor, FanControl) may use it; it has its own entry in
 Apps & features.
 
