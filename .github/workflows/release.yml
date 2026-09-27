@@ -8,7 +8,7 @@ name: Release
 # Needs, in the repository settings (Secrets and variables → Actions):
 #   secret   TAURI_SIGNING_PRIVATE_KEY           update signing key (`tauri signer generate`)
 #   secret   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  its password
-#   variable UPDATER_PUBKEY                      the matching public key (the .pub file)
+#   variable UPDATER_PUBKEY                      the matching public key (the .pub file; a secret works too)
 # Installed copies find updates only while the repository is public (release downloads of a
 # private repository need a sign-in).
 
@@ -35,7 +35,7 @@ jobs:
         id: version
         shell: pwsh
         env:
-          UPDATER_PUBKEY: ${{ vars.UPDATER_PUBKEY }}
+          UPDATER_PUBKEY: ${{ vars.UPDATER_PUBKEY || secrets.UPDATER_PUBKEY }}
           HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
         run: |
           $version = python scripts/set-version.py --check
@@ -46,7 +46,7 @@ jobs:
           } elseif (git ls-remote --tags origin "refs/tags/$tag") {
             throw "$tag already exists: raise the version with scripts/set-version.py first"
           }
-          if (-not $env:UPDATER_PUBKEY) { throw "repository variable UPDATER_PUBKEY is not set" }
+          if (-not $env:UPDATER_PUBKEY) { throw "UPDATER_PUBKEY (repository variable or secret) is not set" }
           if ($env:HAS_KEY -ne 'true') { throw "secret TAURI_SIGNING_PRIVATE_KEY is not set" }
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=$tag" >> $env:GITHUB_OUTPUT
@@ -71,7 +71,7 @@ jobs:
       - name: Updater configuration
         shell: pwsh
         env:
-          UPDATER_PUBKEY: ${{ vars.UPDATER_PUBKEY }}
+          UPDATER_PUBKEY: ${{ vars.UPDATER_PUBKEY || secrets.UPDATER_PUBKEY }}
         run: |
           @{
             bundle = @{ createUpdaterArtifacts = $true }
