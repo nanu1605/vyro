@@ -82,6 +82,65 @@ fn amd_raw() -> serde_json::Value {
     })
 }
 
+/// Where the AMD provider's poll time goes under load: PCI-mutex wait, SMN temperature reads,
+/// and the per-core MSR sweep (slowest single-core hop too), each at normal and time-critical
+/// priority. Run it with a benchmark going.
+#[cfg(windows)]
+fn amd_timing() -> serde_json::Value {
+    use vyro_core::amd::{self, MSR_APERF_RO, MSR_CORE_ENERGY, SMN_THM_TCON_CUR_TMP};
+    use vyro_core::pawnio::{on_cpu, urgent, BusLock, Handle, Module, MUTEX_PCI};
+    let id = vyro_core::hwid::cpuid::read_live();
+    if !amd::supported(&id.vendor, id.family) {
+        return serde_json::Value::Null;
+    }
+    let Ok(io) = Handle::open(Module::AmdFamily17) else {
+        return serde_json::Value::Null;
+    };
+    let lock = BusLock::new(MUTEX_PCI);
+    let ms = |t: Instant| t.elapsed().as_secs_f64() * 1000.0;
+    let cpus = vyro_core::live::logical_processors();
+    let round = || {
+        let t = Instant::now();
+        let waited = lock.hold(500, || {
+            let wait = ms(t);
+            let r = Instant::now();
+            let _ = io.exec1("ioctl_read_smn", &[u64::from(SMN_THM_TCON_CUR_TMP)]);
+            (wait, ms(r))
+        });
+        let s = Instant::now();
+        let mut hop: f64 = 0.0;
+        for cpu in 0..cpus {
+            let h = Instant::now();
+            let _ = on_cpu(cpu, || {
+                let _ = io.exec1("ioctl_read_msr", &[u64::from(MSR_APERF_RO)]);
+                let _ = io.exec1("ioctl_read_msr", &[u64::from(MSR_CORE_ENERGY)]);
+            });
+            hop = hop.max(ms(h));
+        }
+        let r3 = |v: f64| (v * 1000.0).round() / 1000.0;
+        serde_json::json!({
+            "lockWaitMs": waited.map(|w| r3(w.0)),
+            "smnMs": waited.map(|w| r3(w.1)),
+            "sweepMs": r3(ms(s)),
+            "slowestHopMs": r3(hop),
+        })
+    };
+    let mut normal = Vec::new();
+    let mut critical = Vec::new();
+    for _ in 0..6 {
+        normal.push(round());
+        std::thread::sleep(Duration::from_millis(250));
+        critical.push(urgent(round));
+        std::thread::sleep(Duration::from_millis(250));
+    }
+    serde_json::json!({ "normal": normal, "timeCritical": critical })
+}
+
+#[cfg(not(windows))]
+fn amd_timing() -> serde_json::Value {
+    serde_json::Value::Null
+}
+
 #[cfg(not(windows))]
 fn amd_raw() -> serde_json::Value {
     serde_json::Value::Null
@@ -367,6 +426,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let json = serde_json::to_string_pretty(&serde_json::json!({
         "pawnio": pawnio,
         "amdRaw": amd_raw(),
+        "amdTiming": amd_timing(),
         "sioRaw": sio_raw(),
         "ramRaw": ram_raw(),
         "providers": status,

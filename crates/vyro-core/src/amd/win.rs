@@ -173,12 +173,16 @@ impl Provider for AmdCpuProvider {
 
         // Temperatures (SMN, shared index/data pair → PCI mutex).
         let ccd_base = self.ccd_base;
-        let temps = self.pci.hold(LOCK_MS, || {
-            let t = smn(io, SMN_THM_TCON_CUR_TMP);
-            let ccds: Vec<Option<u32>> = ccd_base
-                .map(|base| (0..MAX_CCDS).map(|i| smn(io, base + i * 4)).collect())
-                .unwrap_or_default();
-            (t, ccds)
+        // Held time-critical: a holder preempted by a full-load benchmark would stall every
+        // other monitor waiting on the mutex for whole scheduler quanta.
+        let temps = urgent(|| {
+            self.pci.hold(LOCK_MS, || {
+                let t = smn(io, SMN_THM_TCON_CUR_TMP);
+                let ccds: Vec<Option<u32>> = ccd_base
+                    .map(|base| (0..MAX_CCDS).map(|i| smn(io, base + i * 4)).collect())
+                    .unwrap_or_default();
+                (t, ccds)
+            })
         });
         if let Some((t, ccds)) = temps {
             let t = t.map(tctl);
