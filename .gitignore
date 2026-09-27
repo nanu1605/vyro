@@ -36,3 +36,4 @@ src-tauri/presentmon/PresentMon.exe
 
 # ts-rs output of test runs outside cargo's config (e.g. under Wine); the real bindings are src/bindings
 /bindings/
+src-tauri/tauri.release.conf.json

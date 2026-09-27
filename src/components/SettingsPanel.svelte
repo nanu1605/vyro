@@ -3,6 +3,8 @@
   import Card from './Card.svelte';
   import { getAutostart, getSensorTree, setAutostart, type OverlayCorner, type OverlaySettings } from '../ipc';
   import { prefs, profiles, savePrefs } from '../prefs.svelte';
+  import { checkNow, install, update } from '../updates.svelte';
+  import { fmtDateTime } from '../format';
   import type { BackendStatus, SensorSnapshot, SensorTree, TempUnit } from '../types';
 
   interface Props {
@@ -51,6 +53,14 @@
   ];
   const setOverlay = (change: Partial<OverlaySettings>) =>
     save('Overlay', () => savePrefs({ overlay: { ...prefs.overlay, ...change } }));
+
+  const upd = $derived(update.status);
+  let busy = $state(false);
+  async function run(what: string, f: () => Promise<void>): Promise<void> {
+    busy = true;
+    await save(what, f);
+    busy = false;
+  }
 
   const names = $derived(new Map((tree?.groups ?? []).flatMap((g) => g.sensors).map((s) => [s.id, s.name])));
   const UNITS: Array<{ id: TempUnit; label: string }> = [
@@ -207,6 +217,55 @@
     {/if}
   </Card>
 
+  <Card title="Updates" subtitle={upd ? `version ${upd.current}` : null}>
+    {#if !upd}
+      <p class="note">Loading…</p>
+    {:else if !upd.configured}
+      <p class="note">
+        This build does not update itself (a test or local build). Release builds look for new versions on the project’s
+        GitHub releases.
+      </p>
+    {:else}
+      <label class="check">
+        <input
+          type="checkbox"
+          checked={prefs.checkUpdates}
+          onchange={(e) => void save('Updates', () => savePrefs({ checkUpdates: (e.currentTarget as HTMLInputElement).checked }))}
+        />
+        <span>
+          Check for updates daily
+          <small>Fetches the latest release’s version file from GitHub; nothing about this PC is sent.</small>
+        </span>
+      </label>
+      <div role="status" class="upd">
+        {#if upd.installing}
+          <p>Starting the installer… Vyro closes and opens again when it is done.</p>
+        {:else if upd.checking}
+          <p>Checking…</p>
+        {:else if upd.available}
+          <p><b>Vyro {upd.available.version} is available.</b></p>
+          {#if upd.available.notes}<p class="note notes">{upd.available.notes}</p>{/if}
+        {:else if upd.lastCheck}
+          <p>Vyro is up to date <span class="note">(checked {fmtDateTime(upd.lastCheck)})</span></p>
+        {/if}
+        {#if upd.error}<p class="err">Update failed: {upd.error}</p>{/if}
+      </div>
+      <div class="actions">
+        {#if upd.available}
+          <button type="button" disabled={busy || upd.installing} onclick={() => void run('Install update', install)}>
+            Install and restart
+          </button>
+        {/if}
+        <button type="button" disabled={busy || upd.checking || upd.installing} onclick={() => void run('Check for updates', checkNow)}>
+          Check now
+        </button>
+      </div>
+      {#if upd.available}
+        <p class="note">Installing asks for administrator approval once and restarts the sensor service.</p>
+      {/if}
+    {/if}
+  </Card>
+
   {#if error}<p class="err" role="alert">{error}</p>{/if}
 </section>
 
@@ -290,7 +349,17 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .hidden button {
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .notes {
+    white-space: pre-line;
+  }
+  .hidden button,
+  .actions button {
     padding: 0.2rem 0.6rem;
     border: 1px solid var(--line);
     border-radius: 6px;
@@ -299,6 +368,14 @@
     font: inherit;
     font-size: 0.78rem;
     cursor: pointer;
+  }
+  .actions button {
+    padding: 0.35rem 0.8rem;
+    font-size: 0.82rem;
+  }
+  .actions button:disabled {
+    cursor: default;
+    opacity: 0.55;
   }
   .err {
     grid-column: 1 / -1;

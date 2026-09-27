@@ -33,6 +33,8 @@ pub struct Settings {
     pub game_capture: bool,
     /// The companion overlay over the captured game.
     pub overlay: OverlaySettings,
+    /// Look for a new release daily (release builds only).
+    pub check_updates: bool,
 }
 
 /// Emitted with the new [`Settings`] after any change (window or tray menu).
@@ -47,6 +49,7 @@ impl Default for Settings {
             profile: Profile::Desktop,
             game_capture: true,
             overlay: OverlaySettings::default(),
+            check_updates: true,
         }
     }
 }

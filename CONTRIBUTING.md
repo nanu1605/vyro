@@ -69,3 +69,22 @@ the same time. Say which readings look wrong.
 
 By contributing you agree that your contributions are licensed under MIT OR Apache-2.0, the
 same terms as the project, without additional terms or conditions.
+
+## Releasing
+
+Releases are built by `.github/workflows/release.yml`, never on a developer machine.
+
+1. Once per repository: create the update signing key with `pnpm tauri signer generate -w
+   vyro-updater.key` (keep the file and password safe; losing them means installed copies can
+   no longer update). In Settings → Secrets and variables → Actions, add the secrets
+   `TAURI_SIGNING_PRIVATE_KEY` (the key file's contents) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`,
+   and the variable `UPDATER_PUBKEY` (the contents of `vyro-updater.key.pub`).
+2. Raise the version with `python3 scripts/set-version.py X.Y.Z` and commit (CI checks the
+   manifests agree).
+3. Run the Release workflow from the Actions tab on that commit's branch (or push the tag
+   `vX.Y.Z`). It builds the MSI with the updater enabled, signs it for the updater, and
+   publishes release `vX.Y.Z` with the MSI, `latest.json` and `SHA256SUMS.txt`.
+
+Only these builds contain the updater; CI artifacts and local builds never check for updates.
+Installed copies look for `latest.json` in the latest release, so updates reach them only while
+the repository is public.

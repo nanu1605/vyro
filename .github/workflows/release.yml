@@ -1,0 +1,126 @@
+name: Release
+
+# Builds the signed-for-update MSI and publishes it as a GitHub release, with the `latest.json`
+# the app's updater reads. Start it from the Actions tab ("Run workflow" on the branch to
+# release) or by pushing a tag `vX.Y.Z`; the version comes from the files
+# (`scripts/set-version.py`), and the tag must not exist yet when started from the Actions tab.
+#
+# Needs, in the repository settings (Secrets and variables → Actions):
+#   secret   TAURI_SIGNING_PRIVATE_KEY           update signing key (`tauri signer generate`)
+#   secret   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  its password
+#   variable UPDATER_PUBKEY                      the matching public key (the .pub file)
+# Installed copies find updates only while the repository is public (release downloads of a
+# private repository need a sign-in).
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version and tag
+        id: version
+        shell: pwsh
+        env:
+          UPDATER_PUBKEY: ${{ vars.UPDATER_PUBKEY }}
+          HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: |
+          $version = python scripts/set-version.py --check
+          if ($LASTEXITCODE -ne 0) { throw "version files disagree" }
+          $tag = "v$version"
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            if ($env:GITHUB_REF_NAME -ne $tag) { throw "tag $env:GITHUB_REF_NAME does not match version $version (scripts/set-version.py)" }
+          } elseif (git ls-remote --tags origin "refs/tags/$tag") {
+            throw "$tag already exists: raise the version with scripts/set-version.py first"
+          }
+          if (-not $env:UPDATER_PUBKEY) { throw "repository variable UPDATER_PUBKEY is not set" }
+          if ($env:HAS_KEY -ne 'true') { throw "secret TAURI_SIGNING_PRIVATE_KEY is not set" }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Fetch the bundled PawnIO installer (pinned SHA-256)
+        shell: pwsh
+        run: ./scripts/fetch-pawnio.ps1
+      - name: Fetch the bundled PresentMon (pinned SHA-256)
+        shell: pwsh
+        run: ./scripts/fetch-presentmon.ps1
+
+      # Only release builds carry the updater; other builds never check (updates.rs).
+      - name: Updater configuration
+        shell: pwsh
+        env:
+          UPDATER_PUBKEY: ${{ vars.UPDATER_PUBKEY }}
+        run: |
+          @{
+            bundle = @{ createUpdaterArtifacts = $true }
+            plugins = @{
+              updater = @{
+                pubkey = $env:UPDATER_PUBKEY.Trim()
+                endpoints = @("https://github.com/$env:GITHUB_REPOSITORY/releases/latest/download/latest.json")
+                windows = @{ installMode = 'passive' }
+              }
+            }
+          } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 src-tauri/tauri.release.conf.json
+
+      - name: Build the app and the MSI installer
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri build --config src-tauri/tauri.release.conf.json
+
+      - name: Installer, update manifest and checksums
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          $msi = Get-Item target\release\bundle\msi\*.msi | Select-Object -First 1
+          if ($msi.Length -ge 20MB) { throw "installer is $([math]::Round($msi.Length / 1MB, 2)) MB, over the 20 MB budget" }
+          $sig = (Get-Content -Raw "$($msi.FullName).sig").Trim()
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item $msi.FullName release\
+          $url = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:TAG/$($msi.Name)"
+          $platform = @{ signature = $sig; url = $url }
+          @{
+            version = $env:VERSION
+            notes = "https://github.com/$env:GITHUB_REPOSITORY/releases/tag/$env:TAG"
+            pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = @{ 'windows-x86_64' = $platform; 'windows-x86_64-msi' = $platform }
+          } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 release\latest.json
+          Get-ChildItem release -File | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
+          } | Set-Content -Encoding ascii release\SHA256SUMS.txt
+          Get-Content release\SHA256SUMS.txt | Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
+
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh release create $env:TAG (Get-ChildItem release -File).FullName `
+            --title "Vyro $env:VERSION" --generate-notes --target $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }

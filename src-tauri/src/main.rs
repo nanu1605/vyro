@@ -6,6 +6,7 @@ mod engine;
 mod gaming;
 mod overlay;
 mod tray;
+mod updates;
 
 use tauri::Manager;
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
@@ -24,20 +25,30 @@ fn main() {
         .rotation_strategy(RotationStrategy::KeepSome(3))
         .build();
 
-    let app = tauri::Builder::default()
+    let context = tauri::generate_context!();
+    // Release builds only: the release workflow adds the updater's public key.
+    let can_update = updates::configured(context.config());
+    let current = context.package_info().version.to_string();
+
+    let mut builder = tauri::Builder::default()
         // First: a second launch (Start menu while Vyro sits in the tray) shows the running
         // copy instead of starting another engine.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             tray::show_main(app);
         }))
         .plugin(log)
-        .plugin(tauri_plugin_notification::init())
-        .setup(|app| {
+        .plugin(tauri_plugin_notification::init());
+    if can_update {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
+    let app = builder
+        .setup(move |app| {
             // The window starts hidden (tauri.conf.json); autostart passes --minimized to stay
             // in the tray.
             let minimized = std::env::args().any(|a| a == vyro_core::autostart::MINIMIZED_ARG);
             let engine = Engine::start(app.handle(), !minimized)?;
             app.manage(overlay::Overlay::default());
+            app.manage(updates::Updates::new(can_update, current));
             app.manage(engine);
             app.manage(tray::SettingsStore::load(app.handle()));
             tray::build(app.handle())?;
@@ -46,6 +57,7 @@ fn main() {
                 log::warn!("settings: {e}");
             }
             gaming::watch(app.handle());
+            updates::watch(app.handle());
             if minimized {
                 tray::park_after_start(app.handle());
             } else {
@@ -82,8 +94,11 @@ fn main() {
             commands::get_autostart,
             commands::set_autostart,
             gaming::get_game_sessions,
+            updates::get_update_status,
+            updates::check_for_updates,
+            updates::install_update,
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("failed to build the Tauri application");
 
     app.run(|handle, event| {

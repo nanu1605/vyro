@@ -1,0 +1,253 @@
+//! Updates (P11): release builds carry the Tauri updater's public key and look for a newer
+//! signed MSI in the repository's latest GitHub release (`latest.json`). Other builds (CI
+//! artifacts, local builds) have no updater configured and never check. A check fetches only
+//! that file; installing runs the MSI (`msiexec /passive`, one UAC prompt), which replaces app
+//! and service and starts Vyro again.
+
+use std::sync::Mutex;
+use std::time::Duration;
+
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_notification::NotificationExt;
+use tauri_plugin_updater::{Update, UpdaterExt};
+use vyro_core::profiles::NotifyPolicy;
+use vyro_core::{lock, unix_now};
+
+use crate::tray::SettingsStore;
+
+/// Carries the new [`UpdateStatus`] after every check.
+pub const EVENT: &str = "update-status";
+/// First automatic check after start (the network may still be coming up after sign-in).
+const FIRST_CHECK: Duration = Duration::from_secs(60);
+/// Between automatic checks.
+const EVERY: Duration = Duration::from_secs(24 * 3600);
+
+/// Whether this build has an updater: the release workflow adds `plugins.updater` with the
+/// public key to the configuration.
+pub fn configured(config: &tauri::Config) -> bool {
+    config
+        .plugins
+        .0
+        .get("updater")
+        .and_then(|u| u.get("pubkey"))
+        .and_then(|k| k.as_str())
+        .is_some_and(|k| !k.trim().is_empty())
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AvailableUpdate {
+    pub version: String,
+    pub notes: Option<String>,
+    /// Unix seconds.
+    pub date: Option<i64>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateStatus {
+    /// This build can update itself (a release build).
+    pub configured: bool,
+    pub current: String,
+    pub checking: bool,
+    pub available: Option<AvailableUpdate>,
+    /// Unix seconds of the last completed check.
+    pub last_check: Option<i64>,
+    pub error: Option<String>,
+    pub installing: bool,
+}
+
+#[derive(Default)]
+pub struct Updates {
+    status: Mutex<UpdateStatus>,
+    pending: Mutex<Option<Update>>,
+    /// Version a notification was shown for (once per version and run).
+    notified: Mutex<Option<String>>,
+}
+
+impl Updates {
+    pub fn new(configured: bool, current: String) -> Self {
+        Self {
+            status: Mutex::new(UpdateStatus {
+                configured,
+                current,
+                ..UpdateStatus::default()
+            }),
+            ..Self::default()
+        }
+    }
+
+    fn status(&self) -> UpdateStatus {
+        lock(&self.status).clone()
+    }
+
+    fn change(&self, app: &AppHandle, f: impl FnOnce(&mut UpdateStatus)) -> UpdateStatus {
+        let status = {
+            let mut s = lock(&self.status);
+            f(&mut s);
+            s.clone()
+        };
+        if let Err(e) = app.emit(EVENT, &status) {
+            log::debug!("emit {EVENT}: {e}");
+        }
+        status
+    }
+}
+
+/// Looks for an update; `auto` checks notify when one is found.
+async fn check(app: &AppHandle, auto: bool) -> UpdateStatus {
+    let state = app.state::<Updates>();
+    if !state.status().configured {
+        return state.status();
+    }
+    state.change(app, |s| {
+        s.checking = true;
+        s.error = None;
+    });
+    let result = match app.updater() {
+        Ok(u) => u.check().await.map_err(|e| e.to_string()),
+        Err(e) => Err(e.to_string()),
+    };
+    let available = match &result {
+        Ok(Some(u)) => Some(AvailableUpdate {
+            version: u.version.clone(),
+            notes: u.body.clone().filter(|b| !b.trim().is_empty()),
+            date: u.date.map(|d| d.unix_timestamp()),
+        }),
+        _ => None,
+    };
+    let error = result.as_ref().err().cloned();
+    if let Some(e) = &error {
+        log::warn!("update check: {e}");
+    }
+    if let Ok(found) = result {
+        *lock(&state.pending) = found;
+    }
+    let status = state.change(app, |s| {
+        s.checking = false;
+        s.last_check = Some(unix_now());
+        s.error = error;
+        if s.error.is_none() {
+            s.available = available.clone();
+        }
+    });
+    if let (true, Some(a)) = (auto, &available) {
+        notify(app, &state, &a.version);
+    }
+    status
+}
+
+fn notify(app: &AppHandle, state: &Updates, version: &str) {
+    {
+        let mut notified = lock(&state.notified);
+        if notified.as_deref() == Some(version) {
+            return;
+        }
+        *notified = Some(version.to_owned());
+    }
+    let policy = app
+        .try_state::<SettingsStore>()
+        .map(|s| s.get().profile.spec().notifications)
+        .unwrap_or(NotifyPolicy::All);
+    if !matches!(policy, NotifyPolicy::All | NotifyPolicy::Quiet) {
+        return;
+    }
+    let shown = app
+        .notification()
+        .builder()
+        .title(format!("Vyro {version} is available"))
+        .body("Open Vyro → Settings → Updates to install it.")
+        .show();
+    if let Err(e) = shown {
+        log::warn!("update notification failed: {e}");
+    }
+}
+
+/// Checks after start and then daily, while the setting allows it.
+pub fn watch(app: &AppHandle) {
+    if !app.state::<Updates>().status().configured {
+        return;
+    }
+    let app = app.clone();
+    let spawned = std::thread::Builder::new()
+        .name("vyro-updates".into())
+        .spawn(move || {
+            std::thread::sleep(FIRST_CHECK);
+            loop {
+                let enabled = app
+                    .try_state::<SettingsStore>()
+                    .is_some_and(|s| s.get().check_updates);
+                if enabled {
+                    tauri::async_runtime::block_on(check(&app, true));
+                }
+                std::thread::sleep(EVERY);
+            }
+        });
+    if let Err(e) = spawned {
+        log::warn!("update checks: {e}");
+    }
+}
+
+#[tauri::command]
+pub fn get_update_status(state: State<'_, Updates>) -> UpdateStatus {
+    state.status()
+}
+
+#[tauri::command]
+pub async fn check_for_updates(app: AppHandle) -> Result<UpdateStatus, String> {
+    Ok(check(&app, false).await)
+}
+
+/// Downloads, verifies and runs the installer. On success the installer takes over and Vyro
+/// exits (the MSI starts it again).
+#[tauri::command]
+pub async fn install_update(app: AppHandle) -> Result<(), String> {
+    let state = app.state::<Updates>();
+    let update = lock(&state.pending)
+        .clone()
+        .ok_or("no update to install; check again")?;
+    state.change(&app, |s| {
+        s.installing = true;
+        s.error = None;
+    });
+    log::info!("installing Vyro {}", update.version);
+    let result = update
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|e| e.to_string());
+    // Only reached when it failed (a started installer ends this process).
+    if let Err(e) = &result {
+        log::warn!("update install: {e}");
+        state.change(&app, |s| {
+            s.installing = false;
+            s.error = Some(e.clone());
+        });
+    }
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config(plugins: serde_json::Value) -> tauri::Config {
+        let mut c: tauri::Config = serde_json::from_value(serde_json::json!({
+            "identifier": "app.vyro.test"
+        }))
+        .unwrap();
+        c.plugins = serde_json::from_value(plugins).unwrap();
+        c
+    }
+
+    #[test]
+    fn only_builds_with_a_public_key_update() {
+        assert!(!configured(&config(serde_json::json!({}))));
+        assert!(!configured(&config(
+            serde_json::json!({"updater": {"pubkey": " "}})
+        )));
+        assert!(configured(&config(serde_json::json!({
+            "updater": {"pubkey": "dW50cnVzdGVk", "endpoints": ["https://example.com/latest.json"]}
+        }))));
+    }
+}

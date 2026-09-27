@@ -132,6 +132,8 @@ export interface AppSettings {
   gameCapture: boolean;
   /** The companion overlay over the captured game. */
   overlay: OverlaySettings;
+  /** Look for a new release daily (release builds only). */
+  checkUpdates: boolean;
 }
 export type OverlayCorner = 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
 export interface OverlaySettings {
@@ -142,7 +144,7 @@ export interface OverlaySettings {
 }
 export const DEFAULT_OVERLAY: OverlaySettings = { enabled: false, corner: 'topLeft', detailed: true };
 let browserSettings: AppSettings = {
-  closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop', gameCapture: true, overlay: { ...DEFAULT_OVERLAY },
+  closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop', gameCapture: true, overlay: { ...DEFAULT_OVERLAY }, checkUpdates: true,
 };
 
 /** What the game overlay shows (`src-tauri/src/overlay.rs`). */
@@ -209,6 +211,69 @@ export async function setSettings(settings: AppSettings): Promise<void> {
     return;
   }
   await invoke('set_settings', { settings });
+}
+
+/** Updates (`src-tauri/src/updates.rs`). */
+export interface AvailableUpdate {
+  version: string;
+  notes: string | null;
+  /** Unix seconds. */
+  date: number | null;
+}
+export interface UpdateStatus {
+  /** This build can update itself (release builds). */
+  configured: boolean;
+  current: string;
+  checking: boolean;
+  available: AvailableUpdate | null;
+  /** Unix seconds of the last completed check. */
+  lastCheck: number | null;
+  error: string | null;
+  installing: boolean;
+}
+// Browser preview: a release build that finds 0.2.0 when asked.
+let browserUpdate: UpdateStatus = {
+  configured: true, current: '0.1.0', checking: false, available: null, lastCheck: null, error: null, installing: false,
+};
+const updateListeners = new Set<(s: UpdateStatus) => void>();
+
+export async function getUpdateStatus(): Promise<UpdateStatus> {
+  if (!inTauri) return { ...browserUpdate };
+  return invoke<UpdateStatus>('get_update_status');
+}
+
+/** Status changes (checks, installing, errors). */
+export async function onUpdateStatus(cb: (s: UpdateStatus) => void): Promise<() => void> {
+  if (!inTauri) {
+    updateListeners.add(cb);
+    return () => updateListeners.delete(cb);
+  }
+  return listen<UpdateStatus>('update-status', (e) => cb(e.payload));
+}
+
+export async function checkForUpdates(): Promise<UpdateStatus> {
+  if (!inTauri) {
+    const set = (s: Partial<UpdateStatus>) => {
+      browserUpdate = { ...browserUpdate, ...s };
+      for (const cb of updateListeners) cb({ ...browserUpdate });
+    };
+    set({ checking: true, error: null });
+    await new Promise((r) => setTimeout(r, 600));
+    const now = Math.floor(Date.now() / 1000);
+    set({
+      checking: false,
+      lastCheck: now,
+      available: { version: '0.2.0', notes: 'Frame-time graph scrolls without gaps; update checks.', date: now - 86400 },
+    });
+    return { ...browserUpdate };
+  }
+  return invoke<UpdateStatus>('check_for_updates');
+}
+
+/** Downloads and runs the installer; Vyro exits and the installer starts it again. */
+export async function installUpdate(): Promise<void> {
+  if (!inTauri) throw new Error('not available in the browser preview');
+  await invoke('install_update');
 }
 
 let browserAutostart = false;

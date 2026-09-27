@@ -25,6 +25,7 @@
   import GamingPanel from './components/GamingPanel.svelte';
   import { animator } from './anim';
   import { fmt, fmtGB } from './format';
+  import { loadUpdates, update } from './updates.svelte';
   import { getBackendStatus, getPawnIoStatus, inTauri, onBackendStatus, onSensors, setUiVisible } from './ipc';
   import { loadPrefs, profileSpec, temp, tempOrNull, tempText, tempUnit } from './prefs.svelte';
   import type { AlertFired, BackendStatus, PawnIoStatus, SensorSnapshot } from './types';
@@ -158,6 +159,7 @@
     visited[tab] = true;
     loadPawnIo();
     void loadPrefs().catch(() => {});
+    void loadUpdates().catch(() => {});
     let stop: (() => void) | undefined;
     let stopBackend: (() => void) | undefined;
     let disposed = false;
@@ -229,6 +231,12 @@
         </p>
       {/if}
       <PawnIoBanner status={pawnioShown} />
+      {#if update.status?.available && !update.status.installing}
+        <button type="button" class="health-strip update" onclick={() => select('settings')}>
+          <span class="msg">Vyro {update.status.available.version} is available</span>
+          <span class="go">Settings →</span>
+        </button>
+      {/if}
       {#if attention.length}
         <button type="button" class="health-strip {overall}" onclick={() => select('health')}>
           <span class="alert-dot {overall}" aria-hidden="true"></span>
@@ -478,6 +486,10 @@
   .health-strip.fail {
     border-color: color-mix(in srgb, var(--hot) 55%, var(--line));
     background: color-mix(in srgb, var(--hot) 10%, var(--panel));
+  }
+  .health-strip.update {
+    border-color: color-mix(in srgb, var(--accent-gpu) 45%, var(--line));
+    background: color-mix(in srgb, var(--accent-gpu) 8%, var(--panel));
   }
   .health-strip .alert-dot {
     flex: none;

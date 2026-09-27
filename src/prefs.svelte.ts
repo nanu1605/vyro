@@ -7,7 +7,7 @@ import type { ProfileSpec } from './types';
 import { fromUnit, tempSymbol, tempsIn, toUnit } from './units';
 
 export const prefs = $state<AppSettings>({
-  closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop', gameCapture: true, overlay: { ...DEFAULT_OVERLAY },
+  closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop', gameCapture: true, overlay: { ...DEFAULT_OVERLAY }, checkUpdates: true,
 });
 
 /** Profile presets, loaded with the preferences. */

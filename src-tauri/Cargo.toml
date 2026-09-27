@@ -18,6 +18,7 @@ tauri = { version = "2.11.6", features = ["tray-icon"] }
 tauri-plugin-log = "2.9.2"
 tauri-plugin-notification = "2.4.0"
 tauri-plugin-single-instance = "2.4.5"
+tauri-plugin-updater = "2"
 vyro-core = { path = "../crates/vyro-core" }
 
 [lints]
