@@ -5,7 +5,11 @@
 //! ```sh
 //! cargo run -p vyro-core --example remote                  # the installed service
 //! cargo run -p vyro-core --example remote -- --endpoint X  # a console service elsewhere
+//! cargo run -p vyro-core --example remote -- --capture Game.exe   # 15 s of frame capture
 //! ```
+//!
+//! `--capture` takes a process name (as in Task Manager's Details tab) or id: start the game
+//! first, then run this with the game still in front.
 
 use std::io::{BufRead, IsTerminal};
 use std::sync::mpsc;
@@ -77,6 +81,17 @@ fn main() {
             }
             println!("pawnio:        {:?}", remote.pawnio_status());
             println!("alert rules:   {:?}", remote.alert_rules().map(|r| r.len()));
+            if let Some(what) = args
+                .iter()
+                .position(|a| a == "--capture")
+                .and_then(|i| args.get(i + 1))
+            {
+                capture(&remote, &rx, what);
+            }
+            println!(
+                "game sessions: {:?}",
+                remote.game_sessions().map(|s| s.len())
+            );
             remote.shutdown();
         }
     }
@@ -84,4 +99,53 @@ fn main() {
         println!("\nPress Enter to close.");
         let _ = std::io::stdin().lock().lines().next();
     }
+}
+
+/// Captures a process for 15 s through the service and prints what the snapshots say.
+fn capture(remote: &RemoteEngine, rx: &mpsc::Receiver<SensorSnapshot>, what: &str) {
+    let pid = what.parse::<u32>().ok().or_else(|| {
+        let snap = rx.recv_timeout(Duration::from_secs(5)).ok()?;
+        snap.processes
+            .iter()
+            .find(|p| p.name.eq_ignore_ascii_case(what))
+            .map(|p| p.pid)
+    });
+    let Some(pid) = pid else {
+        println!(
+            "capture:       no running process {what:?} among the busiest processes; pass its id"
+        );
+        return;
+    };
+    let target = vyro_core::gaming::CaptureTarget {
+        pid,
+        name: what.to_owned(),
+    };
+    if let Err(e) = remote.set_capture_target(Some(target)) {
+        println!("capture:       {e}");
+        return;
+    }
+    println!("capture:       {what} ({pid}) for 15 s…");
+    let end = std::time::Instant::now() + Duration::from_secs(15);
+    while std::time::Instant::now() < end {
+        let Ok(snap) = rx.recv_timeout(Duration::from_secs(3)) else {
+            continue;
+        };
+        match snap.game {
+            Some(g) => println!(
+                "  {:?}: {:.0} FPS, 1% low {:.0}, 0.1% low {:.0}, {:.1} ms, CPU busy {:.1} ms, GPU busy {:.1} ms, {:?}, {} frames{}",
+                g.state,
+                g.fps.unwrap_or(0.0),
+                g.low1_fps.unwrap_or(0.0),
+                g.low01_fps.unwrap_or(0.0),
+                g.frame_ms.unwrap_or(0.0),
+                g.cpu_busy_ms.unwrap_or(0.0),
+                g.gpu_busy_ms.unwrap_or(0.0),
+                g.bound,
+                g.frames,
+                g.detail.map(|d| format!(" ({d})")).unwrap_or_default()
+            ),
+            None => println!("  no capture in the snapshot"),
+        }
+    }
+    let _ = remote.set_capture_target(None);
 }

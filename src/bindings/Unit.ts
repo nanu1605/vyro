@@ -3,4 +3,4 @@
 /**
  * Unit, serialized as its display symbol.
  */
-export type Unit = "%" | "MHz" | "°C" | "W" | "V" | "RPM" | "MB" | "MB/s" | "Mbps" | "ms" | "/s" | "";
+export type Unit = "%" | "MHz" | "°C" | "W" | "V" | "RPM" | "MB" | "MB/s" | "Mbps" | "ms" | "/s" | "FPS" | "";

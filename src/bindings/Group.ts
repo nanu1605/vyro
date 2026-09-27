@@ -3,4 +3,4 @@
 /**
  * Display grouping. Declaration order is the order groups appear in the explorer.
  */
-export type Group = "cpu" | "gpu" | "memory" | "storage" | "board" | "fans" | "voltages" | "network" | "power" | "system" | "app";
+export type Group = "cpu" | "gpu" | "memory" | "storage" | "board" | "fans" | "voltages" | "network" | "power" | "system" | "game" | "app";

@@ -55,6 +55,7 @@
         ],
         "componentRefs": [
           "PawnIOSetup",
+          "PresentMon",
           "VyroService"
         ]
       }

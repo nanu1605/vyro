@@ -13,7 +13,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 |---|---|---|---|
 | 1 | Product name / codename | **Vyro** (repo name) | decided |
 | 2 | First release cut | **Early release** after P5 (P11), before the low-level sensors; the former P11b (own driver signing) is dropped | decided |
-| 3 | Gaming module (P10) in v1? | Decide at milestone M5 | open |
+| 3 | Gaming module (P10) in v1? | **Yes**: frame capture with the bundled PresentMon (MIT, Intel-signed) run by the service; companion overlay, no injection | decided |
 | 4 | Fan control (v2 write path) | Not built without explicit go-ahead | default: no |
 | 5 | Ping target host | `1.1.1.1`, user-configurable | default |
 | 6 | History tiers / cap | raw ≤ 30 min · 10 s avg ≤ 24 h · 1 min avg ≤ 7 d · ≤ 200 MB | default |
@@ -372,7 +372,29 @@ In progress.
       steps explained by the component and load that changed. Each links to History.
 - [ ] Field check: insights after a few days of history; the footprint breakdown visible and
       in the tray.
-### P10 — Gaming capture + companion overlay (M6, deferrable)
+### P10 — Gaming capture + companion overlay (M6)
+In progress.
+
+- [x] P10a Frame capture (`vyro_core::gaming`): the app watches for a fullscreen, non-shell app
+      in the foreground (two 1 s samples; it stays the target while it runs, also alt-tabbed,
+      until another fullscreen app takes over) and hands its process id to the service
+      (`SetCaptureTarget`, IPC protocol 3; a client's target ends with its session). The service
+      runs the bundled `PresentMon.exe` 2.6.0 (`--process_id --output_stdout --v2_metrics`,
+      ETW session `VyroCapture`, ended on stop) and parses its CSV by column name (8-bit or
+      UTF-16). Live, every tick: FPS and frame time over the last second, 1 % / 0.1 % lows (FPS
+      at the 99th / 99.9th percentile frame time) over 10 s, CPU / GPU busy, latency, displayed
+      FPS, what limits the frame rate (GPU or CPU busy ≥ 85 % of the frame, else capped), the
+      last 240 frame times. `game.fps`, `game.frametime`, `game.low1` are history sensors.
+      Sessions ≥ 30 s are logged (`games.json`, last 100) with averages, lows from a 0.1 ms
+      histogram, max frame time, max CPU / GPU temperature and average load. Gaming tab (live
+      figures, frame-time graph, limiter, session log), a Game FPS dashboard tile, a Settings
+      switch; PresentMon fetched with a pinned SHA-256 and installed by the MSI.
+      `vyro-remote --capture <exe|pid>` checks capture through the service without the app.
+- [ ] P10a Field check: FPS and lows within a few % of PresentMon's or the game's own counter
+      in a real game; session logged after quitting; anti-cheat games (FACEIT excepted, as with
+      PawnIO) unaffected.
+- [ ] P10b Companion overlay: always-on-top, click-through window over the game with chosen
+      figures; never injected.
 
 **Deferred to v2:** fan/pump control (driver write path), injected in-game overlay.
 

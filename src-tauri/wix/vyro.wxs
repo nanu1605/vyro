@@ -4,6 +4,8 @@
   - ships the signed PawnIO installer and runs it silently, elevated, when PawnIO is missing or
     is a 1.x release. A PawnIO failure never fails the Vyro install (Return="ignore"); the app
     then shows its "needs PawnIO" banner. PawnIO installs before the service starts.
+  - installs PresentMon.exe (Intel, signed, MIT) beside the service, which runs it to measure
+    the frame rate of the fullscreen game the app points it at.
   - installs vyro-service.exe as "VyroService" (LocalSystem, automatic start, restarted on
     failure) and starts it without waiting: if it cannot start, the install still succeeds and
     the app falls back to reading unprivileged sensors itself, with a banner saying so.
@@ -28,6 +30,12 @@
                 Source="$(sys.SOURCEFILEDIR)..\pawnio\PawnIO_setup.exe" />
         </Component>
       </Directory>
+
+      <!-- Fetched by scripts/fetch-presentmon.ps1 (pinned SHA-256). -->
+      <Component Id="PresentMon" Guid="{659A2288-2E71-47AC-A0FF-7AFCDD2B8746}" Win64="yes">
+        <File Id="PresentMonExe" Name="PresentMon.exe" KeyPath="yes"
+              Source="$(sys.SOURCEFILEDIR)..\presentmon\PresentMon.exe" />
+      </Component>
 
       <!-- Built by tauri.conf.json → build.beforeBuildCommand. -->
       <Component Id="VyroService" Guid="{5355C655-ABE9-4732-840C-FF61D9DBD922}" Win64="yes">

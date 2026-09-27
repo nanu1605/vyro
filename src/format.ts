@@ -92,7 +92,7 @@ export function fmtRate(mbs: number | null | undefined): string {
 }
 
 const UNIT_DIGITS: Record<string, number> = {
-  '%': 1, MHz: 0, '°C': 1, '°F': 1, W: 1, V: 3, RPM: 0, MB: 0, 'MB/s': 2, Mbps: 2, ms: 1, '/s': 0, '': 2,
+  '%': 1, MHz: 0, '°C': 1, '°F': 1, W: 1, V: 3, RPM: 0, MB: 0, 'MB/s': 2, Mbps: 2, ms: 1, '/s': 0, FPS: 0, '': 2,
 };
 
 /** A registry reading with its unit: "41.3 °C", "12.5%", "1,480 RPM". */
@@ -105,5 +105,5 @@ export function fmtUnit(value: number | null | undefined, unit: string): string 
 /** Sensor Explorer / History group headings. */
 export const GROUP_LABEL: Record<string, string> = {
   cpu: 'CPU', gpu: 'GPU', memory: 'Memory', storage: 'Storage', board: 'Motherboard', fans: 'Fans',
-  voltages: 'Voltages', network: 'Network', power: 'Power', system: 'System', app: 'Vyro',
+  voltages: 'Voltages', network: 'Network', power: 'Power', system: 'System', game: 'Game', app: 'Vyro',
 };

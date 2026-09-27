@@ -23,6 +23,8 @@ pub enum Group {
     Network,
     Power,
     System,
+    /// The captured game (P10).
+    Game,
     App,
 }
 
@@ -52,6 +54,8 @@ pub enum Unit {
     Millisecond,
     #[serde(rename = "/s")]
     PerSecond,
+    #[serde(rename = "FPS")]
+    Fps,
     #[serde(rename = "")]
     Count,
 }
@@ -71,6 +75,8 @@ pub enum Source {
     Igcl,
     Smart,
     Driver,
+    /// PresentMon frame capture.
+    PresentMon,
     App,
 }
 

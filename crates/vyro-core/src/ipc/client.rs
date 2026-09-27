@@ -12,6 +12,7 @@ use super::PROTOCOL_VERSION;
 use super::{read_frame, recv, send, Hello, Reply, Request, Role, Welcome, MAX_MESSAGE};
 use crate::alerts::{AlertFired, AlertRule};
 use crate::engine::EngineApi;
+use crate::gaming::{CaptureTarget, GameSession};
 use crate::health::HealthEvent;
 use crate::info::{DriveInfo, PawnIoStatus};
 use crate::{lock, HistoryRange, HistorySeries, SensorSnapshot, SensorTree, SnapshotSink};
@@ -35,6 +36,8 @@ struct Shared {
     visible: AtomicBool,
     /// Poll interval asked for (0: the service's default); sent again after a reconnect.
     poll_ms: std::sync::atomic::AtomicU32,
+    /// Capture target asked for; sent again after a reconnect.
+    capture: Mutex<Option<CaptureTarget>>,
     stop: AtomicBool,
     latest: Mutex<Option<SensorSnapshot>>,
     status: Mutex<RemoteStatus>,
@@ -73,6 +76,11 @@ impl Shared {
                     let ms = shared.poll_ms.load(Ordering::SeqCst);
                     if ms > 0 {
                         reqs.push(Request::SetPollInterval { millis: ms });
+                    }
+                    if let Some(target) = lock(&shared.capture).clone() {
+                        reqs.push(Request::SetCaptureTarget {
+                            target: Some(target),
+                        });
                     }
                     for req in reqs {
                         let sent =
@@ -116,6 +124,7 @@ impl RemoteEngine {
             session: fastrand::u64(..),
             visible: AtomicBool::new(visible),
             poll_ms: std::sync::atomic::AtomicU32::new(0),
+            capture: Mutex::new(None),
             stop: AtomicBool::new(false),
             latest: Mutex::new(None),
             status: Mutex::new(RemoteStatus::default()),
@@ -217,6 +226,10 @@ fn stream(
             },
         };
         loop {
+            // Shut down: closing the stream ends this client's session on the service.
+            if shared.stop.load(Ordering::SeqCst) {
+                return;
+            }
             match read_frame(&mut c, MAX_MESSAGE) {
                 Ok(body) => match serde_json::from_slice::<SensorSnapshot>(&body) {
                     Ok(snap) => {
@@ -320,6 +333,16 @@ impl EngineApi for RemoteEngine {
 
     fn insights(&self) -> Result<Vec<crate::analysis::Insight>, String> {
         self.call(&Request::Insights)
+    }
+
+    /// Remembered for reconnects.
+    fn set_capture_target(&self, target: Option<CaptureTarget>) -> Result<(), String> {
+        lock(&self.shared.capture).clone_from(&target);
+        self.call(&Request::SetCaptureTarget { target })
+    }
+
+    fn game_sessions(&self) -> Result<Vec<GameSession>, String> {
+        self.call(&Request::GameSessions)
     }
 
     /// Stops reconnecting; the service keeps running.
@@ -453,6 +476,21 @@ mod tests {
         // A real answer on an elevated Windows runner, `None` elsewhere: either way it arrives.
         assert!(remote.bitlocker_system_drive().is_ok());
 
+        // Capture: the game shows in the snapshots (simulated frames here, PresentMon or its
+        // absence on Windows), and ends when the client leaves.
+        let target = crate::gaming::CaptureTarget {
+            pid: 4242,
+            name: "SimGame.exe".into(),
+        };
+        remote.set_capture_target(Some(target)).unwrap();
+        let game = loop {
+            if let Some(g) = snaps.recv_timeout(WAIT).unwrap().game {
+                break g;
+            }
+        };
+        assert_eq!(game.pid, 4242);
+        assert!(remote.game_sessions().unwrap().is_empty());
+
         remote.set_visible(false);
         let hidden = loop {
             let (visible, _) = sessions.recv_timeout(WAIT).unwrap();
@@ -462,6 +500,14 @@ mod tests {
         };
         assert!(hidden);
         remote.shutdown();
+        let deadline = std::time::Instant::now() + WAIT;
+        while _engine.latest().and_then(|s| s.game).is_some() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "capture outlived its client"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
     }
 
     #[test]

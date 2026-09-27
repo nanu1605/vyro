@@ -30,3 +30,9 @@ Thumbs.db
 
 # Bundled PawnIO installer (fetched by scripts/fetch-pawnio.ps1)
 src-tauri/pawnio/PawnIO_setup.exe
+
+# Bundled PresentMon (fetched by scripts/fetch-presentmon.ps1)
+src-tauri/presentmon/PresentMon.exe
+
+# ts-rs output of test runs outside cargo's config (e.g. under Wine); the real bindings are src/bindings
+/bindings/

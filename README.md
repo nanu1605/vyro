@@ -9,7 +9,8 @@ app or library).
 
 **Status:** early release (P11) with the privilege split (P8). Live CPU, GPU, board, fan,
 voltage, RAM, storage and network sensors on Windows (low-level ones through PawnIO, read by the
-Vyro Sensor Service), history, System Health, alerts, tray and an MSI installer. See [`ROADMAP.md`](ROADMAP.md) for what is verified on which hardware.
+Vyro Sensor Service), history, System Health, alerts, game frame rates (PresentMon), tray and an
+MSI installer. See [`ROADMAP.md`](ROADMAP.md) for what is verified on which hardware.
 Contributions: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Install (test builds)
@@ -20,17 +21,19 @@ The MSI installs Vyro for all users with a Start-menu entry, installs the signed
 temperature and power, fans, voltages and RAM sensors; it stays installed when Vyro is removed),
 and installs the **Vyro Sensor Service**. The service runs the sensor engine with the rights
 PawnIO and SMART need, keeps history while the app is closed, and serves the app over a local
-named pipe; the app itself runs without administrator rights. Without the service the app still
+named pipe; the app itself runs without administrator rights. Intel's
+[PresentMon](https://github.com/GameTechDev/PresentMon) console app is installed beside the
+service, which runs it to measure the fullscreen game in front (nothing is injected into games). Without the service the app still
 starts, reads what it can, and says what is missing. "Start with Windows" (Health → Alerts)
 opens it in the tray at sign-in. Builds are not code-signed yet, so SmartScreen will warn.
 
 `vyro-remote.exe` in the same artifact checks the service from the outside (state, connection,
-sensors). The service logs to `%ProgramData%\Vyro\service.log`.
+sensors; `--capture Game.exe` measures a running game for 15 s). The service logs to `%ProgramData%\Vyro\service.log`.
 
 ## License
 
 Vyro is licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your
-option. Third-party components and their licenses, including PawnIO, are listed in
+option. Third-party components and their licenses, including PawnIO and PresentMon, are listed in
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md), with the full texts in
 [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) (regenerate both with
 `python3 scripts/third_party.py`; CI checks they are current).

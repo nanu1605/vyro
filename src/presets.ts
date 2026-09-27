@@ -46,6 +46,8 @@ const PRESETS: Preset[] = [
   { key: 'disks', title: 'Disk throughput', unit: 'MB/s', zero: true, match: re(/^storage\..+\.(read|write)$/), skipZero: true },
   { key: 'network', title: 'Network', unit: 'Mbps', zero: true, match: re(/^network\.if\d+\.(down|up)$/), skipZero: true },
   { key: 'ping', title: 'Ping', unit: 'ms', zero: true, match: re(/^network\.ping$/) },
+  { key: 'fps', title: 'Game frame rate', unit: 'FPS', zero: true, match: re(/^game\.(fps|low1)$/), skipZero: true },
+  { key: 'frametime', title: 'Game frame time', unit: 'ms', zero: true, match: re(/^game\.frametime$/), skipZero: true },
 ];
 
 export function chartsFor(tree: SensorTree | null): ChartDef[] {
@@ -64,7 +66,7 @@ export function chartForSensor(s: Sensor): ChartDef {
     key: `focus:${s.id}`,
     title: s.name,
     unit: s.unit,
-    zero: ['%', 'W', 'RPM', 'MB', 'MB/s', 'Mbps', 'ms', '/s'].includes(s.unit),
+    zero: ['%', 'W', 'RPM', 'MB', 'MB/s', 'Mbps', 'ms', '/s', 'FPS'].includes(s.unit),
     max: s.unit === '%' ? 100 : undefined,
     metrics: [{ id: s.id, name: s.name }],
   };

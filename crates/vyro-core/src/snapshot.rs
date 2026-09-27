@@ -24,6 +24,8 @@ pub struct SensorSnapshot {
     pub power: PowerSnapshot,
     pub processes: Vec<ProcessSnapshot>,
     pub app: AppSnapshot,
+    /// The captured game, while there is one (P10).
+    pub game: Option<crate::gaming::GameSnapshot>,
     /// System Health, graded from this snapshot (see [`crate::health`]).
     pub health: crate::info::HealthReport,
     /// Alerts that fired on this tick (usually none).

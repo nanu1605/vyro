@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::io;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
@@ -14,6 +14,7 @@ use super::{
     PROTOCOL_VERSION,
 };
 use crate::engine::EngineApi;
+use crate::gaming::CaptureTarget;
 use crate::{lock, SensorSnapshot};
 
 /// Connections served at once; more are closed straight away (each holds a thread).
@@ -78,10 +79,12 @@ impl Hub {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct Session {
     pid: u32,
     visible: bool,
+    /// Capture target this client asked for, with the order it asked in (the latest wins).
+    capture: Option<(u64, CaptureTarget)>,
 }
 
 /// Called with (any client visible, client process ids) whenever the set of connected
@@ -95,6 +98,9 @@ pub struct Server {
     sessions: Mutex<HashMap<u64, Session>>,
     on_sessions: Box<SessionsChanged>,
     active: AtomicUsize,
+    capture_seq: AtomicU64,
+    /// The capture target last handed to the engine.
+    capture: Mutex<Option<CaptureTarget>>,
 }
 
 impl Server {
@@ -113,6 +119,8 @@ impl Server {
             sessions: Mutex::new(HashMap::new()),
             on_sessions: Box::new(on_sessions),
             active: AtomicUsize::new(0),
+            capture_seq: AtomicU64::new(0),
+            capture: Mutex::new(None),
         })
     }
 
@@ -184,6 +192,7 @@ impl Server {
                         Session {
                             pid,
                             visible: hello.visible,
+                            capture: None,
                         },
                     );
                 });
@@ -227,16 +236,29 @@ impl Server {
     }
 
     fn update_sessions(&self, f: impl FnOnce(&mut HashMap<u64, Session>)) {
-        let (visible, pids) = {
+        let (visible, pids, capture) = {
             let mut s = lock(&self.sessions);
             f(&mut s);
             let visible = s.values().any(|s| s.visible);
             let mut pids: Vec<u32> = s.values().map(|s| s.pid).filter(|&p| p != 0).collect();
             pids.sort_unstable();
             pids.dedup();
-            (visible, pids)
+            let capture = s
+                .values()
+                .filter_map(|s| s.capture.as_ref())
+                .max_by_key(|(seq, _)| *seq)
+                .map(|(_, t)| t.clone());
+            (visible, pids, capture)
         };
         (self.on_sessions)(visible, pids);
+        // A client that leaves takes its capture with it.
+        let mut applied = lock(&self.capture);
+        if *applied != capture {
+            applied.clone_from(&capture);
+            if let Err(e) = self.engine.set_capture_target(capture) {
+                log::warn!("ipc: capture target: {e}");
+            }
+        }
     }
 
     fn dispatch(&self, session: u64, req: Request) -> Reply {
@@ -272,6 +294,22 @@ impl Server {
             Request::SetPingHost { host } => json(e.set_ping_host(&host)),
             Request::BitlockerSystemDrive => json(e.bitlocker_system_drive()),
             Request::Insights => json(e.insights()),
+            Request::SetCaptureTarget { target } => {
+                let seq = self.capture_seq.fetch_add(1, Ordering::SeqCst);
+                let mut known = false;
+                self.update_sessions(|s| {
+                    if let Some(s) = s.get_mut(&session) {
+                        known = true;
+                        s.capture = target.map(|t| (seq, t));
+                    }
+                });
+                if known {
+                    json(Ok(()))
+                } else {
+                    Err("capture needs a snapshot stream open".into())
+                }
+            }
+            Request::GameSessions => json(e.game_sessions()),
         }
     }
 }

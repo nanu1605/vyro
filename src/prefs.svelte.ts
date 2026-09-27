@@ -6,7 +6,7 @@ import { getProfiles, getSettings, onSettingsChanged, setSettings, type AppSetti
 import type { ProfileSpec } from './types';
 import { fromUnit, tempSymbol, tempsIn, toUnit } from './units';
 
-export const prefs = $state<AppSettings>({ closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop' });
+export const prefs = $state<AppSettings>({ closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop', gameCapture: true });
 
 /** Profile presets, loaded with the preferences. */
 export const profiles = $state<{ list: ProfileSpec[] }>({ list: [] });

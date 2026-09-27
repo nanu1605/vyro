@@ -22,14 +22,15 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::alerts::AlertRule;
+use crate::gaming::CaptureTarget;
 use crate::HistoryRange;
 
 pub use client::{RemoteEngine, RemoteStatus};
 pub use server::{Hub, Server};
 pub use transport::{connect, default_endpoint, Conn, Listener};
 
-/// 2: `AppSnapshot::parts`.
-pub const PROTOCOL_VERSION: u32 = 2;
+/// 2: `AppSnapshot::parts`. 3: `SensorSnapshot::game`, capture target and game sessions.
+pub const PROTOCOL_VERSION: u32 = 3;
 /// Windows service name (installed by the MSI).
 pub const SERVICE_NAME: &str = "VyroService";
 /// Largest request the server accepts (alert rules are the biggest, a few KB).
@@ -102,6 +103,12 @@ pub enum Request {
     },
     BitlockerSystemDrive,
     Insights,
+    /// The process whose frames to capture (per client session; ends with the session).
+    #[serde(rename_all = "camelCase")]
+    SetCaptureTarget {
+        target: Option<CaptureTarget>,
+    },
+    GameSessions,
 }
 
 /// The answer to a [`Request`]: the method's result as JSON, or an error message.
@@ -195,6 +202,15 @@ mod tests {
             json(&Request::SetVisible { visible: true }),
             r#"{"method":"setVisible","params":{"visible":true}}"#
         );
+        assert_eq!(
+            json(&Request::SetCaptureTarget {
+                target: Some(CaptureTarget {
+                    pid: 9,
+                    name: "g.exe".into()
+                })
+            }),
+            r#"{"method":"setCaptureTarget","params":{"target":{"pid":9,"name":"g.exe"}}}"#
+        );
         let hello = Hello {
             protocol: PROTOCOL_VERSION,
             role: Role::Snapshots,
@@ -204,7 +220,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&hello).unwrap(),
-            r#"{"protocol":2,"role":"snapshots","session":7,"pid":42,"visible":false}"#
+            r#"{"protocol":3,"role":"snapshots","session":7,"pid":42,"visible":false}"#
         );
         let reply: Reply = Err("nope".into());
         assert_eq!(serde_json::to_string(&reply).unwrap(), r#"{"Err":"nope"}"#);

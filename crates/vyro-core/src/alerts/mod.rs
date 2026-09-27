@@ -217,7 +217,7 @@ fn unit_str(unit: Unit) -> String {
 /// "96.1 °C", "12.4%", "480 RPM".
 pub fn show(value: f64, unit: Unit) -> String {
     let digits = match unit {
-        Unit::Mhz | Unit::Rpm | Unit::Megabyte | Unit::PerSecond | Unit::Count => 0,
+        Unit::Mhz | Unit::Rpm | Unit::Megabyte | Unit::PerSecond | Unit::Fps | Unit::Count => 0,
         Unit::Volt => 2,
         _ => 1,
     };

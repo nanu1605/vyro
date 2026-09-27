@@ -4,6 +4,7 @@ import type { AppSnapshot } from "./AppSnapshot";
 import type { BoardSnapshot } from "./BoardSnapshot";
 import type { CpuSnapshot } from "./CpuSnapshot";
 import type { FanSnapshot } from "./FanSnapshot";
+import type { GameSnapshot } from "./GameSnapshot";
 import type { GpuSnapshot } from "./GpuSnapshot";
 import type { HealthReport } from "./HealthReport";
 import type { MemorySnapshot } from "./MemorySnapshot";
@@ -19,6 +20,10 @@ export type SensorSnapshot = {
  * Unix time, seconds.
  */
 ts: number, cpu: CpuSnapshot, gpu: Array<GpuSnapshot>, memory: MemorySnapshot, storage: Array<StorageSnapshot>, board: BoardSnapshot, fans: Array<FanSnapshot>, voltages: Array<VoltageReading>, network: Array<NetworkSnapshot>, ping: PingSnapshot, power: PowerSnapshot, processes: Array<ProcessSnapshot>, app: AppSnapshot, 
+/**
+ * The captured game, while there is one (P10).
+ */
+game: GameSnapshot | null, 
 /**
  * System Health, graded from this snapshot (see [`crate::health`]).
  */

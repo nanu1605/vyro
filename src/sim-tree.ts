@@ -3,7 +3,7 @@
 
 import type { Group, HistoryRange, HistorySeries, Sensor, SensorSnapshot, SensorTree, Source, Unit } from './types';
 
-const GROUP_ORDER: Group[] = ['cpu', 'gpu', 'memory', 'storage', 'board', 'fans', 'voltages', 'network', 'power', 'system', 'app'];
+const GROUP_ORDER: Group[] = ['cpu', 'gpu', 'memory', 'storage', 'board', 'fans', 'voltages', 'network', 'power', 'system', 'game', 'app'];
 
 interface Stats {
   min: number | null;

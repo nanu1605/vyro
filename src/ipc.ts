@@ -3,7 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { AlertFired, AlertRule, BackendStatus, Insight, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, GameSession, Insight, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -46,6 +46,12 @@ export async function queryHistory(metric: string, range: HistoryRange): Promise
 export async function getSensorTree(snap: SensorSnapshot | null): Promise<SensorTree> {
   if (!inTauri) return snap ? (await import('./sim-tree')).simTree(snap) : { groups: [] };
   return invoke<SensorTree>('get_sensor_tree');
+}
+
+/** Logged game sessions, newest first. */
+export async function getGameSessions(): Promise<GameSession[]> {
+  if (!inTauri) return (await import('./sim-game')).SAMPLE_SESSIONS;
+  return invoke<GameSession[]>('get_game_sessions');
 }
 
 /** Findings from history (unusual temperatures, throttling, slow fans, power changes). */
@@ -122,8 +128,10 @@ export interface AppSettings {
   hiddenSensors: string[];
   /** Poll rate, notifications, animation and dashboard density. */
   profile: Profile;
+  /** Measure frame rates of fullscreen games. */
+  gameCapture: boolean;
 }
-let browserSettings: AppSettings = { closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop' };
+let browserSettings: AppSettings = { closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop', gameCapture: true };
 const settingsListeners = new Set<(s: AppSettings) => void>();
 
 /** Settings changed elsewhere (the tray's Profile menu, another view). */

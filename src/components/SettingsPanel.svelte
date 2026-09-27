@@ -89,6 +89,22 @@
     </label>
   </Card>
 
+  <Card title="Gaming">
+    <label class="check">
+      <input
+        type="checkbox"
+        checked={prefs.gameCapture}
+        onchange={(e) => void save('Gaming', () => savePrefs({ gameCapture: (e.currentTarget as HTMLInputElement).checked }))}
+      />
+      <span
+        >Measure the frame rate of fullscreen games<small
+          >FPS, 1% lows and frame times of the game in the foreground, with Intel PresentMon. Nothing is injected into
+          the game.</small
+        ></span
+      >
+    </label>
+  </Card>
+
   <Card title="Units">
     <fieldset>
       <legend>Temperature</legend>

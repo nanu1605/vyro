@@ -28,6 +28,8 @@ pub struct Settings {
     pub hidden_sensors: Vec<String>,
     /// Poll rate, notifications, animation and dashboard density.
     pub profile: Profile,
+    /// Measure frame rates of fullscreen games (PresentMon).
+    pub game_capture: bool,
 }
 
 /// Emitted with the new [`Settings`] after any change (window or tray menu).
@@ -40,6 +42,7 @@ impl Default for Settings {
             temperature_unit: TempUnit::C,
             hidden_sensors: Vec::new(),
             profile: Profile::Desktop,
+            game_capture: true,
         }
     }
 }

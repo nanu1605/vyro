@@ -11,6 +11,7 @@ use ts_rs::TS;
 
 use crate::alerts::{self, AlertEngine, AlertFired, AlertRule};
 use crate::analysis::{self, Insight, SeriesMap};
+use crate::gaming::{CaptureTarget, GameProvider, GameSession, Gaming};
 use crate::health::{self, HealthEvent};
 use crate::info::{DriveInfo, PawnIoStatus};
 use crate::poller::{EVENT_ALERT, EVENT_HEALTH};
@@ -86,6 +87,10 @@ pub trait EngineApi: Send + Sync {
     /// Findings from the history store: unusual temperatures, throttling, slow fans, power
     /// changes.
     fn insights(&self) -> Result<Vec<Insight>, String>;
+    /// Captures frames of this process (the fullscreen app in the foreground), or stops.
+    fn set_capture_target(&self, target: Option<CaptureTarget>) -> Result<(), String>;
+    /// Logged game sessions, newest first.
+    fn game_sessions(&self) -> Result<Vec<GameSession>, String>;
     /// Stops polling and flushes history. Safe to call more than once.
     fn shutdown(&self);
 }
@@ -106,6 +111,7 @@ pub struct LocalEngine {
     alerts_path: Option<PathBuf>,
     poller: Mutex<Option<PollerHandle>>,
     clients: ClientPids,
+    gaming: Arc<Gaming>,
 }
 
 impl LocalEngine {
@@ -127,9 +133,13 @@ impl LocalEngine {
             .map_or_else(alerts::default_rules, alerts::load);
         log::info!("alerts: {} rule(s)", rules.len());
         let alerts = Arc::new(Mutex::new(AlertEngine::new(rules)));
+        let gaming = Gaming::new(Gaming::default_launch(), dir);
 
+        // The game provider runs last: its session summary reads this tick's temperatures.
+        let game: Box<dyn Provider> = Box::new(GameProvider::new(Arc::clone(&gaming)));
         let mut poller = providers
             .into_iter()
+            .chain(std::iter::once(game))
             .fold(
                 Poller::new(Arc::clone(&registry), cfg.poller),
                 Poller::with_boxed,
@@ -146,6 +156,7 @@ impl LocalEngine {
             alerts_path,
             poller: Mutex::new(Some(handle)),
             clients,
+            gaming,
         })
     }
 
@@ -314,7 +325,17 @@ impl EngineApi for LocalEngine {
         }))
     }
 
+    fn set_capture_target(&self, target: Option<CaptureTarget>) -> Result<(), String> {
+        self.gaming.set_target(target);
+        Ok(())
+    }
+
+    fn game_sessions(&self) -> Result<Vec<GameSession>, String> {
+        Ok(self.gaming.sessions())
+    }
+
     fn shutdown(&self) {
+        self.gaming.stop();
         if let Some(poller) = lock(&self.poller).take() {
             poller.stop();
         }

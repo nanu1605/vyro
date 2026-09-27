@@ -16,6 +16,12 @@ hand.
   licensed under LGPL-2.1-or-later; the license text is installed as
   `COPYING-PawnIO-modules`. They are loaded into the separately installed driver at run time.
 
+## PresentMon
+
+- **PresentMon console application** (`PresentMon.exe`, version 2.6.0, unmodified, signed by
+  Intel) from <https://github.com/GameTechDev/PresentMon>, licensed under MIT (text in
+  `THIRD_PARTY_LICENSES.md`). The sensor service runs it to measure game frame rates.
+
 ## Rust crates (290)
 
 Compiled into `vyro.exe` for Windows. Full license texts are in each crate's source package (crates.io) and repository.

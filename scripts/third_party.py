@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Writes THIRD_PARTY_NOTICES.md (PawnIO plus a table of every Rust crate compiled into the
-Windows app and the npm packages bundled into its UI) and THIRD_PARTY_LICENSES.md (their full
+"""Writes THIRD_PARTY_NOTICES.md (PawnIO, PresentMon and a table of every Rust crate compiled
+into the Windows app and the npm packages bundled into its UI) and THIRD_PARTY_LICENSES.md (their full
 license texts, taken from each package's source; identical texts are listed once).
 
     python3 scripts/third_party.py          # regenerate
@@ -41,6 +41,12 @@ hand.
   embedded in `vyro.exe`, unmodified) from <https://github.com/namazso/PawnIO.Modules>,
   licensed under LGPL-2.1-or-later; the license text is installed as
   `COPYING-PawnIO-modules`. They are loaded into the separately installed driver at run time.
+
+## PresentMon
+
+- **PresentMon console application** (`PresentMon.exe`, version 2.6.0, unmodified, signed by
+  Intel) from <https://github.com/GameTechDev/PresentMon>, licensed under MIT (text in
+  `THIRD_PARTY_LICENSES.md`). The sensor service runs it to measure game frame rates.
 """
 
 
@@ -161,6 +167,7 @@ def render_licenses():
         else:
             spdx, text = fallback(name, license, authors)
             add(f"{name} {version}", f"{spdx} (standard text; the package ships none)", text)
+    add("PresentMon 2.6.0 (bundled executable)", "LICENSE.txt", (FALLBACK_DIR / "PresentMon.txt").read_text())
     for name in UI_PACKAGES:
         d = ROOT / "node_modules" / name
         version = json.loads((d / "package.json").read_text())["version"]

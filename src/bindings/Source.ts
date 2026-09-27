@@ -3,4 +3,4 @@
 /**
  * Where a reading comes from (shown in the explorer; useful for field debugging).
  */
-export type Source = "sim" | "os" | "pdh" | "nvml" | "nvapi" | "adl" | "adlx" | "igcl" | "smart" | "driver" | "app";
+export type Source = "sim" | "os" | "pdh" | "nvml" | "nvapi" | "adl" | "adlx" | "igcl" | "smart" | "driver" | "presentmon" | "app";

@@ -22,6 +22,7 @@
   import SensorsPanel from './components/SensorsPanel.svelte';
   import HistoryPanel from './components/HistoryPanel.svelte';
   import HealthPanel from './components/HealthPanel.svelte';
+  import GamingPanel from './components/GamingPanel.svelte';
   import { animator } from './anim';
   import { fmt, fmtGB } from './format';
   import { getBackendStatus, getPawnIoStatus, inTauri, onBackendStatus, onSensors, setUiVisible } from './ipc';
@@ -32,6 +33,7 @@
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'history', label: 'History' },
     { id: 'health', label: 'Health' },
+    { id: 'gaming', label: 'Gaming' },
     { id: 'processes', label: 'Processes' },
     { id: 'hardware', label: 'Hardware' },
     { id: 'storage', label: 'Storage' },
@@ -58,6 +60,7 @@
     dashboard: true,
     history: false,
     health: false,
+    gaming: false,
     processes: false,
     hardware: false,
     storage: false,
@@ -148,6 +151,7 @@
       .then((s) => (pawnio = s))
       .catch(() => {});
   const NEEDS_DRIVER = $derived(pawnio?.state === 'ready' ? 'not reported' : 'needs PawnIO');
+  const game = $derived(snap?.game ?? null);
   const cpuFan = $derived(snap?.fans.find((f) => f.kind === 'fan') ?? null);
 
   onMount(() => {
@@ -252,6 +256,11 @@
       </div>
 
       <div class="tiles">
+        {#if game && game.state !== 'unavailable'}
+          <button type="button" class="tile-link" onclick={() => select('gaming')} aria-label="Game: {game.app}, open Gaming">
+            <StatTile label="Game FPS" value={game.fps} unit="FPS" sub={game.low1Fps != null ? `1% low ${fmt(game.low1Fps)} · ${game.app}` : game.app} />
+          </button>
+        {/if}
         <StatTile label="CPU package" value={tempOrNull(cpu?.tempPackage)} unit={tempUnit()} warn={temp(80)} hot={temp(95)} sub={cpu?.tempPackage == null ? NEEDS_DRIVER : null} />
         <StatTile label="CPU power" value={cpu?.powerPkgW} unit="W" digits={1} sub={cpu?.powerPkgW == null ? NEEDS_DRIVER : null} />
         <StatTile label="GPU temp" value={tempOrNull(gpu?.tempEdge)} unit={tempUnit()} warn={temp(80)} hot={temp(90)} />
@@ -304,6 +313,12 @@
     {#if visited.health}
       <div id="panel-health" role="tabpanel" aria-labelledby="tab-health" hidden={tab !== 'health'}>
         <HealthPanel {snap} active={tab === 'health'} onhistory={openHistory} />
+      </div>
+    {/if}
+
+    {#if visited.gaming}
+      <div id="panel-gaming" role="tabpanel" aria-labelledby="tab-gaming" hidden={tab !== 'gaming'}>
+        <GamingPanel {snap} {backend} active={tab === 'gaming'} onsettings={() => select('settings')} />
       </div>
     {/if}
 
@@ -504,6 +519,20 @@
     grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
     gap: 0.75rem;
     margin-top: 1rem;
+  }
+  .tile-link {
+    display: grid;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius);
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .tile-link:hover :global(.tile) {
+    border-color: var(--accent-gpu);
   }
   .cards {
     display: grid;

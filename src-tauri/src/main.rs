@@ -3,6 +3,7 @@
 
 mod commands;
 mod engine;
+mod gaming;
 mod tray;
 
 use tauri::Manager;
@@ -42,6 +43,7 @@ fn main() {
             if let Err(e) = tray::apply(app.handle(), settings) {
                 log::warn!("settings: {e}");
             }
+            gaming::watch(app.handle());
             if minimized {
                 tray::park_after_start(app.handle());
             } else {
@@ -77,6 +79,7 @@ fn main() {
             commands::get_profiles,
             commands::get_autostart,
             commands::set_autostart,
+            gaming::get_game_sessions,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build the Tauri application");
