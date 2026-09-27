@@ -406,7 +406,7 @@ In progress.
 - [x] P10b Field-checked: overlay shows over Rocket League in borderless mode; in its
       exclusive "Fullscreen" mode it cannot, as expected.
 - [x] P10b Field-checked: never steals focus; sessions are logged after quitting.
-- [ ] Frame-time graph smooth in the overlay at high frame rates (was jittery with raw frames).
+- [x] P10b Field-checked: frame-time graph smooth and scrolls continuously in the overlay.
 
 **Deferred to v2:** fan/pump control (driver write path), injected in-game overlay.
 
