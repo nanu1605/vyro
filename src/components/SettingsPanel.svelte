@@ -245,10 +245,12 @@
         {:else if upd.available}
           <p><b>Vyro {upd.available.version} is available.</b></p>
           {#if upd.available.notes}<p class="note notes">{upd.available.notes}</p>{/if}
+          {#if upd.error}<p class="err">Update failed: {upd.error}</p>{/if}
+        {:else if upd.error}
+          <p class="err">Check failed: {upd.error}</p>
         {:else if upd.lastCheck}
           <p>Vyro is up to date <span class="note">(checked {fmtDateTime(upd.lastCheck)})</span></p>
         {/if}
-        {#if upd.error}<p class="err">Update failed: {upd.error}</p>{/if}
       </div>
       <div class="actions">
         {#if upd.available}

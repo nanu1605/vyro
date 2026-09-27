@@ -106,8 +106,8 @@ async fn check(app: &AppHandle, auto: bool) -> UpdateStatus {
         s.error = None;
     });
     let result = match app.updater() {
-        Ok(u) => u.check().await.map_err(|e| e.to_string()),
-        Err(e) => Err(e.to_string()),
+        Ok(u) => u.check().await.map_err(|e| describe(&e)),
+        Err(e) => Err(describe(&e)),
     };
     let available = match &result {
         Ok(Some(u)) => Some(AvailableUpdate {
@@ -126,9 +126,10 @@ async fn check(app: &AppHandle, auto: bool) -> UpdateStatus {
     }
     let status = state.change(app, |s| {
         s.checking = false;
-        s.last_check = Some(unix_now());
         s.error = error;
+        // A failed check says nothing about whether Vyro is up to date.
         if s.error.is_none() {
+            s.last_check = Some(unix_now());
             s.available = available.clone();
         }
     });
@@ -136,6 +137,23 @@ async fn check(app: &AppHandle, auto: bool) -> UpdateStatus {
         notify(app, &state, &a.version);
     }
     status
+}
+
+/// The updater's errors in words a user can act on.
+fn describe(e: &tauri_plugin_updater::Error) -> String {
+    use tauri_plugin_updater::Error;
+    match e {
+        // The release file answered with an error status: no release yet, or the repository
+        // is private (its downloads need a sign-in).
+        Error::ReleaseNotFound => {
+            "no release information on GitHub (updates need the Vyro repository to be public)"
+                .into()
+        }
+        Error::Reqwest(_) | Error::Network(_) => {
+            "could not reach GitHub; check the internet connection".into()
+        }
+        e => e.to_string(),
+    }
 }
 
 fn notify(app: &AppHandle, state: &Updates, version: &str) {
