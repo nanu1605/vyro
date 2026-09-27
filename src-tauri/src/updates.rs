@@ -143,12 +143,9 @@ async fn check(app: &AppHandle, auto: bool) -> UpdateStatus {
 fn describe(e: &tauri_plugin_updater::Error) -> String {
     use tauri_plugin_updater::Error;
     match e {
-        // The release file answered with an error status: no release yet, or the repository
-        // is private (its downloads need a sign-in).
-        Error::ReleaseNotFound => {
-            "no release information on GitHub (updates need the Vyro repository to be public)"
-                .into()
-        }
+        // The release file answered with an error status: no release there yet, or a private
+        // repository (its downloads need a sign-in).
+        Error::ReleaseNotFound => "no release information found on the update server".into(),
         Error::Reqwest(_) | Error::Network(_) => {
             "could not reach GitHub; check the internet connection".into()
         }

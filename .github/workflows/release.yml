@@ -9,8 +9,13 @@ name: Release
 #   secret   TAURI_SIGNING_PRIVATE_KEY           update signing key (`tauri signer generate`)
 #   secret   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  its password
 #   variable UPDATER_PUBKEY                      the matching public key (the .pub file; a secret works too)
-# Installed copies find updates only while the repository is public (release downloads of a
-# private repository need a sign-in).
+# and, to keep this repository private:
+#   variable RELEASES_REPO                       a public repository for the downloads only
+#                                                (owner/name, created with a README)
+#   secret   RELEASES_TOKEN                      fine-grained token: Contents read and write on it
+# With RELEASES_REPO the installer and `latest.json` are also published there and installed
+# copies update from it (release downloads of a private repository need a sign-in); without
+# it they update from this repository's releases, which works only while it is public.
 
 on:
   workflow_dispatch:
@@ -37,6 +42,8 @@ jobs:
         env:
           UPDATER_PUBKEY: ${{ vars.UPDATER_PUBKEY || secrets.UPDATER_PUBKEY }}
           HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+          RELEASES_REPO: ${{ vars.RELEASES_REPO }}
+          HAS_RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN != '' }}
         run: |
           $version = python scripts/set-version.py --check
           if ($LASTEXITCODE -ne 0) { throw "version files disagree" }
@@ -48,6 +55,10 @@ jobs:
           }
           if (-not $env:UPDATER_PUBKEY) { throw "UPDATER_PUBKEY (repository variable or secret) is not set" }
           if ($env:HAS_KEY -ne 'true') { throw "secret TAURI_SIGNING_PRIVATE_KEY is not set" }
+          $hostRepo = if ($env:RELEASES_REPO) { $env:RELEASES_REPO.Trim() } else { $env:GITHUB_REPOSITORY }
+          if ($env:RELEASES_REPO -and $env:HAS_RELEASES_TOKEN -ne 'true') { throw "RELEASES_REPO is set but the secret RELEASES_TOKEN is not" }
+          "Updates come from https://github.com/$hostRepo/releases" >> $env:GITHUB_STEP_SUMMARY
+          "host=$hostRepo" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=$tag" >> $env:GITHUB_OUTPUT
 
@@ -72,13 +83,14 @@ jobs:
         shell: pwsh
         env:
           UPDATER_PUBKEY: ${{ vars.UPDATER_PUBKEY || secrets.UPDATER_PUBKEY }}
+          HOST_REPO: ${{ steps.version.outputs.host }}
         run: |
           @{
             bundle = @{ createUpdaterArtifacts = $true }
             plugins = @{
               updater = @{
                 pubkey = $env:UPDATER_PUBKEY.Trim()
-                endpoints = @("https://github.com/$env:GITHUB_REPOSITORY/releases/latest/download/latest.json")
+                endpoints = @("https://github.com/$env:HOST_REPO/releases/latest/download/latest.json")
                 windows = @{ installMode = 'passive' }
               }
             }
@@ -95,17 +107,18 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
           TAG: ${{ steps.version.outputs.tag }}
+          HOST_REPO: ${{ steps.version.outputs.host }}
         run: |
           $msi = Get-Item target\release\bundle\msi\*.msi | Select-Object -First 1
           if ($msi.Length -ge 20MB) { throw "installer is $([math]::Round($msi.Length / 1MB, 2)) MB, over the 20 MB budget" }
           $sig = (Get-Content -Raw "$($msi.FullName).sig").Trim()
           New-Item -ItemType Directory -Force release | Out-Null
           Copy-Item $msi.FullName release\
-          $url = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:TAG/$($msi.Name)"
+          $url = "https://github.com/$env:HOST_REPO/releases/download/$env:TAG/$($msi.Name)"
           $platform = @{ signature = $sig; url = $url }
           @{
             version = $env:VERSION
-            notes = "https://github.com/$env:GITHUB_REPOSITORY/releases/tag/$env:TAG"
+            notes = "Vyro $env:VERSION"
             pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
             platforms = @{ 'windows-x86_64' = $platform; 'windows-x86_64-msi' = $platform }
           } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 release\latest.json
@@ -113,6 +126,20 @@ jobs:
             "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
           } | Set-Content -Encoding ascii release\SHA256SUMS.txt
           Get-Content release\SHA256SUMS.txt | Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
+
+      # The downloads only: no source, no generated notes (they would link private commits).
+      - name: Publish the downloads to the public releases repository
+        if: vars.RELEASES_REPO != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+          HOST_REPO: ${{ steps.version.outputs.host }}
+        run: |
+          gh release create $env:TAG (Get-ChildItem release -File).FullName --repo $env:HOST_REPO `
+            --title "Vyro $env:VERSION" --notes "Vyro $env:VERSION for Windows 10/11 (x64). Install the MSI; installed copies update themselves."
+          if ($LASTEXITCODE -ne 0) { throw "publishing to $env:HOST_REPO failed (does it exist with a README, and may RELEASES_TOKEN write to it?)" }
 
       - name: Publish the release
         shell: pwsh

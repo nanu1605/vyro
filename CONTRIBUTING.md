@@ -86,5 +86,9 @@ Releases are built by `.github/workflows/release.yml`, never on a developer mach
    publishes release `vX.Y.Z` with the MSI, `latest.json` and `SHA256SUMS.txt`.
 
 Only these builds contain the updater; CI artifacts and local builds never check for updates.
-Installed copies look for `latest.json` in the latest release, so updates reach them only while
-the repository is public.
+Installed copies look for `latest.json` in the latest release. Release downloads of a private
+repository need a sign-in, so while this repository is private the downloads go to a separate
+public repository that holds no code: create it with a README, set the variable
+`RELEASES_REPO` to its `owner/name`, and add the secret `RELEASES_TOKEN`, a fine-grained token
+with Contents read and write on that repository only. The address is built into each release,
+so copies installed before it was set keep looking in the old place until updated by hand.
