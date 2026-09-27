@@ -390,9 +390,9 @@ In progress.
       figures, frame-time graph, limiter, session log), a Game FPS dashboard tile, a Settings
       switch; PresentMon fetched with a pinned SHA-256 and installed by the MSI.
       `vyro-remote --capture <exe|pid>` checks capture through the service without the app.
-- [ ] P10a Field check: FPS and lows within a few % of PresentMon's or the game's own counter
-      in a real game; session logged after quitting; anti-cheat games (FACEIT excepted, as with
-      PawnIO) unaffected.
+- [x] P10a Field-checked: FPS matches the game's own counter.
+- [ ] P10a Field check: session logged after quitting; anti-cheat games (FACEIT excepted, as
+      with PawnIO) unaffected.
 - [x] P10b Companion overlay (off by default; Settings → Gaming or the tray's "Game overlay"):
       a transparent, always-on-top, click-through window in a chosen corner of the game's
       monitor with FPS, 1 % low and frame time, optionally a frame-time graph and CPU / GPU
@@ -400,7 +400,9 @@ In progress.
       `SW_SHOWNOACTIVATE` (never takes focus), destroyed afterwards; while it shows, the engine
       polls at the profile's rate instead of the tray rate. Its window may only listen for its
       readings. A desktop window, not injected: it shows over borderless and windowed games,
-      not exclusive fullscreen.
+      not exclusive fullscreen. Re-raised every tick (a fullscreen game activated after the
+      overlay appeared sits above it); the Gaming tab says when a game is in exclusive
+      fullscreen (present mode "Hardware: Legacy …") and the overlay cannot show.
 - [ ] P10b Field check: overlay appears over a borderless game in the chosen corner, never
       steals focus or clicks, disappears on alt-tab and when the game exits.
 

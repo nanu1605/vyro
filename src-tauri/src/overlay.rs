@@ -130,6 +130,8 @@ pub fn update(app: &AppHandle, snap: &SensorSnapshot) {
             if !o.shown.swap(true, Ordering::SeqCst) || moved {
                 *lock(&o.placed) = placed;
                 show(app, monitor, &settings);
+            } else {
+                raise(app);
             }
             let gpu = snap.gpu.first();
             let data = OverlayData {
@@ -210,6 +212,17 @@ fn show(app: &AppHandle, monitor: Rect, settings: &OverlaySettings) {
         log::warn!("overlay: {e}");
     }
     set_engine_overlay(app, true);
+}
+
+/// Puts the overlay back on top. A fullscreen game is often a topmost window itself and, once
+/// it is activated, sits above windows made topmost before it; so this runs every tick.
+fn raise(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(w) = handle.get_webview_window(LABEL) {
+            show_without_focus(&w);
+        }
+    });
 }
 
 fn close(app: &AppHandle) {

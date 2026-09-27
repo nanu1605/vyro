@@ -55,6 +55,9 @@
   };
   const share = (busy: number | null | undefined, frame: number | null | undefined) =>
     busy != null && frame ? Math.min(100, (busy / frame) * 100) : null;
+  /** Exclusive fullscreen: the game owns the display ("Hardware: Legacy Flip" / "…Copy to front
+   * buffer"), so desktop windows such as the overlay cannot appear over it. */
+  const exclusive = $derived(game?.presentMode?.startsWith('Hardware: Legacy') ?? false);
   const running = $derived(game && snap ? Math.max(0, snap.ts - game.started) : null);
   const boundLabel = (b: Bound | null) => (b ? BOUND[b].title : NA);
 </script>
@@ -104,6 +107,13 @@
         <span class="badge" role="status">Starting capture…</span>
       {/if}
     </div>
+
+    {#if exclusive && prefs.overlay.enabled}
+      <p class="notice" role="status">
+        {game.app} runs in exclusive fullscreen ({game.presentMode}), which no window can draw over, so the overlay
+        cannot show. Choose borderless (or windowed fullscreen) in the game’s display settings to see it.
+      </p>
+    {/if}
 
     <div class="tiles">
       <div class="panel tile big">
@@ -236,6 +246,14 @@
     border-radius: 999px;
     color: var(--warn);
     font-size: 0.78rem;
+  }
+  .notice {
+    margin: 0 0 0.9rem;
+    padding: 0.55rem 0.85rem;
+    border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--warn) 8%, var(--panel));
+    font-size: 0.85rem;
   }
   .tiles {
     display: grid;
