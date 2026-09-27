@@ -4,7 +4,10 @@
   - ships the signed PawnIO installer and runs it silently, elevated, when PawnIO is missing or
     is a 1.x release. A PawnIO failure never fails the Vyro install (Return="ignore"); the app
     then shows its "needs PawnIO" banner.
-  - on uninstall (not upgrade) removes the "Vyro" autostart task the app may have created.
+  - on uninstall (not upgrade) removes the "Vyro" autostart task the app may have created and,
+    for the user running the uninstall, the per-user toast registration the app writes at start.
+    Settings, alert rules and history (%APPDATA%\app.vyro.monitor) are kept, as usual for user
+    data.
 -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Fragment>
@@ -28,12 +31,19 @@
     <CustomAction Id="RemoveAutostartTask" Directory="INSTALLDIR"
                   ExeCommand="&quot;[SystemFolder]schtasks.exe&quot; /Delete /TN &quot;Vyro&quot; /F"
                   Execute="deferred" Impersonate="no" Return="ignore" />
+    <!-- Impersonated, so HKCU is the uninstalling user's hive. -->
+    <CustomAction Id="RemoveToastRegistration" Directory="INSTALLDIR"
+                  ExeCommand="&quot;[SystemFolder]reg.exe&quot; delete &quot;HKCU\Software\Classes\AppUserModelId\app.vyro.monitor&quot; /f"
+                  Execute="deferred" Impersonate="yes" Return="ignore" />
 
     <InstallExecuteSequence>
       <Custom Action="InstallPawnIO" After="InstallFiles">
         <![CDATA[NOT REMOVE AND (NOT PAWNIO_VERSION OR PAWNIO_VERSION << "1.")]]>
       </Custom>
       <Custom Action="RemoveAutostartTask" Before="RemoveFiles">
+        <![CDATA[REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE]]>
+      </Custom>
+      <Custom Action="RemoveToastRegistration" Before="RemoveFiles">
         <![CDATA[REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE]]>
       </Custom>
     </InstallExecuteSequence>

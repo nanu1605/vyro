@@ -210,12 +210,16 @@ In progress. Done: WiX MSI (`pnpm tauri build`, uploaded by CI) with the pinned 
 installer (`scripts/fetch-pawnio.ps1`, SHA-256 checked) run silently and elevated when PawnIO
 is missing or 1.x (`src-tauri/wix/pawnio.wxs`; a PawnIO failure never fails the install);
 Start-menu shortcut carrying the toast app id; fixed upgrade code; "Start with Windows" as an
-elevated logon task (`vyro_core::autostart`, removed by the uninstaller); single instance;
-license MIT OR Apache-2.0 (decision 12), `THIRD_PARTY_NOTICES.md` generated from Cargo.lock
-and checked in CI. Open: code signing (needs the repo public and a SignPath / Certum
-account), Tauri updater (needs a signing key and a release feed), perf pass, clean-machine
-test with Memory Integrity on, full license texts for dependencies (e.g. cargo-about),
-CONTRIBUTING.
+elevated logon task (`vyro_core::autostart`); uninstall removes that task and the user's toast
+registration and keeps settings and history; single instance; license MIT OR Apache-2.0
+(decision 12); `THIRD_PARTY_NOTICES.md` and full texts in `THIRD_PARTY_LICENSES.md`, generated
+from Cargo.lock and the UI packages and checked in CI; `CONTRIBUTING.md`; spec §8 budget
+readout in the "Vyro itself" card (average CPU, peak memory, startup to first data) and a CI
+installer-size check (< 20 MB). Field-checked on the reference PC: install with PawnIO, test
+notification, close to tray, amd-cpu poll ≈ 1 ms under full load. Open: "Start with Windows"
+field check; §8 numbers from the reference PC into the README; code signing and the Tauri
+updater (deferred: need the repo public, a SignPath / Certum account and an update signing
+key); clean-machine test with Memory Integrity on.
 
 - Signing: SignPath Foundation or Certum Open Source (requires the repo public under an OSI
   license) for vyro.exe and the MSI.
@@ -226,8 +230,8 @@ CONTRIBUTING.
 - LICENSE, THIRD_PARTY_NOTICES (PawnIO driver GPL-2.0 with IOCTL exception, PawnIO modules
   LGPL-2.1, with source links), CONTRIBUTING.
 - Uninstall removes the per-user toast registration Vyro writes at start
-  (`HKCU\Software\Classes\AppUserModelId\app.vyro.monitor`) along with `alerts.json` and the
-  history database only if the user opts in.
+  (`HKCU\Software\Classes\AppUserModelId\app.vyro.monitor`); settings, alert rules and the
+  history database stay in `%APPDATA%\app.vyro.monitor`.
 
 ### P6 — Low-level sensors via PawnIO (M4)
 Our own KMDF driver and its attestation signing are dropped. Vyro talks to the PawnIO driver

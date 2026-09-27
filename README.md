@@ -7,9 +7,10 @@ app or library).
 - **Build spec:** [`PROJECT_PLAN.md`](PROJECT_PLAN.md) — what to build and why.
 - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — milestones, phase tracker, decision log.
 
-**Status:** Phase 1. The sensor engine, history store and UI run end-to-end; live readings are
-still simulated. The Hardware and System views show real inventory on Windows (CPU topology,
-caches, memory modules, board/BIOS, GPUs, OS, security posture, startup apps, power history).
+**Status:** early release (P11). Live CPU, GPU, board, fan, voltage, RAM, storage and network
+sensors on Windows (low-level ones through PawnIO), history, System Health, alerts, tray and an
+MSI installer. See [`ROADMAP.md`](ROADMAP.md) for what is verified on which hardware.
+Contributions: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Install (test builds)
 

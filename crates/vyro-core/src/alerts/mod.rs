@@ -171,8 +171,8 @@ pub fn save(path: &std::path::Path, rules: &[AlertRule]) -> std::io::Result<()> 
 }
 
 /// Lets Windows show toasts for `aumid` without an installer-made Start-menu shortcut: the
-/// per-user `AppUserModelId` registration unpackaged desktop apps use. The MSI (P11) should
-/// remove the key on uninstall.
+/// per-user `AppUserModelId` registration unpackaged desktop apps use. The MSI removes the key
+/// on uninstall (`src-tauri/wix/pawnio.wxs`).
 #[cfg(windows)]
 pub fn register_toast_app(aumid: &str, display_name: &str) -> Result<(), String> {
     let path = format!(r"Software\Classes\AppUserModelId\{aumid}");
