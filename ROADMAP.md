@@ -216,10 +216,10 @@ registration and keeps settings and history; single instance; license MIT OR Apa
 from Cargo.lock and the UI packages and checked in CI; `CONTRIBUTING.md`; spec §8 budget
 readout in the "Vyro itself" card (average CPU, peak memory, startup to first data) and a CI
 installer-size check (< 20 MB). Field-checked on the reference PC: install with PawnIO, test
-notification, close to tray, amd-cpu poll ≈ 1 ms under full load. Open: "Start with Windows"
-field check; §8 numbers from the reference PC into the README; code signing and the Tauri
-updater (deferred: need the repo public, a SignPath / Certum account and an update signing
-key); clean-machine test with Memory Integrity on.
+notification, close to tray, "Start with Windows" (tray at sign-in, no UAC prompt), amd-cpu
+poll ≈ 1 ms under full load. Open: §8 numbers from the reference PC into the README; code
+signing and the Tauri updater (deferred: need the repo public, a SignPath / Certum account and
+an update signing key); clean-machine test with Memory Integrity on.
 
 - Signing: SignPath Foundation or Certum Open Source (requires the repo public under an OSI
   license) for vyro.exe and the MSI.
