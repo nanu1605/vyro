@@ -2,6 +2,7 @@
   import Card from './Card.svelte';
   import KV from './KV.svelte';
   import { fmt } from '../format';
+  import { fmtTemp } from '../prefs.svelte';
   import type { CpuSnapshot } from '../types';
 
   interface Props {
@@ -11,8 +12,8 @@
 
   const unit = (v: number | null | undefined, u: string, d = 1) => (v == null ? null : `${fmt(v, d)} ${u}`);
   const rows = $derived<Array<[string, string | null]>>([
-    ['Package (Tdie)', unit(cpu?.tempPackage, '°C')],
-    ...(cpu?.tempCcd ?? []).map((t, i): [string, string | null] => [`CCD${i + 1}`, unit(t, '°C')]),
+    ['Package (Tdie)', fmtTemp(cpu?.tempPackage, 1)],
+    ...(cpu?.tempCcd ?? []).map((t, i): [string, string | null] => [`CCD${i + 1}`, fmtTemp(t, 1)]),
     ['Package power', unit(cpu?.powerPkgW, 'W')],
     ['Cores power', unit(cpu?.powerCoreW, 'W')],
     ['Core VID', unit(cpu?.vidCore, 'V', 3)],

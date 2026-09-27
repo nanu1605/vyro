@@ -1,7 +1,8 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { GROUP_LABEL } from '../format';
-  import { getAlertLog, getAlertRules, getAutostart, getSensorTree, getSettings, setAlertRules, setAutostart, setSettings, testAlert, type AppSettings } from '../ipc';
+  import { fmt, GROUP_LABEL } from '../format';
+  import { getAlertLog, getAlertRules, getSensorTree, setAlertRules, testAlert } from '../ipc';
+  import { displayUnit, temp, tempFromUser, tempText } from '../prefs.svelte';
   import type { AlertFired, AlertRule, Sensor, SensorSnapshot, SensorTree } from '../types';
 
   interface Props {
@@ -19,31 +20,6 @@
   let draft = $state<AlertRule | null>(null);
   let isNew = $state(false);
   let armedDelete = $state<string | null>(null);
-  let settings = $state<AppSettings | null>(null);
-  let autostart = $state<boolean | null>(null);
-
-  async function setStart(on: boolean): Promise<void> {
-    try {
-      await setAutostart(on);
-      autostart = on;
-      error = null;
-    } catch (e) {
-      error = `Start with Windows: ${String(e)}`;
-      autostart = await getAutostart().catch(() => null);
-    }
-  }
-
-  async function setTray(on: boolean): Promise<void> {
-    if (!settings) return;
-    const next = { ...settings, closeToTray: on };
-    try {
-      await setSettings(next);
-      settings = next;
-      error = null;
-    } catch (e) {
-      error = String(e);
-    }
-  }
 
   const sensors = $derived((tree?.groups ?? []).flatMap((g) => g.sensors));
   const byId = $derived(new Map(sensors.map((s) => [s.id, s])));
@@ -61,12 +37,6 @@
     if (!active) return;
     untrack(() => {
       void reload();
-      void getSettings()
-        .then((x) => (settings = x))
-        .catch(() => {});
-      void getAutostart()
-        .then((x) => (autostart = x))
-        .catch(() => {});
       void getSensorTree(snap).then((t) => (tree = t));
     });
   });
@@ -161,7 +131,10 @@
     if (type === 'health') draft.forSecs = 0;
   }
 
-  const unitOf = (id: string) => byId.get(id)?.unit ?? '';
+  const unitOf = (id: string) => displayUnit(byId.get(id)?.unit ?? '');
+  const isTemp = (id: string) => byId.get(id)?.unit === '°C';
+  /** Rule limits are stored in the sensor's unit (°C for temperatures); shown in the chosen one. */
+  const limitShown = (id: string, v: number) => (isTemp(id) ? Number(temp(v).toFixed(1)) : v);
   function describe(r: AlertRule): string {
     const quiet = r.cooldownSecs >= 60 ? `${Math.round(r.cooldownSecs / 60)} min` : `${r.cooldownSecs} s`;
     const tail = ` · quiet ${quiet} after firing${r.sound ? ' · sound' : ''}`;
@@ -169,8 +142,10 @@
       return (r.kind.problems ? 'System Health problems: stopped fans, failing drives, limits reached' : 'Any System Health warning or problem') + tail;
     }
     const s: Sensor | undefined = byId.get(r.kind.sensor);
-    const unit = s?.unit ? (s.unit === '%' ? '%' : ` ${s.unit}`) : '';
-    return `${s?.name ?? r.kind.sensor} ${r.kind.above ? 'above' : 'below'} ${r.kind.value}${unit}${r.forSecs ? ` for ${r.forSecs} s` : ''}${tail}${s ? '' : ' · sensor not present'}`;
+    const u = displayUnit(s?.unit ?? '');
+    const unit = u ? (u === '%' ? '%' : ` ${u}`) : '';
+    const limit = fmt(limitShown(r.kind.sensor, r.kind.value), isTemp(r.kind.sensor) ? 1 : 2).replace(/\.?0+$/, '');
+    return `${s?.name ?? r.kind.sensor} ${r.kind.above ? 'above' : 'below'} ${limit}${unit}${r.forSecs ? ` for ${r.forSecs} s` : ''}${tail}${s ? '' : ' · sensor not present'}`;
   }
   const when = (t: number) =>
     new Date(t * 1000).toLocaleString('en-US', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
@@ -201,7 +176,7 @@
           {#each groups as g (g.group)}
             <optgroup label={GROUP_LABEL[g.group] ?? g.group}>
               {#each g.sensors.filter((s) => s.unit !== '') as s (s.id)}
-                <option value={s.id}>{s.name} ({s.unit})</option>
+                <option value={s.id}>{s.name} ({displayUnit(s.unit)})</option>
               {/each}
             </optgroup>
           {/each}
@@ -219,7 +194,16 @@
       </label>
       <label>
         <span>Limit ({unitOf(d.kind.sensor) || 'value'})</span>
-        <input type="number" step="any" bind:value={d.kind.value} />
+        <input
+          type="number"
+          step="any"
+          bind:value={
+            () => (d.kind.type === 'threshold' ? limitShown(d.kind.sensor, d.kind.value) : 0),
+            (v) => {
+              if (d.kind.type === 'threshold' && typeof v === 'number') d.kind.value = isTemp(d.kind.sensor) ? tempFromUser(v) : v;
+            }
+          }
+        />
       </label>
       <label>
         <span>For at least (s)</span>
@@ -262,19 +246,10 @@
       <button type="button" class="primary" onclick={add} disabled={!!draft}>Add rule</button>
     </div>
   </div>
-  <p class="note">Windows notifications while Vyro is running, including from the tray. Rules are saved on this PC.</p>
-  {#if settings}
-    <label class="tray">
-      <input type="checkbox" checked={settings.closeToTray} onchange={(e) => void setTray((e.currentTarget as HTMLInputElement).checked)} />
-      Keep running in the tray when the window is closed (alerts need Vyro running; quit from the tray icon)
-    </label>
-  {/if}
-  {#if autostart != null}
-    <label class="tray">
-      <input type="checkbox" checked={autostart} onchange={(e) => void setStart((e.currentTarget as HTMLInputElement).checked)} />
-      Start with Windows, in the tray
-    </label>
-  {/if}
+  <p class="note">
+    Windows notifications while Vyro is running, including from the tray (Settings: keep running in the tray, start
+    with Windows). Rules are saved on this PC.
+  </p>
   {#if error}<p class="err">{error}</p>{/if}
 
   <ul class="rules">
@@ -310,7 +285,7 @@
   {#if log.length}
     <ol class="log">
       {#each [...log].reverse() as a, i (i)}
-        <li><time>{when(a.ts)}</time> <b>{a.title}</b> {a.message}</li>
+        <li><time>{when(a.ts)}</time> <b>{tempText(a.title)}</b> {tempText(a.message)}</li>
       {/each}
     </ol>
   {:else}
@@ -380,16 +355,6 @@
     margin: 0.35rem 0 0.7rem;
     color: var(--muted);
     font-size: 0.78rem;
-  }
-  .tray {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.45rem;
-    margin: 0 0 0.5rem;
-    font-size: 0.8rem;
-  }
-  .tray input {
-    margin-top: 0.15rem;
   }
   .err {
     color: var(--hot);

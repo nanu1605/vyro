@@ -3,6 +3,7 @@
   import KV from './KV.svelte';
   import Meter from './Meter.svelte';
   import { fmt, fmtGBTotal, fmtRate, fmtStorage, NA } from '../format';
+  import { fmtTemp } from '../prefs.svelte';
   import { getDrives } from '../ipc';
   import type { DriveInfo, Status, StorageSnapshot } from '../types';
 
@@ -46,12 +47,10 @@
 
   const HEALTH: Record<Status, string> = { ok: 'Good', warn: 'Caution', fail: 'Bad', unknown: 'Unknown' };
 
-  function temp(c: number | null | undefined): string | null {
-    return c == null ? null : `${fmt(c)} °C`;
-  }
+  const temp = (c: number | null | undefined): string | null => fmtTemp(c);
 
   function limits(d: DriveInfo): string | null {
-    const parts = [d.tempWarnC != null ? `warn ${fmt(d.tempWarnC)} °C` : null, d.tempCritC != null ? `critical ${fmt(d.tempCritC)} °C` : null];
+    const parts = [d.tempWarnC != null ? `warn ${fmtTemp(d.tempWarnC)}` : null, d.tempCritC != null ? `critical ${fmtTemp(d.tempCritC)}` : null];
     return parts.filter(Boolean).join(' · ') || null;
   }
 
@@ -73,7 +72,7 @@
   // there, and Seagate stores minutes / seconds above the power-on and head-flying hours.
   function rawValue(d: DriveInfo, id: number, raw: number): string {
     const temp = id === 194 || id === 190 || (id === 231 && d.ssd === false);
-    if (temp) return `${raw % 256} °C`;
+    if (temp) return fmtTemp(raw % 256) ?? NA;
     if (id === 9 || id === 240) return `${fmt(raw % 2 ** 32)} h`;
     return fmt(raw);
   }
@@ -111,7 +110,7 @@
         <div class="badges">
           <span class="health {s?.health ?? d.health}">{HEALTH[s?.health ?? d.health]}{d.healthPct != null ? ` · ${fmt(d.healthPct)}% life` : ''}</span>
           {#if t != null}
-            <span class="temp" class:hot={d.tempWarnC != null && t >= d.tempWarnC}>{fmt(t)} °C</span>
+            <span class="temp" class:hot={d.tempWarnC != null && t >= d.tempWarnC}>{fmtTemp(t)}</span>
           {/if}
         </div>
         {#if d.healthNotes.length > 0}
@@ -173,7 +172,7 @@
               ['Above warning temp', minutes(n.warningTempMinutes)],
               ['Above critical temp', minutes(n.criticalTempMinutes)],
               ['Thermal throttling', n.throttleEvents.some((x) => x > 0) ? `${n.throttleEvents.join(' / ')} events, ${n.throttleSecs.join(' / ')} s` : 'None'],
-              ['Sensors', n.sensorsC.map((c, i) => (c == null ? null : `#${i + 1} ${fmt(c)} °C`)).filter(Boolean).join(' · ') || null],
+              ['Sensors', n.sensorsC.map((c, i) => (c == null ? null : `#${i + 1} ${fmtTemp(c)}`)).filter(Boolean).join(' · ') || null],
             ]}
           />
         {/if}

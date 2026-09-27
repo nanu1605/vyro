@@ -346,8 +346,12 @@ In progress.
       rate, WebView2 invisible + low memory target + suspended; resumed before showing.
       `--minimized` starts park the page after 5 s.
 - [ ] P9a Measure on the reference PC (visible and in the tray) and decide the next trims.
-- [ ] P9b Settings: °C/°F, per-sensor show/hide, start minimized; empty/error states;
-      accessibility pass.
+- [x] P9b Settings tab: keep running in the tray, start with Windows (moved from Alerts),
+      °C/°F everywhere (tiles, cards, Sensors, History, alert limits, health and alert texts,
+      Windows notifications; the engine stays in °C), hidden sensors (× in Sensors, listed in
+      Settings to bring back, left out of History presets), sensor service status. Saved in the
+      app's `settings.json`.
+- [ ] P9b Empty/error states and accessibility pass.
 - [ ] P9c Profiles (Desktop / Gaming / Work / Benchmark / Silent).
 - [ ] P9d Analysis: baselines, unusual temperatures, throttling and cooling anomalies, power
       changes explained from the history store.

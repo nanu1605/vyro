@@ -3,6 +3,8 @@
 export type { AppSnapshot } from './bindings/AppSnapshot';
 export type { BackendMode } from './bindings/BackendMode';
 export type { BackendStatus } from './bindings/BackendStatus';
+export type { TempUnit } from './bindings/TempUnit';
+export type { AppPart } from './bindings/AppPart';
 export type { CpuSnapshot } from './bindings/CpuSnapshot';
 export type { EngineStatus } from './bindings/EngineStatus';
 export type { GpuSnapshot } from './bindings/GpuSnapshot';

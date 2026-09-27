@@ -27,6 +27,7 @@ pub mod sio;
 pub mod snapshot;
 pub mod storage;
 pub mod sysinfo;
+pub mod units;
 pub mod usage;
 #[cfg(windows)]
 mod winutil;

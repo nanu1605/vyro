@@ -1,6 +1,7 @@
 <script lang="ts">
   import AlertsPanel from './AlertsPanel.svelte';
   import { getHealthEvents } from '../ipc';
+  import { fmtTemp, tempText } from '../prefs.svelte';
   import type { HealthEvent, SensorSnapshot, Status } from '../types';
 
   interface Props {
@@ -43,6 +44,8 @@
     if (!bad.length) return 'Everything Vyro monitors is within normal limits.';
     return `${bad.length} ${bad.length === 1 ? 'area needs' : 'areas need'} attention: ${bad.map((s) => s.name).join(', ')}.`;
   });
+  /** "85 °C / 92 °C" in the chosen unit. */
+  const lim = (warn: number, problem: number): string => `${fmtTemp(warn)} / ${fmtTemp(problem)}`;
 </script>
 
 <section class="panel">
@@ -59,7 +62,7 @@
         </header>
         {#if s.messages.length}
           <ul>
-            {#each s.messages as m (m)}<li>{m}</li>{/each}
+            {#each s.messages as m (m)}<li>{tempText(m)}</li>{/each}
           </ul>
         {:else if s.status === 'ok'}
           <p class="fine">Within normal limits.</p>
@@ -76,7 +79,7 @@
         <li class="tone-{e.status}">
           <time>{when(e.ts)}</time>
           <span class="dot" aria-hidden="true"></span>
-          <span class="what"><b>{e.subsystem}</b> {e.message}</span>
+          <span class="what"><b>{e.subsystem}</b> {tempText(e.message)}</span>
         </li>
       {/each}
     </ol>
@@ -84,8 +87,8 @@
     <p class="fine">No thermal limits, throttling, stopped fans or rail problems since Vyro started.</p>
   {/if}
   <p class="note">
-    Limits (warning / problem): CPU 90 / 99 °C (Ryzen 7000/9000 run at 95 °C under full load by design), GPU 85 / 92 °C, hotspot 100 / 108 °C, NVMe 75 / 85 °C, VRM 95 / 105 °C,
-    DIMM 75 / 85 °C, supply rails ±5 % / ±10 %. A fan that was spinning and reads 0 RPM counts as stopped.
+    Limits (warning / problem): CPU {lim(90, 99)} (Ryzen 7000/9000 run at {fmtTemp(95)} under full load by design), GPU
+    {lim(85, 92)}, hotspot {lim(100, 108)}, NVMe {lim(75, 85)}, VRM {lim(95, 105)}, DIMM {lim(75, 85)}, supply rails ±5 % / ±10 %. A fan that was spinning and reads 0 RPM counts as stopped.
   </p>
 
   <AlertsPanel {snap} {active} />

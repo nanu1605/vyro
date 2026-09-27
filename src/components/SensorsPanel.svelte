@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { fmtUnit, GROUP_LABEL, NA } from '../format';
+  import { GROUP_LABEL, NA } from '../format';
+  import { fmtReading, isHidden, prefs, savePrefs } from '../prefs.svelte';
   import { getSensorTree, resetSensorStats } from '../ipc';
   import type { Sensor, SensorSnapshot, SensorTree } from '../types';
 
@@ -16,7 +17,19 @@
   let error = $state<string | null>(null);
   let filter = $state('');
   let collapsed = $state<Record<string, boolean>>({});
+  let showHidden = $state(false);
   let busy = false;
+
+  /** Hides a sensor from this list and from History (Settings lists them to bring back). */
+  async function toggleHidden(s: Sensor): Promise<void> {
+    const hidden = prefs.hiddenSensors;
+    try {
+      await savePrefs({ hiddenSensors: isHidden(s.id) ? hidden.filter((id) => id !== s.id) : [...hidden, s.id] });
+      error = null;
+    } catch (e) {
+      error = String(e);
+    }
+  }
 
   async function refresh(): Promise<void> {
     if (busy) return;
@@ -46,14 +59,18 @@
     return (tree?.groups ?? [])
       .map((g) => ({
         ...g,
-        sensors: q ? g.sensors.filter((s) => s.name.toLowerCase().includes(q) || s.id.includes(q)) : g.sensors,
+        sensors: g.sensors.filter(
+          (s) => (showHidden || !isHidden(s.id)) && (!q || s.name.toLowerCase().includes(q) || s.id.includes(q)),
+        ),
       }))
       .filter((g) => g.sensors.length > 0);
   });
   const total = $derived(tree?.groups.reduce((n, g) => n + g.sensors.length, 0) ?? 0);
   const live = $derived(tree?.groups.reduce((n, g) => n + g.sensors.filter((s) => s.available).length, 0) ?? 0);
 
-  const v = (s: Sensor, x: number | null) => (x == null ? NA : fmtUnit(x, s.unit));
+  const hiddenCount = $derived(prefs.hiddenSensors.length);
+
+  const v = (s: Sensor, x: number | null) => (x == null ? NA : fmtReading(x, s.unit));
 </script>
 
 <section class="panel">
@@ -64,6 +81,12 @@
     <div class="tools">
       <input type="search" placeholder="Filter sensors" aria-label="Filter sensors" bind:value={filter} />
       <button type="button" class="reset" onclick={reset}>Reset min/max</button>
+      {#if hiddenCount > 0 || showHidden}
+        <label class="reset">
+          <input type="checkbox" bind:checked={showHidden} />
+          Show hidden ({hiddenCount})
+        </label>
+      {/if}
     </div>
   </div>
 
@@ -95,6 +118,7 @@
               <col class="c-num" />
               <col class="c-num opt" />
               <col class="c-src opt" />
+              <col class="c-act" />
             </colgroup>
             <thead>
               <tr>
@@ -104,11 +128,13 @@
                 <th class="num">Max</th>
                 <th class="num opt">Avg</th>
                 <th class="opt">Source</th>
+                <th><span class="sr">Hide</span></th>
               </tr>
             </thead>
             <tbody>
               {#each g.sensors as s (s.id)}
-                <tr class:off={!s.available}>
+                {@const hidden = isHidden(s.id)}
+                <tr class:off={!s.available || hidden}>
                   <td class="name" title={s.id}>
                     {#if s.history && onhistory}
                       <button type="button" class="link" onclick={() => onhistory(s.id)} title="Show history">{s.name}</button>
@@ -121,6 +147,17 @@
                   <td class="num">{v(s, s.max)}</td>
                   <td class="num opt">{v(s, s.avg)}</td>
                   <td class="opt src">{s.source}</td>
+                  <td class="act">
+                    <button
+                      type="button"
+                      class="hide"
+                      onclick={() => toggleHidden(s)}
+                      aria-label="{hidden ? 'Show' : 'Hide'} {s.name}"
+                      title={hidden ? 'Show again in Sensors and History' : 'Hide from Sensors and History'}
+                    >
+                      {hidden ? '+' : '×'}
+                    </button>
+                  </td>
                 </tr>
               {/each}
             </tbody>
@@ -216,6 +253,46 @@
   }
   .c-src {
     width: 5.5rem;
+  }
+  .c-act {
+    width: 2.2rem;
+  }
+  .act {
+    padding: 0 0.3rem;
+    text-align: center;
+  }
+  .hide {
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .hide:hover,
+  .hide:focus-visible {
+    border-color: var(--line);
+    color: var(--text);
+  }
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  label.reset {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  label.reset input {
+    min-width: 0;
   }
   th {
     padding: 0.3rem 0.8rem;

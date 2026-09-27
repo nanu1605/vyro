@@ -3,6 +3,7 @@
   import HistoryChart from './HistoryChart.svelte';
   import { getSensorTree, queryHistory } from '../ipc';
   import { chartForSensor, chartsFor, type ChartDef } from '../presets';
+  import { displayUnit, prefs, temp } from '../prefs.svelte';
   import type { HistoryRange, HistorySeries, SensorSnapshot, SensorTree } from '../types';
 
   interface Props {
@@ -50,7 +51,12 @@
   }
 
   const charts = $derived.by<ChartDef[]>(() => {
-    const list = chartsFor(tree);
+    // Sensors hidden in the explorer stay out of the preset charts (a focused one still shows).
+    const hidden = prefs.hiddenSensors;
+    const shown = tree && {
+      groups: tree.groups.map((g) => ({ ...g, sensors: g.sensors.filter((s) => !hidden.includes(s.id)) })),
+    };
+    const list = chartsFor(shown);
     const f = focus ? tree?.groups.flatMap((g) => g.sensors).find((s) => s.id === focus) : null;
     return f ? [chartForSensor(f), ...list] : list;
   });
@@ -101,8 +107,19 @@
     return () => clearInterval(t);
   });
 
+  /** Series in display units (temperatures in °F when chosen; history is stored in °C). */
   const seriesFor = (c: ChartDef) =>
-    c.metrics.map((m, i) => ({ name: m.name, color: COLORS[i % COLORS.length]!, points: data[m.id]?.points ?? [] }));
+    c.metrics.map((m, i) => {
+      const points = data[m.id]?.points ?? [];
+      return {
+        name: m.name,
+        color: COLORS[i % COLORS.length]!,
+        points:
+          c.unit === '°C' && prefs.temperatureUnit === 'f'
+            ? points.map((p) => ({ ...p, avg: temp(p.avg), min: temp(p.min), max: temp(p.max) }))
+            : points,
+      };
+    });
   const step = $derived(Object.values(data)[0]?.stepSecs ?? 1);
 </script>
 
@@ -132,7 +149,7 @@
       <div class:wide={c.key.startsWith('focus:')}>
         <HistoryChart
           title={c.title}
-          unit={c.unit}
+          unit={displayUnit(c.unit)}
           zero={c.zero}
           max={c.max}
           series={seriesFor(c)}

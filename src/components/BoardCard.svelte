@@ -2,6 +2,7 @@
   import Card from './Card.svelte';
   import KV from './KV.svelte';
   import { fmt } from '../format';
+  import { fmtTemp } from '../prefs.svelte';
   import type { BoardSnapshot, FanSnapshot, VoltageReading } from '../types';
 
   interface Props {
@@ -12,7 +13,7 @@
   }
   let { board, fans, voltages, pending }: Props = $props();
 
-  const temp = (v: number | null | undefined) => (v == null ? null : `${fmt(v, 1)} °C`);
+  const temp = (v: number | null | undefined) => fmtTemp(v, 1);
   const temps = $derived<Array<[string, string | null]>>(
     (
       [

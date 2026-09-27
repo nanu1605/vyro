@@ -1,7 +1,7 @@
 <script lang="ts">
   import { bandPath, linePath, nearest, niceScale, runs, timeLabel, timeTicks } from '../chart';
   import { fmt, fmtUnit } from '../format';
-  import type { HistoryPoint, Unit } from '../types';
+  import type { HistoryPoint } from '../types';
 
   interface Series {
     name: string;
@@ -10,7 +10,8 @@
   }
   interface Props {
     title: string;
-    unit: Unit;
+    /** Display unit, e.g. "°F" for a °C sensor shown in Fahrenheit. */
+    unit: string;
     zero: boolean;
     max?: number;
     series: Series[];

@@ -3,6 +3,7 @@
   import KV from './KV.svelte';
   import Meter from './Meter.svelte';
   import { fmt, fmtGB } from '../format';
+  import { fmtTemp } from '../prefs.svelte';
   import type { GpuSnapshot } from '../types';
 
   interface Props {
@@ -30,9 +31,9 @@
     rows={[
       ['Core clock', unit(gpu.mhzCore, 'MHz')],
       ['Memory clock', unit(gpu.mhzMem, 'MHz')],
-      ['Temperature', unit(gpu.tempEdge, '°C')],
-      ['Hotspot', unit(gpu.tempHotspot, '°C')],
-      ['Memory temp', unit(gpu.tempMem, '°C')],
+      ['Temperature', fmtTemp(gpu.tempEdge)],
+      ['Hotspot', fmtTemp(gpu.tempHotspot)],
+      ['Memory temp', fmtTemp(gpu.tempMem)],
       ['Core voltage', unit(gpu.voltageV, 'V', 3)],
       ['VRAM', gpu.vramUsedMB != null ? `${fmtGB(gpu.vramUsedMB)} / ${fmtGB(gpu.vramTotalMB)} GB` : null],
       [

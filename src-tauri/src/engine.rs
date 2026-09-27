@@ -259,11 +259,12 @@ fn migrate_alert_rules(app: &AppHandle, api: &Arc<dyn EngineApi>) {
 /// Shows a fired alert as a Windows notification (silent unless the rule asks for sound).
 pub fn notify(app: &AppHandle, alert: &AlertFired) {
     log::info!("alert: {}: {}", alert.title, alert.message);
-    let mut n = app
-        .notification()
-        .builder()
-        .title(&alert.title)
-        .body(&alert.message);
+    let unit = app
+        .try_state::<crate::tray::SettingsStore>()
+        .map_or_else(Default::default, |s| s.get().temperature_unit);
+    let title = vyro_core::units::temps_in(&alert.title, unit);
+    let body = vyro_core::units::temps_in(&alert.message, unit);
+    let mut n = app.notification().builder().title(&title).body(&body);
     if alert.sound {
         n = n.sound("Default");
     }

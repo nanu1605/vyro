@@ -5,6 +5,7 @@
   import AppStatus from './components/AppStatus.svelte';
   import HardwarePanel from './components/HardwarePanel.svelte';
   import SystemPanel from './components/SystemPanel.svelte';
+  import SettingsPanel from './components/SettingsPanel.svelte';
   import DisplaysPanel from './components/DisplaysPanel.svelte';
   import StoragePanel from './components/StoragePanel.svelte';
   import MemoryCard from './components/MemoryCard.svelte';
@@ -24,6 +25,7 @@
   import { animator } from './anim';
   import { fmt, fmtGB } from './format';
   import { getBackendStatus, getPawnIoStatus, inTauri, onBackendStatus, onSensors, setUiVisible } from './ipc';
+  import { loadPrefs, temp, tempOrNull, tempText, tempUnit } from './prefs.svelte';
   import type { AlertFired, BackendStatus, PawnIoStatus, SensorSnapshot } from './types';
 
   const TABS = [
@@ -37,6 +39,7 @@
     { id: 'displays', label: 'Displays' },
     { id: 'system', label: 'System' },
     { id: 'sensors', label: 'Sensors' },
+    { id: 'settings', label: 'Settings' },
   ] as const;
   type Tab = (typeof TABS)[number]['id'];
 
@@ -62,6 +65,7 @@
     displays: false,
     system: false,
     sensors: false,
+    settings: false,
   });
 
   /** Alerts that fired while the window is open, shown briefly in the corner. */
@@ -108,7 +112,7 @@
     (snap?.health.subsystems ?? [])
       .filter((x) => x.status === 'warn' || x.status === 'fail')
       .sort((a, b) => (a.status === b.status ? 0 : a.status === 'fail' ? -1 : 1))
-      .flatMap((x) => (x.messages.length ? x.messages : [x.name])),
+      .flatMap((x) => (x.messages.length ? x.messages.map(tempText) : [x.name])),
   );
 
   let uiFps = $state(0);
@@ -132,6 +136,7 @@
   onMount(() => {
     visited[tab] = true;
     loadPawnIo();
+    void loadPrefs().catch(() => {});
     let stop: (() => void) | undefined;
     let stopBackend: (() => void) | undefined;
     let disposed = false;
@@ -224,10 +229,10 @@
       </div>
 
       <div class="tiles">
-        <StatTile label="CPU package" value={cpu?.tempPackage} unit="°C" warn={80} hot={95} sub={cpu?.tempPackage == null ? NEEDS_DRIVER : null} />
+        <StatTile label="CPU package" value={tempOrNull(cpu?.tempPackage)} unit={tempUnit()} warn={temp(80)} hot={temp(95)} sub={cpu?.tempPackage == null ? NEEDS_DRIVER : null} />
         <StatTile label="CPU power" value={cpu?.powerPkgW} unit="W" digits={1} sub={cpu?.powerPkgW == null ? NEEDS_DRIVER : null} />
-        <StatTile label="GPU temp" value={gpu?.tempEdge} unit="°C" warn={80} hot={90} />
-        <StatTile label="GPU hotspot" value={gpu?.tempHotspot} unit="°C" warn={90} hot={105} />
+        <StatTile label="GPU temp" value={tempOrNull(gpu?.tempEdge)} unit={tempUnit()} warn={temp(80)} hot={temp(90)} />
+        <StatTile label="GPU hotspot" value={tempOrNull(gpu?.tempHotspot)} unit={tempUnit()} warn={temp(90)} hot={temp(105)} />
         <StatTile
           label="VRAM"
           value={gpu?.vramUsedMB != null ? gpu.vramUsedMB / 1024 : null}
@@ -307,6 +312,11 @@
         <SensorsPanel {snap} active={tab === 'sensors'} onhistory={openHistory} />
       </div>
     {/if}
+    {#if visited.settings}
+      <div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden={tab !== 'settings'}>
+        <SettingsPanel {snap} {backend} active={tab === 'settings'} />
+      </div>
+    {/if}
   </main>
 
   <AppStatus app={snap?.app ?? null} {uiFps} source={inTauri ? 'engine' : 'browser sim'} />
@@ -314,8 +324,8 @@
   <div class="toasts" role="status" aria-live="polite">
     {#each toasts as t (t.key)}
       <button type="button" class="toast" onclick={() => select('health')}>
-        <b>{t.title}</b>
-        <span>{t.message}</span>
+        <b>{tempText(t.title)}</b>
+        <span>{tempText(t.message)}</span>
       </button>
     {/each}
   </div>

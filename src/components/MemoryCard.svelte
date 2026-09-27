@@ -2,6 +2,7 @@
   import Card from './Card.svelte';
   import KV from './KV.svelte';
   import { fmt, fmtGB, NA } from '../format';
+  import { fmtTemp } from '../prefs.svelte';
   import type { MemorySnapshot } from '../types';
 
   interface Props {
@@ -58,7 +59,7 @@
   />
   {#if dimms.length}
     <h3>Modules</h3>
-    <KV rows={dimms.map((d): [string, string | null] => [d.slot, d.tempC == null ? null : `${fmt(d.tempC, 1)} °C`])} />
+    <KV rows={dimms.map((d): [string, string | null] => [d.slot, fmtTemp(d.tempC, 1)])} />
   {/if}
   {#if t}
     <h3>Timings</h3>

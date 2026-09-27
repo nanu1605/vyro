@@ -3,7 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { AlertFired, AlertRule, BackendStatus, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -96,8 +96,12 @@ export async function getAlertLog(): Promise<AlertFired[]> {
 export interface AppSettings {
   /** Closing the window keeps Vyro running in the tray. */
   closeToTray: boolean;
+  /** How temperatures are shown; the engine always works in °C. */
+  temperatureUnit: TempUnit;
+  /** Sensor ids left out of the Sensors and History views. */
+  hiddenSensors: string[];
 }
-let browserSettings: AppSettings = { closeToTray: true };
+let browserSettings: AppSettings = { closeToTray: true, temperatureUnit: 'c', hiddenSensors: [] };
 
 export async function getSettings(): Promise<AppSettings> {
   if (!inTauri) return { ...browserSettings };

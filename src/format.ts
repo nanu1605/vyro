@@ -92,7 +92,7 @@ export function fmtRate(mbs: number | null | undefined): string {
 }
 
 const UNIT_DIGITS: Record<string, number> = {
-  '%': 1, MHz: 0, '°C': 1, W: 1, V: 3, RPM: 0, MB: 0, 'MB/s': 2, Mbps: 2, ms: 1, '/s': 0, '': 2,
+  '%': 1, MHz: 0, '°C': 1, '°F': 1, W: 1, V: 3, RPM: 0, MB: 0, 'MB/s': 2, Mbps: 2, ms: 1, '/s': 0, '': 2,
 };
 
 /** A registry reading with its unit: "41.3 °C", "12.5%", "1,480 RPM". */

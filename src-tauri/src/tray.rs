@@ -10,6 +10,7 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, Window, WindowEvent};
 use vyro_core::alerts::AlertFired;
+use vyro_core::units::TempUnit;
 use vyro_core::{lock, unix_now};
 
 use crate::engine::{notify, Engine};
@@ -19,12 +20,18 @@ use crate::engine::{notify, Engine};
 pub struct Settings {
     /// Closing the window keeps Vyro running in the tray (alerts keep working).
     pub close_to_tray: bool,
+    /// How temperatures are shown (the engine always works in °C).
+    pub temperature_unit: TempUnit,
+    /// Sensor ids left out of the Sensors and History views.
+    pub hidden_sensors: Vec<String>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             close_to_tray: true,
+            temperature_unit: TempUnit::C,
+            hidden_sensors: Vec::new(),
         }
     }
 }
