@@ -298,7 +298,10 @@ the browser build).
       so monitoring and alerts continue (setting, on by default, `settings.json`); a one-time
       notification says so.
 ### P8 — Privilege separation: Windows service + ACL'd named pipe (M5)
-In progress: built and tested (Linux, Wine, CI); awaiting the field check on the reference PC.
+In progress: built and tested (Linux, Wine, CI). Field-checked on the reference PC: MSI upgrade
+from the elevated build, app unelevated and connected to the service, the full sensor set through
+it (PawnIO ready; CPU, board, fans, voltages, DIMMs, drives all live), alert rules carried over.
+Footprint with the service: 185 MB (service + app + WebView2), above the §8 120 MB target — P9.
 
 - [x] `vyro_core::engine`: the engine as one object (`LocalEngine`: registry, poller and
       providers, history, health, alert rules) behind `EngineApi`, moved out of the Tauri shell.
@@ -329,8 +332,10 @@ In progress: built and tested (Linux, Wine, CI); awaiting the field check on the
       pipe (snapshots, every command, visibility, reconnect after a service restart, version
       refusal); the service binary end to end. Checked under Wine with the real SCM: install,
       start, client verification, stop.
-- [ ] Field check: fresh install and upgrade from the elevated build; sensors and history with
-      the app closed; `sc stop` / `sc start VyroService` while the app runs; `vyro-remote.exe`.
+- [x] Field check: upgrade from the elevated build, sensors through the service,
+      `vyro-remote.exe`.
+- [ ] Field check: history with the app closed; `sc stop` / `sc start VyroService` while the app
+      runs; "Start with Windows" re-enabled after the upgrade.
 ### P9 — Performance hardening, profiles, intelligent analysis, polish (M5)
 ### P10 — Gaming capture + companion overlay (M6, deferrable)
 
