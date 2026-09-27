@@ -1,8 +1,13 @@
 import { mount } from 'svelte';
 import './styles/theme.css';
 import App from './App.svelte';
+import Overlay from './Overlay.svelte';
 
 const target = document.getElementById('app');
 if (!target) throw new Error('#app mount point missing');
 
-export default mount(App, { target });
+// The game overlay window loads the same page with #overlay (src-tauri/src/overlay.rs).
+const overlay = location.hash === '#overlay';
+if (overlay) document.documentElement.classList.add('overlay');
+
+export default mount(overlay ? Overlay : App, { target });

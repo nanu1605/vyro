@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import Card from './Card.svelte';
-  import { getAutostart, getSensorTree, setAutostart } from '../ipc';
+  import { getAutostart, getSensorTree, setAutostart, type OverlayCorner, type OverlaySettings } from '../ipc';
   import { prefs, profiles, savePrefs } from '../prefs.svelte';
   import type { BackendStatus, SensorSnapshot, SensorTree, TempUnit } from '../types';
 
@@ -42,6 +42,15 @@
     });
     if (error) autostart = await getAutostart().catch(() => null);
   }
+
+  const CORNERS: Array<{ id: OverlayCorner; label: string }> = [
+    { id: 'topLeft', label: 'Top left' },
+    { id: 'topRight', label: 'Top right' },
+    { id: 'bottomLeft', label: 'Bottom left' },
+    { id: 'bottomRight', label: 'Bottom right' },
+  ];
+  const setOverlay = (change: Partial<OverlaySettings>) =>
+    save('Overlay', () => savePrefs({ overlay: { ...prefs.overlay, ...change } }));
 
   const names = $derived(new Map((tree?.groups ?? []).flatMap((g) => g.sensors).map((s) => [s.id, s.name])));
   const UNITS: Array<{ id: TempUnit; label: string }> = [
@@ -103,6 +112,41 @@
         ></span
       >
     </label>
+    <label class="check">
+      <input
+        type="checkbox"
+        checked={prefs.overlay.enabled}
+        disabled={!prefs.gameCapture}
+        onchange={(e) => void setOverlay({ enabled: (e.currentTarget as HTMLInputElement).checked })}
+      />
+      <span
+        >Show the overlay over the game<small
+          >A small window in a corner of the game’s screen with FPS and temperatures. It ignores the mouse and never
+          takes focus; borderless and windowed fullscreen games only. Also in the tray menu.</small
+        ></span
+      >
+    </label>
+    {#if prefs.overlay.enabled}
+      <div class="sub">
+        <label>
+          Corner
+          <select
+            value={prefs.overlay.corner}
+            onchange={(e) => void setOverlay({ corner: (e.currentTarget as HTMLSelectElement).value as OverlayCorner })}
+          >
+            {#each CORNERS as c (c.id)}<option value={c.id}>{c.label}</option>{/each}
+          </select>
+        </label>
+        <label class="check">
+          <input
+            type="checkbox"
+            checked={prefs.overlay.detailed}
+            onchange={(e) => void setOverlay({ detailed: (e.currentTarget as HTMLInputElement).checked })}
+          />
+          <span>Frame-time graph and CPU / GPU readings</span>
+        </label>
+      </div>
+    {/if}
   </Card>
 
   <Card title="Units">
@@ -187,6 +231,25 @@
     display: block;
     color: var(--muted);
     font-size: 0.75rem;
+  }
+  .sub {
+    display: grid;
+    gap: 0.5rem;
+    margin: -0.2rem 0 0.4rem 1.6rem;
+    font-size: 0.82rem;
+  }
+  .sub label:not(.check) {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  select {
+    padding: 0.2rem 0.4rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
   }
   fieldset {
     margin: 0;

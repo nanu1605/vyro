@@ -2,11 +2,13 @@
 // (`settings.json`). Components read them through these helpers so they follow changes live.
 
 import { fmt, fmtUnit, NA } from './format';
-import { getProfiles, getSettings, onSettingsChanged, setSettings, type AppSettings } from './ipc';
+import { DEFAULT_OVERLAY, getProfiles, getSettings, onSettingsChanged, setSettings, type AppSettings } from './ipc';
 import type { ProfileSpec } from './types';
 import { fromUnit, tempSymbol, tempsIn, toUnit } from './units';
 
-export const prefs = $state<AppSettings>({ closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop', gameCapture: true });
+export const prefs = $state<AppSettings>({
+  closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop', gameCapture: true, overlay: { ...DEFAULT_OVERLAY },
+});
 
 /** Profile presets, loaded with the preferences. */
 export const profiles = $state<{ list: ProfileSpec[] }>({ list: [] });

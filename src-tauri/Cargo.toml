@@ -27,3 +27,5 @@ workspace = true
 [target."cfg(windows)".dependencies]
 webview2-com = "0.38"
 windows-core = "0.61"
+# Showing the game overlay without taking focus (same version Tauri uses).
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }

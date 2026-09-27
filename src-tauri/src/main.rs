@@ -4,6 +4,7 @@
 mod commands;
 mod engine;
 mod gaming;
+mod overlay;
 mod tray;
 
 use tauri::Manager;
@@ -36,6 +37,7 @@ fn main() {
             // in the tray.
             let minimized = std::env::args().any(|a| a == vyro_core::autostart::MINIMIZED_ARG);
             let engine = Engine::start(app.handle(), !minimized)?;
+            app.manage(overlay::Overlay::default());
             app.manage(engine);
             app.manage(tray::SettingsStore::load(app.handle()));
             tray::build(app.handle())?;

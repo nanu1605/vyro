@@ -16,6 +16,7 @@ use vyro_core::units::TempUnit;
 use vyro_core::{lock, unix_now};
 
 use crate::engine::{notify, Engine};
+use crate::overlay::OverlaySettings;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -30,6 +31,8 @@ pub struct Settings {
     pub profile: Profile,
     /// Measure frame rates of fullscreen games (PresentMon).
     pub game_capture: bool,
+    /// The companion overlay over the captured game.
+    pub overlay: OverlaySettings,
 }
 
 /// Emitted with the new [`Settings`] after any change (window or tray menu).
@@ -43,6 +46,7 @@ impl Default for Settings {
             hidden_sensors: Vec::new(),
             profile: Profile::Desktop,
             game_capture: true,
+            overlay: OverlaySettings::default(),
         }
     }
 }
@@ -184,6 +188,8 @@ fn set_webview_active(_window: &tauri::WebviewWindow, _active: bool) {}
 
 /// The tray's profile items, kept to move the check mark.
 pub struct ProfileItems(Vec<(Profile, CheckMenuItem<Wry>)>);
+/// The tray's "Game overlay" item.
+pub struct OverlayItem(CheckMenuItem<Wry>);
 
 /// Saves `settings` and applies them: the profile's poll rate, the tray check mark, and the
 /// window's view (via [`SETTINGS_EVENT`]).
@@ -200,6 +206,9 @@ pub fn apply(app: &AppHandle, settings: Settings) -> Result<(), String> {
             let _ = item.set_checked(*p == settings.profile);
         }
     }
+    if let Some(item) = app.try_state::<OverlayItem>() {
+        let _ = item.0.set_checked(settings.overlay.enabled);
+    }
     if let Err(e) = app.emit(SETTINGS_EVENT, &settings) {
         log::debug!("emit {SETTINGS_EVENT}: {e}");
     }
@@ -207,10 +216,11 @@ pub fn apply(app: &AppHandle, settings: Settings) -> Result<(), String> {
 }
 
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
-    let current = app
+    let settings = app
         .try_state::<SettingsStore>()
-        .map(|s| s.get().profile)
+        .map(|s| s.get())
         .unwrap_or_default();
+    let current = settings.profile;
     let mut items = Vec::new();
     for p in Profile::ALL {
         let spec = p.spec();
@@ -232,10 +242,20 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let profiles = Submenu::with_items(app, "Profile", true, &refs)?;
     app.manage(ProfileItems(items));
 
+    let overlay = CheckMenuItem::with_id(
+        app,
+        "overlay",
+        "Game overlay",
+        true,
+        settings.overlay.enabled,
+        None::<&str>,
+    )?;
+    app.manage(OverlayItem(overlay.clone()));
+
     let show = MenuItem::with_id(app, "show", "Show Vyro", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Vyro", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&show, &profiles, &sep, &quit])?;
+    let menu = Menu::with_items(app, &[&show, &profiles, &overlay, &sep, &quit])?;
     let mut tray = TrayIconBuilder::with_id("main")
         .tooltip("Vyro")
         .menu(&menu)
@@ -243,6 +263,15 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, e| match e.id.as_ref() {
             "show" => show_main(app),
             "quit" => app.exit(0),
+            "overlay" => {
+                if let Some(store) = app.try_state::<SettingsStore>() {
+                    let mut settings = store.get();
+                    settings.overlay.enabled = !settings.overlay.enabled;
+                    if let Err(e) = apply(app, settings) {
+                        log::warn!("settings: {e}");
+                    }
+                }
+            }
             id => {
                 let Some(name) = id.strip_prefix("profile:") else {
                     return;

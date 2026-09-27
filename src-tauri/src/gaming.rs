@@ -38,14 +38,20 @@ fn run(app: &AppHandle) {
         else {
             continue;
         };
+        let fg = foreground();
         let change = if store.get().game_capture {
-            watcher.step(foreground().as_ref(), own, alive)
+            watcher.step(fg.as_ref(), own, alive)
         } else if watcher.current().is_some() {
             watcher.reset();
             Some(None)
         } else {
             None
         };
+        // The overlay shows only while the captured game is in front, on its monitor.
+        let front = fg
+            .as_ref()
+            .filter(|f| watcher.current().is_some_and(|t| t.pid == f.pid));
+        crate::overlay::set_front(app, front.is_some(), front.map(|f| f.monitor));
         if let Some(target) = change {
             match &target {
                 Some(t) => log::info!("gaming: {} ({}) in fullscreen", t.name, t.pid),

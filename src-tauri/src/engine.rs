@@ -34,6 +34,8 @@ pub struct Engine {
     /// Whether the window shows. While it does not, snapshots are not sent to it (alerts still
     /// notify) and the engine polls at the tray rate.
     visible: Arc<AtomicBool>,
+    /// The game overlay shows: the engine keeps the window's poll rate.
+    overlay: AtomicBool,
 }
 
 impl Engine {
@@ -90,6 +92,7 @@ impl Engine {
             inventory,
             status,
             visible: shown,
+            overlay: AtomicBool::new(false),
         })
     }
 
@@ -99,7 +102,14 @@ impl Engine {
 
     pub fn set_visible(&self, visible: bool) {
         self.visible.store(visible, Ordering::SeqCst);
-        self.api.set_visible(visible);
+        self.api
+            .set_visible(visible || self.overlay.load(Ordering::SeqCst));
+    }
+
+    pub fn set_overlay(&self, on: bool) {
+        self.overlay.store(on, Ordering::SeqCst);
+        self.api
+            .set_visible(on || self.visible.load(Ordering::SeqCst));
     }
 
     pub fn set_poll_interval(&self, millis: u32) {
@@ -125,6 +135,7 @@ fn sink(app: &AppHandle, shown: &Arc<AtomicBool>) -> impl Fn(&SensorSnapshot) + 
                 log::debug!("emit {SENSORS_EVENT}: {e}");
             }
         }
+        crate::overlay::update(&app, snap);
         for alert in &snap.alerts {
             notify(&app, alert);
         }

@@ -393,8 +393,16 @@ In progress.
 - [ ] P10a Field check: FPS and lows within a few % of PresentMon's or the game's own counter
       in a real game; session logged after quitting; anti-cheat games (FACEIT excepted, as with
       PawnIO) unaffected.
-- [ ] P10b Companion overlay: always-on-top, click-through window over the game with chosen
-      figures; never injected.
+- [x] P10b Companion overlay (off by default; Settings → Gaming or the tray's "Game overlay"):
+      a transparent, always-on-top, click-through window in a chosen corner of the game's
+      monitor with FPS, 1 % low and frame time, optionally a frame-time graph and CPU / GPU
+      temperature, load and power. Created only while the captured game is in front, shown with
+      `SW_SHOWNOACTIVATE` (never takes focus), destroyed afterwards; while it shows, the engine
+      polls at the profile's rate instead of the tray rate. Its window may only listen for its
+      readings. A desktop window, not injected: it shows over borderless and windowed games,
+      not exclusive fullscreen.
+- [ ] P10b Field check: overlay appears over a borderless game in the chosen corner, never
+      steals focus or clicks, disappears on alt-tab and when the game exits.
 
 **Deferred to v2:** fan/pump control (driver write path), injected in-game overlay.
 

@@ -3,7 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { AlertFired, AlertRule, BackendStatus, GameSession, Insight, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, GameSession, GameSnapshot, Insight, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -130,8 +130,47 @@ export interface AppSettings {
   profile: Profile;
   /** Measure frame rates of fullscreen games. */
   gameCapture: boolean;
+  /** The companion overlay over the captured game. */
+  overlay: OverlaySettings;
 }
-let browserSettings: AppSettings = { closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop', gameCapture: true };
+export type OverlayCorner = 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
+export interface OverlaySettings {
+  enabled: boolean;
+  corner: OverlayCorner;
+  /** Frame-time graph and CPU / GPU readings besides the FPS figures. */
+  detailed: boolean;
+}
+export const DEFAULT_OVERLAY: OverlaySettings = { enabled: false, corner: 'topLeft', detailed: true };
+let browserSettings: AppSettings = {
+  closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop', gameCapture: true, overlay: { ...DEFAULT_OVERLAY },
+};
+
+/** What the game overlay shows (`src-tauri/src/overlay.rs`). */
+export interface OverlayData {
+  game: GameSnapshot;
+  detailed: boolean;
+  cpuTemp: number | null;
+  cpuUsage: number | null;
+  gpuTemp: number | null;
+  gpuUsage: number | null;
+  gpuPower: number | null;
+}
+
+/** Overlay readings, every tick while the overlay shows; in a browser, from the simulator. */
+export async function onOverlay(cb: (d: OverlayData) => void): Promise<() => void> {
+  if (!inTauri) {
+    return onSensors((s) => {
+      const g = s.gpu[0];
+      if (s.game) {
+        cb({
+          game: s.game, detailed: browserSettings.overlay.detailed, cpuTemp: s.cpu.tempPackage, cpuUsage: s.cpu.usageTotal,
+          gpuTemp: g?.tempEdge ?? null, gpuUsage: g?.usage ?? null, gpuPower: g?.powerW ?? null,
+        });
+      }
+    });
+  }
+  return listen<OverlayData>('overlay', (e) => cb(e.payload));
+}
 const settingsListeners = new Set<(s: AppSettings) => void>();
 
 /** Settings changed elsewhere (the tray's Profile menu, another view). */
