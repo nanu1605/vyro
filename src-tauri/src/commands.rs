@@ -198,6 +198,14 @@ pub async fn get_health_events(engine: State<'_, Engine>) -> Result<Vec<HealthEv
     with_engine(&engine, |e| e.health_events()).await
 }
 
+/// Findings from history: unusual temperatures, throttling, slow fans, power changes.
+#[tauri::command]
+pub async fn get_insights(
+    engine: State<'_, Engine>,
+) -> Result<Vec<vyro_core::analysis::Insight>, String> {
+    with_engine(&engine, |e| e.insights()).await
+}
+
 /// Whether the engine can use PawnIO (low-level sensors: CPU temperature and power, board
 /// fans).
 #[tauri::command]

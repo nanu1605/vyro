@@ -288,7 +288,7 @@
 
     {#if visited.health}
       <div id="panel-health" role="tabpanel" aria-labelledby="tab-health" hidden={tab !== 'health'}>
-        <HealthPanel {snap} active={tab === 'health'} />
+        <HealthPanel {snap} active={tab === 'health'} onhistory={openHistory} />
       </div>
     {/if}
 

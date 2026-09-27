@@ -5,6 +5,8 @@ export type { BackendMode } from './bindings/BackendMode';
 export type { BackendStatus } from './bindings/BackendStatus';
 export type { TempUnit } from './bindings/TempUnit';
 export type { Profile } from './bindings/Profile';
+export type { Insight } from './bindings/Insight';
+export type { InsightKind } from './bindings/InsightKind';
 export type { ProfileSpec } from './bindings/ProfileSpec';
 export type { Motion } from './bindings/Motion';
 export type { Density } from './bindings/Density';

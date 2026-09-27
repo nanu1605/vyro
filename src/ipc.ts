@@ -3,7 +3,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { AlertFired, AlertRule, BackendStatus, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, Insight, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -46,6 +46,26 @@ export async function queryHistory(metric: string, range: HistoryRange): Promise
 export async function getSensorTree(snap: SensorSnapshot | null): Promise<SensorTree> {
   if (!inTauri) return snap ? (await import('./sim-tree')).simTree(snap) : { groups: [] };
   return invoke<SensorTree>('get_sensor_tree');
+}
+
+/** Findings from history (unusual temperatures, throttling, slow fans, power changes). */
+export async function getInsights(): Promise<Insight[]> {
+  if (!inTauri) {
+    const now = Math.floor(Date.now() / 1000);
+    return [
+      {
+        kind: 'unusualTemp', status: 'warn', title: 'CPU running hotter than usual', ts: null,
+        detail: 'Over the last 30 minutes: 68 °C at 22 % load. At that load it usually runs near 58 °C (past week). Dust, a changed fan curve, a warmer room or a cooler problem can cause this.',
+        metrics: ['cpu.temp.package', 'cpu.usage.total'],
+      },
+      {
+        kind: 'powerChange', status: 'ok', title: 'Power rose to 188 W', ts: now - 5400,
+        detail: 'CPU + GPU power went from 45 W to 188 W: GPU #0 +135 W (load 3 % → 97 %), CPU +8 W (load 5 % → 12 %).',
+        metrics: ['cpu.power.package', 'gpu.0.power'],
+      },
+    ];
+  }
+  return invoke<Insight[]>('get_insights');
 }
 
 /** Recent health changes, oldest first. */

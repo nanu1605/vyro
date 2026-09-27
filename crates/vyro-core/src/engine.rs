@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::alerts::{self, AlertEngine, AlertFired, AlertRule};
+use crate::analysis::{self, Insight, SeriesMap};
 use crate::health::{self, HealthEvent};
 use crate::info::{DriveInfo, PawnIoStatus};
 use crate::poller::{EVENT_ALERT, EVENT_HEALTH};
@@ -82,6 +83,9 @@ pub trait EngineApi: Send + Sync {
     fn set_ping_host(&self, host: &str) -> Result<(), String>;
     /// BitLocker protection of the system drive (needs administrator rights).
     fn bitlocker_system_drive(&self) -> Result<Option<bool>, String>;
+    /// Findings from the history store: unusual temperatures, throttling, slow fans, power
+    /// changes.
+    fn insights(&self) -> Result<Vec<Insight>, String>;
     /// Stops polling and flushes history. Safe to call more than once.
     fn shutdown(&self);
 }
@@ -278,6 +282,38 @@ impl EngineApi for LocalEngine {
         })
     }
 
+    fn insights(&self) -> Result<Vec<Insight>, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        let tree = lock(&self.registry).tree();
+        let ids = analysis::wanted(&tree);
+        let names = tree
+            .groups
+            .iter()
+            .flat_map(|g| g.sensors.iter())
+            .map(|s| (s.id.clone(), s.name.clone()))
+            .collect();
+        let now = unix_now();
+        let mut windows: [SeriesMap; 3] = Default::default();
+        {
+            let mut h = lock(history);
+            let ranges = [HistoryRange::D7, HistoryRange::H24, HistoryRange::H1];
+            for (map, range) in windows.iter_mut().zip(ranges) {
+                for id in &ids {
+                    let s = h.query(id, range, now).map_err(|e| e.to_string())?;
+                    map.insert(id.clone(), s.points);
+                }
+            }
+        }
+        let [week, day, hour] = &windows;
+        Ok(analysis::analyze(&analysis::Inputs {
+            now,
+            week,
+            day,
+            hour,
+            names: &names,
+        }))
+    }
+
     fn shutdown(&self) {
         if let Some(poller) = lock(&self.poller).take() {
             poller.stop();
@@ -355,6 +391,8 @@ mod tests {
         engine.set_alert_rules(rules.clone()).unwrap();
         assert_eq!(engine.alert_rules().unwrap(), rules);
         assert!(engine.set_ping_host("not a host!").is_err());
+        // A few seconds of history: no baselines yet, so nothing to report.
+        assert_eq!(engine.insights(), Ok(Vec::new()));
         engine.shutdown();
         engine.shutdown();
 

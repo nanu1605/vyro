@@ -101,6 +101,7 @@ pub enum Request {
         host: String,
     },
     BitlockerSystemDrive,
+    Insights,
 }
 
 /// The answer to a [`Request`]: the method's result as JSON, or an error message.

@@ -271,6 +271,7 @@ impl Server {
             Request::PawnIoStatus => json(e.pawnio_status()),
             Request::SetPingHost { host } => json(e.set_ping_host(&host)),
             Request::BitlockerSystemDrive => json(e.bitlocker_system_drive()),
+            Request::Insights => json(e.insights()),
         }
     }
 }

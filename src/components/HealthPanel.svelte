@@ -1,14 +1,33 @@
 <script lang="ts">
   import AlertsPanel from './AlertsPanel.svelte';
-  import { getHealthEvents } from '../ipc';
+  import { getHealthEvents, getInsights } from '../ipc';
   import { fmtTemp, tempText } from '../prefs.svelte';
-  import type { HealthEvent, SensorSnapshot, Status } from '../types';
+  import type { HealthEvent, Insight, SensorSnapshot, Status } from '../types';
 
   interface Props {
     snap: SensorSnapshot | null;
     active: boolean;
+    /** Opens a sensor in History. */
+    onhistory?: (id: string) => void;
   }
-  let { snap, active }: Props = $props();
+  let { snap, active, onhistory }: Props = $props();
+
+  // Insights compare the past week with the last hours; once a minute is plenty.
+  let insights = $state<Insight[] | null>(null);
+  let insightError = $state<string | null>(null);
+  $effect(() => {
+    if (!active) return;
+    const load = () =>
+      getInsights()
+        .then((i) => {
+          insights = i;
+          insightError = null;
+        })
+        .catch((e: unknown) => (insightError = String(e)));
+    void load();
+    const t = setInterval(load, 60_000);
+    return () => clearInterval(t);
+  });
   const health = $derived(snap?.health ?? null);
   const ts = $derived(snap?.ts ?? 0);
 
@@ -71,6 +90,33 @@
       </article>
     {/each}
   </div>
+
+  <h2 class="events-title">Insights</h2>
+  {#if insightError}
+    <p class="fine">Insights unavailable: {insightError}</p>
+  {:else if insights == null}
+    <p class="fine">Looking through the history…</p>
+  {:else if insights.length === 0}
+    <p class="fine">
+      Nothing unusual: temperatures, clocks and fans match how this PC usually behaves. Insights compare the last
+      hours with the past week, so they need a few days of history to work well.
+    </p>
+  {:else}
+    <ul class="insights">
+      {#each insights as ins, i (i)}
+        <li class="tone-{ins.status}">
+          <span class="dot" aria-hidden="true"></span>
+          <div>
+            <b>{tempText(ins.title)}</b>{#if ins.ts != null}<time>{when(ins.ts)}</time>{/if}
+            <p>{tempText(ins.detail)}</p>
+            {#if onhistory && ins.metrics[0]}
+              <button type="button" class="link" onclick={() => onhistory(ins.metrics[0]!)}>Show in History</button>
+            {/if}
+          </div>
+        </li>
+      {/each}
+    </ul>
+  {/if}
 
   <h2 class="events-title">Recent events</h2>
   {#if newest.length}
@@ -162,6 +208,48 @@
     margin: 0.35rem 0 0;
     color: var(--muted);
     font-size: 0.8rem;
+  }
+  .insights {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+  }
+  .insights li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    margin: 0;
+    padding: 0.55rem 0.8rem;
+    font-size: 0.82rem;
+  }
+  .insights li + li {
+    border-top: 1px solid var(--line);
+  }
+  .insights .dot {
+    margin-top: 0.35rem;
+  }
+  .insights time {
+    min-width: 0;
+    margin-left: 0.6rem;
+    font-size: 0.75rem;
+  }
+  .insights p {
+    margin: 0.2rem 0 0.25rem;
+    color: var(--muted);
+  }
+  .link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.78rem;
+    text-decoration: underline dotted var(--muted);
+    text-underline-offset: 3px;
+    cursor: pointer;
   }
   .events-title {
     margin: 1.3rem 0 0.5rem;

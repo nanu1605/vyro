@@ -318,6 +318,10 @@ impl EngineApi for RemoteEngine {
         self.call(&Request::BitlockerSystemDrive)
     }
 
+    fn insights(&self) -> Result<Vec<crate::analysis::Insight>, String> {
+        self.call(&Request::Insights)
+    }
+
     /// Stops reconnecting; the service keeps running.
     fn shutdown(&self) {
         self.shared.stop.store(true, Ordering::SeqCst);
@@ -444,6 +448,7 @@ mod tests {
             "history store unavailable"
         );
         assert!(remote.set_ping_host("bad host!").is_err());
+        assert_eq!(remote.insights().unwrap_err(), "history store unavailable");
         assert!(!remote.drives().unwrap().is_empty());
         // A real answer on an elevated Windows runner, `None` elsewhere: either way it arrives.
         assert!(remote.bitlocker_system_drive().is_ok());
