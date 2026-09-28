@@ -350,7 +350,11 @@ In progress.
       (IPC protocol 2). Hidden to the tray: no snapshots sent to the page, engine at the tray
       rate, WebView2 invisible + low memory target + suspended; resumed before showing.
       `--minimized` starts park the page after 5 s.
-- [ ] P9a Measure on the reference PC (visible and in the tray) and decide the next trims.
+- [x] P9a Measured on the reference PC. In the tray: service 32 MB + app 7 MB, WebView2
+      suspended (≈ 40 MB). Visible, before → after the 60 fps animation cap and
+      `--in-process-gpu` (0.1.4): 131 → 120 MB (WebView2 92 MB ×6 → 80 MB ×5), peak 208 →
+      132 MB, average CPU 1.0 → 0.68 %, UI 144 → ≤ 60 fps.
+- [ ] P9a Peak with the window open still above 120 MB (132 MB after visiting tabs).
 - [x] P9b Settings tab: keep running in the tray, start with Windows (moved from Alerts),
       °C/°F everywhere (tiles, cards, Sensors, History, alert limits, health and alert texts,
       Windows notifications; the engine stays in °C), hidden sensors (× in Sensors, listed in
