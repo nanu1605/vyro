@@ -447,7 +447,7 @@ In progress.
 ## V2 phase tracker
 
 Built in this order (V2_PLAN.md has each phase's scope and acceptance). Every phase: branch
-`v2/<phase>` off `v2`, a footprint budget written here before coding, pure logic with tests plus
+`v2-<phase>` off `v2`, a footprint budget written here before coding, pure logic with tests plus
 a thin Windows layer, CI green, then merge into `v2`. Hardware writes never ship without the
 owner's field check on the reference PC.
 
@@ -456,9 +456,15 @@ All control runs in the service; the app only asks over the pipe. Writes go thro
 `LpcIO` port I/O on the NCT6687 EC (same page/index/data transaction as the reads), only on
 allow-listed chip + revision + board + header, each read back and bounded.
 
-- [ ] 12a Write path + capability detection: `write_ec`, readback, allow-list (MS-7E24 only),
-      bounds (fan ≥ 20 %, pump ≥ 60 %), BIOS state saved to `%ProgramData%\Vyro\fan-restore.json`
-      before the first write; read-only register dump for the owner first.
+- [x] 12a Write path + capability detection (`sio::control`, tested against a simulated EC):
+      `write_ec` (same free/page/index/data/free transaction as reads, never forces a busy EC),
+      mode bit + request/done handshake + duty command, readback of every write, allow-list
+      keyed by chip, revision (0x92), board (MS-7E24) and header, floors (fan ≥ 20 %, pump
+      ≥ 60 %, an unknown request = 100 %), BIOS state capture / save / restore (mode register
+      written last, also when a duty write failed). `vyro-fans` (CI download): read-only dump by
+      default; `--try HEADER PERCENT` supervised 10 s test with restore; `--restore`.
+- [ ] 12a Field check: `vyro-fans` dump matches MSI Center / HWiNFO; then `--try` on a system
+      fan and the CPU fan changes RPM and returns to the BIOS curve.
 - [ ] 12b Curve engine (any sensor, hysteresis, ramp delays) + Cooling tab with curve editor.
 - [ ] 12c Pump presets and curve; header confirmed by the owner before the first write.
 - [ ] 12d Failsafe: emergency override, watchdog, restore on stop / shutdown / suspend / crash

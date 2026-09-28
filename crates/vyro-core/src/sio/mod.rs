@@ -3,14 +3,16 @@
 //! and LGA1700/1851 boards. Decoders and board layouts here are pure; `win` does the port I/O.
 //! Register layout follows LibreHardwareMonitor's `Nct677X` and the Linux `nct6687d` driver.
 //!
-//! Vyro only reads: unlike other tools it never writes the chip's monitor-enable or fan
-//! registers, so a board whose firmware left monitoring off simply reports nothing.
+//! Monitoring only reads: Vyro never writes the chip's monitor-enable registers, so a board whose
+//! firmware left monitoring off simply reports nothing. Fan control (`control`, Phase 12) writes
+//! only the fan registers, only on allow-listed boards.
 
+pub mod control;
 #[cfg(windows)]
 mod win;
 
 #[cfg(windows)]
-pub use win::{detect, read_block, Found, SioProvider};
+pub use win::{detect, read_block, Found, Ports, SioProvider};
 
 use crate::snapshot::FanKind;
 
@@ -170,6 +172,8 @@ pub trait PortIo {
     fn outb(&mut self, port: u16, value: u8) -> Result<(), Self::Error>;
     /// Pause between polls of a busy EC.
     fn pause(&mut self) {}
+    /// Wait for the EC to act on a fan-control request (tens of milliseconds on hardware).
+    fn settle(&mut self) {}
 }
 
 /// Reads `len` bytes of NCT6687 EC space from `start` (base = hardware-monitor I/O base).

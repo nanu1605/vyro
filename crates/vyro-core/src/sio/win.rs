@@ -83,7 +83,9 @@ pub fn detect(io: &Handle) -> Result<Option<Found>, PawnIoError> {
     Ok(None)
 }
 
-struct Ports<'a>(&'a Handle);
+/// Port I/O through PawnIO, for [`super::control`]. Use with the ISA-bus mutex held, after
+/// [`detect`] on the same handle.
+pub struct Ports<'a>(pub &'a Handle);
 
 impl PortIo for Ports<'_> {
     type Error = PawnIoError;
@@ -95,6 +97,10 @@ impl PortIo for Ports<'_> {
     }
     fn pause(&mut self) {
         std::thread::sleep(Duration::from_millis(1));
+    }
+    fn settle(&mut self) {
+        // The `nct6687d` driver waits 50 ms around each request.
+        std::thread::sleep(Duration::from_millis(50));
     }
 }
 
