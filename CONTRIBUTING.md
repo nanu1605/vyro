@@ -81,9 +81,14 @@ Releases are built by `.github/workflows/release.yml`, never on a developer mach
    and the variable `UPDATER_PUBKEY` (the contents of `vyro-updater.key.pub`).
 2. Raise the version with `python3 scripts/set-version.py X.Y.Z` and commit (CI checks the
    manifests agree).
-3. Run the Release workflow from the Actions tab on that commit's branch (or push the tag
-   `vX.Y.Z`). It builds the MSI with the updater enabled, signs it for the updater, and
+3. Run the Release workflow from the Actions tab on `main` (or push the tag `vX.Y.Z` on a
+   commit of `main`). It builds the MSI with the updater enabled, signs it for the updater, and
    publishes release `vX.Y.Z` with the MSI, `latest.json` and `SHA256SUMS.txt`.
+
+Branches: `main` is the released line (0.1.x fixes); V2 work happens on `v2` (feature branches
+`v2/<phase>` merged into it) and is merged into `main` at each milestone, then released. The
+workflow refuses other branches unless "prerelease" is ticked: that publishes a test build as
+`vX.Y.Z-pre.N`, marked prerelease, which installed copies never update to.
 
 Only these builds contain the updater; CI artifacts and local builds never check for updates.
 Installed copies look for `latest.json` in the latest release. Release downloads of a private

@@ -1,9 +1,12 @@
 name: Release
 
 # Builds the signed-for-update MSI and publishes it as a GitHub release, with the `latest.json`
-# the app's updater reads. Start it from the Actions tab ("Run workflow" on the branch to
-# release) or by pushing a tag `vX.Y.Z`; the version comes from the files
+# the app's updater reads. Start it from the Actions tab ("Run workflow" on `main`) or by
+# pushing a tag `vX.Y.Z` on a commit of `main`; the version comes from the files
 # (`scripts/set-version.py`), and the tag must not exist yet when started from the Actions tab.
+# Releases come from `main` only. From another branch (e.g. `v2`) tick "prerelease": it is
+# tagged `vX.Y.Z-pre.N` and published as a prerelease, which installed copies never update to
+# (`releases/latest` skips prereleases).
 #
 # Needs, in the repository settings (Secrets and variables → Actions):
 #   secret   TAURI_SIGNING_PRIVATE_KEY           update signing key (`tauri signer generate`)
@@ -19,6 +22,11 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      prerelease:
+        description: Test build from a branch other than main (installed copies never update to it)
+        type: boolean
+        default: false
   push:
     tags: ['v*']
 
@@ -35,6 +43,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history: a release tag must be on main
 
       - name: Version and tag
         id: version
@@ -44,13 +54,23 @@ jobs:
           HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
           RELEASES_REPO: ${{ vars.RELEASES_REPO }}
           HAS_RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN != '' }}
+          PRERELEASE: ${{ inputs.prerelease == true }}
         run: |
           $version = python scripts/set-version.py --check
           if ($LASTEXITCODE -ne 0) { throw "version files disagree" }
           $tag = "v$version"
-          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+          $pre = $env:PRERELEASE -eq 'true'
+          if ($pre) {
+            if ($env:GITHUB_REF_TYPE -eq 'tag') { throw "prereleases are started from the Actions tab" }
+            $tag = "v$version-pre.$env:GITHUB_RUN_NUMBER"
+          } elseif ($env:GITHUB_REF_TYPE -eq 'tag') {
             if ($env:GITHUB_REF_NAME -ne $tag) { throw "tag $env:GITHUB_REF_NAME does not match version $version (scripts/set-version.py)" }
-          } elseif (git ls-remote --tags origin "refs/tags/$tag") {
+            git merge-base --is-ancestor $env:GITHUB_SHA origin/main
+            if ($LASTEXITCODE -ne 0) { throw "$tag is not on main: releases come from main (tick prerelease for a test build)" }
+          } elseif ($env:GITHUB_REF_NAME -ne 'main') {
+            throw "releases come from main, not $env:GITHUB_REF_NAME: run it on main, or tick prerelease for a test build"
+          }
+          if (git ls-remote --tags origin "refs/tags/$tag") {
             throw "$tag already exists: raise the version with scripts/set-version.py first"
           }
           if (-not $env:UPDATER_PUBKEY) { throw "UPDATER_PUBKEY (repository variable or secret) is not set" }
@@ -61,6 +81,7 @@ jobs:
           "host=$hostRepo" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=$tag" >> $env:GITHUB_OUTPUT
+          "prerelease=$(if ($pre) { '--prerelease' } else { '' })" >> $env:GITHUB_OUTPUT
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -136,9 +157,11 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           TAG: ${{ steps.version.outputs.tag }}
           HOST_REPO: ${{ steps.version.outputs.host }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: |
-          gh release create $env:TAG (Get-ChildItem release -File).FullName --repo $env:HOST_REPO `
-            --title "Vyro $env:VERSION" --notes "Vyro $env:VERSION for Windows 10/11 (x64). Install the MSI; installed copies update themselves."
+          $extra = @($env:PRERELEASE | Where-Object { $_ })
+          gh release create $env:TAG (Get-ChildItem release -File).FullName --repo $env:HOST_REPO @extra `
+            --title "Vyro $($env:TAG.Substring(1))" --notes "Vyro $env:VERSION for Windows 10/11 (x64). Install the MSI; installed copies update themselves."
           if ($LASTEXITCODE -ne 0) { throw "publishing to $env:HOST_REPO failed (does it exist with a README, and may RELEASES_TOKEN write to it?)" }
 
       - name: Publish the release
@@ -147,7 +170,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
           TAG: ${{ steps.version.outputs.tag }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: |
-          gh release create $env:TAG (Get-ChildItem release -File).FullName `
-            --title "Vyro $env:VERSION" --generate-notes --target $env:GITHUB_SHA
+          $extra = @($env:PRERELEASE | Where-Object { $_ })
+          gh release create $env:TAG (Get-ChildItem release -File).FullName @extra `
+            --title "Vyro $($env:TAG.Substring(1))" --generate-notes --target $env:GITHUB_SHA
           if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
