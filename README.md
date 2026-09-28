@@ -13,9 +13,14 @@ Vyro Sensor Service), history, System Health, alerts, game frame rates (PresentM
 MSI installer. See [`ROADMAP.md`](ROADMAP.md) for what is verified on which hardware.
 Contributions: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-## Install (test builds)
+## Install
 
-Every CI run on this branch uploads `vyro-windows-<commit>` with `Vyro_<version>_x64_en-US.msi`.
+Releases are published by the Release workflow (see [CONTRIBUTING](CONTRIBUTING.md#releasing)):
+install `Vyro_<version>_x64_en-US.msi` from the latest release. Installed copies look for a new
+release daily and update themselves from Settings → Updates (one administrator prompt; app and
+service are both replaced). Every CI run also uploads a test build, `vyro-windows-<commit>`,
+which never updates itself.
+
 The MSI installs Vyro for all users with a Start-menu entry, installs the signed
 [PawnIO](https://github.com/namazso/PawnIO) driver silently if it is missing (it reads CPU
 temperature and power, fans, voltages and RAM sensors; it stays installed when Vyro is removed),
@@ -24,8 +29,8 @@ PawnIO and SMART need, keeps history while the app is closed, and serves the app
 named pipe; the app itself runs without administrator rights. Intel's
 [PresentMon](https://github.com/GameTechDev/PresentMon) console app is installed beside the
 service, which runs it to measure the fullscreen game in front (nothing is injected into games). Without the service the app still
-starts, reads what it can, and says what is missing. "Start with Windows" (Health → Alerts)
-opens it in the tray at sign-in. Builds are not code-signed yet, so SmartScreen will warn.
+starts, reads what it can, and says what is missing. "Start with Windows" (Settings) opens it
+in the tray at sign-in. Builds are not code-signed yet, so SmartScreen will warn.
 
 `vyro-remote.exe` in the same artifact checks the service from the outside (state, connection,
 sensors; `--capture Game.exe` measures a running game for 15 s). The service logs to `%ProgramData%\Vyro\service.log`.
@@ -109,11 +114,17 @@ that sleeps when values settle or the window is hidden.
 
 ## Performance
 
-Measured against the spec §8 budget from Phase 9 on, using the built-in self-monitoring
-widget.
+Measured against the spec §8 budget with the built-in "Vyro itself" card (Dashboard),
+which counts the sensor service, the app and its WebView2 processes. Reference PC: Ryzen 7
+9700X, RTX 5060 Ti, Windows 11, 144 Hz display; Vyro 0.1.4, Desktop profile (1 s polling).
 
 | Metric | Target | Measured |
 |---|---|---|
-| CPU (steady, window visible) | < 1.5 % | — |
-| RAM (working set) | < 120 MB | — |
-| Startup to first data | < 2 s | — |
+| CPU (average, window visible) | < 1.5 % | 0.68 % |
+| RAM (private working set, window visible) | < 120 MB | 120 MB average, 132 MB peak after visiting every tab |
+| RAM (closed to the tray) | — | ≈ 40 MB (service 33 MB, app 7 MB, WebView2 suspended) |
+| Startup to first data | < 2 s | 0.76 s |
+| Installer | < 20 MB | 9.5 MB |
+
+Of the visible figure, WebView2 takes 80 MB (five processes), the service 33 MB and the app
+7 MB. Animation runs at most 60 fps and only while values move.

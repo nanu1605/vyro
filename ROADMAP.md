@@ -223,8 +223,8 @@ the MSI passively); `scripts/set-version.py` keeps the manifests in step. Field-
 notification, close to tray, "Start with Windows" (tray at sign-in, no UAC prompt), amd-cpu
 poll ≈ 1 ms under full load. Downloads go to a public releases-only repository
 (`RELEASES_REPO`), so the source can stay private. Field-checked: releases 0.1.2 and 0.1.3
-published; 0.1.2 found 0.1.3 and updated itself, app and service, and reopened. Open: §8
-numbers from the reference PC into the README; code signing (needs the repo public and a SignPath / Certum
+published; 0.1.2 found 0.1.3 and updated itself, app and service, and reopened. §8 numbers
+from the reference PC in the README. Open: code signing (needs the repo public and a SignPath / Certum
 account); clean-machine test with Memory Integrity on.
 
 - Signing: SignPath Foundation or Certum Open Source (requires the repo public under an OSI
