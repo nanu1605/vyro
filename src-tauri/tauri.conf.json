@@ -19,7 +19,8 @@
         "minWidth": 480,
         "minHeight": 520,
         "backgroundColor": "#0a0d12",
-        "visible": false
+        "visible": false,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --in-process-gpu"
       }
     ],
     "security": {

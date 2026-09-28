@@ -14,6 +14,10 @@ const EPSILON = 0.01;
 /** Longest frame step honoured, so a stalled tab doesn't jump. */
 const MAX_DT = 0.1;
 
+/** Frames closer than this are skipped: about 60 fps, also on 120–240 Hz displays, where
+ * easing looks the same and full-rate frames only cost CPU and GPU time. */
+const MIN_FRAME_MS = 1000 / 60 - 2;
+
 export function ease(cur: number, target: number, dt: number, tau = TAU): number {
   return cur + (target - cur) * (1 - Math.exp(-dt / tau));
 }
@@ -111,6 +115,10 @@ export class Animator {
   }
 
   private loop = (now: number): void => {
+    if (now - this.last < MIN_FRAME_MS) {
+      this.raf = this.hidden ? 0 : requestAnimationFrame(this.loop);
+      return;
+    }
     const dt = Math.min((now - this.last) / 1000, MAX_DT);
     this.last = now;
     this.countFrame(now);

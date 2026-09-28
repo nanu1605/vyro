@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TAU, Tween, ease } from './anim';
+import { Animator, TAU, Tween, ease } from './anim';
 
 describe('ease', () => {
   it('matches the exponential approach formula', () => {
@@ -44,5 +44,36 @@ describe('Tween', () => {
     t.set(80);
     expect(t.step(1 / 60, true)).toBe(false);
     expect(t.cur).toBe(80);
+  });
+});
+
+describe('Animator', () => {
+  it('runs about 60 frames a second on a 144 Hz display', () => {
+    const queue: Array<(t: number) => void> = [];
+    const g = globalThis as unknown as Record<string, unknown>;
+    const saved = [g.requestAnimationFrame, g.cancelAnimationFrame];
+    let clock = 0;
+    g.requestAnimationFrame = (cb: (t: number) => void) => queue.push(cb);
+    g.cancelAnimationFrame = () => {};
+    const realNow = performance.now.bind(performance);
+    performance.now = () => clock;
+    try {
+      const a = new Animator();
+      let calls = 0;
+      a.add(() => {
+        calls++;
+        return true;
+      });
+      for (let i = 0; i < 144; i++) {
+        clock += 1000 / 144;
+        const cb = queue.shift();
+        cb?.(clock);
+      }
+      expect(calls).toBeGreaterThanOrEqual(45);
+      expect(calls).toBeLessThanOrEqual(75);
+    } finally {
+      performance.now = realNow;
+      [g.requestAnimationFrame, g.cancelAnimationFrame] = saved;
+    }
   });
 });

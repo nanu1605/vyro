@@ -19,6 +19,11 @@ use crate::tray::SettingsStore;
 pub const LABEL: &str = "overlay";
 /// Carries an [`OverlayData`] to the overlay page every tick.
 pub const EVENT: &str = "overlay";
+/// WebView2 arguments; windows sharing the browser process must use the same ones, so this
+/// matches the main window's `additionalBrowserArgs` (tauri.conf.json). Tauri's defaults plus
+/// `--in-process-gpu`: no separate GPU process (tens of MB for a page this light).
+pub const WEBVIEW_ARGS: &str =
+    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --in-process-gpu";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -184,6 +189,7 @@ fn show(app: &AppHandle, monitor: Rect, settings: &OverlaySettings) {
                     WebviewUrl::App("index.html#overlay".into()),
                 )
                 .title("Vyro overlay")
+                .additional_browser_args(WEBVIEW_ARGS)
                 .transparent(true)
                 .decorations(false)
                 .shadow(false)
@@ -288,6 +294,16 @@ mod tests {
         assert_eq!(place(m, Corner::TopRight, 200, 100, 16), (4904, 16));
         assert_eq!(place(m, Corner::BottomLeft, 200, 100, 16), (2576, 1324));
         assert_eq!(place(m, Corner::BottomRight, 200, 100, 16), (4904, 1324));
+    }
+
+    #[test]
+    fn overlay_shares_the_main_windows_webview_arguments() {
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        assert_eq!(
+            conf["app"]["windows"][0]["additionalBrowserArgs"].as_str(),
+            Some(WEBVIEW_ARGS)
+        );
     }
 
     #[test]
