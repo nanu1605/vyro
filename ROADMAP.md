@@ -354,7 +354,8 @@ In progress.
       suspended (≈ 40 MB). Visible, before → after the 60 fps animation cap and
       `--in-process-gpu` (0.1.4): 131 → 120 MB (WebView2 92 MB ×6 → 80 MB ×5), peak 208 →
       132 MB, average CPU 1.0 → 0.68 %, UI 144 → ≤ 60 fps.
-- [ ] P9a Peak with the window open still above 120 MB (132 MB after visiting tabs).
+- [x] P9a Accepted as is (owner's call): 120 MB average and a 132 MB peak with the window
+      open; unloading left tabs kept as an option if it grows.
 - [x] P9b Settings tab: keep running in the tray, start with Windows (moved from Alerts),
       °C/°F everywhere (tiles, cards, Sensors, History, alert limits, health and alert texts,
       Windows notifications; the engine stays in °C), hidden sensors (× in Sensors, listed in
