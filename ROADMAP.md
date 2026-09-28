@@ -4,6 +4,10 @@ Execution tracker for [`PROJECT_PLAN.md`](PROJECT_PLAN.md) (the build spec, v2).
 source of truth for *what* to build; this file records *in what order*, what is done, and which
 open decisions (spec §12) have been answered.
 
+V2 (phases P12–P27, milestones M7–M13) follows [`V2_PLAN.md`](V2_PLAN.md), the V2 spec; its
+"roadmap §…" references are the rules spelled out in that file. V2 is built on the `v2` branch
+and merged into `main` (the released line) at each milestone.
+
 Deviation from the spec: the custom kernel driver (spec P6) and its attestation signing (spec
 P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P6 section.
 
@@ -14,7 +18,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 1 | Product name / codename | **Vyro** (repo name) | decided |
 | 2 | First release cut | **Early release** after P5 (P11), before the low-level sensors; the former P11b (own driver signing) is dropped | decided |
 | 3 | Gaming module (P10) in v1? | **Yes**: frame capture with the bundled PresentMon (MIT, Intel-signed) run by the service; companion overlay, no injection | decided |
-| 4 | Fan control (v2 write path) | Not built without explicit go-ahead | default: no |
+| 4 | Fan control (v2 write path) | Superseded by 18 | superseded |
 | 5 | Ping target host | `1.1.1.1`, user-configurable | default |
 | 6 | History tiers / cap | raw ≤ 30 min · 10 s avg ≤ 24 h · 1 min avg ≤ 7 d · ≤ 200 MB | default |
 | 7 | Frontend framework | **Svelte 5** + strict TS + Vite | decided |
@@ -24,6 +28,19 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 11 | Code signing | **SignPath Foundation** or **Certum Open Source** (no EV certificate) | decided |
 | 12 | Source availability | **Open source**; license MIT OR Apache-2.0 (LICENSE files added in P11; can still change before the repo goes public) | default |
 | 13 | Privilege split (P8) | **LocalSystem service `VyroService`** runs the whole engine (sensors, history, health, alerts) and serves it over `\\.\pipe\vyro-engine`; the app runs unelevated and falls back to an in-process engine without the privileged sensors when the service is missing | decided |
+| 14 | GPU visual | Own stylized parameterized **WebGL** model; no third-party photos; offline | decided |
+| 15 | 3-D renderer | **Three.js** bundled locally; render on demand only | decided |
+| 16 | Devices battery sources | BLE GATT 0x180F + PnP battery devnode property + XInput; vendor HID++ later | decided |
+| 17 | Open on Dashboard | Default on, with an "Open on: Dashboard / Last tab" setting | decided |
+| 18 | Fan / pump control | **Yes, the V2 flagship**, safety-gated (V2_PLAN "Hardware-control safety"); read-only by default; per-board allow-list | decided |
+| 19 | Remote / web companion | In V2: LAN-only, opt-in, authenticated, built last (M12); timing confirmed at P26 | decided |
+| 20 | Versions | 0.2 / 0.3 / 0.4 / 0.5 at milestone merges; **1.0** at M13 | decided |
+| 21 | Themes | Several themes + accent colour, accessibility preserved | decided |
+| 22 | Performance Score method | Versioned fixed formula on observed conditions, inputs shown | open: formula drafted for sign-off at P17 |
+| 23 | Benchmark positioning | Self-relative (own engine), variance reported | decided |
+| 24 | Fan-control launch boards | **MSI B650M GAMING PLUS WIFI (MS-7E24, NCT6687D) only**; each further board after its own validation | decided |
+| 25 | Tagline | "Know your machine." unless changed | open |
+| 26 | Navigation (new IA) | Adopted incrementally; V1 tabs keep working each release | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -38,6 +55,13 @@ the §4.3 animation spec in Phase 0.
 | **M4** Low-level sensors | P6 | CPU temps/power/voltage, Super-I/O fans/temps/voltages, SPD + DIMM temps, RAM timings | PawnIO | – |
 | **M5** Insight | P7, P8, P9 | History/health/alerts/explorer, privilege split (service + unelevated app), profiles, analysis, polish | PawnIO (via the service) | – |
 | **M6** Gaming | P10 | PresentMon FPS + companion overlay (deferrable) | – | – |
+| **M7** Control → 0.2 | P12 | Fan and pump control with failsafe, watchdog and restore | PawnIO (writes) | – |
+| **M8** Gaming automation → 0.3 | P13 – P15 | Auto game profiles, Overlay 2.0, session replay | – | – |
+| **M9** Intelligence → 0.4 | P16 – P19 | Intelligence engine, Performance Score, compound alerts, hardware changes | – | – |
+| **M10** Benchmark & diagnostics → 0.4 | P20, P21 | Benchmark, one-click diagnostics, reports | – | – |
+| **M11** Visualization & UX → 0.5 | P22 – P25 | Devices + battery, 3-D / My PC / thermal map, dashboard builder, themes | – | – |
+| **M12** Remote → 0.5 | P26 | LAN-only companion, off by default | – | – |
+| **M13** V2 polish → 1.0 | P27 | Footprint, accessibility, migration, control-safety validation | – | – |
 
 P7 has no hard dependency on P6 (it operates on whatever sensors are registered) and can be
 pulled ahead of P6 if the early release should include history/alerts — decide at M3.
@@ -418,7 +442,76 @@ In progress.
 - [x] P10b Field-checked: never steals focus; sessions are logged after quitting.
 - [x] P10b Field-checked: frame-time graph smooth and scrolls continuously in the overlay.
 
-**Deferred to v2:** fan/pump control (driver write path), injected in-game overlay.
+**Deferred to v2:** fan/pump control (now P12), injected in-game overlay (research only).
+
+## V2 phase tracker
+
+Built in this order (V2_PLAN.md has each phase's scope and acceptance). Every phase: branch
+`v2/<phase>` off `v2`, a footprint budget written here before coding, pure logic with tests plus
+a thin Windows layer, CI green, then merge into `v2`. Hardware writes never ship without the
+owner's field check on the reference PC.
+
+### P12 — Fan & pump control (M7 → 0.2)
+All control runs in the service; the app only asks over the pipe. Writes go through PawnIO
+`LpcIO` port I/O on the NCT6687 EC (same page/index/data transaction as the reads), only on
+allow-listed chip + revision + board + header, each read back and bounded.
+
+- [ ] 12a Write path + capability detection: `write_ec`, readback, allow-list (MS-7E24 only),
+      bounds (fan ≥ 20 %, pump ≥ 60 %), BIOS state saved to `%ProgramData%\Vyro\fan-restore.json`
+      before the first write; read-only register dump for the owner first.
+- [ ] 12b Curve engine (any sensor, hysteresis, ramp delays) + Cooling tab with curve editor.
+- [ ] 12c Pump presets and curve; header confirmed by the owner before the first write.
+- [ ] 12d Failsafe: emergency override, watchdog, restore on stop / shutdown / suspend / crash
+      (service restart restores first), control-event log.
+- [ ] 12e Curves per profile, `fan_profiles` / `fan_control_events`, "hardware control active"
+      indicator with one-click restore; off by default.
+- [ ] Field matrix on MS-7E24 (each header 30/50/100 %, curve under load, kill the service,
+      forced override, sleep/resume, reboot, uninstall with control on); footprint re-measured.
+
+### P13 — Automatic game profiles (M8 → 0.3)
+- [ ] Game → per-game profile, cooling, overlay layout and poll rate; restore on exit.
+
+### P14 — Gaming Overlay 2.0 (M8)
+- [ ] Minimal / Performance / Full / Graph modes and customization; canvas graphs ≤ 30 fps.
+
+### P15 — Game session replay (M8)
+- [ ] `game_sessions` / `game_events`, timeline with event markers and history context.
+
+### P19 — Hardware change detection (M9 → 0.4; first, P16 cites it)
+- [ ] Inventory diffs into `hardware_changes` and a PC change history.
+
+### P16 — Intelligence engine (M9)
+- [ ] Derived metrics → baselines → events → cause chains; measured vs inferred, confidence.
+
+### P18 — Smart compound alerts (M9)
+- [ ] AND/OR, rate of change, FOR duration, cooldown; fan action only with control enabled.
+
+### P17 — Performance Score (M9)
+- [ ] Formula drafted for sign-off (decision 22); versioned, inputs shown.
+
+### P20 — Benchmark mode (M10 → 0.4)
+- [ ] Own workloads, hard stop, variance; `benchmark_runs` / `benchmark_metrics`.
+
+### P21 — One-click diagnostics + reports (M10)
+- [ ] Checks with telemetry evidence; HTML / JSON / Markdown / PDF, serials redacted.
+
+### P25 — Themes, open on Dashboard, shareable cards (M11 → 0.5; first, small)
+- [ ] "Open on" setting (Dashboard default), themes + accent passing axe-core, share cards.
+
+### P22 — Devices & wireless battery (M11)
+- [ ] `devices/` provider, hot add/remove, battery via BLE / PnP / XInput.
+
+### P24 — Custom dashboard builder (M11)
+- [ ] Depth decided at start; `dashboard_layouts` with presets.
+
+### P23 — 3-D GPU / My PC / thermal map (M11)
+- [ ] Three.js on demand (≤ 30 fps, 2-D fallback), within the installer and memory budgets.
+
+### P26 — Remote companion (M12 → 0.5)
+- [ ] Off by default, LAN-only, token + QR pairing, expiry, revoke; transport decided at start.
+
+### P27 — V2 polish & validation (M13 → 1.0)
+- [ ] Footprint audit, accessibility, V1→V2 migration, clean machine, control-safety matrix.
 
 ## Risks
 
@@ -431,3 +524,7 @@ In progress.
   without the low-level sensors and says so.
 - PawnIO has a single upstream maintainer; module ABI or signing changes need a Vyro update.
 - SignPath / Certum OSS require a public repo with an OSI license and a verifiable build.
+- Fan control (P12): some boards' fans are owned by the embedded controller and cannot be
+  driven safely, pump headers are easy to mislabel, and another tool (MSI Center, FanControl)
+  writing the same EC fights Vyro. Mitigations: allow-list, owner-confirmed pump header,
+  readback on every write, restore on any fault, and the EC's free/busy page handshake.
