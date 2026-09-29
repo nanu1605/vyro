@@ -139,6 +139,7 @@ pub fn run(
             EngineConfig {
                 data_dir,
                 poller: PollerConfig::default(),
+                fan_control: true,
             },
             providers,
             clients,

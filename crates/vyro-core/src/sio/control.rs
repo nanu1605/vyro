@@ -309,6 +309,33 @@ pub fn restore<P: PortIo>(io: &mut P, base: u16, state: &BiosState) -> Res<(), P
     }
 }
 
+/// Hands one header back to the BIOS: its duty command as recorded, then its mode bit as
+/// recorded (the other headers' bits are left as they are now).
+pub fn release<P: PortIo>(
+    io: &mut P,
+    base: u16,
+    header: u16,
+    state: &BiosState,
+) -> Res<(), P::Error> {
+    if header >= HEADERS {
+        return Err(ControlError::NotAllowed(header));
+    }
+    let bit = 1u8 << header;
+    let raw = state
+        .commands
+        .get(usize::from(header))
+        .copied()
+        .unwrap_or(0);
+    write_ec(io, base, CTRL_REQUEST, REQ_BEGIN)?;
+    io.settle();
+    let duty = write_checked(io, base, DUTY_COMMAND + header, raw);
+    let done = write_ec(io, base, CTRL_REQUEST, REQ_DONE);
+    io.settle();
+    let mode = read1(io, base, CTRL_MODE)
+        .and_then(|m| write_checked(io, base, CTRL_MODE, (m & !bit) | (state.mode & bit)));
+    duty.and(done).and(mode)
+}
+
 /// Mode, command and output registers of each header, for the read-only dump and the UI.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HeaderState {
@@ -592,6 +619,22 @@ mod tests {
         }
         // The mode register (hand-back to the BIOS) is the last write.
         assert_eq!(ec.writes.last(), Some(&(CTRL_MODE, 0)));
+    }
+
+    #[test]
+    fn release_hands_back_one_header_only() {
+        let mut ec = Ec::new();
+        let state = capture(&mut ec, BASE, 0xD5, 0x92, 0).unwrap();
+        set_duty(&mut ec, BASE, board(), 0, 100.0).unwrap();
+        set_duty(&mut ec, BASE, board(), 2, 100.0).unwrap();
+        release(&mut ec, BASE, 0, &state).unwrap();
+        assert_eq!(ec.at(CTRL_MODE), 0b0000_0100);
+        assert_eq!(ec.at(DUTY_COMMAND), 0x40);
+        assert_eq!(ec.at(DUTY_COMMAND + 2), 255);
+        assert_eq!(
+            release(&mut ec, BASE, 8, &state),
+            Err(ControlError::NotAllowed(8))
+        );
     }
 
     #[test]

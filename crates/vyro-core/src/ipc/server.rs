@@ -310,6 +310,9 @@ impl Server {
                 }
             }
             Request::GameSessions => json(e.game_sessions()),
+            Request::FanStatus => json(e.fan_status()),
+            Request::SetFanConfig { config } => json(e.set_fan_config(config)),
+            Request::RestoreFans => json(e.restore_fans()),
         }
     }
 }

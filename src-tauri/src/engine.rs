@@ -226,6 +226,7 @@ fn start_local(app: &AppHandle, shown: &Arc<AtomicBool>) -> std::io::Result<Loca
         EngineConfig {
             data_dir,
             poller: PollerConfig::default(),
+            fan_control: false,
         },
         providers,
         clients,

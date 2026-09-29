@@ -12,6 +12,7 @@ use super::PROTOCOL_VERSION;
 use super::{read_frame, recv, send, Hello, Reply, Request, Role, Welcome, MAX_MESSAGE};
 use crate::alerts::{AlertFired, AlertRule};
 use crate::engine::EngineApi;
+use crate::fan::{FanConfig, FanStatus};
 use crate::gaming::{CaptureTarget, GameSession};
 use crate::health::HealthEvent;
 use crate::info::{DriveInfo, PawnIoStatus};
@@ -345,6 +346,18 @@ impl EngineApi for RemoteEngine {
         self.call(&Request::GameSessions)
     }
 
+    fn fan_status(&self) -> Result<FanStatus, String> {
+        self.call(&Request::FanStatus)
+    }
+
+    fn set_fan_config(&self, config: FanConfig) -> Result<(), String> {
+        self.call(&Request::SetFanConfig { config })
+    }
+
+    fn restore_fans(&self) -> Result<(), String> {
+        self.call(&Request::RestoreFans)
+    }
+
     /// Stops reconnecting; the service keeps running.
     fn shutdown(&self) {
         self.shared.stop.store(true, Ordering::SeqCst);
@@ -390,6 +403,7 @@ mod tests {
                         interval: Duration::from_millis(10),
                         hidden_interval: Duration::from_millis(10),
                     },
+                    fan_control: false,
                 },
                 vec![Box::new(SimProvider::with_seed(9))],
                 ClientPids::default(),
