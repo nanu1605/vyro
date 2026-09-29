@@ -467,9 +467,24 @@ allow-listed chip + revision + board + header, each read back and bounded.
       mode 0xA00 = 0 (all BIOS), request 0xA01 idle, commands 0xA28+ a fixed 0x66, outputs
       0x160+ follow the BIOS curve (CPU 58→65 % in 3 s), RPM as in the monitor path (CPU 1461,
       pump 4444 at 100 %). System Fan 1–3 have nothing connected (0 RPM at 60 %).
-- [ ] 12a Field check: `vyro-fans --try 0 100` then `--try 0 30`: CPU fan RPM rises / falls and
-      returns to the BIOS curve (mode 0, output tracking the curve) after restore.
-- [ ] 12b Curve engine (any sensor, hysteresis, ramp delays) + Cooling tab with curve editor.
+- [x] 12a Field-checked: `vyro-fans --try 0 100` (readback 255, CPU fan 1550 → 2010 RPM) and
+      `--try 0 30` (readback 77, 1371 → 968 RPM, settled in ~7 s); only header 0 changed; after
+      restore mode 0 and the output back on the BIOS curve.
+- [x] 12b Controller (`vyro_core::fan`): speeds decided in the poller tick right after the
+      providers (curve on any temperature sensor with hysteresis and ramp limits, or fixed; floors
+      per header), written by a worker thread so EC waits never delay a tick. Failsafe core from
+      12d built in: CPU / GPU emergency limit or a source without a reading → 100 %; readback
+      mismatch or 3 I/O errors → restore and turn off; no tick for 10 s → BIOS until ticks
+      resume; `fan-restore.json` saved before the first write and restored at the next start
+      after a crash (the MSI already restarts the service). Tray interval capped at 2 s while
+      fans are driven. Service only (the app's fallback engine reports it unavailable); IPC
+      protocol 5. Cooling tab: per-header BIOS / Fixed / Curve, SVG curve editor (drag,
+      double-click to add, right-click or Delete to remove, arrow keys, presets, copy to another
+      header, live marker), smoothing and safety limits, apply / discard, confirmation before
+      turning on; "Fan control active" chip with Return to BIOS in the header.
+- [ ] 12b Field check: CPU fan Fixed 40 % holds; a curve follows a stress test; Return to BIOS
+      (mode 0 in `vyro-fans`); kill `vyro-service.exe` with control on → BIOS curve back after the
+      restart; emergency limit lowered to 50 °C → 100 %; footprint re-measured.
 - [ ] 12c Pump presets and curve; header confirmed by the owner before the first write.
 - [ ] 12d Failsafe: emergency override, watchdog, restore on stop / shutdown / suspend / crash
       (service restart restores first), control-event log.

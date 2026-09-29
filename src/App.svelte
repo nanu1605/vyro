@@ -23,15 +23,17 @@
   import HistoryPanel from './components/HistoryPanel.svelte';
   import HealthPanel from './components/HealthPanel.svelte';
   import GamingPanel from './components/GamingPanel.svelte';
+  import CoolingPanel from './components/CoolingPanel.svelte';
   import { animator } from './anim';
   import { fmt, fmtGB } from './format';
   import { loadUpdates, update } from './updates.svelte';
-  import { getBackendStatus, getPawnIoStatus, inTauri, onBackendStatus, onSensors, setUiVisible } from './ipc';
+  import { getBackendStatus, getFanStatus, getPawnIoStatus, inTauri, onBackendStatus, onSensors, restoreFans, setUiVisible } from './ipc';
   import { loadPrefs, profileSpec, temp, tempOrNull, tempText, tempUnit } from './prefs.svelte';
-  import type { AlertFired, BackendStatus, PawnIoStatus, SensorSnapshot } from './types';
+  import type { AlertFired, BackendStatus, FanStatus, PawnIoStatus, SensorSnapshot } from './types';
 
   const TABS = [
     { id: 'dashboard', label: 'Dashboard' },
+    { id: 'cooling', label: 'Cooling' },
     { id: 'history', label: 'History' },
     { id: 'health', label: 'Health' },
     { id: 'gaming', label: 'Gaming' },
@@ -59,6 +61,7 @@
   // Panels mount on first visit and then stay mounted (keeps fetched data and live history).
   let visited = $state<Record<Tab, boolean>>({
     dashboard: true,
+    cooling: false,
     history: false,
     health: false,
     gaming: false,
@@ -155,9 +158,25 @@
   const game = $derived(snap?.game ?? null);
   const cpuFan = $derived(snap?.fans.find((f) => f.kind === 'fan') ?? null);
 
+  // Fan control (P12): the header shows whenever Vyro drives fans, from any tab.
+  let fans = $state.raw<FanStatus | null>(null);
+  const loadFans = () =>
+    getFanStatus(snap)
+      .then((s) => (fans = s))
+      .catch(() => {});
+  async function fansToBios(): Promise<void> {
+    await restoreFans().catch(() => {});
+    loadFans();
+  }
+
   onMount(() => {
     visited[tab] = true;
     loadPawnIo();
+    loadFans();
+    // The Cooling tab refreshes every tick while shown; elsewhere every 5 s is enough.
+    const fanTimer = setInterval(() => {
+      if (!document.hidden && tab !== 'cooling') loadFans();
+    }, 5000);
     void loadPrefs().catch(() => {});
     void loadUpdates().catch(() => {});
     let stop: (() => void) | undefined;
@@ -190,6 +209,7 @@
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       disposed = true;
+      clearInterval(fanTimer);
       stop?.();
       stopBackend?.();
       document.removeEventListener('visibilitychange', onVisibility);
@@ -220,9 +240,25 @@
         </button>
       {/each}
     </div>
+    {#if fans?.active}
+      <div class="fan-chip" role="status">
+        <button type="button" class="chip-open" onclick={() => select('cooling')}>
+          <span class="fan-dot" class:hot={fans.overrideReason} aria-hidden="true"></span>
+          {fans.overrideReason ? 'Fans at full speed' : 'Fan control active'}
+        </button>
+        <button type="button" class="chip-bios" onclick={fansToBios} title="Hand every fan back to the BIOS">
+          Return to BIOS
+        </button>
+      </div>
+    {/if}
   </header>
 
   <main>
+    {#if visited.cooling}
+      <div id="panel-cooling" role="tabpanel" aria-labelledby="tab-cooling" hidden={tab !== 'cooling'}>
+        <CoolingPanel {snap} {backend} active={tab === 'cooling'} onstatus={(s) => (fans = s)} />
+      </div>
+    {/if}
     <div id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard" hidden={tab !== 'dashboard'}>
       <ServiceBanner status={backend} />
       {#if !snap}
@@ -397,6 +433,39 @@
     align-items: center;
     gap: 0.5rem 0.75rem;
     margin-bottom: 0.9rem;
+  }
+  .fan-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-left: auto;
+    padding: 0.15rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+    border-radius: 999px;
+    font-size: 0.78rem;
+  }
+  .fan-chip button {
+    padding: 0.2rem 0.6rem;
+    border: 0;
+    border-radius: 999px;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+  }
+  .fan-chip .chip-bios {
+    background: color-mix(in srgb, var(--accent) 14%, var(--bg));
+  }
+  .fan-dot {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-right: 0.35rem;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .fan-dot.hot {
+    background: var(--hot);
   }
   .tabs {
     display: flex;

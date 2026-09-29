@@ -403,7 +403,9 @@ impl Worker {
                 }
             }
             self.loops = self.loops.wrapping_add(1);
-            let chip = self.loops.is_multiple_of(READ_EVERY)
+            let chip = self
+                .loops
+                .is_multiple_of(READ_EVERY)
                 .then(|| self.dev.read().ok())
                 .flatten();
             let mut inner = lock(&self.shared.inner);
