@@ -463,8 +463,12 @@ allow-listed chip + revision + board + header, each read back and bounded.
       ≥ 60 %, an unknown request = 100 %), BIOS state capture / save / restore (mode register
       written last, also when a duty write failed). `vyro-fans` (CI download): read-only dump by
       default; `--try HEADER PERCENT` supervised 10 s test with restore; `--restore`.
-- [ ] 12a Field check: `vyro-fans` dump matches MSI Center / HWiNFO; then `--try` on a system
-      fan and the CPU fan changes RPM and returns to the BIOS curve.
+- [x] 12a Field dump (read only) on MS-7E24: chip 0xD5 rev 0x92, EC base 0xA20, allow-listed;
+      mode 0xA00 = 0 (all BIOS), request 0xA01 idle, commands 0xA28+ a fixed 0x66, outputs
+      0x160+ follow the BIOS curve (CPU 58→65 % in 3 s), RPM as in the monitor path (CPU 1461,
+      pump 4444 at 100 %). System Fan 1–3 have nothing connected (0 RPM at 60 %).
+- [ ] 12a Field check: `vyro-fans --try 0 100` then `--try 0 30`: CPU fan RPM rises / falls and
+      returns to the BIOS curve (mode 0, output tracking the curve) after restore.
 - [ ] 12b Curve engine (any sensor, hysteresis, ramp delays) + Cooling tab with curve editor.
 - [ ] 12c Pump presets and curve; header confirmed by the owner before the first write.
 - [ ] 12d Failsafe: emergency override, watchdog, restore on stop / shutdown / suspend / crash
