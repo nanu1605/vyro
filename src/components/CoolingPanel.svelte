@@ -130,7 +130,7 @@
   }
 
   const others = (h: HeaderStatus) =>
-    (status?.headers ?? []).filter((x) => x.index !== h.index && x.controllable && x.connected);
+    (status?.headers ?? []).filter((x) => x.index !== h.index && x.controllable);
   const sourceName = (id: string) => sources.find((s) => s.id === id)?.name ?? id;
   const t = (c: number | null | undefined) => fmtTemp(c) ?? '—';
 </script>
@@ -172,6 +172,16 @@
       </div>
     </div>
 
+    <details class="explain">
+      <summary>Why are some fans missing?</summary>
+      <p>
+        Your motherboard has {status.headers.length} fan headers, and each reports the speed of one fan. Fans on a
+        splitter all follow their header’s setting, but only one of them reports a speed. Fans powered by a case or
+        cooler hub (usually from a SATA cable) don’t reach the motherboard at all: no program that reads the
+        motherboard can see or control them, unless the hub itself is plugged into one of these headers.
+      </p>
+    </details>
+
     {#if status.overrideReason}
       <p class="alert" role="alert">{status.overrideReason}</p>
     {/if}
@@ -193,7 +203,7 @@
         {@const mode = modeOf(config, h.index)}
         <Card
           title={h.name}
-          subtitle={h.connected ? `${fmt(h.rpm)} RPM · ${fmt(h.dutyPct)} %` : 'No fan detected'}
+          subtitle={h.connected ? `${fmt(h.rpm)} RPM · ${fmt(h.dutyPct)} %` : `No speed reading · ${fmt(h.dutyPct)} %`}
           wide={mode.mode === 'curve'}
         >
           <p class="state">
@@ -210,7 +220,10 @@
             </p>
           {:else}
             {#if !h.connected}
-              <p class="note">Nothing seems to be plugged in (0 RPM). You can still set it.</p>
+              <p class="note">
+                Either nothing is plugged in, or a hub or splitter whose speed wire isn’t connected. Fans on it still
+                follow this header’s setting.
+              </p>
             {/if}
             <div class="modes" role="radiogroup" aria-label="{h.name} mode">
               {#each [['bios', 'BIOS'], ['fixed', 'Fixed'], ['curve', 'Curve']] as const as [kind, text] (kind)}
@@ -444,6 +457,19 @@
   .primary {
     border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
     background: color-mix(in srgb, var(--accent) 16%, var(--bg));
+  }
+  .explain {
+    margin: -0.4rem 0 0.9rem;
+    font-size: 0.82rem;
+  }
+  .explain summary {
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .explain p {
+    max-width: 52rem;
+    margin: 0.4rem 0 0;
+    color: var(--muted);
   }
   .alert {
     margin: 0 0 0.9rem;

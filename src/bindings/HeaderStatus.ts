@@ -27,6 +27,7 @@ targetPct: number | null,
  */
 sourceC: number | null, 
 /**
- * False when the header reads 0 RPM while driven: nothing plugged in.
+ * False when the header reads 0 RPM while driven: nothing plugged in, or a hub or splitter
+ * without a speed wire (its fans still follow the header).
  */
 connected: boolean, };

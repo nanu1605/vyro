@@ -155,7 +155,8 @@ pub struct HeaderStatus {
     pub target_pct: Option<f64>,
     /// Current temperature of the curve's source, for the editor's live marker.
     pub source_c: Option<f64>,
-    /// False when the header reads 0 RPM while driven: nothing plugged in.
+    /// False when the header reads 0 RPM while driven: nothing plugged in, or a hub or splitter
+    /// without a speed wire (its fans still follow the header).
     pub connected: bool,
 }
 
