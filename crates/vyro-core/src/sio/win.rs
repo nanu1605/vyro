@@ -195,7 +195,7 @@ impl SioProvider {
                 BoardTemp::System => b.temp_system = t,
                 BoardTemp::VrmMos => b.temp_vrm_mos = t,
                 BoardTemp::Chipset => b.temp_chipset = t,
-                BoardTemp::Socket => b.temp_socket = t,
+                BoardTemp::Vrm => b.temp_vrm = t,
                 BoardTemp::Pcie => b.temp_pcie = t,
                 BoardTemp::M2 => b.temp_m2 = t,
             }

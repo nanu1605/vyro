@@ -188,7 +188,7 @@ export function nextSnapshot(st: SimState, ts: number, pollHz: number, rand: () 
     { name: 'System Fan 1', rpm: 0, pct: null, pwm: null, minRpm: null, maxRpm: null, kind: 'fan', status: 'unknown' },
   );
   s.board = {
-    ...s.board, tempSystem: 42, tempVrmMos: 41 + st.cpu * 0.1, tempChipset: 41, tempSocket: 39,
+    ...s.board, tempSystem: 42, tempVrmMos: 41 + st.cpu * 0.1, tempChipset: 41, tempVrm: 39,
   };
   s.voltages = [
     { name: '+12V', value: 12.07 }, { name: '+5V', value: 5.07 }, { name: 'CPU SoC', value: 1.206 },

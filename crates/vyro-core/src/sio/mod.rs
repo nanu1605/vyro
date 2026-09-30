@@ -98,7 +98,8 @@ pub enum BoardTemp {
     System,
     VrmMos,
     Chipset,
-    Socket,
+    /// Voltage-regulator temperature ("VR" in HWiNFO), separate from the MOSFET sensor.
+    Vrm,
     Pcie,
     M2,
 }
@@ -123,7 +124,7 @@ pub const MSI_NCT6687: Layout = Layout {
         (1, "System", BoardTemp::System),
         (2, "VRM MOS", BoardTemp::VrmMos),
         (3, "Chipset", BoardTemp::Chipset),
-        (4, "CPU Socket", BoardTemp::Socket),
+        (4, "VR", BoardTemp::Vrm),
     ],
     fans: &[
         (0, "CPU Fan", FanKind::Fan),
@@ -139,6 +140,7 @@ pub const MSI_NCT6687: Layout = Layout {
 /// raw register dump next to HWMonitor (whose "VINn" numbering is not register order: its
 /// VIN3 is 0x128). Vcore (0x128) follows VDDCR_VDD from 1.34 V idle to 1.02 V under load;
 /// SoC (0x124) holds 1.21 V with VDDCR_SOC at 1.20 V; VDDIO (0x126) is halved on the board.
+/// VTT (0x13A) reads 2.046 V, the same as HWiNFO's VTT on the owner's board.
 pub const MSI_B650M_GAMING_PLUS_WIFI: Layout = Layout {
     volts: &[
         (0, "+12V", 1.0),
@@ -149,6 +151,7 @@ pub const MSI_B650M_GAMING_PLUS_WIFI: Layout = Layout {
         (8, "+3.3V", 1.0),
         (11, "+3.3V Standby", 1.0),
         (12, "AVSB", 1.0),
+        (13, "VTT", 1.0),
         (14, "CMOS Battery", 1.0),
     ],
     ..MSI_NCT6687
