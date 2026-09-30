@@ -485,6 +485,11 @@ allow-listed chip + revision + board + header, each read back and bounded.
 - [ ] 12b Field check: CPU fan Fixed 40 % holds; a curve follows a stress test; Return to BIOS
       (mode 0 in `vyro-fans`); kill `vyro-service.exe` with control on → BIOS curve back after the
       restart; emergency limit lowered to 50 °C → 100 %; footprint re-measured.
+      Fixed 40 % passed (2026-09-30). HWiNFO Sensors shows the same two fan speeds as Vyro
+      (CPU 1,246 RPM, PUMPFAN 4,428 RPM); the owner's other 8 fans are on splitters or a hub
+      without a speed wire, or a SATA-powered hub. Next: System Fan 1–3 at Fixed 100 % one at a time.
+- [x] Board names match HWiNFO: temperature channel 4 is "VR" (was "CPU Socket"; now
+      `temp_vrm`, id `board.temp4` unchanged); voltage channel 13 (0x13A) added as "VTT" (2.046 V).
 - [ ] 12c Pump presets and curve; header confirmed by the owner before the first write.
 - [ ] 12d Failsafe: emergency override, watchdog, restore on stop / shutdown / suspend / crash
       (service restart restores first), control-event log.
@@ -553,5 +558,3 @@ allow-listed chip + revision + board + header, each read back and bounded.
   driven safely, pump headers are easy to mislabel, and another tool (MSI Center, FanControl)
   writing the same EC fights Vyro. Mitigations: allow-list, owner-confirmed pump header,
   readback on every write, restore on any fault, and the EC's free/busy page handshake.
-- **HWiNFO Sensors (2026-09-30).** The NCT6687D reports two fan speeds: CPU at 1,246 RPM and PUMPFAN at 4,428 RPM. Vyro shows the same two, so it is missing nothing the board reports. The owner's other 8 fans sit on splitters or a case hub without a speed wire, or on a SATA-powered hub. Test to find out which: set System Fan 1–3 to Fixed 100 % one at a time and listen.
-- Board sensor names now match HWiNFO. Temperature channel 4 was labelled "CPU Socket" and is now "VR" (voltage regulator); it goes to `temp_vrm`, and its sensor id `board.temp4` is unchanged. Voltage channel 13 (0x13A) is new as "VTT"; it reads 2.046 V, the same as HWiNFO.
