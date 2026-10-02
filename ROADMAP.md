@@ -487,7 +487,9 @@ allow-listed chip + revision + board + header, each read back and bounded.
       restart; emergency limit lowered to 50 °C → 100 %; footprint re-measured.
       Fixed 40 % passed (2026-09-30). HWiNFO Sensors shows the same two fan speeds as Vyro
       (CPU 1,246 RPM, PUMPFAN 4,428 RPM); the owner's other 8 fans are on splitters or a hub
-      without a speed wire, or a SATA-powered hub. Next: System Fan 1–3 at Fixed 100 % one at a time.
+      without a speed wire, or a SATA-powered hub. System Fan 1 at Fixed 100 % made the case fans
+      louder (2026-10-01), so the case hub is on SYS_FAN1 with no speed wire: Vyro drives it but
+      cannot see it spin, so a stalled fan there is not detectable.
 - [x] Board names match HWiNFO: temperature channel 4 is "VR" (was "CPU Socket"; now
       `temp_vrm`, id `board.temp4` unchanged); voltage channel 13 (0x13A) added as "VTT" (2.046 V).
 - [ ] 12c Pump presets and curve; header confirmed by the owner before the first write.
