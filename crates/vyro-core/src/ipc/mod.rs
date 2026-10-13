@@ -32,8 +32,10 @@ pub use server::{Hub, Server};
 pub use transport::{connect, default_endpoint, Conn, Listener};
 
 /// 2: `AppSnapshot::parts`. 3: `SensorSnapshot::game`, capture target and game sessions.
-/// 4: `GameSnapshot::timeline` replaces the raw frame times.
-pub const PROTOCOL_VERSION: u32 = 6;
+/// 4: `GameSnapshot::timeline` replaces the raw frame times. 5: fan control (0.2).
+/// 6: `SetGameContext` (P13). 7: game session replay (P15): `GameTimeline`, `HistoryWindow`,
+/// session ids.
+pub const PROTOCOL_VERSION: u32 = 7;
 /// Windows service name (installed by the MSI).
 pub const SERVICE_NAME: &str = "VyroService";
 /// Largest request the server accepts (alert rules are the biggest, a few KB).
@@ -116,6 +118,17 @@ pub enum Request {
         context: Option<GameContext>,
     },
     GameSessions,
+    #[serde(rename_all = "camelCase")]
+    GameTimeline {
+        id: i64,
+    },
+    /// Unix seconds, both included.
+    #[serde(rename_all = "camelCase")]
+    HistoryWindow {
+        metrics: Vec<String>,
+        from: i64,
+        to: i64,
+    },
     FanStatus,
     #[serde(rename_all = "camelCase")]
     SetFanConfig {
@@ -242,6 +255,18 @@ mod tests {
         );
         assert_eq!(json(&Request::RestoreFans), r#"{"method":"restoreFans"}"#);
         assert_eq!(
+            json(&Request::GameTimeline { id: 12 }),
+            r#"{"method":"gameTimeline","params":{"id":12}}"#
+        );
+        assert_eq!(
+            json(&Request::HistoryWindow {
+                metrics: vec!["cpu.usage.total".into()],
+                from: 100,
+                to: 220
+            }),
+            r#"{"method":"historyWindow","params":{"metrics":["cpu.usage.total"],"from":100,"to":220}}"#
+        );
+        assert_eq!(
             json(&Request::SetFanProfile {
                 profile: Profile::Gaming
             }),
@@ -260,7 +285,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&hello).unwrap(),
-            r#"{"protocol":6,"role":"snapshots","session":7,"pid":42,"visible":false}"#
+            r#"{"protocol":7,"role":"snapshots","session":7,"pid":42,"visible":false}"#
         );
         let reply: Reply = Err("nope".into());
         assert_eq!(serde_json::to_string(&reply).unwrap(), r#"{"Err":"nope"}"#);

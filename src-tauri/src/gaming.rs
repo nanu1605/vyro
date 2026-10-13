@@ -236,6 +236,32 @@ pub async fn get_game_sessions(
         .map_err(|e| e.to_string())?
 }
 
+/// A logged session with its samples and markers, for the replay; `None` once it is gone.
+#[tauri::command]
+pub async fn get_game_timeline(
+    engine: tauri::State<'_, Engine>,
+    id: i64,
+) -> Result<Option<vyro_core::gaming::replay::GameTimeline>, String> {
+    let api = std::sync::Arc::clone(&engine.api);
+    tauri::async_runtime::spawn_blocking(move || api.game_timeline(id))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Sensor history around a moment of a replay.
+#[tauri::command]
+pub async fn get_history_window(
+    engine: tauri::State<'_, Engine>,
+    metrics: Vec<String>,
+    from: i64,
+    to: i64,
+) -> Result<Vec<vyro_core::history::WindowSeries>, String> {
+    let api = std::sync::Arc::clone(&engine.api);
+    tauri::async_runtime::spawn_blocking(move || api.history_window(&metrics, from, to))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// The profile, fan settings and update rate in force, and why.
 #[tauri::command]
 pub fn get_game_state(app: AppHandle) -> Effective {

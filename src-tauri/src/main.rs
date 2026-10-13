@@ -95,6 +95,8 @@ fn main() {
             commands::get_autostart,
             commands::set_autostart,
             gaming::get_game_sessions,
+            gaming::get_game_timeline,
+            gaming::get_history_window,
             gaming::get_game_state,
             gaming::pick_profile,
             gaming::keep_profile,
