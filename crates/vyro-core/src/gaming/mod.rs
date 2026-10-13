@@ -637,8 +637,12 @@ fn import(store: &Mutex<History>, json: &std::path::Path) {
                 "gaming: {} session(s) moved to the history store",
                 sessions.len()
             );
-            if let Err(e) = std::fs::rename(json, json.with_file_name(IMPORTED_FILE)) {
-                log::warn!("gaming: cannot rename {}: {e}", json.display());
+            // Windows will not rename over an earlier import's file. The sessions are in the
+            // store now: the log must not stay, or they would be imported again.
+            let done = json.with_file_name(IMPORTED_FILE);
+            let _ = std::fs::remove_file(&done);
+            if let Err(e) = std::fs::rename(json, &done).or_else(|_| std::fs::remove_file(json)) {
+                log::warn!("gaming: cannot move {} aside: {e}", json.display());
             }
         }
         Err(e) => log::warn!("gaming: cannot import {}: {e}", json.display()),
@@ -783,6 +787,17 @@ mod tests {
         assert!(!dir.path().join(SESSIONS_FILE).exists());
         assert!(dir.path().join(IMPORTED_FILE).exists());
         assert_eq!(gaming.sessions()[0].app, "Old.exe");
+        // A second log (back to 0.2 and up again) replaces the earlier import's file.
+        save(&dir.path().join(SESSIONS_FILE), &old).unwrap();
+        Gaming::new(
+            capture::simulated("x"),
+            Some(dir.path()),
+            Some(Arc::clone(&store)),
+        );
+        assert!(!dir.path().join(SESSIONS_FILE).exists());
+        assert_eq!(gaming.sessions().len(), 2);
+        let again = gaming.sessions()[0].id;
+        lock(&store).game_discard(again).unwrap();
 
         // A live capture records a sample per tick and marks an alt-tab.
         let ctx = |in_front| {
