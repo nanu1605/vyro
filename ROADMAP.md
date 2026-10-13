@@ -647,14 +647,32 @@ nothing is loaded until a replay is opened. The history database moves to schema
 new tables, added in place): going back to 0.2 would turn its history off, since 0.2 refuses
 a newer schema.
 
-- [ ] Store: `game_session` / `game_sample` / `game_event` in the history database; last 100
-      sessions; when over the cap, the oldest data goes first, a replay or history (a dropped
-      replay keeps its summary); `games.json` imported once; a session left open by a crash
-      is closed at its last sample.
-- [ ] Markers: frame-rate drops, stutters, thermal and power limits, throttling, alt-tab,
-      profile changes, overlay shown or hidden.
-- [ ] Replay view: tracks on one time axis, marker lane, context for any moment from the
-      history store.
+- [x] Built (2026-10-13, branch `v2-p15-replay`), field check open:
+      - Store (`history::games`, schema v2): `game_session` (summary as JSON), `game_sample`
+        (one row per tick; readings as scaled integers, about 44 bytes a sample: 80 KB per
+        hour played at 2 s updates, 156 KB at 1 s, 312 KB at 0.5 s) and `game_event`, written
+        with the history's 10 s batch. The running session's summary is refreshed with each
+        batch; a session left open by a crash is closed at its last sample. The newest 100
+        sessions are kept; over the 200 MB cap the oldest data goes first, a replay or history
+        (a dropped replay keeps its summary). 0.2's `games.json` is imported once (summaries
+        only) and renamed `games.json.imported`.
+      - Markers (`gaming::markers`): a frame-rate drop below 60 % of the last 30 s median
+        (after 10 s of frames, until back above 80 %); a stutter, a frame ≥ 3× the median and
+        ≥ 25 ms; CPU and GPU thermal and power limits and other clock limits (CPU current
+        limit, GPU hardware slowdown) when they come on, again only after 30 s off; switching
+        away and back, profile changes, the overlay shown or hidden. Frame-rate markers are
+        10 s apart at least; at most 200 per kind.
+      - IPC protocol 7: session ids, `GameTimeline` (downsampled in the service to ≤ 1500
+        samples, keeping each bucket's slowest stretch and worst frame) and `HistoryWindow`
+        (`History::query_window`: raw within 30 min, 10 s within a day, 1 min within a week).
+      - UI: Replay in the Gaming tab's session list (its code loads on first use): summary,
+        frame rate, frame time, use, temperatures and power on one time axis with a shared
+        crosshair; a marker lane and list with filters; any moment by clicking a chart or with
+        the slider. A moment shows its marker, the game's readings then and a minute either
+        side of the PC's sensor history (or that history older than 7 days is gone). Browser
+        preview: a 2 h replay keeps the JS heap at 5.1–5.8 MB and the page 10–13 MB above the
+        Dashboard; opening and closing it six times does not grow memory; axe clean, no
+        overflow at 390 px.
 - [ ] Field check (MS-7E24): two sessions with an alt-tab, a profile change, an overlay toggle
       and heavy load; markers at the right moments and their context matches History; kept
       after a service restart; disk growth measured.

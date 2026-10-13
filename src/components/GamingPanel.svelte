@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import Card from './Card.svelte';
   import KV from './KV.svelte';
   import Meter from './Meter.svelte';
@@ -77,12 +77,33 @@
       autoError = String(e);
     }
   }
+  // Session replay (P15): opens in place of the tab (its code loads on first use); closing it
+  // returns focus to its row.
+  let replay = $state<number | null>(null);
+  const loadReplay = () => import('./SessionReplay.svelte');
+  let list = $state<HTMLElement | null>(null);
+  async function closeReplay(): Promise<void> {
+    const id = replay;
+    replay = null;
+    await tick();
+    list?.querySelector<HTMLButtonElement>(`[data-replay="${id}"]`)?.focus();
+  }
+
   function notAGame(exe: string): Promise<void> {
     const rule = ruleFor(prefs.games, exe) ?? newRule(exe, game?.app ?? exe);
     return savePrefs({ games: withRule(prefs.games, { ...rule, ignore: true }) });
   }
 </script>
 
+{#if replay != null}
+  {#await loadReplay()}
+    <p class="note" role="status">Opening the replay…</p>
+  {:then { default: SessionReplay }}
+    <SessionReplay id={replay} {snap} onclose={() => void closeReplay()} />
+  {:catch e}
+    <LoadState what="the replay" error={String(e)} retry={() => (replay = null)} />
+  {/await}
+{:else}
 <section class="panel-wrap">
   {#if !game}
     <div class="empty panel" role="status">
@@ -226,9 +247,9 @@
   {#if error || !sessions}
     <LoadState what="game sessions" {error} loading={!sessions} retry={load} />
   {:else if sessions.length === 0}
-    <p class="note">Games you play for at least 30 seconds are listed here with their frame rates and temperatures.</p>
+    <p class="note">Games you play for at least 30 seconds are listed here with their frame rates and temperatures, and a replay of each.</p>
   {:else}
-    <div class="table-wrap panel">
+    <div class="table-wrap panel" bind:this={list}>
       <table>
         <thead>
           <tr>
@@ -240,10 +261,11 @@
             <th scope="col">Limited by</th>
             <th scope="col" class="num">CPU max</th>
             <th scope="col" class="num">GPU max</th>
+            <th scope="col"><span class="sr-only">Replay</span></th>
           </tr>
         </thead>
         <tbody>
-          {#each sessions as s (s.started + s.app)}
+          {#each sessions as s (s.id || s.started + s.app)}
             <tr>
               <td><b>{s.app}</b><small>{s.runtime ?? ''}</small></td>
               <td>{fmtDateTime(s.started)}<small>{fmtDuration(s.secs)}</small></td>
@@ -253,6 +275,19 @@
               <td>{s.bound ? BOUND[s.bound].title : NA}</td>
               <td class="num">{fmtTemp(s.cpuTempMax) ?? NA}</td>
               <td class="num">{fmtTemp(s.gpuTempMax) ?? NA}</td>
+              <td>
+                {#if s.hasTimeline}
+                  <button
+                    type="button"
+                    class="replay"
+                    data-replay={s.id}
+                    aria-label="Replay {s.app}, {fmtDateTime(s.started)}"
+                    onclick={() => (replay = s.id)}>Replay</button
+                  >
+                {:else}
+                  <small>Summary only</small>
+                {/if}
+              </td>
             </tr>
           {/each}
         </tbody>
@@ -260,6 +295,7 @@
     </div>
   {/if}
 </section>
+{/if}
 
 <style>
   .empty {
@@ -402,8 +438,20 @@
     text-transform: uppercase;
   }
   .table-wrap {
+    position: relative;
     overflow-x: auto;
     padding: 0.4rem 0.6rem;
+  }
+  .replay {
+    padding: 0.2rem 0.6rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    cursor: pointer;
   }
   table {
     width: 100%;

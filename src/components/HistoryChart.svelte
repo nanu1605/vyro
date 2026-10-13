@@ -8,6 +8,11 @@
     color: string;
     points: HistoryPoint[];
   }
+  /** A moment drawn as a thin vertical line (game session replay markers). */
+  interface Mark {
+    ts: number;
+    color: string;
+  }
   interface Props {
     title: string;
     /** Display unit, e.g. "°F" for a °C sensor shown in Fahrenheit. */
@@ -20,13 +25,39 @@
     end: number;
     step: number;
     onclose?: () => void;
+    /** Plot height, px. */
+    height?: number;
+    /** Min–max band; by default only for averaged buckets. */
+    band?: boolean;
+    markers?: Mark[];
+    /** The hovered moment; bind it to share the crosshair between charts. */
+    hoverTs?: number | null;
+    /** A click on the plot, at that moment. */
+    onpick?: (ts: number) => void;
+    emptyText?: string;
   }
-  let { title, unit, zero, max, series, start, end, step, onclose }: Props = $props();
+  let {
+    title,
+    unit,
+    zero,
+    max,
+    series,
+    start,
+    end,
+    step,
+    onclose,
+    height = 170,
+    band,
+    markers = [],
+    hoverTs = $bindable(null),
+    onpick,
+    emptyText = 'No history for this range yet.',
+  }: Props = $props();
 
-  const H = 170;
+  const H = $derived(height);
+  const showBand = $derived(band ?? step > 1);
   const M = { l: 46, r: 10, t: 8, b: 22 };
   let w = $state(0);
-  let hoverTs = $state<number | null>(null);
 
   const scale = $derived(
     niceScale(
@@ -42,7 +73,7 @@
   const drawn = $derived(
     series.map((s) => ({
       ...s,
-      runs: runs(s.points, maxGap).map((r) => ({ line: linePath(r, x, y), band: step > 1 ? bandPath(r, x, y) : '' })),
+      runs: runs(s.points, maxGap).map((r) => ({ line: linePath(r, x, y), band: showBand ? bandPath(r, x, y) : '' })),
     })),
   );
   const xTicks = $derived(timeTicks(start, end, Math.max(2, Math.floor(plotW / 110))));
@@ -60,14 +91,19 @@
     return { ts, rows };
   });
 
-  function move(e: PointerEvent): void {
+  /** The moment under the pointer, or `null` outside the plot. */
+  function at(e: PointerEvent): number | null {
     const rect = (e.currentTarget as SVGElement).getBoundingClientRect();
     const px = e.clientX - rect.left;
-    if (px < M.l || px > M.l + plotW) {
-      hoverTs = null;
-      return;
-    }
-    hoverTs = start + ((px - M.l) / plotW) * (end - start);
+    if (px < M.l || px > M.l + plotW) return null;
+    return start + ((px - M.l) / plotW) * (end - start);
+  }
+  function move(e: PointerEvent): void {
+    hoverTs = at(e);
+  }
+  function up(e: PointerEvent): void {
+    const ts = e.button === 0 ? at(e) : null;
+    if (ts != null) onpick?.(ts);
   }
 
   const latest = (s: Series) => s.points[s.points.length - 1]?.avg ?? null;
@@ -89,15 +125,17 @@
       <button type="button" class="close" aria-label="Close {title} chart" onclick={onclose}>×</button>
     {/if}
   </figcaption>
-  <div class="plot" bind:clientWidth={w}>
+  <div class="plot" style:height="{H}px" bind:clientWidth={w}>
     {#if w > 0}
       <svg
         width={w}
         height={H}
         role="img"
         aria-label="{title} history: {series.map((s) => s.name).join(', ')}"
+        class:pick={!!onpick}
         onpointermove={move}
         onpointerleave={() => (hoverTs = null)}
+        onpointerup={onpick ? up : undefined}
       >
         {#each scale.ticks as t (t)}
           <line class="grid" x1={M.l} x2={M.l + plotW} y1={y(t)} y2={y(t)} />
@@ -105,6 +143,11 @@
         {/each}
         {#each xTicks as t (t)}
           <text class="xlab" x={x(t)} y={H - 6}>{timeLabel(t, end - start)}</text>
+        {/each}
+        {#each markers as m, i (i)}
+          {#if m.ts >= start && m.ts <= end}
+            <line class="mark" x1={x(m.ts)} x2={x(m.ts)} y1={M.t} y2={H - M.b} style:stroke={m.color} />
+          {/if}
         {/each}
         {#each drawn as s (s.name)}
           {#each s.runs as r, i (i)}
@@ -120,7 +163,7 @@
         {/if}
       </svg>
       {#if empty}
-        <p class="empty">No history for this range yet.</p>
+        <p class="empty">{emptyText}</p>
       {/if}
       {#if hover}
         <div class="tip" style:left="{Math.min(Math.max(x(hover.ts) + 10, 0), Math.max(0, w - 190))}px">
@@ -178,11 +221,18 @@
   }
   .plot {
     position: relative;
-    height: 170px;
   }
   svg {
     display: block;
     touch-action: pan-y;
+  }
+  .pick {
+    cursor: crosshair;
+  }
+  .mark {
+    stroke-width: 1.2;
+    stroke-dasharray: 2 3;
+    opacity: 0.8;
   }
   .grid {
     stroke: var(--line);
