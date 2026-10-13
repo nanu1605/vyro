@@ -3,11 +3,13 @@ import type { FanKind } from "./FanKind";
 
 export type HeaderStatus = { index: number, name: string, kind: FanKind, 
 /**
- * Lowest speed Vyro sets on this header.
+ * Lowest speed Vyro sets on this header (marking it as a pump raises it to
+ * [`FanStatus::pump_min_pct`]).
  */
 minPct: number, 
 /**
- * Whether this header can be driven (pumps wait for pump control).
+ * Whether this header can be driven on this board (a pump header still needs the owner's
+ * confirmation, [`FanConfig::pumps`]).
  */
 controllable: boolean, rpm: number | null, 
 /**

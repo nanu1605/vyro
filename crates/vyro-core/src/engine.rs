@@ -221,6 +221,12 @@ impl LocalEngine {
         *lock(&self.clients) = pids;
     }
 
+    /// The PC is about to sleep (`true`) or has woken (`false`): fans go back to the BIOS
+    /// for the duration (the service forwards the power events).
+    pub fn set_suspended(&self, on: bool) {
+        self.fans.set_suspended(on);
+    }
+
     fn simulated() -> bool {
         !cfg!(windows) || std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1")
     }
@@ -383,7 +389,7 @@ impl EngineApi for LocalEngine {
         let rpms: Vec<Option<f64>> = {
             let reg = lock(&self.registry);
             (0..control::HEADERS)
-                .map(|n| reg.get(&format!("fan.{n}")).and_then(|s| s.value))
+                .map(|n| reg.get(&crate::fan::rpm_id(n)).and_then(|s| s.value))
                 .collect()
         };
         Ok(self

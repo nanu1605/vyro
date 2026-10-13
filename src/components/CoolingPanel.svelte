@@ -2,7 +2,7 @@
   import { untrack } from 'svelte';
   import Card from './Card.svelte';
   import CurveEditor from './CurveEditor.svelte';
-  import { defaultCurve, PRESETS, type Preset } from '../curve';
+  import { defaultCurve, PRESETS, PUMP_CURVE, PUMP_SPEEDS, type Preset } from '../curve';
   import { fmt } from '../format';
   import { getFanStatus, getSensorTree, restoreFans, setFanConfig } from '../ipc';
   import { fmtTemp } from '../prefs.svelte';
@@ -79,12 +79,34 @@
     });
   }
 
+  /** Treated as a pump: the board's pump header, or one the owner marked. */
+  const isPump = (c: FanConfig, h: HeaderStatus) => h.kind === 'pump' || c.pumps.includes(h.index);
+  /** The board's pump header is driven only after the owner confirms a pump is on it. */
+  const confirmed = (c: FanConfig, h: HeaderStatus) => h.kind !== 'pump' || c.pumps.includes(h.index);
+  const floorOf = (c: FanConfig, h: HeaderStatus) =>
+    isPump(c, h) ? Math.max(h.minPct, status?.pumpMinPct ?? 60) : h.minPct;
+
   function pick(h: HeaderStatus, kind: HeaderMode['mode']): void {
-    const cur = config ? modeOf(config, h.index) : null;
-    if (cur?.mode === kind) return;
+    if (!config) return;
+    const cur = modeOf(config, h.index);
+    if (cur.mode === kind) return;
+    const pump = isPump(config, h);
     if (kind === 'bios') setMode(h.index, { mode: 'bios' });
-    else if (kind === 'fixed') setMode(h.index, { mode: 'fixed', pct: Math.max(h.minPct, Math.round(h.dutyPct ?? 50)) });
-    else setMode(h.index, { mode: 'curve', curve: defaultCurve() });
+    else if (kind === 'fixed')
+      setMode(h.index, { mode: 'fixed', pct: Math.max(floorOf(config, h), Math.round(h.dutyPct ?? 50)) });
+    else setMode(h.index, { mode: 'curve', curve: pump ? defaultCurve(undefined, PUMP_CURVE) : defaultCurve() });
+  }
+
+  /** Marks a header as driving a pump (or not). Un-marking the board's pump header puts it back
+   * on the BIOS, since it may only be driven while confirmed. */
+  function setPump(h: HeaderStatus, on: boolean): void {
+    edit((c) => {
+      c.pumps = on ? [...c.pumps.filter((i) => i !== h.index), h.index] : c.pumps.filter((i) => i !== h.index);
+      const entry = c.headers.find((x) => x.index === h.index);
+      if (!entry) return;
+      if (!on && h.kind === 'pump') entry.mode = { mode: 'bios' };
+      else if (on && entry.mode.mode === 'fixed') entry.mode.pct = Math.max(entry.mode.pct, floorOf(c, h));
+    });
   }
 
   async function save(c: FanConfig): Promise<void> {
@@ -130,7 +152,9 @@
   }
 
   const others = (h: HeaderStatus) =>
-    (status?.headers ?? []).filter((x) => x.index !== h.index && x.controllable);
+    (status?.headers ?? []).filter(
+      (x) => x.index !== h.index && x.controllable && config != null && confirmed(config, x),
+    );
   const sourceName = (id: string) => sources.find((s) => s.id === id)?.name ?? id;
   const t = (c: number | null | undefined) => fmtTemp(c) ?? '—';
 </script>
@@ -215,14 +239,30 @@
             {/if}
           </p>
           {#if !h.controllable}
+            <p class="note">Vyro cannot control this header on this motherboard.</p>
+          {:else if !confirmed(config, h)}
             <p class="note">
-              This header drives a pump. It stays on the BIOS curve; pump control comes in a later update.
+              This header is meant for a liquid cooler’s pump{#if h.connected && h.rpm}; something on it runs at
+                {fmt(h.rpm)} RPM{/if}. Before Vyro controls it, confirm that a pump is plugged in here. Vyro keeps a
+              pump at {status.pumpMinPct} % or more, and hands every fan back to the BIOS if the pump stops reporting a
+              speed.
             </p>
+            <button type="button" class="confirm-pump" onclick={() => setPump(h, true)}>A pump is plugged in here</button>
           {:else}
-            {#if !h.connected}
+            {#if isPump(config, h) && !h.connected}
+              <p class="note warn">
+                Vyro can’t see this pump’s speed, so it can’t tell if the pump stops. Leave it on BIOS unless you’re
+                sure the pump is on this header.
+              </p>
+            {:else if !h.connected}
               <p class="note">
                 Either nothing is plugged in, or a hub or splitter whose speed wire isn’t connected. Fans on it still
                 follow this header’s setting.
+              </p>
+            {:else if isPump(config, h)}
+              <p class="note">
+                Never below {floorOf(config, h)} %. If the pump stops reporting a speed, every fan goes back to the
+                BIOS.
               </p>
             {/if}
             <div class="modes" role="radiogroup" aria-label="{h.name} mode">
@@ -241,14 +281,26 @@
                 <span>Speed <strong>{mode.pct} %</strong></span>
                 <input
                   type="range"
-                  min={h.minPct}
+                  min={floorOf(config, h)}
                   max="100"
                   step="1"
                   value={mode.pct}
                   oninput={(e) => setMode(h.index, { mode: 'fixed', pct: Number(e.currentTarget.value) })}
                 />
-                <small>Minimum {h.minPct} %</small>
+                <small>Minimum {floorOf(config, h)} %</small>
               </label>
+              {#if isPump(config, h)}
+                <span class="presets">
+                  {#each Object.entries(PUMP_SPEEDS) as [name, pct] (name)}
+                    <button
+                      type="button"
+                      class:selected={mode.pct === pct}
+                      onclick={() => setMode(h.index, { mode: 'fixed', pct })}
+                      >{name[0]?.toUpperCase()}{name.slice(1)} {pct} %</button
+                    >
+                  {/each}
+                </span>
+              {/if}
             {:else if mode.mode === 'curve'}
               {@const curve = mode.curve}
               <div class="curve-bar">
@@ -297,7 +349,7 @@
               <CurveEditor
                 label="{h.name} curve"
                 points={curve.points}
-                minPct={h.minPct}
+                minPct={floorOf(config, h)}
                 live={h.software && h.sourceC != null && h.targetPct != null ? { temp: h.sourceC, pct: h.targetPct } : null}
                 onchange={(points) => setMode(h.index, { mode: 'curve', curve: { ...curve, points } })}
               />
@@ -356,6 +408,18 @@
                 </p>
               </details>
             {/if}
+            {#if h.kind === 'pump'}
+              <button type="button" class="link" onclick={() => setPump(h, false)}>No pump on this header?</button>
+            {:else}
+              <label class="pump-mark">
+                <input
+                  type="checkbox"
+                  checked={config.pumps.includes(h.index)}
+                  onchange={(e) => setPump(h, e.currentTarget.checked)}
+                />
+                A pump is plugged in here (never below {status.pumpMinPct} %)
+              </label>
+            {/if}
           {/if}
         </Card>
       {/each}
@@ -387,8 +451,9 @@
         </div>
         <p class="note">
           Every fan Vyro drives goes to 100 % when either limit is reached, or when a curve’s temperature has no reading.
-          Vyro never sets a fan below 20 % and hands every fan back to the BIOS when it stops, crashes or loses its
-          sensors. Closing this window does not stop fan control; the Vyro service keeps running it.
+          Vyro never sets a fan below 20 % or a pump below {status.pumpMinPct} %, and hands every fan back to the BIOS
+          when it stops, crashes, loses its sensors, the pump stops reporting a speed, or the PC goes to sleep. Closing
+          this window does not stop fan control; the Vyro service keeps running it.
         </p>
       </Card>
     </div>
@@ -397,7 +462,10 @@
       <h2 id="fan-confirm-title">Turn on fan control?</h2>
       <p>Vyro will set the speed of the fans you choose instead of the BIOS.</p>
       <ul>
-        <li>Fans never go below 20 %; the pump stays on the BIOS curve.</li>
+        <li>
+          Fans never go below 20 %, pumps never below {status.pumpMinPct} %. The pump header is controlled only after you
+          confirm a pump is plugged into it.
+        </li>
         <li>Every fan Vyro drives runs at 100 % above the safety limits ({t(config.emergencyCpuC)} CPU, {t(config.emergencyGpuC)} GPU).</li>
         <li>If Vyro stops, crashes or loses its sensor readings, the BIOS takes the fans back.</li>
         <li>Closing the window does not stop fan control. Use “Return to BIOS” to hand everything back.</li>
@@ -568,6 +636,40 @@
   .presets button {
     padding: 0.2rem 0.55rem;
     font-size: 0.76rem;
+  }
+  .presets .selected {
+    background: color-mix(in srgb, var(--accent) 20%, var(--bg));
+  }
+  .slider + .presets {
+    margin-top: 0.5rem;
+  }
+  .note.warn {
+    color: var(--warn);
+  }
+  .confirm-pump {
+    margin-top: 0.2rem;
+  }
+  .pump-mark {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.7rem;
+    color: var(--muted);
+    font-size: 0.76rem;
+  }
+  .pump-mark input {
+    accent-color: var(--accent);
+  }
+  button.link {
+    display: block;
+    margin-top: 0.7rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font-size: 0.76rem;
+    text-decoration: underline;
+    cursor: pointer;
   }
   select,
   input[type='number'] {

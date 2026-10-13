@@ -7,6 +7,11 @@
 //! - a register that does not keep a write, or three I/O errors in a row, restore and turn
 //!   control off;
 //! - no sensor tick for the watchdog period (the poller stopped) restores until ticks resume;
+//! - a pump that stops reporting a speed restores and turns control off;
+//! - going to sleep restores (the service tells the controller); after waking, the BIOS state
+//!   is captured afresh before the next write;
+//! - the chip is re-read every few seconds: a header that lost Vyro's setting (the EC was reset,
+//!   or another fan tool wrote it) is written again, and if that keeps happening control ends;
 //! - a file left by a crash is written back when the next controller starts, before anything
 //!   else (the service restarts itself after a crash).
 
@@ -18,9 +23,9 @@ use std::time::{Duration, Instant};
 
 use super::{
     validate, Decision, FanCapability, FanConfig, FanStatus, HeaderMode, HeaderStatus, Runtime,
+    PUMP_MIN_PCT,
 };
 use crate::sio::control::{self, BiosState, Board, ControlError};
-use crate::snapshot::FanKind;
 
 pub const CONFIG_FILE: &str = "fan-control.json";
 pub const RESTORE_FILE: &str = "fan-restore.json";
@@ -31,6 +36,16 @@ pub const MAX_TICK: Duration = Duration::from_secs(2);
 const MAX_IO_ERRORS: u32 = 3;
 /// Chip state (mode, duties) is re-read every this many worker loops.
 const READ_EVERY: u32 = 3;
+/// A driven header's output may differ from what was written by this many steps (rounding).
+const DRIFT_STEPS: u8 = 2;
+/// Reads in a row that disagree with what Vyro wrote before it writes again (one may catch
+/// the chip mid-request).
+const DRIFT_READS: u32 = 2;
+/// This many rewrites within [`DRIFT_WINDOW`] mean another program is driving the same fans.
+const MAX_DRIFTS: usize = 3;
+const DRIFT_WINDOW: Duration = Duration::from_secs(120);
+/// Longest wait for the BIOS state to be written back before the PC sleeps.
+const SUSPEND_WAIT: Duration = Duration::from_millis(1500);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DevError {
@@ -92,6 +107,8 @@ struct Inner {
     override_reason: Option<String>,
     last_error: Option<String>,
     chip: Option<ChipState>,
+    /// The PC is going to sleep: the BIOS drives every header until it wakes.
+    suspended: bool,
     stop: bool,
 }
 
@@ -167,6 +184,7 @@ fn shared(config: FanConfig, chip: Option<ChipState>, config_path: Option<PathBu
             override_reason: None,
             last_error: None,
             chip,
+            suspended: false,
             stop: false,
         }),
         wake: Condvar::new(),
@@ -216,6 +234,8 @@ impl FanControl {
             applied: BTreeMap::new(),
             io_errors: 0,
             loops: 0,
+            drift_reads: 0,
+            drifts: Vec::new(),
         };
         match std::thread::Builder::new()
             .name("vyro-fans".into())
@@ -296,6 +316,38 @@ impl FanControl {
         self.shared.save(&cfg)
     }
 
+    /// Before the PC sleeps (`true`): hands every header back to the BIOS and waits, briefly,
+    /// until that is done. After it wakes (`false`): control resumes with the next tick, from a
+    /// fresh capture of the BIOS state (the firmware may have reset the chip).
+    pub fn set_suspended(&self, on: bool) {
+        if self.board.is_none() {
+            return;
+        }
+        {
+            let mut inner = lock(&self.shared.inner);
+            if inner.suspended == on {
+                return;
+            }
+            inner.suspended = on;
+            inner.runtime.reset();
+            // Nothing is written after waking until a fresh tick (the watchdog would read
+            // the time asleep as stopped sensors).
+            inner.last_tick = None;
+            inner.decision = None;
+            inner.fresh = false;
+        }
+        self.shared.wake.notify_one();
+        if on {
+            let until = Instant::now() + SUSPEND_WAIT;
+            while lock(&self.shared.inner).active && Instant::now() < until {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            log::info!("fans: suspended for sleep");
+        } else {
+            log::info!("fans: resumed after sleep");
+        }
+    }
+
     /// `rpm(header)` reads the monitor's fan speed.
     pub fn status(&self, rpm: impl Fn(u16) -> Option<f64>) -> FanStatus {
         let inner = lock(&self.shared.inner);
@@ -322,7 +374,7 @@ impl FanControl {
                     name: h.name.into(),
                     kind: h.kind,
                     min_pct: h.min_pct,
-                    controllable: h.kind != FanKind::Pump,
+                    controllable: true,
                     rpm,
                     duty_pct: duty.map(control::percent),
                     software,
@@ -341,6 +393,7 @@ impl FanControl {
             override_reason: inner.override_reason.clone(),
             last_error: inner.last_error.clone(),
             headers,
+            pump_min_pct: PUMP_MIN_PCT,
         }
     }
 
@@ -370,10 +423,15 @@ struct Worker {
     applied: BTreeMap<u16, u8>,
     io_errors: u32,
     loops: u32,
+    /// Chip reads in a row where a driven header lost its setting.
+    drift_reads: u32,
+    /// When lost settings were last written again.
+    drifts: Vec<Instant>,
 }
 
 enum Step {
     Stop,
+    Suspend,
     Stale,
     Apply(Option<Decision>),
 }
@@ -386,6 +444,7 @@ impl Worker {
                     self.restore_all();
                     return;
                 }
+                Step::Suspend => self.restore_all(),
                 Step::Stale => {
                     if self.bios.is_some() {
                         self.restore_all();
@@ -408,12 +467,59 @@ impl Worker {
                 .is_multiple_of(READ_EVERY)
                 .then(|| self.dev.read().ok())
                 .flatten();
+            if let Some(c) = &chip {
+                self.check_drift(c);
+            }
             let mut inner = lock(&self.shared.inner);
             if chip.is_some() {
                 inner.chip = chip;
             }
             inner.active = self.bios.is_some() && !self.applied.is_empty();
         }
+    }
+
+    /// Compares what the chip drives with what Vyro wrote. A header that lost its setting
+    /// (mode bit cleared, or another duty) is written again on the next tick; if that keeps
+    /// happening, another program is driving the fans and Vyro gives them back to the BIOS.
+    fn check_drift(&mut self, chip: &ChipState) {
+        let lost: Vec<u16> = self
+            .applied
+            .iter()
+            .filter(|&(&h, &raw)| {
+                let on = chip.mode & (1 << h) != 0;
+                let out = chip.outputs.get(usize::from(h)).copied();
+                !on || out.is_some_and(|o| o.abs_diff(raw) > DRIFT_STEPS)
+            })
+            .map(|(&h, _)| h)
+            .collect();
+        if lost.is_empty() {
+            self.drift_reads = 0;
+            return;
+        }
+        self.drift_reads += 1;
+        if self.drift_reads < DRIFT_READS {
+            return;
+        }
+        self.drift_reads = 0;
+        let now = Instant::now();
+        self.drifts
+            .retain(|t| now.duration_since(*t) < DRIFT_WINDOW);
+        self.drifts.push(now);
+        if self.drifts.len() >= MAX_DRIFTS {
+            self.drifts.clear();
+            return self.fail(
+                "another program keeps changing the fan settings (close MSI Center, FanControl \
+                 or similar tools)"
+                    .into(),
+            );
+        }
+        log::warn!("fans: header(s) {lost:?} lost Vyro's setting; writing it again");
+        for h in lost {
+            self.applied.remove(&h);
+        }
+        // Rewrite with the latest decision even if no tick arrives first.
+        let mut inner = lock(&self.shared.inner);
+        inner.fresh = inner.decision.is_some();
     }
 
     fn wait(&mut self) -> Step {
@@ -428,6 +534,9 @@ impl Worker {
         }
         if inner.stop {
             return Step::Stop;
+        }
+        if inner.suspended {
+            return Step::Suspend;
         }
         let stale = inner.config.drives_any()
             && inner.last_tick.is_none_or(|t| t.elapsed() > self.watchdog);
@@ -462,6 +571,9 @@ impl Worker {
     }
 
     fn apply(&mut self, d: &Decision) {
+        if let Some(f) = &d.fault {
+            return self.fail(f.clone());
+        }
         if d.targets.is_empty() {
             self.restore_all();
             return;
@@ -558,6 +670,8 @@ pub struct SimChip {
     pub outputs: Vec<u8>,
     /// Errors the next calls return, first to last.
     pub fail: Vec<DevError>,
+    /// Another fan tool: every software-driven header reads this duty.
+    pub fight: Option<u8>,
     pub log: Vec<String>,
 }
 
@@ -652,7 +766,14 @@ impl FanDevice for SimDevice {
     }
 
     fn read(&mut self) -> Result<ChipState, DevError> {
-        let c = lock(&self.0);
+        let mut c = lock(&self.0);
+        if let Some(v) = c.fight {
+            for n in 0..c.outputs.len() {
+                if c.mode & (1 << n) != 0 {
+                    c.outputs[n] = v;
+                }
+            }
+        }
         Ok(ChipState {
             mode: c.mode,
             outputs: c.outputs.clone(),
@@ -864,6 +985,121 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// Ticks with `read` until `done` holds for the simulated chip (the worker acts
+    /// asynchronously, and drift checks need several chip reads).
+    fn tick_until(
+        fc: &FanControl,
+        dev: &SimDevice,
+        read: impl Fn(&str) -> Option<f64> + Copy,
+        done: impl Fn(&SimChip) -> bool,
+    ) {
+        for _ in 0..1000 {
+            if done(&lock(&dev.0)) {
+                return;
+            }
+            fc.on_tick(read);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        panic!("condition not reached: {:?}", lock(&dev.0).log);
+    }
+
+    fn cool(id: &str) -> Option<f64> {
+        (id == CPU_TEMP).then_some(50.0)
+    }
+
+    #[test]
+    fn sleep_hands_back_to_the_bios_and_waking_captures_afresh() {
+        let dev = SimDevice::new();
+        let fc = FanControl::start(Box::new(dev.clone()), None, WATCHDOG);
+        fc.set_config(on(vec![fixed(0, 40.0)])).unwrap();
+        tick(&fc, &dev, 50.0, 2);
+        fc.set_suspended(true);
+        assert_eq!(
+            lock(&dev.0).log.last().unwrap(),
+            "restore",
+            "done before returning"
+        );
+        assert_eq!(lock(&dev.0).mode, 0);
+        // Ticks while going to sleep write nothing.
+        fc.on_tick(cool);
+        settle();
+        assert_eq!(lock(&dev.0).log.len(), 3);
+        fc.set_suspended(false);
+        tick(&fc, &dev, 50.0, 5);
+        assert_eq!(&lock(&dev.0).log[3..5], ["capture", "set 0 102"]);
+        assert!(
+            fc.status(|_| None).last_error.is_none(),
+            "not a watchdog trip"
+        );
+    }
+
+    #[test]
+    fn a_setting_the_chip_lost_is_written_again() {
+        let dev = SimDevice::new();
+        let fc = FanControl::start(Box::new(dev.clone()), None, WATCHDOG);
+        fc.set_config(on(vec![fixed(0, 40.0)])).unwrap();
+        tick(&fc, &dev, 50.0, 2);
+        // The EC was reset (the header is back on the BIOS curve).
+        {
+            let mut c = lock(&dev.0);
+            c.mode = 0;
+            c.outputs[0] = 153;
+        }
+        tick_until(&fc, &dev, cool, |c| c.log.len() >= 3);
+        assert_eq!(lock(&dev.0).log[2], "set 0 102");
+        assert_eq!(lock(&dev.0).mode, 1);
+        assert!(fc.status(|_| None).config.enabled);
+    }
+
+    #[test]
+    fn another_program_fighting_over_the_fans_ends_control() {
+        let dev = SimDevice::new();
+        let fc = FanControl::start(Box::new(dev.clone()), None, WATCHDOG);
+        fc.set_config(on(vec![fixed(0, 40.0)])).unwrap();
+        tick(&fc, &dev, 50.0, 2);
+        // Another tool sets its own duty after every write of Vyro's.
+        lock(&dev.0).fight = Some(200);
+        tick_until(&fc, &dev, cool, |c| {
+            c.log.last().is_some_and(|l| l == "restore")
+        });
+        let rewrites = lock(&dev.0)
+            .log
+            .iter()
+            .filter(|l| *l == "set 0 102")
+            .count();
+        assert_eq!(rewrites, 3, "written again twice before giving up");
+        let st = fc.status(|_| None);
+        assert!(!st.config.enabled);
+        assert!(st.last_error.unwrap().contains("another program"));
+    }
+
+    #[test]
+    fn a_stopped_pump_hands_everything_back() {
+        let dev = SimDevice::new();
+        let fc = FanControl::start(Box::new(dev.clone()), None, WATCHDOG);
+        let mut cfg = on(vec![fixed(0, 40.0), fixed(1, 70.0)]);
+        assert!(fc.set_config(cfg.clone()).is_err(), "pump not confirmed");
+        cfg.pumps = vec![1];
+        fc.set_config(cfg).unwrap();
+        let spinning = |id: &str| match id {
+            "fan.1" => Some(3900.0),
+            _ => cool(id),
+        };
+        tick_until(&fc, &dev, spinning, |c| c.log.len() >= 3);
+        assert_eq!(&lock(&dev.0).log[1..3], ["set 0 102", "set 1 179"]);
+        let stopped = |id: &str| match id {
+            "fan.1" => Some(0.0),
+            _ => cool(id),
+        };
+        tick_until(&fc, &dev, stopped, |c| {
+            c.log.last().is_some_and(|l| l == "restore")
+        });
+        let st = fc.status(|_| None);
+        assert!(!st.config.enabled);
+        assert!(st.last_error.unwrap().contains("pump may have stopped"));
+        assert_eq!(lock(&dev.0).mode, 0);
+    }
+
     #[test]
     fn status_reports_headers_targets_and_unconnected_fans() {
         let dev = SimDevice::new();
@@ -890,7 +1126,8 @@ mod tests {
         assert_eq!(cpu.target_pct, Some(60.0));
         assert_eq!(cpu.source_c, Some(40.0));
         assert!(cpu.connected);
-        assert!(!st.headers[1].controllable, "pump");
+        assert!(st.headers[1].controllable, "the pump, once confirmed");
+        assert_eq!(st.pump_min_pct, 60);
         assert!(!st.headers[2].connected, "0 RPM at 60 %");
     }
 }

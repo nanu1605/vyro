@@ -3,10 +3,15 @@
 //! duties through `sio::control`; it runs only in the service, only on allow-listed boards,
 //! and hands cooling back to the BIOS on any failure.
 //!
-//! Rules, in order: control off → nothing is driven; CPU or GPU at its emergency limit →
-//! every controlled header at 100 %; a curve whose source sensor has no reading → that header
-//! at 100 %; otherwise the curve (with hysteresis and ramp limits) or the fixed speed, never
-//! below the header's floor.
+//! Rules, in order: control off → nothing is driven; a pump that stops reporting a speed →
+//! control off and every header back to the BIOS; CPU or GPU at its emergency limit → every
+//! controlled header at 100 %; a curve whose source sensor has no reading → that header at
+//! 100 %; otherwise the curve (with hysteresis and ramp limits) or the fixed speed, never below
+//! the header's floor.
+//!
+//! Pumps (12c): the pump header is driven only after the owner confirms it drives a pump
+//! ([`FanConfig::pumps`]); a pump plugged into a fan header can be marked the same way. A
+//! pump never goes below [`PUMP_MIN_PCT`] %.
 
 pub mod controller;
 #[cfg(windows)]
@@ -20,13 +25,24 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::sio::control::Board;
+use crate::sio::control::{Board, Header};
 use crate::snapshot::FanKind;
+
+pub use crate::sio::control::PUMP_MIN_PCT;
 
 /// Emergency sensors (the same ones the default alerts watch).
 pub const CPU_TEMP: &str = "cpu.temp.package";
 pub const GPU_TEMP: &str = "gpu.0.temp.edge";
 pub const MAX_POINTS: usize = 8;
+/// A driven pump that has reported a speed and then reads below this...
+pub const PUMP_STALL_RPM: f64 = 300.0;
+/// ...on this many ticks in a row has stopped: control ends and the BIOS takes over.
+pub const PUMP_STALL_TICKS: u32 = 3;
+
+/// Registry id of a header's fan speed.
+pub fn rpm_id(header: u16) -> String {
+    format!("fan.{header}")
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -96,6 +112,10 @@ pub struct FanConfig {
     pub headers: Vec<HeaderConfig>,
     pub emergency_cpu_c: f64,
     pub emergency_gpu_c: f64,
+    /// Headers the owner confirmed drive a pump. The board's pump header can be driven only
+    /// once listed; every listed header keeps the pump floor and the stall check.
+    #[serde(default)]
+    pub pumps: Vec<u16>,
 }
 
 impl Default for FanConfig {
@@ -105,6 +125,7 @@ impl Default for FanConfig {
             headers: Vec::new(),
             emergency_cpu_c: 95.0,
             emergency_gpu_c: 90.0,
+            pumps: Vec::new(),
         }
     }
 }
@@ -120,6 +141,25 @@ impl FanConfig {
     /// Whether any header is driven by Vyro.
     pub fn drives_any(&self) -> bool {
         self.enabled && self.headers.iter().any(|h| h.mode != HeaderMode::Bios)
+    }
+
+    /// Whether `header` is treated as a pump (the board says so, or the owner did).
+    pub fn is_pump(&self, header: &Header) -> bool {
+        header.kind == FanKind::Pump || self.pumps.contains(&header.index)
+    }
+
+    /// Whether Vyro may drive `header` (a pump header only once the owner confirmed it).
+    pub fn may_drive(&self, header: &Header) -> bool {
+        header.kind != FanKind::Pump || self.pumps.contains(&header.index)
+    }
+
+    /// Lowest speed for `header`: its own floor, raised to the pump floor for a pump.
+    pub fn floor(&self, header: &Header) -> u8 {
+        if self.is_pump(header) {
+            header.min_pct.max(PUMP_MIN_PCT)
+        } else {
+            header.min_pct
+        }
     }
 }
 
@@ -142,9 +182,11 @@ pub struct HeaderStatus {
     pub index: u16,
     pub name: String,
     pub kind: FanKind,
-    /// Lowest speed Vyro sets on this header.
+    /// Lowest speed Vyro sets on this header (marking it as a pump raises it to
+    /// [`FanStatus::pump_min_pct`]).
     pub min_pct: u8,
-    /// Whether this header can be driven (pumps wait for pump control).
+    /// Whether this header can be driven on this board (a pump header still needs the owner's
+    /// confirmation, [`FanConfig::pumps`]).
     pub controllable: bool,
     pub rpm: Option<f64>,
     /// Duty the chip drives now.
@@ -172,6 +214,8 @@ pub struct FanStatus {
     pub override_reason: Option<String>,
     pub last_error: Option<String>,
     pub headers: Vec<HeaderStatus>,
+    /// Lowest speed for any header treated as a pump.
+    pub pump_min_pct: u8,
 }
 
 impl FanStatus {
@@ -185,6 +229,7 @@ impl FanStatus {
             override_reason: None,
             last_error: None,
             headers: Vec::new(),
+            pump_min_pct: PUMP_MIN_PCT,
         }
     }
 }
@@ -225,6 +270,12 @@ pub fn validate(cfg: &FanConfig, board: Option<&Board>) -> Result<(), String> {
     if cfg.enabled && board.is_none() {
         return Err("fan control is not available on this PC".into());
     }
+    let find = |index: u16| board.and_then(|b| b.headers.iter().find(|x| x.index == index));
+    for (i, p) in cfg.pumps.iter().enumerate() {
+        if cfg.pumps[..i].contains(p) || (board.is_some() && find(*p).is_none()) {
+            return Err(format!("header {p} cannot be marked as a pump"));
+        }
+    }
     let mut seen = Vec::new();
     for h in &cfg.headers {
         if seen.contains(&h.index) {
@@ -234,12 +285,11 @@ pub fn validate(cfg: &FanConfig, board: Option<&Board>) -> Result<(), String> {
         if h.mode == HeaderMode::Bios {
             continue;
         }
-        let header = board
-            .and_then(|b| b.headers.iter().find(|x| x.index == h.index))
-            .ok_or_else(|| format!("header {} cannot be controlled", h.index))?;
-        if header.kind == FanKind::Pump {
+        let header =
+            find(h.index).ok_or_else(|| format!("header {} cannot be controlled", h.index))?;
+        if !cfg.may_drive(header) {
             return Err(format!(
-                "{} stays on the BIOS curve until pump control",
+                "confirm that {} drives your pump before Vyro controls it",
                 header.name
             ));
         }
@@ -289,6 +339,10 @@ struct Run {
     held_c: Option<f64>,
     /// Speed last asked for.
     pct: Option<f64>,
+    /// A pump has reported a speed since Vyro took it over.
+    spun: bool,
+    /// Ticks in a row a pump read below [`PUMP_STALL_RPM`] after it spun.
+    stalled: u32,
 }
 
 /// What to drive this tick.
@@ -300,6 +354,8 @@ pub struct Decision {
     pub override_reason: Option<String>,
     /// Source temperature of each curve header.
     pub sources: Vec<(u16, f64)>,
+    /// A fault that ends control (a stopped pump): every header goes back to the BIOS.
+    pub fault: Option<String>,
 }
 
 /// Turns readings into speeds tick by tick.
@@ -350,12 +406,27 @@ impl Runtime {
         };
         for h in board.headers {
             let mode = cfg.mode(h.index);
-            if *mode == HeaderMode::Bios || h.kind == FanKind::Pump {
+            if *mode == HeaderMode::Bios || !cfg.may_drive(h) {
                 self.runs.remove(&h.index);
                 continue;
             }
             let run = self.runs.entry(h.index).or_default();
-            let floor = f64::from(h.min_pct);
+            if cfg.is_pump(h) {
+                if let Some(rpm) = read(&rpm_id(h.index)).filter(|v| v.is_finite()) {
+                    if rpm >= PUMP_STALL_RPM {
+                        run.spun = true;
+                        run.stalled = 0;
+                    } else if run.spun {
+                        run.stalled += 1;
+                        if run.stalled >= PUMP_STALL_TICKS {
+                            out.fault.get_or_insert_with(|| {
+                                format!("{} reads {rpm:.0} RPM: the pump may have stopped", h.name)
+                            });
+                        }
+                    }
+                }
+            }
+            let floor = f64::from(cfg.floor(h));
             let want = if emergency.is_some() {
                 None
             } else {
@@ -468,8 +539,17 @@ mod tests {
         assert!(validate(&bios_only, None).is_err(), "curves need a board");
         assert_eq!(validate(&FanConfig::default(), None), Ok(()));
 
-        let pump = cfg(&[(1, HeaderMode::Fixed { pct: 80.0 })]);
-        assert!(validate(&pump, b).unwrap_err().contains("pump"));
+        let mut pump = cfg(&[(1, HeaderMode::Fixed { pct: 80.0 })]);
+        assert!(
+            validate(&pump, b).unwrap_err().contains("pump"),
+            "unconfirmed"
+        );
+        pump.pumps = vec![1];
+        assert_eq!(validate(&pump, b), Ok(()));
+        pump.pumps = vec![1, 1];
+        assert!(validate(&pump, b).is_err(), "listed twice");
+        pump.pumps = vec![1, 6];
+        assert!(validate(&pump, b).is_err(), "not a header");
         let unlisted = cfg(&[(5, HeaderMode::Fixed { pct: 80.0 })]);
         assert!(validate(&unlisted, b).is_err());
         let twice = cfg(&[(0, HeaderMode::Bios), (0, HeaderMode::Bios)]);
@@ -525,6 +605,51 @@ mod tests {
         let d = rt.decide(&c, board(), 0.0, |_| Some(40.0));
         assert_eq!(d.targets, vec![(0, 20.0), (2, 55.0)]);
         assert_eq!(d.override_reason, None);
+    }
+
+    #[test]
+    fn confirmed_pumps_are_driven_never_below_the_pump_floor() {
+        let mut rt = Runtime::default();
+        let mut c = cfg(&[
+            (1, HeaderMode::Fixed { pct: 30.0 }),
+            (2, HeaderMode::Fixed { pct: 30.0 }),
+        ]);
+        // The pump header once confirmed; a pump on System Fan 1 marked by the owner.
+        c.pumps = vec![1, 2];
+        let d = rt.decide(&c, board(), 0.0, |id| {
+            Some(if id.starts_with("fan.") { 4000.0 } else { 40.0 })
+        });
+        assert_eq!(d.targets, vec![(1, 60.0), (2, 60.0)]);
+        assert_eq!(c.floor(&board().headers[2]), PUMP_MIN_PCT);
+        assert_eq!(c.floor(&board().headers[0]), 20);
+        assert!(!FanConfig::default().may_drive(&board().headers[1]));
+        assert!(c.may_drive(&board().headers[1]));
+    }
+
+    #[test]
+    fn a_pump_that_stops_reporting_a_speed_ends_control() {
+        let mut rt = Runtime::default();
+        let mut c = cfg(&[(1, HeaderMode::Fixed { pct: 70.0 })]);
+        c.pumps = vec![1];
+        let rpm = |v: f64| move |id: &str| (id == "fan.1").then_some(v);
+        assert_eq!(rt.decide(&c, board(), 0.0, rpm(3800.0)).fault, None);
+        // One or two low reads may be a glitch.
+        assert_eq!(rt.decide(&c, board(), 1.0, rpm(0.0)).fault, None);
+        assert_eq!(rt.decide(&c, board(), 2.0, rpm(0.0)).fault, None);
+        let d = rt.decide(&c, board(), 3.0, rpm(0.0));
+        assert!(d.fault.unwrap().contains("Pump Fan reads 0 RPM"));
+        // A reading in between starts the count again.
+        let mut rt = Runtime::default();
+        for (t, v) in [3800.0, 0.0, 0.0, 3700.0, 0.0, 0.0].into_iter().enumerate() {
+            #[allow(clippy::cast_precision_loss)]
+            let d = rt.decide(&c, board(), t as f64, rpm(v));
+            assert_eq!(d.fault, None);
+        }
+        // A pump header that never reported a speed (no tach wire) is not judged by it.
+        let mut rt = Runtime::default();
+        for t in 0..5 {
+            assert_eq!(rt.decide(&c, board(), f64::from(t), rpm(0.0)).fault, None);
+        }
     }
 
     #[test]

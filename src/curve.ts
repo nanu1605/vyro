@@ -95,12 +95,18 @@ export const PRESETS = {
 } as const;
 export type Preset = keyof typeof PRESETS;
 
-export function defaultCurve(source = 'cpu.temp.package'): FanCurve {
+export function defaultCurve(source = 'cpu.temp.package', points: readonly CurvePoint[] = PRESETS.balanced): FanCurve {
   return {
     source,
-    points: PRESETS.balanced.map((p) => ({ ...p })),
+    points: points.map((p) => ({ ...p })),
     hysteresisC: 3,
     rampUpPctS: 10,
     rampDownPctS: 5,
   };
 }
+
+/** Fixed pump speeds offered as one-click choices (never below the pump floor). */
+export const PUMP_SPEEDS = { quiet: 60, standard: 80, full: 100 } as const;
+
+/** A pump curve: steady at idle, full flow well before the CPU's limit. */
+export const PUMP_CURVE = pts([40, 60], [60, 70], [75, 85], [85, 100]);

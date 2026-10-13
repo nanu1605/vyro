@@ -5,4 +5,9 @@ export type FanConfig = {
 /**
  * Off by default; the UI asks for confirmation before turning it on.
  */
-enabled: boolean, headers: Array<HeaderConfig>, emergencyCpuC: number, emergencyGpuC: number, };
+enabled: boolean, headers: Array<HeaderConfig>, emergencyCpuC: number, emergencyGpuC: number, 
+/**
+ * Headers the owner confirmed drive a pump. The board's pump header can be driven only
+ * once listed; every listed header keeps the pump floor and the stall check.
+ */
+pumps: Array<number>, };

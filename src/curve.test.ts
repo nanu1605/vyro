@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { add, evaluate, move, path, PRESETS, remove, toPoint, x, y, type Box } from './curve';
+import { add, defaultCurve, evaluate, move, path, PRESETS, PUMP_CURVE, PUMP_SPEEDS, remove, toPoint, x, y, type Box } from './curve';
 
 const box: Box = { width: 420, height: 220, left: 20, right: 0, top: 0, bottom: 20 };
 const pts = (...p: Array<[number, number]>) => p.map(([tempC, pct]) => ({ tempC, pct }));
@@ -47,5 +47,14 @@ describe('fan curve', () => {
       for (let i = 1; i < p.length; i++) expect(p[i]!.tempC).toBeGreaterThan(p[i - 1]!.tempC);
       expect(p[p.length - 1]!.pct).toBe(100);
     }
+  });
+
+  it('pump choices never go below the pump floor', () => {
+    expect(Math.min(...PUMP_CURVE.map((p) => p.pct))).toBe(60);
+    expect(Math.min(...Object.values(PUMP_SPEEDS))).toBe(60);
+    const c = defaultCurve(undefined, PUMP_CURVE);
+    expect(c.points).toEqual(PUMP_CURVE);
+    expect(c.points).not.toBe(PUMP_CURVE);
+    expect(c.source).toBe('cpu.temp.package');
   });
 });

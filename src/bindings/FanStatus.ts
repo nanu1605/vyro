@@ -11,4 +11,8 @@ active: boolean,
 /**
  * Why every header (or one) runs at full speed, while it lasts.
  */
-overrideReason: string | null, lastError: string | null, headers: Array<HeaderStatus>, };
+overrideReason: string | null, lastError: string | null, headers: Array<HeaderStatus>, 
+/**
+ * Lowest speed for any header treated as a pump.
+ */
+pumpMinPct: number, };

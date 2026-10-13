@@ -492,9 +492,25 @@ allow-listed chip + revision + board + header, each read back and bounded.
       cannot see it spin, so a stalled fan there is not detectable.
 - [x] Board names match HWiNFO: temperature channel 4 is "VR" (was "CPU Socket"; now
       `temp_vrm`, id `board.temp4` unchanged); voltage channel 13 (0x13A) added as "VTT" (2.046 V).
-- [ ] 12c Pump presets and curve; header confirmed by the owner before the first write.
-- [ ] 12d Failsafe: emergency override, watchdog, restore on stop / shutdown / suspend / crash
-      (service restart restores first), control-event log.
+- [x] 12c Pump control (built 2026-10-13, field check open): the pump header is driven only
+      after the owner confirms a pump is on it (`FanConfig.pumps`); a pump on a fan header can be
+      marked the same way. Pumps never go below 60 %. Quiet 60 / Standard 80 / Full 100 % and a
+      pump curve (40 °C 60 % → 85 °C 100 %). Stall guard: a driven pump that has reported a speed
+      and then reads below 300 RPM on 3 ticks in a row ends control (every header back to the
+      BIOS). A pump without a speed reading can be driven, with a warning that a stop can't be
+      seen.
+- [ ] 12c Field check: confirm Pump Fan, Quiet 60 % → RPM drops from about 4,400 and holds;
+      Full 100 % → back up; Return to BIOS → 100 % again.
+- [x] 12d Failsafe (built 2026-10-13, field check open): emergency override, watchdog, restore on
+      stop / shutdown / crash (service restart restores first) came with 12b. Added: the service
+      takes power events and hands the fans to the BIOS before the PC sleeps (it waits up to
+      1.5 s), then captures the BIOS state afresh after waking before the next write. The chip is
+      re-read every few seconds: a driven header that lost Vyro's setting (mode bit cleared or
+      another duty, read twice) is written again; three rewrites within 2 minutes mean another
+      program is driving the fans, and control ends. Control-event log moves to 12e.
+- [ ] 12d Field check: sleep and wake with control on (fans back on the BIOS while asleep, Vyro's
+      setting back within seconds of waking); reboot with control on; uninstall with control on
+      (BIOS curve after removal); MSI Center opened while Vyro drives a fan → Vyro gives up.
 - [ ] 12e Curves per profile, `fan_profiles` / `fan_control_events`, "hardware control active"
       indicator with one-click restore; off by default.
 - [ ] Field matrix on MS-7E24 (each header 30/50/100 %, curve under load, kill the service,
