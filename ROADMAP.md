@@ -647,7 +647,8 @@ nothing is loaded until a replay is opened. The history database moves to schema
 new tables, added in place): going back to 0.2 would turn its history off, since 0.2 refuses
 a newer schema.
 
-- [x] Built (2026-10-13, branch `v2-p15-replay`), field check open:
+- [x] Built (2026-10-13, branch `v2-p15-replay`, bd7b43a; 14df117 moves `games.json` aside even
+      over an earlier import, which Windows will not rename over):
       - Store (`history::games`, schema v2): `game_session` (summary as JSON), `game_sample`
         (one row per tick; readings as scaled integers, about 44 bytes a sample: 80 KB per
         hour played at 2 s updates, 156 KB at 1 s, 312 KB at 0.5 s) and `game_event`, written
@@ -673,9 +674,11 @@ a newer schema.
         preview: a 2 h replay keeps the JS heap at 5.1–5.8 MB and the page 10–13 MB above the
         Dashboard; opening and closing it six times does not grow memory; axe clean, no
         overflow at 390 px.
-- [ ] Field check (MS-7E24): two sessions with an alt-tab, a profile change, an overlay toggle
-      and heavy load; markers at the right moments and their context matches History; kept
-      after a service restart; disk growth measured.
+- [x] Field check (2026-10-13, MS-7E24), all passed: two sessions with an alt-tab, a profile
+      change, an overlay toggle and heavy load; markers at the right moments and their context
+      matches History; sessions and replays kept after a service restart; disk growth
+      measured. With P13 and P14 also field-checked, M8 is complete; 0.3.0 waits for the
+      owner's go-ahead.
 
 ### P19 — Hardware change detection (M9 → 0.4; first, P16 cites it)
 - [ ] Inventory diffs into `hardware_changes` and a PC change history.
