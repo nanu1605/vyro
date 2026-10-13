@@ -504,6 +504,7 @@ allow-listed chip + revision + board + header, each read back and bounded.
       were taken with HWMonitor open, which likely turned their monitoring on. Exactly 0 V is
       now "no reading" (`sio::win`), and Health skips 0 V inputs. Vyro does not turn the
       monitoring on itself: that is a chip write and would need its own field check.
+      Field-confirmed (2026-10-13): Voltages show OK.
 - [x] 12c Pump control (built 2026-10-13, field check open): the pump header is driven only
       after the owner confirms a pump is on it (`FanConfig.pumps`); a pump on a fan header can be
       marked the same way. Pumps never go below 60 %. Quiet 60 / Standard 80 / Full 100 % and a
@@ -541,9 +542,10 @@ allow-listed chip + revision + board + header, each read back and bounded.
         follow it: the tooltip reads "fan control on" or "fans at full speed", and the tray
         menu has "Return fans to BIOS". The app's 5 s fan status poll is gone.
       - Control is off by default and needs confirmation (from 12b).
-- [ ] 12e Field check: name System Fan 1; give Gaming its own settings and switch to Gaming from
-      the tray (the fans follow it, and an event is logged); tray tooltip and "Return fans to
-      BIOS" while control is on; events kept after a restart.
+- [x] 12e Field check (2026-10-13, MS-7E24), all passed: name System Fan 1; give Gaming its
+      own settings and switch to Gaming from the tray (the fans follow it, and an event is
+      logged); tray tooltip and "Return fans to BIOS" while control is on; events kept after a
+      restart.
 - [ ] Field matrix on MS-7E24 (each header 30/50/100 %, curve under load, kill the service,
       forced override, sleep/resume, reboot, uninstall with control on); footprint re-measured.
 
