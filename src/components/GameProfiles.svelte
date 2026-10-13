@@ -2,7 +2,8 @@
   import Card from './Card.svelte';
   import { gameRows, newRule, pollLabel, POLL_CHOICES, withRule, type GameRow } from '../games';
   import { prefs, profiles, savePrefs } from '../prefs.svelte';
-  import type { GameRule, GameSession, Profile } from '../types';
+  import { MODES } from '../overlay';
+  import type { GameRule, GameSession, OverlayMode, Profile } from '../types';
 
   interface Props {
     sessions: GameSession[] | null;
@@ -32,7 +33,13 @@
     else void change(row, { profile: v as Profile, keep: false });
   }
   const profileValue = (r: GameRule) => (r.keep ? 'keep' : (r.profile ?? 'default'));
-  const overlayValue = (r: GameRule) => (r.overlay == null ? 'default' : r.overlay ? 'on' : 'off');
+  const overlayValue = (r: GameRule) => (r.overlay === false ? 'off' : (r.overlayMode ?? (r.overlay ? 'on' : 'default')));
+  function setOverlay(row: GameRow, v: string): void {
+    if (v === 'default') void change(row, { overlay: null, overlayMode: null });
+    else if (v === 'off') void change(row, { overlay: false, overlayMode: null });
+    else if (v === 'on') void change(row, { overlay: true, overlayMode: null });
+    else void change(row, { overlay: true, overlayMode: v as OverlayMode });
+  }
 </script>
 
 <Card title="Game profiles" subtitle={prefs.games.enabled ? 'On' : 'Off'} wide>
@@ -95,13 +102,11 @@
                   <select
                     aria-label="Overlay for {row.name}"
                     value={overlayValue(row.rule)}
-                    onchange={(e) => {
-                      const v = (e.currentTarget as HTMLSelectElement).value;
-                      void change(row, { overlay: v === 'default' ? null : v === 'on' });
-                    }}
+                    onchange={(e) => setOverlay(row, (e.currentTarget as HTMLSelectElement).value)}
                   >
                     <option value="default">Default ({prefs.overlay.enabled ? 'on' : 'off'})</option>
                     <option value="on">On</option>
+                    {#each MODES as m (m.id)}<option value={m.id}>On: {m.label}</option>{/each}
                     <option value="off">Off</option>
                   </select>
                 </td>

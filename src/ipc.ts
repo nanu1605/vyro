@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { evaluate } from './curve';
 import { DEFAULT_GAMES, effectiveFor } from './games';
+import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
 import type { AlertFired, AlertRule, BackendStatus, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, Insight, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -238,41 +239,30 @@ export interface AppSettings {
   /** Automatic game profiles and each saved game's own settings. */
   games: GameAutomation;
 }
-export type OverlayCorner = 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
-export interface OverlaySettings {
-  enabled: boolean;
-  corner: OverlayCorner;
-  /** Frame-time graph and CPU / GPU readings besides the FPS figures. */
-  detailed: boolean;
-}
-export const DEFAULT_OVERLAY: OverlaySettings = { enabled: false, corner: 'topLeft', detailed: true };
+export { DEFAULT_OVERLAY };
+export type { OverlayCorner, OverlayData, OverlaySettings };
 let browserSettings: AppSettings = {
   closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop', gameCapture: true, overlay: { ...DEFAULT_OVERLAY }, checkUpdates: true,
   games: { ...DEFAULT_GAMES },
 };
 
-/** What the game overlay shows (`src-tauri/src/overlay.rs`). */
-export interface OverlayData {
-  game: GameSnapshot;
-  detailed: boolean;
-  cpuTemp: number | null;
-  cpuUsage: number | null;
-  gpuTemp: number | null;
-  gpuUsage: number | null;
-  gpuPower: number | null;
-}
-
-/** Overlay readings, every tick while the overlay shows; in a browser, from the simulator. */
+/** Overlay readings, at the overlay's update rate while it shows; in a browser, from the
+ * simulator (with the game's own mode, as the app does). */
 export async function onOverlay(cb: (d: OverlayData) => void): Promise<() => void> {
   if (!inTauri) {
+    // Preview pages can ask for a look: ?mode=graph&compact&scale=150&corner=topRight&metrics=fps,vram#overlay.
+    const q = new URLSearchParams(location.search);
+    const look: Partial<OverlaySettings> = {
+      ...(q.get('mode') ? { mode: q.get('mode') as OverlaySettings['mode'] } : {}),
+      ...(q.has('compact') ? { compact: true } : {}),
+      ...(q.get('scale') ? { scale: Number(q.get('scale')) } : {}),
+      ...(q.get('corner') ? { corner: q.get('corner') as OverlayCorner } : {}),
+      ...(q.get('metrics') ? { metrics: q.get('metrics')!.split(',') as OverlaySettings['metrics'] } : {}),
+    };
     return onSensors((s) => {
-      const g = s.gpu[0];
-      if (s.game) {
-        cb({
-          game: s.game, detailed: browserSettings.overlay.detailed, cpuTemp: s.cpu.tempPackage, cpuUsage: s.cpu.usageTotal,
-          gpuTemp: g?.tempEdge ?? null, gpuUsage: g?.usage ?? null, gpuPower: g?.powerW ?? null,
-        });
-      }
+      if (!s.game) return;
+      const mode = browserEffective().overlayMode ?? browserSettings.overlay.mode;
+      cb(overlayData({ ...browserSettings.overlay, mode, ...look }, s, s.game));
     });
   }
   return listen<OverlayData>('overlay', (e) => cb(e.payload));

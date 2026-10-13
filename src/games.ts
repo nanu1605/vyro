@@ -9,7 +9,7 @@ export const POLL_CHOICES = [500, 1000, 2000, 5000] as const;
 export const DEFAULT_GAMES: GameAutomation = { enabled: true, defaultProfile: 'gaming', loadTrigger: false, rules: [] };
 
 export function newRule(exe: string, name = exe): GameRule {
-  return { exe: exe.toLowerCase(), name, profile: null, keep: false, fans: null, overlay: null, pollMs: null, ignore: false };
+  return { exe: exe.toLowerCase(), name, profile: null, keep: false, fans: null, overlay: null, overlayMode: null, pollMs: null, ignore: false };
 }
 
 export function ruleFor(auto: GameAutomation, exe: string): GameRule | undefined {
@@ -19,7 +19,7 @@ export function ruleFor(auto: GameAutomation, exe: string): GameRule | undefined
 
 /** Nothing of its own: the game behaves as an unsaved one. */
 export function isPlain(r: GameRule): boolean {
-  return r.profile == null && !r.keep && r.fans == null && r.overlay == null && r.pollMs == null && !r.ignore;
+  return r.profile == null && !r.keep && r.fans == null && r.overlay == null && r.overlayMode == null && r.pollMs == null && !r.ignore;
 }
 
 /** `auto` with `rule` added or replaced; a rule left with nothing of its own is dropped. */
@@ -63,12 +63,12 @@ export function effectiveFor(
   pollOf: (p: Profile) => number,
 ): Effective {
   const plain: Effective = {
-    base, profile: base, fans: base, pollMs: pollOf(base), overlay: null, game: null, auto: false, suppressed: false,
+    base, profile: base, fans: base, pollMs: pollOf(base), overlay: null, overlayMode: null, game: null, auto: false, suppressed: false,
   };
   if (!game) return plain;
   const rule = ruleFor(auto, game);
   if (rule?.ignore) return plain;
-  const playing: Effective = { ...plain, game, overlay: rule?.overlay ?? null };
+  const playing: Effective = { ...plain, game, overlay: rule?.overlay ?? null, overlayMode: rule?.overlayMode ?? null };
   if (suppressed) return { ...playing, suppressed: true };
   if (!auto.enabled) return playing;
   const profile = rule?.keep ? base : (rule?.profile ?? auto.defaultProfile ?? base);

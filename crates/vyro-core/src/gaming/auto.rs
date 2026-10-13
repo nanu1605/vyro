@@ -10,6 +10,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use super::overlay::OverlayMode;
 use crate::profiles::Profile;
 
 /// Update rates a game can ask for, milliseconds.
@@ -38,6 +39,8 @@ pub struct GameRule {
     pub fans: Option<Profile>,
     /// Shows or hides the overlay for this game; `None`: the overlay setting.
     pub overlay: Option<bool>,
+    /// The overlay's mode for this game; `None`: the overlay setting.
+    pub overlay_mode: Option<OverlayMode>,
     /// Vyro's update rate while it runs, ms; `None`: the profile's.
     pub poll_ms: Option<u32>,
     /// Not a game: never detected, never switches anything.
@@ -153,6 +156,8 @@ pub struct Effective {
     pub poll_ms: u32,
     /// The game's overlay choice; `None`: the overlay setting.
     pub overlay: Option<bool>,
+    /// The game's overlay mode; `None`: the overlay setting.
+    pub overlay_mode: Option<OverlayMode>,
     /// The game being played (its executable), if any.
     pub game: Option<String>,
     /// Profile, fans or update rate differ from the base because of the game.
@@ -199,6 +204,7 @@ impl Switcher {
             fans: base,
             poll_ms: base.spec().poll_ms,
             overlay: None,
+            overlay_mode: None,
             game: None,
             auto: false,
             suppressed: false,
@@ -213,6 +219,7 @@ impl Switcher {
         let playing = Effective {
             game: Some(game.to_owned()),
             overlay: rule.and_then(|r| r.overlay),
+            overlay_mode: rule.and_then(|r| r.overlay_mode),
             ..plain
         };
         if self.suppressed {
@@ -333,6 +340,7 @@ mod tests {
             fans: Some(Profile::Benchmark),
             poll_ms: Some(1000),
             overlay: Some(true),
+            overlay_mode: Some(OverlayMode::Graph),
             ..GameRule::new("Quiet.exe")
         }]);
         let mut s = Switcher::default();
@@ -342,6 +350,7 @@ mod tests {
             (e.profile, e.fans, e.poll_ms, e.overlay),
             (Profile::Silent, Profile::Benchmark, 1000, Some(true))
         );
+        assert_eq!(e.overlay_mode, Some(OverlayMode::Graph));
         assert!(auto.known("QUIET.EXE"));
 
         // "Don't switch" with its own update rate still counts as automatic.

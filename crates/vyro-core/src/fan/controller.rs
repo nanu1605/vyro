@@ -760,9 +760,11 @@ impl Worker {
         lock(&self.shared.inner).last_error = Some(e);
     }
 
-    /// Turns control off after a fault the controller must not retry.
+    /// Turns control off after a fault the controller must not retry. Control is marked off,
+    /// with the reason, before the BIOS settings go back (no I/O in between), so anyone who
+    /// sees them back also sees control off.
     fn fail(&mut self, e: String) {
-        self.restore_all();
+        let message = format!("{e}; fan control turned off and BIOS control restored");
         let cfg = {
             let mut inner = lock(&self.shared.inner);
             inner.config.enabled = false;
@@ -778,14 +780,15 @@ impl Worker {
                 FanEventKind::Fault,
                 format!("{e}. Fan control turned off and the BIOS settings put back"),
             );
+            inner.last_error = Some(message.clone());
             inner.config.clone()
         };
+        log::warn!("fans: {message}");
+        // A failed restore replaces the message with its own.
+        self.restore_all();
         if let Err(save) = self.shared.save(&cfg) {
             log::warn!("fans: {save}");
         }
-        self.note_error(format!(
-            "{e}; fan control turned off and BIOS control restored"
-        ));
     }
 
     fn apply(&mut self, d: &Decision) {

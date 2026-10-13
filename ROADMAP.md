@@ -607,7 +607,36 @@ window hidden (the profile's or the game's own; Gaming = 2 s instead of the 5 s 
       re-measured.
 
 ### P14 — Gaming Overlay 2.0 (M8)
-- [ ] Minimal / Performance / Full / Graph modes and customization; canvas graphs ≤ 30 fps.
+Budget: the same overlay window as P10b (no new process); the modes add at most a few MB to it
+and nothing when no game is in front; the graph redraws only when readings arrive (≤ 2 Hz,
+far below the 30 fps cap) with no animation between. In the browser preview the overlay
+page's renderer is 42–46 MB in every mode (JS heap 2.1–2.3 MB, 68–174 DOM nodes), so the
+mode changes about 4 MB; most of it is the WebView's fixed cost. The figure on Windows is
+taken in the field check.
+
+- [x] Built (2026-10-13, branch `v2-p14-overlay`, df67965; with 0d77a60, which marks fan control
+      off before the BIOS settings go back, a race the Windows CI run found):
+      - `vyro_core::gaming::overlay`: `OverlayMode` (Minimal, Performance, Full, Graph),
+        `OverlayMetric` (13 readings: FPS, 1 % and 0.1 % lows, frame time, latency, CPU and
+        GPU use, temperature and power, VRAM, what limits the frame rate), each mode's
+        defaults, `rows` from the snapshot, and `size` for the window. P13's `GameRule` gains
+        a per-game overlay mode.
+      - Settings (`src-tauri/src/overlay.rs`): mode, corner plus offsets, size 75–200 %,
+        background opacity, own choice of readings, graph, refresh every 0.5/1/2 s, colour,
+        compact. A 0.2 `settings.json` keeps its look (`detailed` → Performance, otherwise
+        Minimal); out-of-range values are brought back.
+      - Window: sized as an upper bound for what it shows; the page pins the plate to the
+        window's corner on the screen's corner, so spare room is invisible (the window is
+        transparent and click-through). In the browser preview every mode fits its window
+        at 100 % and 150 %, normal and compact (20 cases, including Minimal with all 13
+        readings wrapping onto a second line). Readings go out at most once per refresh
+        interval.
+      - UI: `OverlayPlate` (shared by the overlay window and the preview), canvas
+        `OverlayGraph`, Settings → Overlay card with a live preview over a stand-in game
+        scene, and per-game mode in the Game profiles card.
+- [x] Field check (2026-10-13, MS-7E24), all passed: the four modes over a borderless game;
+      changes apply live; the game keeps input focus; exclusive fullscreen still reports
+      "overlay unavailable"; "Vyro itself" with the overlay shown and hidden.
 
 ### P15 — Game session replay (M8)
 - [ ] `game_sessions` / `game_events`, timeline with event markers and history context.

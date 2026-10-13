@@ -7,6 +7,7 @@ pub mod auto;
 pub mod capture;
 pub mod csv;
 pub mod foreground;
+pub mod overlay;
 pub mod stats;
 
 use std::path::PathBuf;

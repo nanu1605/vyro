@@ -71,6 +71,12 @@ pub fn overlay_wanted(app: &AppHandle, setting: bool) -> bool {
         .unwrap_or(setting)
 }
 
+/// The game's own overlay mode, if it has one.
+pub fn overlay_mode(app: &AppHandle) -> Option<vyro_core::gaming::overlay::OverlayMode> {
+    app.try_state::<GameState>()
+        .and_then(|s| lock(&s.applied).as_ref().and_then(|e| e.overlay_mode))
+}
+
 /// Puts the effective profile, fan settings and update rate in force (what changed), moves the
 /// tray check mark and tells the window.
 pub fn apply_effective(app: &AppHandle) {
