@@ -13,7 +13,7 @@
   }
   let { snap, active, onhistory }: Props = $props();
 
-  let tree = $state<SensorTree | null>(null);
+  let tree = $state.raw<SensorTree | null>(null);
   let error = $state<string | null>(null);
   let filter = $state('');
   let collapsed = $state<Record<string, boolean>>({});

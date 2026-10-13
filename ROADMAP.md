@@ -499,8 +499,17 @@ allow-listed chip + revision + board + header, each read back and bounded.
       is close to 0.1.4's 120 MB (WebView2 80 MB ×5) and below the 175 MB of 2026-09-30. But
       the peak since start was 296 MB (0.1.4: 132 MB). In the browser preview the Cooling tab
       adds about 1.7 MB of JS heap and 1,000 DOM nodes, steady over 2 minutes with nothing
-      left behind, so it is not the source. Open: find which tab or moment makes the peak
-      (peaks reset in Sensors, then Dashboard, Cooling, History and Health in turn).
+      left behind, so it is not the source.
+- [x] The peak was the History tab. Its series (about 58 sensors × 600 points) sat in deep
+      `$state`, so Svelte wrapped every point in a proxy and rebuilt them on each reload
+      (every 5 s at 30 min). In the browser preview, History took the page's JS heap from
+      2.4 MB to 53.5 MB (after GC) and all Chromium processes from 147 MB to 295 MB at the
+      highest. Every list that is only ever replaced (History series and sensor trees, the
+      Sensors, Settings and Alerts trees, alert log, Health insights and events, game
+      sessions, the Cooling status, sources, profiles and events) is now `$state.raw`, as the
+      snapshot already was. After the fix the History JS heap is 8.6 MB. The highest total in
+      a sweep of all 13 tabs, sampled every 250 ms, is 167 MB (295 MB before), and History's
+      own highest is 154 MB. Owner re-measure on the next build.
 - [x] Board names match HWiNFO: temperature channel 4 is "VR" (was "CPU Socket"; now
       `temp_vrm`, id `board.temp4` unchanged); voltage channel 13 (0x13A) added as "VTT" (2.046 V).
 - [x] False voltage alarm (2026-10-13): on the owner's working PC, Health kept reporting

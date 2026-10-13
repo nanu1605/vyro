@@ -26,15 +26,15 @@
   }
   let { snap, backend, active }: Props = $props();
 
-  let status = $state<FanStatus | null>(null);
+  let status = $state.raw<FanStatus | null>(null);
   /** The configuration being edited; `null` follows the engine's. */
   let draft = $state<FanConfig | null>(null);
   let error = $state<string | null>(null);
   let busy = $state(false);
-  let sources = $state<Array<{ id: string; name: string }>>([]);
+  let sources = $state.raw<Array<{ id: string; name: string }>>([]);
   let confirm = $state<HTMLDialogElement | null>(null);
-  let profiles = $state<ProfileSpec[]>([]);
-  let events = $state<FanEvent[]>([]);
+  let profiles = $state.raw<ProfileSpec[]>([]);
+  let events = $state.raw<FanEvent[]>([]);
   /** Which header settings the cards edit: every profile's, or one profile's own. `null`
    * follows the profile in use. */
   let slotPick = $state<Profile | 'all' | null>(null);

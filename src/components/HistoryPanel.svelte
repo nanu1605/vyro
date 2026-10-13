@@ -35,8 +35,8 @@
   }
 
   let range = $state<HistoryRange>(savedRange());
-  let tree = $state<SensorTree | null>(null);
-  let data = $state<Record<string, HistorySeries>>({});
+  let tree = $state.raw<SensorTree | null>(null);
+  let data = $state.raw<Record<string, HistorySeries>>({});
   let end = $state(Math.floor(Date.now() / 1000));
   let error = $state<string | null>(null);
   let loading = $state(false);

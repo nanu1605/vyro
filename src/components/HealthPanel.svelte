@@ -13,7 +13,7 @@
   let { snap, active, onhistory }: Props = $props();
 
   // Insights compare the past week with the last hours; once a minute is plenty.
-  let insights = $state<Insight[] | null>(null);
+  let insights = $state.raw<Insight[] | null>(null);
   let insightError = $state<string | null>(null);
   $effect(() => {
     if (!active) return;
@@ -31,7 +31,7 @@
   const health = $derived(snap?.health ?? null);
   const ts = $derived(snap?.ts ?? 0);
 
-  let events = $state<HealthEvent[]>([]);
+  let events = $state.raw<HealthEvent[]>([]);
   let busy = false;
 
   $effect(() => {
