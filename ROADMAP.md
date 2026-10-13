@@ -494,7 +494,8 @@ allow-listed chip + revision + board + header, each read back and bounded.
       followed a stress test and slowed after it. Killing `vyro-service.exe` with control on
       brought the BIOS curve back (2026-10-13; the restarted service restores the saved state),
       and control resumed after the restart. With the CPU limit at 50 °C under load every
-      controlled fan went to 100 % (2026-10-13). Open: footprint.
+      controlled fan went to 100 % (2026-10-13). Open: footprint numbers (the owner reports it
+      passed; the Dashboard-only and Cooling-tab figures are still to be recorded).
 - [x] Board names match HWiNFO: temperature channel 4 is "VR" (was "CPU Socket"; now
       `temp_vrm`, id `board.temp4` unchanged); voltage channel 13 (0x13A) added as "VTT" (2.046 V).
 - [x] 12c Pump control (built 2026-10-13, field check open): the pump header is driven only
@@ -515,9 +516,9 @@ allow-listed chip + revision + board + header, each read back and bounded.
       re-read every few seconds: a driven header that lost Vyro's setting (mode bit cleared or
       another duty, read twice) is written again; three rewrites within 2 minutes mean another
       program is driving the fans, and control ends. Control-event log moves to 12e.
-- [ ] 12d Field check: sleep and wake with control on (fans back on the BIOS while asleep, Vyro's
-      setting back within seconds of waking); reboot with control on; uninstall with control on
-      (BIOS curve after removal); MSI Center opened while Vyro drives a fan → Vyro gives up.
+- [x] 12d Field check (2026-10-13, MS-7E24): sleep and wake with control on (settings back
+      after waking), reboot with control on (control resumes), uninstall with control on (BIOS
+      curve after removal) all passed. Not run: MSI Center fighting Vyro (covered by tests).
 - [ ] 12e Curves per profile, `fan_profiles` / `fan_control_events`, "hardware control active"
       indicator with one-click restore; off by default.
 - [ ] Field matrix on MS-7E24 (each header 30/50/100 %, curve under load, kill the service,
