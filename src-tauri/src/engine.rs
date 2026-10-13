@@ -1,7 +1,7 @@
 //! Connects the app to the sensor engine: the Vyro service when it runs (the app itself stays
 //! unelevated), else an in-process engine without the privileged sensors.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -125,11 +125,19 @@ impl Engine {
     }
 }
 
-/// Emits each snapshot to the UI while it shows, and shows the alerts it fired.
+/// Emits each snapshot to the UI while it shows, shows the alerts it fired, and keeps the
+/// tray's fan control state current.
 fn sink(app: &AppHandle, shown: &Arc<AtomicBool>) -> impl Fn(&SensorSnapshot) + Send + 'static {
     let app = app.clone();
     let shown = Arc::clone(shown);
+    // Fan state last shown in the tray (bit 0 active, bit 1 full speed); none yet.
+    let tray_fans = AtomicU8::new(u8::MAX);
     move |snap: &SensorSnapshot| {
+        let fans = snap.fan_control;
+        let bits = u8::from(fans.active) | u8::from(fans.full_speed) << 1;
+        if tray_fans.load(Ordering::Relaxed) != bits && crate::tray::set_fan_state(&app, fans) {
+            tray_fans.store(bits, Ordering::Relaxed);
+        }
         if shown.load(Ordering::SeqCst) {
             if let Err(e) = app.emit(SENSORS_EVENT, snap) {
                 log::debug!("emit {SENSORS_EVENT}: {e}");
@@ -226,6 +234,7 @@ fn start_local(app: &AppHandle, shown: &Arc<AtomicBool>) -> std::io::Result<Loca
         EngineConfig {
             data_dir,
             poller: PollerConfig::default(),
+            fan_control: false,
         },
         providers,
         clients,

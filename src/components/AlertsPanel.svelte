@@ -12,8 +12,8 @@
   let { snap, active }: Props = $props();
 
   let rules = $state<AlertRule[]>([]);
-  let tree = $state<SensorTree | null>(null);
-  let log = $state<AlertFired[]>([]);
+  let tree = $state.raw<SensorTree | null>(null);
+  let log = $state.raw<AlertFired[]>([]);
   let error = $state<string | null>(null);
   let saved = $state<string | null>(null);
   /** Rule being edited (a copy); `isNew` when it is not in `rules` yet. */

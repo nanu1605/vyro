@@ -83,7 +83,9 @@ pub fn detect(io: &Handle) -> Result<Option<Found>, PawnIoError> {
     Ok(None)
 }
 
-struct Ports<'a>(&'a Handle);
+/// Port I/O through PawnIO, for [`super::control`]. Use with the ISA-bus mutex held, after
+/// [`detect`] on the same handle.
+pub struct Ports<'a>(pub &'a Handle);
 
 impl PortIo for Ports<'_> {
     type Error = PawnIoError;
@@ -95,6 +97,10 @@ impl PortIo for Ports<'_> {
     }
     fn pause(&mut self) {
         std::thread::sleep(Duration::from_millis(1));
+    }
+    fn settle(&mut self) {
+        // The `nct6687d` driver waits 50 ms around each request.
+        std::thread::sleep(Duration::from_millis(50));
     }
 }
 
@@ -189,7 +195,7 @@ impl SioProvider {
                 BoardTemp::System => b.temp_system = t,
                 BoardTemp::VrmMos => b.temp_vrm_mos = t,
                 BoardTemp::Chipset => b.temp_chipset = t,
-                BoardTemp::Socket => b.temp_socket = t,
+                BoardTemp::Vrm => b.temp_vrm = t,
                 BoardTemp::Pcie => b.temp_pcie = t,
                 BoardTemp::M2 => b.temp_m2 = t,
             }
@@ -223,7 +229,10 @@ impl SioProvider {
                 )
                 .with_history()
             });
-            let value = reg.set(k, Some(v));
+            // Exactly 0 V is an input the chip is not sampling (on MS-7E24 the standby rail
+            // and the CMOS battery read 0 unless something turned their monitoring on), not a
+            // dead rail: a PC that runs has standby power.
+            let value = reg.set(k, (v > 0.0).then_some(v));
             out.voltages.push(VoltageReading { name, value });
         }
         for &(n, r) in &d.fans {

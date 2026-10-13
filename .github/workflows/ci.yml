@@ -104,6 +104,8 @@ jobs:
           Copy-Item target\debug\examples\live.exe dist-win\vyro-live.exe
           cargo build -p vyro-core --example remote
           Copy-Item target\debug\examples\remote.exe dist-win\vyro-remote.exe
+          cargo build -p vyro-core --example fans
+          Copy-Item target\debug\examples\fans.exe dist-win\vyro-fans.exe
           Copy-Item target\release\vyro-service.exe dist-win\vyro-service.exe
           Copy-Item target\release\vyro.exe dist-win\vyro.exe
           Copy-Item target\release\bundle\msi\*.msi dist-win\

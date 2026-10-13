@@ -328,11 +328,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if !snap.fans.is_empty() || !snap.voltages.is_empty() {
             let b = &snap.board;
             println!(
-                "     board: system {} VRM {} chipset {} socket {} | fans {} | volts {}",
+                "     board: system {} VRM MOS {} chipset {} VR {} | fans {} | volts {}",
                 fmt(b.temp_system, " °C"),
                 fmt(b.temp_vrm_mos, " °C"),
                 fmt(b.temp_chipset, " °C"),
-                fmt(b.temp_socket, " °C"),
+                fmt(b.temp_vrm, " °C"),
                 snap.fans
                     .iter()
                     .map(|f| format!("{} {}", f.name, fmt(f.rpm, "")))

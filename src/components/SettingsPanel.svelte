@@ -15,7 +15,7 @@
   let { snap, backend, active }: Props = $props();
 
   let autostart = $state<boolean | null>(null);
-  let tree = $state<SensorTree | null>(null);
+  let tree = $state.raw<SensorTree | null>(null);
   let error = $state<string | null>(null);
 
   $effect(() => {

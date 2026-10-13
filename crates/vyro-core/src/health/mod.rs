@@ -349,7 +349,10 @@ impl HealthMonitor {
 
         // Voltages
         for v in &s.voltages {
-            let Some(value) = v.value else { continue };
+            // 0 V means the input is not sampled (see `sio`), never a measured rail.
+            let Some(value) = v.value.filter(|v| *v > 0.0) else {
+                continue;
+            };
             let key = format!("voltage.{}", v.name);
             if let Some(nominal) = rail(&v.name) {
                 let dev = (value / nominal - 1.0).abs() * 100.0;
@@ -630,6 +633,32 @@ mod tests {
         assert_eq!(v.status, Status::Warn);
         assert_eq!(v.messages.len(), 1);
         assert!(v.messages[0].starts_with("+5V at 4.60 V"));
+    }
+
+    #[test]
+    fn inputs_reading_zero_are_not_graded() {
+        // Field (MS-7E24): +3.3V Standby and the CMOS battery read 0.00 V on a working PC.
+        let mut h = HealthMonitor::new();
+        let mut s = snap(0);
+        s.voltages = vec![
+            VoltageReading {
+                name: "+12V".into(),
+                value: Some(12.07),
+            },
+            VoltageReading {
+                name: "+3.3V Standby".into(),
+                value: Some(0.0),
+            },
+            VoltageReading {
+                name: "CMOS Battery".into(),
+                value: Some(0.0),
+            },
+        ];
+        let r = h.update(&s);
+        let v = sub(&r, "Voltages");
+        assert_eq!(v.status, Status::Ok);
+        assert!(v.messages.is_empty());
+        assert!(r.overall != Status::Fail);
     }
 
     #[test]

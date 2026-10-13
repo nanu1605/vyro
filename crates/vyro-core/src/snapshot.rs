@@ -30,6 +30,8 @@ pub struct SensorSnapshot {
     pub health: crate::info::HealthReport,
     /// Alerts that fired on this tick (usually none).
     pub alerts: Vec<crate::alerts::AlertFired>,
+    /// Whether Vyro drives fans (P12), for the header chip and the tray.
+    pub fan_control: crate::fan::FanBrief,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
