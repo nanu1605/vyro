@@ -86,7 +86,7 @@ Releases are built by `.github/workflows/release.yml`, never on a developer mach
    publishes release `vX.Y.Z` with the MSI, `latest.json` and `SHA256SUMS.txt`.
 
 Branches: `main` is the released line (0.1.x fixes); V2 work happens on `v2` (feature branches
-`v2/<phase>` merged into it) and is merged into `main` at each milestone, then released. The
+`v2-<phase>` merged into it) and is merged into `main` at each milestone, then released. The
 workflow refuses other branches unless "prerelease" is ticked: that publishes a test build as
 `vX.Y.Z-pre.N`, marked prerelease, which installed copies never update to.
 

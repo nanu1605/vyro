@@ -19,6 +19,7 @@
       [
         ['System', board?.tempSystem],
         ['VRM MOS', board?.tempVrmMos],
+        ['VR', board?.tempVrm],
         ['Chipset', board?.tempChipset],
         ['CPU socket', board?.tempSocket],
         ['PCIe', board?.tempPcie],

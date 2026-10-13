@@ -4,6 +4,10 @@ Execution tracker for [`PROJECT_PLAN.md`](PROJECT_PLAN.md) (the build spec, v2).
 source of truth for *what* to build; this file records *in what order*, what is done, and which
 open decisions (spec §12) have been answered.
 
+V2 (phases P12–P27, milestones M7–M13) follows [`V2_PLAN.md`](V2_PLAN.md), the V2 spec; its
+"roadmap §…" references are the rules spelled out in that file. V2 is built on the `v2` branch
+and merged into `main` (the released line) at each milestone.
+
 Deviation from the spec: the custom kernel driver (spec P6) and its attestation signing (spec
 P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P6 section.
 
@@ -14,7 +18,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 1 | Product name / codename | **Vyro** (repo name) | decided |
 | 2 | First release cut | **Early release** after P5 (P11), before the low-level sensors; the former P11b (own driver signing) is dropped | decided |
 | 3 | Gaming module (P10) in v1? | **Yes**: frame capture with the bundled PresentMon (MIT, Intel-signed) run by the service; companion overlay, no injection | decided |
-| 4 | Fan control (v2 write path) | Not built without explicit go-ahead | default: no |
+| 4 | Fan control (v2 write path) | Superseded by 18 | superseded |
 | 5 | Ping target host | `1.1.1.1`, user-configurable | default |
 | 6 | History tiers / cap | raw ≤ 30 min · 10 s avg ≤ 24 h · 1 min avg ≤ 7 d · ≤ 200 MB | default |
 | 7 | Frontend framework | **Svelte 5** + strict TS + Vite | decided |
@@ -24,6 +28,19 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 11 | Code signing | **SignPath Foundation** or **Certum Open Source** (no EV certificate) | decided |
 | 12 | Source availability | **Open source**; license MIT OR Apache-2.0 (LICENSE files added in P11; can still change before the repo goes public) | default |
 | 13 | Privilege split (P8) | **LocalSystem service `VyroService`** runs the whole engine (sensors, history, health, alerts) and serves it over `\\.\pipe\vyro-engine`; the app runs unelevated and falls back to an in-process engine without the privileged sensors when the service is missing | decided |
+| 14 | GPU visual | Own stylized parameterized **WebGL** model; no third-party photos; offline | decided |
+| 15 | 3-D renderer | **Three.js** bundled locally; render on demand only | decided |
+| 16 | Devices battery sources | BLE GATT 0x180F + PnP battery devnode property + XInput; vendor HID++ later | decided |
+| 17 | Open on Dashboard | Default on, with an "Open on: Dashboard / Last tab" setting | decided |
+| 18 | Fan / pump control | **Yes, the V2 flagship**, safety-gated (V2_PLAN "Hardware-control safety"); read-only by default; per-board allow-list | decided |
+| 19 | Remote / web companion | In V2: LAN-only, opt-in, authenticated, built last (M12); timing confirmed at P26 | decided |
+| 20 | Versions | 0.2 / 0.3 / 0.4 / 0.5 at milestone merges; **1.0** at M13 | decided |
+| 21 | Themes | Several themes + accent colour, accessibility preserved | decided |
+| 22 | Performance Score method | Versioned fixed formula on observed conditions, inputs shown | open: formula drafted for sign-off at P17 |
+| 23 | Benchmark positioning | Self-relative (own engine), variance reported | decided |
+| 24 | Fan-control launch boards | **MSI B650M GAMING PLUS WIFI (MS-7E24, NCT6687D) only**; each further board after its own validation | decided |
+| 25 | Tagline | "Know your machine." unless changed | open |
+| 26 | Navigation (new IA) | Adopted incrementally; V1 tabs keep working each release | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -38,6 +55,13 @@ the §4.3 animation spec in Phase 0.
 | **M4** Low-level sensors | P6 | CPU temps/power/voltage, Super-I/O fans/temps/voltages, SPD + DIMM temps, RAM timings | PawnIO | – |
 | **M5** Insight | P7, P8, P9 | History/health/alerts/explorer, privilege split (service + unelevated app), profiles, analysis, polish | PawnIO (via the service) | – |
 | **M6** Gaming | P10 | PresentMon FPS + companion overlay (deferrable) | – | – |
+| **M7** Control → 0.2 | P12 | Fan and pump control with failsafe, watchdog and restore | PawnIO (writes) | – |
+| **M8** Gaming automation → 0.3 | P13 – P15 | Auto game profiles, Overlay 2.0, session replay | – | – |
+| **M9** Intelligence → 0.4 | P16 – P19 | Intelligence engine, Performance Score, compound alerts, hardware changes | – | – |
+| **M10** Benchmark & diagnostics → 0.4 | P20, P21 | Benchmark, one-click diagnostics, reports | – | – |
+| **M11** Visualization & UX → 0.5 | P22 – P25 | Devices + battery, 3-D / My PC / thermal map, dashboard builder, themes | – | – |
+| **M12** Remote → 0.5 | P26 | LAN-only companion, off by default | – | – |
+| **M13** V2 polish → 1.0 | P27 | Footprint, accessibility, migration, control-safety validation | – | – |
 
 P7 has no hard dependency on P6 (it operates on whatever sensors are registered) and can be
 pulled ahead of P6 if the early release should include history/alerts — decide at M3.
@@ -418,7 +442,177 @@ In progress.
 - [x] P10b Field-checked: never steals focus; sessions are logged after quitting.
 - [x] P10b Field-checked: frame-time graph smooth and scrolls continuously in the overlay.
 
-**Deferred to v2:** fan/pump control (driver write path), injected in-game overlay.
+**Deferred to v2:** fan/pump control (now P12), injected in-game overlay (research only).
+
+## V2 phase tracker
+
+Built in this order (V2_PLAN.md has each phase's scope and acceptance). Every phase: branch
+`v2-<phase>` off `v2`, a footprint budget written here before coding, pure logic with tests plus
+a thin Windows layer, CI green, then merge into `v2`. Hardware writes never ship without the
+owner's field check on the reference PC.
+
+### P12 — Fan & pump control (M7 → 0.2)
+All control runs in the service; the app only asks over the pipe. Writes go through PawnIO
+`LpcIO` port I/O on the NCT6687 EC (same page/index/data transaction as the reads), only on
+allow-listed chip + revision + board + header, each read back and bounded.
+
+- [x] 12a Write path + capability detection (`sio::control`, tested against a simulated EC):
+      `write_ec` (same free/page/index/data/free transaction as reads, never forces a busy EC),
+      mode bit + request/done handshake + duty command, readback of every write, allow-list
+      keyed by chip, revision (0x92), board (MS-7E24) and header, floors (fan ≥ 20 %, pump
+      ≥ 60 %, an unknown request = 100 %), BIOS state capture / save / restore (mode register
+      written last, also when a duty write failed). `vyro-fans` (CI download): read-only dump by
+      default; `--try HEADER PERCENT` supervised 10 s test with restore; `--restore`.
+- [x] 12a Field dump (read only) on MS-7E24: chip 0xD5 rev 0x92, EC base 0xA20, allow-listed;
+      mode 0xA00 = 0 (all BIOS), request 0xA01 idle, commands 0xA28+ a fixed 0x66, outputs
+      0x160+ follow the BIOS curve (CPU 58→65 % in 3 s), RPM as in the monitor path (CPU 1461,
+      pump 4444 at 100 %). System Fan 1–3 have nothing connected (0 RPM at 60 %).
+- [x] 12a Field-checked: `vyro-fans --try 0 100` (readback 255, CPU fan 1550 → 2010 RPM) and
+      `--try 0 30` (readback 77, 1371 → 968 RPM, settled in ~7 s); only header 0 changed; after
+      restore mode 0 and the output back on the BIOS curve.
+- [x] 12b Controller (`vyro_core::fan`): speeds decided in the poller tick right after the
+      providers (curve on any temperature sensor with hysteresis and ramp limits, or fixed; floors
+      per header), written by a worker thread so EC waits never delay a tick. Failsafe core from
+      12d built in: CPU / GPU emergency limit or a source without a reading → 100 %; readback
+      mismatch or 3 I/O errors → restore and turn off; no tick for 10 s → BIOS until ticks
+      resume; `fan-restore.json` saved before the first write and restored at the next start
+      after a crash (the MSI already restarts the service). Tray interval capped at 2 s while
+      fans are driven. Service only (the app's fallback engine reports it unavailable); IPC
+      protocol 5. Cooling tab: per-header BIOS / Fixed / Curve, SVG curve editor (drag,
+      double-click to add, right-click or Delete to remove, arrow keys, presets, copy to another
+      header, live marker), smoothing and safety limits, apply / discard, confirmation before
+      turning on; "Fan control active" chip with Return to BIOS in the header.
+- [x] 12b Field check: CPU fan Fixed 40 % holds; a curve follows a stress test; Return to BIOS
+      (mode 0 in `vyro-fans`); kill `vyro-service.exe` with control on → BIOS curve back after the
+      restart; emergency limit lowered to 50 °C → 100 %; footprint re-measured.
+      Fixed 40 % passed (2026-09-30). HWiNFO Sensors shows the same two fan speeds as Vyro
+      (CPU 1,246 RPM, PUMPFAN 4,428 RPM); the owner's other 8 fans are on splitters or a hub
+      without a speed wire, or a SATA-powered hub. System Fan 1 at Fixed 100 % made the case fans
+      louder (2026-10-01), so the case hub is on SYS_FAN1 with no speed wire: Vyro drives it but
+      cannot see it spin, so a stalled fan there is not detectable. Return to BIOS passed
+      (2026-10-13): `vyro-fans` reads mode 0x00 afterwards. Curve passed (2026-10-13): the fans
+      followed a stress test and slowed after it. Killing `vyro-service.exe` with control on
+      brought the BIOS curve back (2026-10-13; the restarted service restores the saved state),
+      and control resumed after the restart. With the CPU limit at 50 °C under load every
+      controlled fan went to 100 % (2026-10-13). Footprint (2026-10-13, after 12e): 125 MB
+      (WebView2 85 MB ×5, service 33 MB, app 7 MB), average CPU 0.46 %, startup 1.02 s. That
+      is close to 0.1.4's 120 MB (WebView2 80 MB ×5) and below the 175 MB of 2026-09-30. But
+      the peak since start was 296 MB (0.1.4: 132 MB). In the browser preview the Cooling tab
+      adds about 1.7 MB of JS heap and 1,000 DOM nodes, steady over 2 minutes with nothing
+      left behind, so it is not the source.
+- [x] The peak was the History tab. Its series (about 58 sensors × 600 points) sat in deep
+      `$state`, so Svelte wrapped every point in a proxy and rebuilt them on each reload
+      (every 5 s at 30 min). In the browser preview, History took the page's JS heap from
+      2.4 MB to 53.5 MB (after GC) and all Chromium processes from 147 MB to 295 MB at the
+      highest. Every list that is only ever replaced (History series and sensor trees, the
+      Sensors, Settings and Alerts trees, alert log, Health insights and events, game
+      sessions, the Cooling status, sources, profiles and events) is now `$state.raw`, as the
+      snapshot already was. After the fix the History JS heap is 8.6 MB. The highest total in
+      a sweep of all 13 tabs, sampled every 250 ms, is 167 MB (295 MB before), and History's
+      own highest is 154 MB. Field-confirmed (2026-10-13, build 70be0db): after resetting
+      peaks and opening History at 30 min, 24 h and 7 days, the owner reports the peak
+      stayed within 125–150 MB.
+- [x] Board names match HWiNFO: temperature channel 4 is "VR" (was "CPU Socket"; now
+      `temp_vrm`, id `board.temp4` unchanged); voltage channel 13 (0x13A) added as "VTT" (2.046 V).
+- [x] False voltage alarm (2026-10-13): on the owner's working PC, Health kept reporting
+      "+3.3V Standby at 0.00 V" and "CMOS battery low: 0.00 V" at every start. The chip reads
+      0 on those inputs while it isn't sampling them. Earlier field reads of 3.37 V and 3.09 V
+      were taken with HWMonitor open, which likely turned their monitoring on. Exactly 0 V is
+      now "no reading" (`sio::win`), and Health skips 0 V inputs. Vyro does not turn the
+      monitoring on itself: that is a chip write and would need its own field check.
+      Field-confirmed (2026-10-13): Voltages show OK.
+- [x] 12c Pump control (built 2026-10-13): the pump header is driven only
+      after the owner confirms a pump is on it (`FanConfig.pumps`); a pump on a fan header can be
+      marked the same way. Pumps never go below 60 %. Quiet 60 / Standard 80 / Full 100 % and a
+      pump curve (40 °C 60 % → 85 °C 100 %). Stall guard: a driven pump that has reported a speed
+      and then reads below 300 RPM on 3 ticks in a row ends control (every header back to the
+      BIOS). A pump without a speed reading can be driven, with a warning that a stop can't be
+      seen.
+- [x] 12c Field check (2026-10-13, MS-7E24): confirm Pump Fan, Quiet 60 % → the pump dropped
+      from about 4,400 to about 3,300 RPM and held (well above the 300 RPM stall threshold);
+      Full 100 % → back up to about 4,400 RPM; Return to BIOS → stayed at about 4,400 RPM (the
+      BIOS runs the pump at 100 %).
+- [x] 12d Failsafe (built 2026-10-13): emergency override, watchdog, restore on
+      stop / shutdown / crash (service restart restores first) came with 12b. Added: the service
+      takes power events and hands the fans to the BIOS before the PC sleeps (it waits up to
+      1.5 s), then captures the BIOS state afresh after waking before the next write. The chip is
+      re-read every few seconds: a driven header that lost Vyro's setting (mode bit cleared or
+      another duty, read twice) is written again; three rewrites within 2 minutes mean another
+      program is driving the fans, and control ends. Control-event log moves to 12e.
+- [x] 12d Field check (2026-10-13, MS-7E24): sleep and wake with control on (settings back
+      after waking), reboot with control on (control resumes), uninstall with control on (BIOS
+      curve after removal) all passed. Not run: MSI Center fighting Vyro (covered by tests).
+- [x] 12e (built 2026-10-13):
+      - Per-profile fan settings: `FanConfig.profiles` holds the header settings of profiles
+        that don't use the shared ones. The app sends the profile in use (`SetFanProfile`) on
+        start and on every change. The service keeps it in `fan-profile.json` for boot before
+        sign-in. On, off, the limits, pumps and names apply to every profile.
+      - Stored in `fan-control.json` with the rest of the configuration (one atomic file)
+        instead of a `fan_profiles` table.
+      - Fan event log: on and off, Return to BIOS, full speed and back, faults, watchdog,
+        crash recovery, rewrites, sleep and wake, profile changes. Kept in the history store's
+        `event` table under kind `fan` (7 days, 1,000 entries), not a separate
+        `fan_control_events` table, so no migration is needed. Shown in the Cooling tab.
+      - Header names ("Case fans") in `FanConfig.labels`.
+      - Each snapshot carries `fanControl { active, fullSpeed }`. The header chip and the tray
+        follow it: the tooltip reads "fan control on" or "fans at full speed", and the tray
+        menu has "Return fans to BIOS". The app's 5 s fan status poll is gone.
+      - Control is off by default and needs confirmation (from 12b).
+- [x] 12e Field check (2026-10-13, MS-7E24), all passed: name System Fan 1; give Gaming its
+      own settings and switch to Gaming from the tray (the fans follow it, and an event is
+      logged); tray tooltip and "Return fans to BIOS" while control is on; events kept after a
+      restart.
+- [x] Field matrix on MS-7E24 (each header 30/50/100 %, curve under load, kill the service,
+      forced override, sleep/resume, reboot, uninstall with control on); footprint re-measured.
+      Done through the checks above. Headers: CPU at 30 / 40 / 100 %, pump at 60 / 100 %,
+      System Fan 1 at 100 % (heard, no speed wire); System Fan 2–3 have nothing connected,
+      and 50 % was not run as its own step. The rest passed as listed, and the footprint is
+      125 MB with the peak fixed. M7 is complete; next is the 0.2.0 release.
+
+### P13 — Automatic game profiles (M8 → 0.3)
+- [ ] Game → per-game profile, cooling, overlay layout and poll rate; restore on exit.
+
+### P14 — Gaming Overlay 2.0 (M8)
+- [ ] Minimal / Performance / Full / Graph modes and customization; canvas graphs ≤ 30 fps.
+
+### P15 — Game session replay (M8)
+- [ ] `game_sessions` / `game_events`, timeline with event markers and history context.
+
+### P19 — Hardware change detection (M9 → 0.4; first, P16 cites it)
+- [ ] Inventory diffs into `hardware_changes` and a PC change history.
+
+### P16 — Intelligence engine (M9)
+- [ ] Derived metrics → baselines → events → cause chains; measured vs inferred, confidence.
+
+### P18 — Smart compound alerts (M9)
+- [ ] AND/OR, rate of change, FOR duration, cooldown; fan action only with control enabled.
+
+### P17 — Performance Score (M9)
+- [ ] Formula drafted for sign-off (decision 22); versioned, inputs shown.
+
+### P20 — Benchmark mode (M10 → 0.4)
+- [ ] Own workloads, hard stop, variance; `benchmark_runs` / `benchmark_metrics`.
+
+### P21 — One-click diagnostics + reports (M10)
+- [ ] Checks with telemetry evidence; HTML / JSON / Markdown / PDF, serials redacted.
+
+### P25 — Themes, open on Dashboard, shareable cards (M11 → 0.5; first, small)
+- [ ] "Open on" setting (Dashboard default), themes + accent passing axe-core, share cards.
+
+### P22 — Devices & wireless battery (M11)
+- [ ] `devices/` provider, hot add/remove, battery via BLE / PnP / XInput.
+
+### P24 — Custom dashboard builder (M11)
+- [ ] Depth decided at start; `dashboard_layouts` with presets.
+
+### P23 — 3-D GPU / My PC / thermal map (M11)
+- [ ] Three.js on demand (≤ 30 fps, 2-D fallback), within the installer and memory budgets.
+
+### P26 — Remote companion (M12 → 0.5)
+- [ ] Off by default, LAN-only, token + QR pairing, expiry, revoke; transport decided at start.
+
+### P27 — V2 polish & validation (M13 → 1.0)
+- [ ] Footprint audit, accessibility, V1→V2 migration, clean machine, control-safety matrix.
 
 ## Risks
 
@@ -431,3 +625,7 @@ In progress.
   without the low-level sensors and says so.
 - PawnIO has a single upstream maintainer; module ABI or signing changes need a Vyro update.
 - SignPath / Certum OSS require a public repo with an OSI license and a verifiable build.
+- Fan control (P12): some boards' fans are owned by the embedded controller and cannot be
+  driven safely, pump headers are easy to mislabel, and another tool (MSI Center, FanControl)
+  writing the same EC fights Vyro. Mitigations: allow-list, owner-confirmed pump header,
+  readback on every write, restore on any fault, and the EC's free/busy page handshake.

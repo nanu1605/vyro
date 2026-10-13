@@ -12,6 +12,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use crate::alerts::{AlertEngine, Reading};
+use crate::fan::{self, controller::FanControl};
 use crate::health::{HealthEvent, HealthMonitor};
 use crate::history::History;
 use crate::provider::Provider;
@@ -75,6 +76,7 @@ pub struct Poller {
     history_error: Option<String>,
     health: Arc<Mutex<HealthMonitor>>,
     alerts: Option<Arc<Mutex<AlertEngine>>>,
+    fans: Option<Arc<FanControl>>,
     cfg: PollerConfig,
     /// `app.cpu` / `app.ram`: the footprint as sensors, for averages, peaks and history.
     app_keys: Option<(SensorKey, SensorKey)>,
@@ -90,6 +92,7 @@ impl Poller {
             history_error: None,
             health: Arc::new(Mutex::new(HealthMonitor::new())),
             alerts: None,
+            fans: None,
             cfg,
             app_keys: None,
             startup_ms: None,
@@ -117,6 +120,13 @@ impl Poller {
     /// Evaluates these alert rules every tick; fired alerts go out in `SensorSnapshot::alerts`.
     pub fn with_alerts(mut self, alerts: Arc<Mutex<AlertEngine>>) -> Self {
         self.alerts = Some(alerts);
+        self
+    }
+
+    /// Decides fan speeds every tick, right after the providers ran; while fans are driven the
+    /// tray interval is capped so their sources stay fresh.
+    pub fn with_fans(mut self, fans: Arc<FanControl>) -> Self {
+        self.fans = Some(fans);
         self
     }
 
@@ -160,6 +170,8 @@ impl Poller {
             loop {
                 let interval = if visible {
                     self.cfg.interval
+                } else if self.fans.as_ref().is_some_and(|f| f.drives()) {
+                    self.cfg.hidden_interval.min(fan::controller::MAX_TICK)
                 } else {
                     self.cfg.hidden_interval
                 };
@@ -230,6 +242,11 @@ impl Poller {
                     slot.enabled = false;
                 }
             }
+        }
+
+        if let Some(fans) = &self.fans {
+            fans.on_tick(|id| reg.get(id).and_then(|s| s.value));
+            snap.fan_control = fans.brief();
         }
 
         let (cpu_key, ram_key) = *self.app_keys.get_or_insert_with(|| {

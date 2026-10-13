@@ -261,3 +261,33 @@ pub async fn set_autostart(enabled: bool) -> Result<(), String> {
         Err("Start with Windows is only available on Windows".into())
     }
 }
+
+/// Fan control (P12): capability, configuration and each header's state.
+#[tauri::command]
+pub async fn get_fan_status(
+    engine: State<'_, Engine>,
+) -> Result<vyro_core::fan::FanStatus, String> {
+    with_engine(&engine, |e| e.fan_status()).await
+}
+
+#[tauri::command]
+pub async fn set_fan_config(
+    engine: State<'_, Engine>,
+    config: vyro_core::fan::FanConfig,
+) -> Result<(), String> {
+    with_engine(&engine, move |e| e.set_fan_config(config)).await
+}
+
+/// Turns fan control off and hands every header back to the BIOS.
+#[tauri::command]
+pub async fn restore_fans(engine: State<'_, Engine>) -> Result<(), String> {
+    with_engine(&engine, |e| e.restore_fans()).await
+}
+
+/// The fan control log, newest last.
+#[tauri::command]
+pub async fn get_fan_events(
+    engine: State<'_, Engine>,
+) -> Result<Vec<vyro_core::fan::FanEvent>, String> {
+    with_engine(&engine, |e| e.fan_events()).await
+}

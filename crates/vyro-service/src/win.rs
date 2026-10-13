@@ -27,10 +27,11 @@ use windows::Win32::Storage::FileSystem::{
 };
 use windows::Win32::System::Services::{
     RegisterServiceCtrlHandlerExW, SetServiceStatus, StartServiceCtrlDispatcherW,
-    SERVICE_ACCEPT_SHUTDOWN, SERVICE_ACCEPT_STOP, SERVICE_CONTROL_INTERROGATE,
-    SERVICE_CONTROL_SHUTDOWN, SERVICE_CONTROL_STOP, SERVICE_RUNNING, SERVICE_START_PENDING,
-    SERVICE_STATUS, SERVICE_STATUS_CURRENT_STATE, SERVICE_STATUS_HANDLE, SERVICE_STOPPED,
-    SERVICE_STOP_PENDING, SERVICE_TABLE_ENTRYW, SERVICE_WIN32_OWN_PROCESS,
+    SERVICE_ACCEPT_POWEREVENT, SERVICE_ACCEPT_SHUTDOWN, SERVICE_ACCEPT_STOP,
+    SERVICE_CONTROL_INTERROGATE, SERVICE_CONTROL_POWEREVENT, SERVICE_CONTROL_SHUTDOWN,
+    SERVICE_CONTROL_STOP, SERVICE_RUNNING, SERVICE_START_PENDING, SERVICE_STATUS,
+    SERVICE_STATUS_CURRENT_STATE, SERVICE_STATUS_HANDLE, SERVICE_STOPPED, SERVICE_STOP_PENDING,
+    SERVICE_TABLE_ENTRYW, SERVICE_WIN32_OWN_PROCESS,
 };
 
 use vyro_core::lock;
@@ -43,6 +44,19 @@ const DATA_SDDL: &str = "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FRFX;;;BU)";
 static STATUS: AtomicUsize = AtomicUsize::new(0);
 /// Signals `run` to stop.
 static STOP: Mutex<Option<mpsc::Sender<()>>> = Mutex::new(None);
+/// Called with `true` before the PC sleeps and `false` after it wakes.
+type PowerHook = Box<dyn Fn(bool) + Send>;
+static POWER: Mutex<Option<PowerHook>> = Mutex::new(None);
+
+// Power broadcast events (WM_POWERBROADCAST values, `PBT_*`).
+const PBT_APMSUSPEND: u32 = 0x4;
+const PBT_APMRESUMESUSPEND: u32 = 0x7;
+const PBT_APMRESUMEAUTOMATIC: u32 = 0x12;
+
+/// Sets (or clears) what runs on sleep and wake.
+pub fn on_power(hook: Option<PowerHook>) {
+    *lock(&POWER) = hook;
+}
 
 /// Hands the process to the Service Control Manager; returns when the service has stopped.
 pub fn dispatch() {
@@ -69,7 +83,7 @@ fn report(state: SERVICE_STATUS_CURRENT_STATE, exit_code: u32, wait_hint_ms: u32
         return;
     }
     let accepted = if state == SERVICE_RUNNING {
-        SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN
+        SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN | SERVICE_ACCEPT_POWEREVENT
     } else {
         0
     };
@@ -92,7 +106,7 @@ fn report(state: SERVICE_STATUS_CURRENT_STATE, exit_code: u32, wait_hint_ms: u32
 
 unsafe extern "system" fn control(
     ctrl: u32,
-    _event_type: u32,
+    event_type: u32,
     _event_data: *mut c_void,
     _context: *mut c_void,
 ) -> u32 {
@@ -101,6 +115,19 @@ unsafe extern "system" fn control(
             report(SERVICE_STOP_PENDING, 0, 15_000);
             if let Some(tx) = lock(&STOP).take() {
                 let _ = tx.send(());
+            }
+            NO_ERROR.0
+        }
+        SERVICE_CONTROL_POWEREVENT => {
+            // Windows waits for this handler before it sleeps: the fans are back on the BIOS
+            // when it returns (bounded to about 1.5 s by the controller).
+            let suspend = match event_type {
+                PBT_APMSUSPEND => Some(true),
+                PBT_APMRESUMESUSPEND | PBT_APMRESUMEAUTOMATIC => Some(false),
+                _ => None,
+            };
+            if let (Some(on), Some(hook)) = (suspend, lock(&POWER).as_ref()) {
+                hook(on);
             }
             NO_ERROR.0
         }

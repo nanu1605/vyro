@@ -139,6 +139,7 @@ pub fn run(
             EngineConfig {
                 data_dir,
                 poller: PollerConfig::default(),
+                fan_control: true,
             },
             providers,
             clients,
@@ -166,9 +167,17 @@ pub fn run(
             }
         })
         .map_err(|e| format!("cannot start the IPC server: {e}"))?;
+    // Fans back to the BIOS before the PC sleeps; control resumes after it wakes.
+    #[cfg(windows)]
+    {
+        let power = Arc::clone(&engine);
+        win::on_power(Some(Box::new(move |suspend| power.set_suspended(suspend))));
+    }
     ready();
     let _ = stop.recv();
     log::info!("stopping");
+    #[cfg(windows)]
+    win::on_power(None);
     hub.close();
     engine.shutdown();
     log::info!("stopped");

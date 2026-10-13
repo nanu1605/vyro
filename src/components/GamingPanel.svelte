@@ -21,7 +21,7 @@
   const game = $derived(snap?.game ?? null);
   const live = $derived(game?.state === 'capturing');
 
-  let sessions = $state<GameSession[] | null>(null);
+  let sessions = $state.raw<GameSession[] | null>(null);
   let error = $state<string | null>(null);
   function load(): void {
     getGameSessions()

@@ -3,14 +3,16 @@
 //! and LGA1700/1851 boards. Decoders and board layouts here are pure; `win` does the port I/O.
 //! Register layout follows LibreHardwareMonitor's `Nct677X` and the Linux `nct6687d` driver.
 //!
-//! Vyro only reads: unlike other tools it never writes the chip's monitor-enable or fan
-//! registers, so a board whose firmware left monitoring off simply reports nothing.
+//! Monitoring only reads: Vyro never writes the chip's monitor-enable registers, so a board whose
+//! firmware left monitoring off simply reports nothing. Fan control (`control`, Phase 12) writes
+//! only the fan registers, only on allow-listed boards.
 
+pub mod control;
 #[cfg(windows)]
 mod win;
 
 #[cfg(windows)]
-pub use win::{detect, read_block, Found, SioProvider};
+pub use win::{detect, read_block, Found, Ports, SioProvider};
 
 use crate::snapshot::FanKind;
 
@@ -96,7 +98,8 @@ pub enum BoardTemp {
     System,
     VrmMos,
     Chipset,
-    Socket,
+    /// Voltage-regulator temperature ("VR" in HWiNFO), separate from the MOSFET sensor.
+    Vrm,
     Pcie,
     M2,
 }
@@ -121,7 +124,7 @@ pub const MSI_NCT6687: Layout = Layout {
         (1, "System", BoardTemp::System),
         (2, "VRM MOS", BoardTemp::VrmMos),
         (3, "Chipset", BoardTemp::Chipset),
-        (4, "CPU Socket", BoardTemp::Socket),
+        (4, "VR", BoardTemp::Vrm),
     ],
     fans: &[
         (0, "CPU Fan", FanKind::Fan),
@@ -137,6 +140,7 @@ pub const MSI_NCT6687: Layout = Layout {
 /// raw register dump next to HWMonitor (whose "VINn" numbering is not register order: its
 /// VIN3 is 0x128). Vcore (0x128) follows VDDCR_VDD from 1.34 V idle to 1.02 V under load;
 /// SoC (0x124) holds 1.21 V with VDDCR_SOC at 1.20 V; VDDIO (0x126) is halved on the board.
+/// VTT (0x13A) reads 2.046 V, the same as HWiNFO's VTT on the owner's board.
 pub const MSI_B650M_GAMING_PLUS_WIFI: Layout = Layout {
     volts: &[
         (0, "+12V", 1.0),
@@ -147,6 +151,7 @@ pub const MSI_B650M_GAMING_PLUS_WIFI: Layout = Layout {
         (8, "+3.3V", 1.0),
         (11, "+3.3V Standby", 1.0),
         (12, "AVSB", 1.0),
+        (13, "VTT", 1.0),
         (14, "CMOS Battery", 1.0),
     ],
     ..MSI_NCT6687
@@ -170,6 +175,8 @@ pub trait PortIo {
     fn outb(&mut self, port: u16, value: u8) -> Result<(), Self::Error>;
     /// Pause between polls of a busy EC.
     fn pause(&mut self) {}
+    /// Wait for the EC to act on a fan-control request (tens of milliseconds on hardware).
+    fn settle(&mut self) {}
 }
 
 /// Reads `len` bytes of NCT6687 EC space from `start` (base = hardware-monitor I/O base).

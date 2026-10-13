@@ -11,10 +11,14 @@ use ts_rs::TS;
 
 use crate::alerts::{self, AlertEngine, AlertFired, AlertRule};
 use crate::analysis::{self, Insight, SeriesMap};
+use crate::fan::controller::{self, FanControl, SimDevice};
+use crate::fan::{FanCapability, FanConfig, FanEvent, FanStatus};
 use crate::gaming::{CaptureTarget, GameProvider, GameSession, Gaming};
 use crate::health::{self, HealthEvent};
 use crate::info::{DriveInfo, PawnIoStatus};
 use crate::poller::{EVENT_ALERT, EVENT_HEALTH};
+use crate::profiles::Profile;
+use crate::sio::control;
 use crate::{
     lock, unix_now, History, HistoryConfig, HistoryRange, HistorySeries, Poller, PollerConfig,
     PollerHandle, Provider, Registry, SensorSnapshot, SensorTree, SnapshotSink,
@@ -91,6 +95,16 @@ pub trait EngineApi: Send + Sync {
     fn set_capture_target(&self, target: Option<CaptureTarget>) -> Result<(), String>;
     /// Logged game sessions, newest first.
     fn game_sessions(&self) -> Result<Vec<GameSession>, String>;
+    /// Fan control: capability, configuration and each header's state.
+    fn fan_status(&self) -> Result<FanStatus, String>;
+    /// Validates, saves and applies a fan configuration.
+    fn set_fan_config(&self, config: FanConfig) -> Result<(), String>;
+    /// Turns fan control off and hands every header back to the BIOS.
+    fn restore_fans(&self) -> Result<(), String>;
+    /// Fan control log, newest last (kept across restarts where there is a history store).
+    fn fan_events(&self) -> Result<Vec<FanEvent>, String>;
+    /// The P9c profile in use: its own fan settings apply, if it has any.
+    fn set_fan_profile(&self, profile: Profile) -> Result<(), String>;
     /// Stops polling and flushes history. Safe to call more than once.
     fn shutdown(&self);
 }
@@ -101,6 +115,8 @@ pub struct EngineConfig {
     /// Folder for the history database and alert rules; `None` keeps both in memory only.
     pub data_dir: Option<PathBuf>,
     pub poller: PollerConfig,
+    /// Drive fans (the service only; the app's fallback engine never does).
+    pub fan_control: bool,
 }
 
 /// The engine running in this process.
@@ -112,6 +128,7 @@ pub struct LocalEngine {
     poller: Mutex<Option<PollerHandle>>,
     clients: ClientPids,
     gaming: Arc<Gaming>,
+    fans: Arc<FanControl>,
 }
 
 impl LocalEngine {
@@ -134,6 +151,7 @@ impl LocalEngine {
         log::info!("alerts: {} rule(s)", rules.len());
         let alerts = Arc::new(Mutex::new(AlertEngine::new(rules)));
         let gaming = Gaming::new(Gaming::default_launch(), dir);
+        let fans = Arc::new(Self::start_fans(cfg.fan_control, dir, history.clone()));
 
         // The game provider runs last: its session summary reads this tick's temperatures.
         let game: Box<dyn Provider> = Box::new(GameProvider::new(Arc::clone(&gaming)));
@@ -144,7 +162,8 @@ impl LocalEngine {
                 Poller::new(Arc::clone(&registry), cfg.poller),
                 Poller::with_boxed,
             )
-            .with_alerts(Arc::clone(&alerts));
+            .with_alerts(Arc::clone(&alerts))
+            .with_fans(Arc::clone(&fans));
         if let Some(history) = &history {
             poller = poller.with_history(Arc::clone(history));
         }
@@ -157,7 +176,48 @@ impl LocalEngine {
             poller: Mutex::new(Some(handle)),
             clients,
             gaming,
+            fans,
         })
+    }
+
+    /// The fan controller: the simulated chip in simulation, the real one only in the service
+    /// and only where `fan::open_device` allows it.
+    fn start_fans(
+        wanted: bool,
+        dir: Option<&std::path::Path>,
+        history: Option<Arc<Mutex<History>>>,
+    ) -> FanControl {
+        if Self::simulated() {
+            return FanControl::start(Box::new(SimDevice::new()), None, controller::WATCHDOG);
+        }
+        if !wanted {
+            return FanControl::unavailable(FanCapability::Unavailable {
+                reason: "fan control runs in the Vyro service".into(),
+            });
+        }
+        // Fan events are kept with the health and alert events.
+        let events = history.map(|h| -> controller::EventSink {
+            Box::new(move |ev: &FanEvent| {
+                if let Err(e) = lock(&h).log_events(crate::fan::EVENT_KIND, ev.ts, &[ev]) {
+                    log::warn!("fan events: {e}");
+                }
+            })
+        });
+        #[cfg(windows)]
+        match crate::fan::open_device() {
+            Ok(dev) => FanControl::start_with(dev, dir, controller::WATCHDOG, events),
+            Err(cap) => {
+                log::info!("fans: control not possible: {cap:?}");
+                FanControl::unavailable(cap)
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (dir, events);
+            FanControl::unavailable(FanCapability::Unavailable {
+                reason: "fan control needs Windows".into(),
+            })
+        }
     }
 
     /// The real providers on Windows (the simulator with `VYRO_SIM=1`); the simulator
@@ -176,6 +236,12 @@ impl LocalEngine {
     /// The connected UI processes (for the app footprint).
     pub fn set_clients(&self, pids: Vec<u32>) {
         *lock(&self.clients) = pids;
+    }
+
+    /// The PC is about to sleep (`true`) or has woken (`false`): fans go back to the BIOS
+    /// for the duration (the service forwards the power events).
+    pub fn set_suspended(&self, on: bool) {
+        self.fans.set_suspended(on);
     }
 
     fn simulated() -> bool {
@@ -334,7 +400,46 @@ impl EngineApi for LocalEngine {
         Ok(self.gaming.sessions())
     }
 
+    fn fan_status(&self) -> Result<FanStatus, String> {
+        // Registry first and released before the controller's lock (the poller takes them in
+        // that order).
+        let rpms: Vec<Option<f64>> = {
+            let reg = lock(&self.registry);
+            (0..control::HEADERS)
+                .map(|n| reg.get(&crate::fan::rpm_id(n)).and_then(|s| s.value))
+                .collect()
+        };
+        Ok(self
+            .fans
+            .status(|h| rpms.get(usize::from(h)).copied().flatten()))
+    }
+
+    fn set_fan_config(&self, config: FanConfig) -> Result<(), String> {
+        self.fans.set_config(config)
+    }
+
+    fn restore_fans(&self) -> Result<(), String> {
+        self.fans.restore()
+    }
+
+    /// From the history store, else this run's.
+    fn fan_events(&self) -> Result<Vec<FanEvent>, String> {
+        let stored = self.history.as_ref().and_then(|h| {
+            lock(h)
+                .events::<FanEvent>(crate::fan::EVENT_KIND, controller::RECENT_EVENTS as i64)
+                .inspect_err(|e| log::warn!("fan events: {e}"))
+                .ok()
+        });
+        Ok(stored.unwrap_or_else(|| self.fans.events()))
+    }
+
+    fn set_fan_profile(&self, profile: Profile) -> Result<(), String> {
+        self.fans.set_profile(profile)
+    }
+
     fn shutdown(&self) {
+        // Fans first: they go back to the BIOS while the sensors still run.
+        self.fans.shutdown();
         self.gaming.stop();
         if let Some(poller) = lock(&self.poller).take() {
             poller.stop();
@@ -393,6 +498,7 @@ mod tests {
         let cfg = EngineConfig {
             data_dir: Some(dir.path().join("data")),
             poller: fast(),
+            fan_control: false,
         };
         let engine = LocalEngine::start(
             cfg,
