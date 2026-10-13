@@ -639,7 +639,25 @@ taken in the field check.
       "overlay unavailable"; "Vyro itself" with the overlay shown and hidden.
 
 ### P15 — Game session replay (M8)
-- [ ] `game_sessions` / `game_events`, timeline with event markers and history context.
+Owner's choice (2026-10-13): full detail, every reading of the last 100 sessions, inside the
+200 MB history cap. Budget: no new process or thread; one sample per tick while a game is
+captured, written with the history store's existing 10 s batch (≤ 0.4 MB per hour played);
+a 2 h replay keeps the page's JS heap ≤ 10 MB and its total within 25 MB of the Dashboard;
+nothing is loaded until a replay is opened. The history database moves to schema v2 (three
+new tables, added in place): going back to 0.2 would turn its history off, since 0.2 refuses
+a newer schema.
+
+- [ ] Store: `game_session` / `game_sample` / `game_event` in the history database; last 100
+      sessions; when over the cap, the oldest data goes first, a replay or history (a dropped
+      replay keeps its summary); `games.json` imported once; a session left open by a crash
+      is closed at its last sample.
+- [ ] Markers: frame-rate drops, stutters, thermal and power limits, throttling, alt-tab,
+      profile changes, overlay shown or hidden.
+- [ ] Replay view: tracks on one time axis, marker lane, context for any moment from the
+      history store.
+- [ ] Field check (MS-7E24): two sessions with an alt-tab, a profile change, an overlay toggle
+      and heavy load; markers at the right moments and their context matches History; kept
+      after a service restart; disk growth measured.
 
 ### P19 — Hardware change detection (M9 → 0.4; first, P16 cites it)
 - [ ] Inventory diffs into `hardware_changes` and a PC change history.

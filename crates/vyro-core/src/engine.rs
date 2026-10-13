@@ -152,7 +152,7 @@ impl LocalEngine {
             .map_or_else(alerts::default_rules, alerts::load);
         log::info!("alerts: {} rule(s)", rules.len());
         let alerts = Arc::new(Mutex::new(AlertEngine::new(rules)));
-        let gaming = Gaming::new(Gaming::default_launch(), dir);
+        let gaming = Gaming::new(Gaming::default_launch(), dir, history.clone());
         let fans = Arc::new(Self::start_fans(cfg.fan_control, dir, history.clone()));
 
         // The game provider runs last: its session summary reads this tick's temperatures.
