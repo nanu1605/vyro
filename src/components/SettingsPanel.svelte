@@ -1,8 +1,9 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import Card from './Card.svelte';
-  import { getAutostart, getSensorTree, setAutostart, type OverlayCorner, type OverlaySettings } from '../ipc';
-  import { prefs, profiles, savePrefs } from '../prefs.svelte';
+  import { getAutostart, getSensorTree, pickProfile, setAutostart, type OverlayCorner, type OverlaySettings } from '../ipc';
+  import { activeProfile, game, prefs, profiles, savePrefs } from '../prefs.svelte';
+  import type { GameAutomation, Profile } from '../types';
   import { checkNow, install, update } from '../updates.svelte';
   import { fmtDateTime } from '../format';
   import type { BackendStatus, SensorSnapshot, SensorTree, TempUnit } from '../types';
@@ -53,6 +54,9 @@
   ];
   const setOverlay = (change: Partial<OverlaySettings>) =>
     save('Overlay', () => savePrefs({ overlay: { ...prefs.overlay, ...change } }));
+  const setGames = (change: Partial<GameAutomation>) =>
+    save('Game profiles', () => savePrefs({ games: { ...prefs.games, ...change } }));
+  const nameOf = (p: Profile | null | undefined) => profiles.list.find((x) => x.id === p)?.name ?? p ?? '';
 
   const upd = $derived(update.status);
   let busy = $state(false);
@@ -70,7 +74,7 @@
 </script>
 
 <section class="grid">
-  <Card title="Profile" subtitle={profiles.list.find((p) => p.id === prefs.profile)?.name ?? null}>
+  <Card title="Profile" subtitle={nameOf(activeProfile()) || null}>
     <fieldset>
       <legend>Poll rate, notifications, animation, dashboard</legend>
       {#each profiles.list as p (p.id)}
@@ -78,14 +82,21 @@
           <input
             type="radio"
             name="profile"
-            checked={prefs.profile === p.id}
-            onchange={() => void save('Profile', () => savePrefs({ profile: p.id }))}
+            checked={activeProfile() === p.id}
+            onchange={() => void save('Profile', () => pickProfile(p.id))}
           />
           <span>{p.name}<small>{p.description}</small></span>
         </label>
       {/each}
     </fieldset>
-    <p class="note">Also in the tray icon's menu.</p>
+    {#if game.state?.game && game.state.auto}
+      <p class="note" role="status">
+        {nameOf(game.state.profile)} is in use while {snap?.game?.app ?? game.state.game} runs; {nameOf(game.state.base)} comes
+        back when it closes. Picking a profile here keeps it for the rest of the game.
+      </p>
+    {:else}
+      <p class="note">Also in the tray icon's menu.</p>
+    {/if}
   </Card>
 
   <Card title="General">
@@ -154,6 +165,49 @@
             onchange={(e) => void setOverlay({ detailed: (e.currentTarget as HTMLInputElement).checked })}
           />
           <span>Frame-time graph and CPU / GPU readings</span>
+        </label>
+      </div>
+    {/if}
+    <label class="check">
+      <input
+        type="checkbox"
+        checked={prefs.games.enabled}
+        onchange={(e) => void setGames({ enabled: (e.currentTarget as HTMLInputElement).checked })}
+      />
+      <span
+        >Switch profiles for games<small
+          >While a game runs, its profile, fan settings and update rate apply; yours come back when it closes. Set
+          games up in the Gaming tab.</small
+        ></span
+      >
+    </label>
+    {#if prefs.games.enabled}
+      <div class="sub">
+        <label>
+          Games without their own settings
+          <select
+            value={prefs.games.defaultProfile ?? 'none'}
+            onchange={(e) => {
+              const v = (e.currentTarget as HTMLSelectElement).value;
+              void setGames({ defaultProfile: v === 'none' ? null : (v as Profile) });
+            }}
+          >
+            {#each profiles.list as p (p.id)}<option value={p.id}>{p.name} profile</option>{/each}
+            <option value="none">Leave the profile as it is</option>
+          </select>
+        </label>
+        <label class="check">
+          <input
+            type="checkbox"
+            checked={prefs.games.loadTrigger}
+            onchange={(e) => void setGames({ loadTrigger: (e.currentTarget as HTMLInputElement).checked })}
+          />
+          <span
+            >Also treat an app in a window as a game when it keeps the GPU busy<small
+              >60% or more of the GPU for 10 s. Browsers and video players never count; mark others "Not a game" in the
+              Gaming tab.</small
+            ></span
+          >
         </label>
       </div>
     {/if}

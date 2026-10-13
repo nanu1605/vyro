@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::alerts::AlertRule;
 use crate::fan::FanConfig;
-use crate::gaming::CaptureTarget;
+use crate::gaming::{CaptureTarget, GameContext};
 use crate::profiles::Profile;
 use crate::HistoryRange;
 
@@ -33,7 +33,7 @@ pub use transport::{connect, default_endpoint, Conn, Listener};
 
 /// 2: `AppSnapshot::parts`. 3: `SensorSnapshot::game`, capture target and game sessions.
 /// 4: `GameSnapshot::timeline` replaces the raw frame times.
-pub const PROTOCOL_VERSION: u32 = 5;
+pub const PROTOCOL_VERSION: u32 = 6;
 /// Windows service name (installed by the MSI).
 pub const SERVICE_NAME: &str = "VyroService";
 /// Largest request the server accepts (alert rules are the biggest, a few KB).
@@ -110,6 +110,10 @@ pub enum Request {
     #[serde(rename_all = "camelCase")]
     SetCaptureTarget {
         target: Option<CaptureTarget>,
+    },
+    #[serde(rename_all = "camelCase")]
+    SetGameContext {
+        context: Option<GameContext>,
     },
     GameSessions,
     FanStatus,
@@ -225,6 +229,17 @@ mod tests {
             }),
             r#"{"method":"setCaptureTarget","params":{"target":{"pid":9,"name":"g.exe"}}}"#
         );
+        assert_eq!(
+            json(&Request::SetGameContext {
+                context: Some(GameContext {
+                    in_front: true,
+                    profile: Profile::Gaming,
+                    auto: true,
+                    overlay: false
+                })
+            }),
+            r#"{"method":"setGameContext","params":{"context":{"inFront":true,"profile":"gaming","auto":true,"overlay":false}}}"#
+        );
         assert_eq!(json(&Request::RestoreFans), r#"{"method":"restoreFans"}"#);
         assert_eq!(
             json(&Request::SetFanProfile {
@@ -245,7 +260,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&hello).unwrap(),
-            r#"{"protocol":5,"role":"snapshots","session":7,"pid":42,"visible":false}"#
+            r#"{"protocol":6,"role":"snapshots","session":7,"pid":42,"visible":false}"#
         );
         let reply: Reply = Err("nope".into());
         assert_eq!(serde_json::to_string(&reply).unwrap(), r#"{"Err":"nope"}"#);

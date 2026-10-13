@@ -13,7 +13,7 @@ use crate::alerts::{self, AlertEngine, AlertFired, AlertRule};
 use crate::analysis::{self, Insight, SeriesMap};
 use crate::fan::controller::{self, FanControl, SimDevice};
 use crate::fan::{FanCapability, FanConfig, FanEvent, FanStatus};
-use crate::gaming::{CaptureTarget, GameProvider, GameSession, Gaming};
+use crate::gaming::{CaptureTarget, GameContext, GameProvider, GameSession, Gaming};
 use crate::health::{self, HealthEvent};
 use crate::info::{DriveInfo, PawnIoStatus};
 use crate::poller::{EVENT_ALERT, EVENT_HEALTH};
@@ -93,6 +93,8 @@ pub trait EngineApi: Send + Sync {
     fn insights(&self) -> Result<Vec<Insight>, String>;
     /// Captures frames of this process (the fullscreen app in the foreground), or stops.
     fn set_capture_target(&self, target: Option<CaptureTarget>) -> Result<(), String>;
+    /// The app's view of the captured game: in front, profile, overlay (`None`: no game).
+    fn set_game_context(&self, context: Option<GameContext>) -> Result<(), String>;
     /// Logged game sessions, newest first.
     fn game_sessions(&self) -> Result<Vec<GameSession>, String>;
     /// Fan control: capability, configuration and each header's state.
@@ -393,6 +395,11 @@ impl EngineApi for LocalEngine {
 
     fn set_capture_target(&self, target: Option<CaptureTarget>) -> Result<(), String> {
         self.gaming.set_target(target);
+        Ok(())
+    }
+
+    fn set_game_context(&self, context: Option<GameContext>) -> Result<(), String> {
+        self.gaming.set_context(context);
         Ok(())
     }
 

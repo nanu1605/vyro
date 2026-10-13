@@ -80,6 +80,12 @@ pub struct Overlay {
     placed: Mutex<Option<(Corner, bool, Rect)>>,
 }
 
+/// The overlay window shows.
+pub fn shown(app: &AppHandle) -> bool {
+    app.try_state::<Overlay>()
+        .is_some_and(|o| o.shown.load(Ordering::SeqCst))
+}
+
 /// From the game watcher, once a second.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub fn set_front(app: &AppHandle, in_front: bool, monitor: Option<Rect>) {
@@ -127,7 +133,8 @@ pub fn update(app: &AppHandle, snap: &SensorSnapshot) {
         .as_ref()
         .filter(|g| g.state != CaptureState::Unavailable);
     let monitor = *lock(&o.monitor);
-    let want = settings.enabled && o.in_front.load(Ordering::SeqCst) && game.is_some();
+    let enabled = crate::gaming::overlay_wanted(app, settings.enabled);
+    let want = enabled && o.in_front.load(Ordering::SeqCst) && game.is_some();
     match (want, monitor, game) {
         (true, Some(monitor), Some(game)) => {
             let placed = Some((settings.corner, settings.detailed, monitor));

@@ -3,6 +3,7 @@
 //! capture, puts the live figures in the snapshot ([`GameSnapshot`]) and the `game.*` sensors,
 //! and keeps a summary of every session ([`GameSession`]).
 
+pub mod auto;
 pub mod capture;
 pub mod csv;
 pub mod foreground;
@@ -15,6 +16,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::profiles::Profile;
 use crate::provider::{BoxError, Provider};
 use crate::registry::{Group, Registry, SensorDesc, SensorKey, Source, Unit};
 use crate::snapshot::SensorSnapshot;
@@ -39,6 +41,22 @@ pub struct CaptureTarget {
     pub pid: u32,
     /// Executable name, shown until the first frame names it.
     pub name: String,
+}
+
+/// What the app knows about the game it asked to capture: whether it is in front, the profile
+/// in force and the overlay. Sent whenever any of it changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct GameContext {
+    /// The game is the foreground app (not alt-tabbed away).
+    pub in_front: bool,
+    /// Profile in force.
+    pub profile: Profile,
+    /// The game chose it (automatic game profiles).
+    pub auto: bool,
+    /// The companion overlay shows over the game.
+    pub overlay: bool,
 }
 
 /// What limits the frame rate.
@@ -132,6 +150,9 @@ pub struct GameSession {
     pub gpu_temp_max: Option<f64>,
     pub cpu_usage_avg: Option<f64>,
     pub gpu_usage_avg: Option<f64>,
+    /// Profile in force when it ended (logged since 0.3).
+    #[serde(default)]
+    pub profile: Option<Profile>,
 }
 
 /// Running mean and maximum of a reading over the session.
@@ -173,6 +194,7 @@ struct Session {
     gpu_temp: Track,
     cpu_usage: Track,
     gpu_usage: Track,
+    profile: Option<Profile>,
 }
 
 impl Session {
@@ -193,6 +215,7 @@ impl Session {
             gpu_temp_max: self.gpu_temp.max,
             cpu_usage_avg: self.cpu_usage.avg(),
             gpu_usage_avg: self.gpu_usage.avg(),
+            profile: self.profile,
         }
     }
 }
@@ -201,6 +224,8 @@ struct Inner {
     session: Option<Session>,
     generation: u64,
     sessions: Vec<GameSession>,
+    /// Latest from the app; applies to the running session and the next one.
+    context: Option<GameContext>,
 }
 
 /// The engine's side of gaming: the capture target, the running capture and the session log.
@@ -221,6 +246,7 @@ impl Gaming {
                 session: None,
                 generation: 0,
                 sessions,
+                context: None,
             })),
             launch,
             path,
@@ -273,6 +299,7 @@ impl Gaming {
                 gpu_temp: Track::default(),
                 cpu_usage: Track::default(),
                 gpu_usage: Track::default(),
+                profile: inner.context.map(|c| c.profile),
             });
             inner.generation
         };
@@ -330,6 +357,15 @@ impl Gaming {
                     s.failed = Some(e.to_string());
                 }
             }
+        }
+    }
+
+    /// The app's view of the game: in front, profile, overlay.
+    pub fn set_context(&self, context: Option<GameContext>) {
+        let mut inner = lock(&self.inner);
+        inner.context = context;
+        if let (Some(s), Some(c)) = (inner.session.as_mut(), context) {
+            s.profile = Some(c.profile);
         }
     }
 
@@ -572,6 +608,7 @@ mod tests {
             gpu_temp: Track::default(),
             cpu_usage: Track::default(),
             gpu_usage: Track::default(),
+            profile: Some(Profile::Gaming),
         };
         let mut at = 0.0;
         while at < 60_000.0 {
@@ -597,6 +634,7 @@ mod tests {
         assert_eq!(logged[0].secs, 60);
         assert_eq!(logged[0].bound, Some(Bound::Capped));
         assert_eq!(logged[0].cpu_temp_max, Some(80.0));
+        assert_eq!(logged[0].profile, Some(Profile::Gaming));
         assert!((logged[0].avg_fps.unwrap() - 100.0).abs() < 1e-6);
         let again = Gaming::new(capture::simulated("x"), Some(dir.path()));
         assert_eq!(again.sessions(), logged);
