@@ -7,10 +7,11 @@ app or library).
 - **Build spec:** [`PROJECT_PLAN.md`](PROJECT_PLAN.md) — what to build and why.
 - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — milestones, phase tracker, decision log.
 
-**Status:** early release (P11) with the privilege split (P8). Live CPU, GPU, board, fan,
-voltage, RAM, storage and network sensors on Windows (low-level ones through PawnIO, read by the
-Vyro Sensor Service), history, System Health, alerts, game frame rates (PresentMon), tray and an
-MSI installer. See [`ROADMAP.md`](ROADMAP.md) for what is verified on which hardware.
+**Status:** 0.2 (milestone M7). Live CPU, GPU, board, fan, voltage, RAM, storage and network
+sensors on Windows (low-level ones through PawnIO, read by the Vyro Sensor Service), history,
+System Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 0.2: fan
+and pump control, so far only on the MSI B650M GAMING PLUS WIFI (MS-7E24). See
+[`ROADMAP.md`](ROADMAP.md) for what is verified on which hardware.
 Contributions: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Install
@@ -31,6 +32,24 @@ named pipe; the app itself runs without administrator rights. Intel's
 service, which runs it to measure the fullscreen game in front (nothing is injected into games). Without the service the app still
 starts, reads what it can, and says what is missing. "Start with Windows" (Settings) opens it
 in the tray at sign-in. Builds are not code-signed yet, so SmartScreen will warn.
+
+## Fan and pump control
+
+The **Cooling** tab sets each fan header to the BIOS curve, a fixed speed or Vyro's own curve
+on any temperature sensor, per profile. It is off until you turn it on and confirm. Control runs
+in the service, so it keeps going with the app closed. Safeguards:
+
+- Fans never go below 20 % and pumps never below 60 %. A pump header is driven only after you
+  confirm a pump is on it, and a pump that stops reporting a speed ends control.
+- CPU at 95 °C or GPU at 90 °C (both adjustable), or a source sensor without a reading, sends
+  every controlled fan to 100 %.
+- The BIOS settings are saved before the first change. They are put back on Return to BIOS
+  (Cooling tab, header chip or tray), when the service stops, before sleep, on uninstall, when
+  a write doesn't read back, when another program takes over the fans, and at the next start
+  after a crash. If the control loop stalls for 10 s, the BIOS takes over until it recovers.
+
+Only boards that have been checked on real hardware can be controlled: today the MSI B650M
+GAMING PLUS WIFI (MS-7E24, Nuvoton NCT6687D). Every other board shows its fans read-only.
 
 `vyro-remote.exe` in the same artifact checks the service from the outside (state, connection,
 sensors; `--capture Game.exe` measures a running game for 15 s). The service logs to `%ProgramData%\Vyro\service.log`.
@@ -116,15 +135,16 @@ that sleeps when values settle or the window is hidden.
 
 Measured against the spec §8 budget with the built-in "Vyro itself" card (Dashboard),
 which counts the sensor service, the app and its WebView2 processes. Reference PC: Ryzen 7
-9700X, RTX 5060 Ti, Windows 11, 144 Hz display; Vyro 0.1.4, Desktop profile (1 s polling).
+9700X, RTX 5060 Ti, Windows 11, 144 Hz display; Desktop profile (1 s polling).
 
-| Metric | Target | Measured |
-|---|---|---|
-| CPU (average, window visible) | < 1.5 % | 0.68 % |
-| RAM (private working set, window visible) | < 120 MB | 120 MB average, 132 MB peak after visiting every tab |
-| RAM (closed to the tray) | — | ≈ 40 MB (service 33 MB, app 7 MB, WebView2 suspended) |
-| Startup to first data | < 2 s | 0.76 s |
-| Installer | < 20 MB | 9.5 MB |
+| Metric | Target | 0.1.4 | 0.2.0 |
+|---|---|---|---|
+| CPU (average, window visible) | < 1.5 % | 0.68 % | 0.46 % |
+| RAM (private working set, window visible) | < 120 MB | 120 MB | 125 MB |
+| RAM peak | — | 132 MB after visiting every tab | 125–150 MB with History open |
+| RAM (closed to the tray) | — | ≈ 40 MB (service 33 MB, app 7 MB, WebView2 suspended) | not re-measured |
+| Startup to first data | < 2 s | 0.76 s | 1.02 s |
+| Installer | < 20 MB | 9.5 MB | measured at release |
 
-Of the visible figure, WebView2 takes 80 MB (five processes), the service 33 MB and the app
-7 MB. Animation runs at most 60 fps and only while values move.
+In 0.2.0, of the visible figure, WebView2 takes 85 MB (five processes), the service 33 MB and
+the app 7 MB. Animation runs at most 60 fps and only while values move.
