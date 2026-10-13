@@ -499,11 +499,10 @@ allow-listed chip + revision + board + header, each read back and bounded.
       and then reads below 300 RPM on 3 ticks in a row ends control (every header back to the
       BIOS). A pump without a speed reading can be driven, with a warning that a stop can't be
       seen.
-- [ ] 12c Field check: confirm Pump Fan, Quiet 60 % → RPM drops from about 4,400 and holds;
-      Full 100 % → back up; Return to BIOS → 100 % again.
-      Quiet 60 % passed (2026-10-13): the pump dropped to about 3,300 RPM and held, well above
-      the 300 RPM stall threshold. Full 100 % passed: back up to about 4,400 RPM. Open: Return
-      to BIOS → stays at about 4,400 RPM.
+- [x] 12c Field check (2026-10-13, MS-7E24): confirm Pump Fan, Quiet 60 % → the pump dropped
+      from about 4,400 to about 3,300 RPM and held (well above the 300 RPM stall threshold);
+      Full 100 % → back up to about 4,400 RPM; Return to BIOS → stayed at about 4,400 RPM (the
+      BIOS runs the pump at 100 %).
 - [x] 12d Failsafe (built 2026-10-13, field check open): emergency override, watchdog, restore on
       stop / shutdown / crash (service restart restores first) came with 12b. Added: the service
       takes power events and hands the fans to the BIOS before the PC sleeps (it waits up to
