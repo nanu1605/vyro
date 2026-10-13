@@ -494,8 +494,13 @@ allow-listed chip + revision + board + header, each read back and bounded.
       followed a stress test and slowed after it. Killing `vyro-service.exe` with control on
       brought the BIOS curve back (2026-10-13; the restarted service restores the saved state),
       and control resumed after the restart. With the CPU limit at 50 °C under load every
-      controlled fan went to 100 % (2026-10-13). Open: footprint numbers (the owner reports it
-      passed; the Dashboard-only and Cooling-tab figures are still to be recorded).
+      controlled fan went to 100 % (2026-10-13). Footprint (2026-10-13, after 12e): 125 MB
+      (WebView2 85 MB ×5, service 33 MB, app 7 MB), average CPU 0.46 %, startup 1.02 s. That
+      is close to 0.1.4's 120 MB (WebView2 80 MB ×5) and below the 175 MB of 2026-09-30. But
+      the peak since start was 296 MB (0.1.4: 132 MB). In the browser preview the Cooling tab
+      adds about 1.7 MB of JS heap and 1,000 DOM nodes, steady over 2 minutes with nothing
+      left behind, so it is not the source. Open: find which tab or moment makes the peak
+      (peaks reset in Sensors, then Dashboard, Cooling, History and Health in turn).
 - [x] Board names match HWiNFO: temperature channel 4 is "VR" (was "CPU Socket"; now
       `temp_vrm`, id `board.temp4` unchanged); voltage channel 13 (0x13A) added as "VTT" (2.046 V).
 - [x] False voltage alarm (2026-10-13): on the owner's working PC, Health kept reporting
