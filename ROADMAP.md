@@ -498,6 +498,12 @@ allow-listed chip + revision + board + header, each read back and bounded.
       passed; the Dashboard-only and Cooling-tab figures are still to be recorded).
 - [x] Board names match HWiNFO: temperature channel 4 is "VR" (was "CPU Socket"; now
       `temp_vrm`, id `board.temp4` unchanged); voltage channel 13 (0x13A) added as "VTT" (2.046 V).
+- [x] False voltage alarm (2026-10-13): on the owner's working PC, Health kept reporting
+      "+3.3V Standby at 0.00 V" and "CMOS battery low: 0.00 V" at every start. The chip reads
+      0 on those inputs while it isn't sampling them. Earlier field reads of 3.37 V and 3.09 V
+      were taken with HWMonitor open, which likely turned their monitoring on. Exactly 0 V is
+      now "no reading" (`sio::win`), and Health skips 0 V inputs. Vyro does not turn the
+      monitoring on itself: that is a chip write and would need its own field check.
 - [x] 12c Pump control (built 2026-10-13, field check open): the pump header is driven only
       after the owner confirms a pump is on it (`FanConfig.pumps`); a pump on a fan header can be
       marked the same way. Pumps never go below 60 %. Quiet 60 / Standard 80 / Full 100 % and a

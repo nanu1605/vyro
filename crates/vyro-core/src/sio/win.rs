@@ -229,7 +229,10 @@ impl SioProvider {
                 )
                 .with_history()
             });
-            let value = reg.set(k, Some(v));
+            // Exactly 0 V is an input the chip is not sampling (on MS-7E24 the standby rail
+            // and the CMOS battery read 0 unless something turned their monitoring on), not a
+            // dead rail: a PC that runs has standby power.
+            let value = reg.set(k, (v > 0.0).then_some(v));
             out.voltages.push(VoltageReading { name, value });
         }
         for &(n, r) in &d.fans {
