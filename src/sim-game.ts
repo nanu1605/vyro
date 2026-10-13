@@ -49,16 +49,16 @@ export const SAMPLE_SESSIONS: GameSession[] = [
   {
     app: 'Cyberpunk2077.exe', runtime: 'DXGI', started: now - 90_000, secs: 5_420, frames: 612_000,
     avgFps: 112.9, low1Fps: 78.4, low01Fps: 61.0, maxFrameMs: 48.2, bound: 'gpu',
-    cpuTempMax: 78.5, gpuTempMax: 71.0, cpuUsageAvg: 34.0, gpuUsageAvg: 97.1,
+    cpuTempMax: 78.5, gpuTempMax: 71.0, cpuUsageAvg: 34.0, gpuUsageAvg: 97.1, profile: 'gaming',
   },
   {
     app: 'cs2.exe', runtime: 'Vulkan', started: now - 260_000, secs: 2_890, frames: 1_050_000,
     avgFps: 363.3, low1Fps: 190.1, low01Fps: 131.6, maxFrameMs: 22.9, bound: 'cpu',
-    cpuTempMax: 83.0, gpuTempMax: 58.5, cpuUsageAvg: 41.0, gpuUsageAvg: 62.4,
+    cpuTempMax: 83.0, gpuTempMax: 58.5, cpuUsageAvg: 41.0, gpuUsageAvg: 62.4, profile: 'gaming',
   },
   {
     app: 'Hades2.exe', runtime: 'DXGI', started: now - 400_000, secs: 3_600, frames: 432_000,
     avgFps: 120.0, low1Fps: 116.3, low01Fps: 104.2, maxFrameMs: 12.5, bound: 'capped',
-    cpuTempMax: 61.0, gpuTempMax: 49.0, cpuUsageAvg: 9.0, gpuUsageAvg: 28.0,
+    cpuTempMax: 61.0, gpuTempMax: 49.0, cpuUsageAvg: 9.0, gpuUsageAvg: 28.0, profile: null,
   },
 ];

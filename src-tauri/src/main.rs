@@ -48,6 +48,7 @@ fn main() {
             let minimized = std::env::args().any(|a| a == vyro_core::autostart::MINIMIZED_ARG);
             let engine = Engine::start(app.handle(), !minimized)?;
             app.manage(overlay::Overlay::default());
+            app.manage(gaming::GameState::default());
             app.manage(updates::Updates::new(can_update, current));
             app.manage(engine);
             app.manage(tray::SettingsStore::load(app.handle()));
@@ -94,6 +95,9 @@ fn main() {
             commands::get_autostart,
             commands::set_autostart,
             gaming::get_game_sessions,
+            gaming::get_game_state,
+            gaming::pick_profile,
+            gaming::keep_profile,
             commands::get_fan_status,
             commands::set_fan_config,
             commands::restore_fans,

@@ -5,9 +5,12 @@
   import Meter from './Meter.svelte';
   import FrameTimeGraph from './FrameTimeGraph.svelte';
   import LoadState from './LoadState.svelte';
+  import GameProfiles from './GameProfiles.svelte';
   import { fmt, fmtDateTime, fmtDuration, NA } from '../format';
-  import { getGameSessions } from '../ipc';
-  import { fmtTemp, prefs } from '../prefs.svelte';
+  import { newRule, pollLabel, ruleFor, withRule } from '../games';
+  import { getGameSessions, keepProfile } from '../ipc';
+  import { fmtTemp, game as automation, prefs, profiles, savePrefs } from '../prefs.svelte';
+  import type { Profile } from '../types';
   import type { BackendStatus, Bound, GameSession, SensorSnapshot } from '../types';
 
   interface Props {
@@ -60,6 +63,24 @@
   const exclusive = $derived(game?.presentMode?.startsWith('Hardware: Legacy') ?? false);
   const running = $derived(game && snap ? Math.max(0, snap.ts - game.started) : null);
   const boundLabel = (b: Bound | null) => (b ? BOUND[b].title : NA);
+
+  // Automatic game profiles (P13).
+  const auto = $derived(automation.state);
+  const nameOf = (p: Profile) => profiles.list.find((x) => x.id === p)?.name ?? p;
+  const pollOf = (p: Profile) => profiles.list.find((x) => x.id === p)?.pollMs ?? 1000;
+  let autoError = $state<string | null>(null);
+  async function act(run: () => Promise<void>): Promise<void> {
+    try {
+      await run();
+      autoError = null;
+    } catch (e) {
+      autoError = String(e);
+    }
+  }
+  function notAGame(exe: string): Promise<void> {
+    const rule = ruleFor(prefs.games, exe) ?? newRule(exe, game?.app ?? exe);
+    return savePrefs({ games: withRule(prefs.games, { ...rule, ignore: true }) });
+  }
 </script>
 
 <section class="panel-wrap">
@@ -107,6 +128,26 @@
         <span class="badge" role="status">Starting capture…</span>
       {/if}
     </div>
+
+    {#if auto?.game && (auto.auto || auto.suppressed)}
+      <div class="auto" role="status">
+        {#if auto.suppressed}
+          <p>Your <b>{nameOf(auto.base)}</b> profile stays while {game.app} runs.</p>
+        {:else}
+          <p>
+            <b>{nameOf(auto.profile)} profile</b> while {game.app} runs{auto.fans !== auto.profile
+              ? `, with ${nameOf(auto.fans)}'s fan settings`
+              : ''}{auto.pollMs !== pollOf(auto.profile) ? `, readings every ${pollLabel(auto.pollMs)}` : ''}.
+            {nameOf(auto.base)} comes back when it closes.
+          </p>
+          <div class="auto-actions">
+            <button type="button" onclick={() => void act(keepProfile)}>Keep {nameOf(auto.base)}</button>
+            <button type="button" onclick={() => void act(() => notAGame(auto.game!))}>Not a game</button>
+          </div>
+        {/if}
+        {#if autoError}<p class="error" role="alert">{autoError}</p>{/if}
+      </div>
+    {/if}
 
     {#if exclusive && prefs.overlay.enabled}
       <p class="notice" role="status">
@@ -176,6 +217,10 @@
       </Card>
     </div>
   {/if}
+
+  <div class="profiles">
+    <GameProfiles {sessions} playing={auto?.game ? (game?.app ?? auto.game) : null} />
+  </div>
 
   <h2 class="section">Sessions</h2>
   {#if error || !sessions}
@@ -249,6 +294,44 @@
     border-radius: 999px;
     color: var(--warn);
     font-size: 0.78rem;
+  }
+  .auto {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    margin: 0 0 0.9rem;
+    padding: 0.55rem 0.85rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 7%, var(--panel));
+    font-size: 0.85rem;
+  }
+  .auto p {
+    margin: 0;
+  }
+  .auto-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .auto button {
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .auto .error {
+    flex-basis: 100%;
+    color: var(--hot);
+  }
+  .profiles {
+    margin-top: 1rem;
   }
   .notice {
     margin: 0 0 0.9rem;

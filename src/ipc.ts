@@ -4,7 +4,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { evaluate } from './curve';
-import type { AlertFired, AlertRule, BackendStatus, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, Insight, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import { DEFAULT_GAMES, effectiveFor } from './games';
+import type { AlertFired, AlertRule, BackendStatus, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, Insight, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -234,6 +235,8 @@ export interface AppSettings {
   overlay: OverlaySettings;
   /** Look for a new release daily (release builds only). */
   checkUpdates: boolean;
+  /** Automatic game profiles and each saved game's own settings. */
+  games: GameAutomation;
 }
 export type OverlayCorner = 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
 export interface OverlaySettings {
@@ -245,6 +248,7 @@ export interface OverlaySettings {
 export const DEFAULT_OVERLAY: OverlaySettings = { enabled: false, corner: 'topLeft', detailed: true };
 let browserSettings: AppSettings = {
   closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop', gameCapture: true, overlay: { ...DEFAULT_OVERLAY }, checkUpdates: true,
+  games: { ...DEFAULT_GAMES },
 };
 
 /** What the game overlay shows (`src-tauri/src/overlay.rs`). */
@@ -306,11 +310,61 @@ export async function getSettings(): Promise<AppSettings> {
 
 export async function setSettings(settings: AppSettings): Promise<void> {
   if (!inTauri) {
+    if (settings.profile !== browserSettings.profile) browserSuppressed = true;
     browserSettings = { ...settings };
     for (const cb of settingsListeners) cb({ ...browserSettings });
+    notifyBrowserGame();
     return;
   }
   await invoke('set_settings', { settings });
+}
+
+// Browser preview: the simulated game (`sim-game.ts`) always runs.
+const BROWSER_GAME = 'cyberpunk2077.exe';
+let browserSuppressed = false;
+const gameListeners = new Set<(e: Effective) => void>();
+function browserEffective(): Effective {
+  const poll = (p: Profile) => BROWSER_PROFILES.find((x) => x.id === p)?.pollMs ?? 1000;
+  return effectiveFor(browserSettings.profile, browserSettings.games, BROWSER_GAME, browserSuppressed, poll);
+}
+function notifyBrowserGame(): void {
+  const e = browserEffective();
+  for (const cb of gameListeners) cb(e);
+}
+
+/** The profile, fan settings and update rate in force, and whether a game chose them. */
+export async function getGameState(): Promise<Effective> {
+  if (!inTauri) return browserEffective();
+  return invoke<Effective>('get_game_state');
+}
+
+export async function onGameState(cb: (e: Effective) => void): Promise<() => void> {
+  if (!inTauri) {
+    gameListeners.add(cb);
+    return () => gameListeners.delete(cb);
+  }
+  return listen<Effective>('profile-state', (e) => cb(e.payload));
+}
+
+/** A profile picked by the owner: saved, and it wins over a running game's. */
+export async function pickProfile(profile: Profile): Promise<void> {
+  if (!inTauri) {
+    browserSuppressed = true;
+    await setSettings({ ...browserSettings, profile });
+    notifyBrowserGame();
+    return;
+  }
+  await invoke('pick_profile', { profile });
+}
+
+/** Keeps the owner's profile while the current game runs. */
+export async function keepProfile(): Promise<void> {
+  if (!inTauri) {
+    browserSuppressed = true;
+    notifyBrowserGame();
+    return;
+  }
+  await invoke('keep_profile');
 }
 
 /** Updates (`src-tauri/src/updates.rs`). */

@@ -13,7 +13,7 @@ use super::{read_frame, recv, send, Hello, Reply, Request, Role, Welcome, MAX_ME
 use crate::alerts::{AlertFired, AlertRule};
 use crate::engine::EngineApi;
 use crate::fan::{FanConfig, FanEvent, FanStatus};
-use crate::gaming::{CaptureTarget, GameSession};
+use crate::gaming::{CaptureTarget, GameContext, GameSession};
 use crate::health::HealthEvent;
 use crate::info::{DriveInfo, PawnIoStatus};
 use crate::profiles::Profile;
@@ -40,6 +40,7 @@ struct Shared {
     poll_ms: std::sync::atomic::AtomicU32,
     /// Capture target asked for; sent again after a reconnect.
     capture: Mutex<Option<CaptureTarget>>,
+    game: Mutex<Option<GameContext>>,
     stop: AtomicBool,
     latest: Mutex<Option<SensorSnapshot>>,
     status: Mutex<RemoteStatus>,
@@ -82,6 +83,11 @@ impl Shared {
                     if let Some(target) = lock(&shared.capture).clone() {
                         reqs.push(Request::SetCaptureTarget {
                             target: Some(target),
+                        });
+                    }
+                    if let Some(context) = *lock(&shared.game) {
+                        reqs.push(Request::SetGameContext {
+                            context: Some(context),
                         });
                     }
                     for req in reqs {
@@ -127,6 +133,7 @@ impl RemoteEngine {
             visible: AtomicBool::new(visible),
             poll_ms: std::sync::atomic::AtomicU32::new(0),
             capture: Mutex::new(None),
+            game: Mutex::new(None),
             stop: AtomicBool::new(false),
             latest: Mutex::new(None),
             status: Mutex::new(RemoteStatus::default()),
@@ -341,6 +348,12 @@ impl EngineApi for RemoteEngine {
     fn set_capture_target(&self, target: Option<CaptureTarget>) -> Result<(), String> {
         lock(&self.shared.capture).clone_from(&target);
         self.call(&Request::SetCaptureTarget { target })
+    }
+
+    /// Remembered for reconnects.
+    fn set_game_context(&self, context: Option<GameContext>) -> Result<(), String> {
+        *lock(&self.shared.game) = context;
+        self.call(&Request::SetGameContext { context })
     }
 
     fn game_sessions(&self) -> Result<Vec<GameSession>, String> {

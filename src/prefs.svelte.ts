@@ -2,13 +2,18 @@
 // (`settings.json`). Components read them through these helpers so they follow changes live.
 
 import { fmt, fmtUnit, NA } from './format';
-import { DEFAULT_OVERLAY, getProfiles, getSettings, onSettingsChanged, setSettings, type AppSettings } from './ipc';
-import type { ProfileSpec } from './types';
+import { DEFAULT_GAMES } from './games';
+import { DEFAULT_OVERLAY, getGameState, getProfiles, getSettings, onGameState, onSettingsChanged, setSettings, type AppSettings } from './ipc';
+import type { Effective, ProfileSpec } from './types';
 import { fromUnit, tempSymbol, tempsIn, toUnit } from './units';
 
 export const prefs = $state<AppSettings>({
   closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop', gameCapture: true, overlay: { ...DEFAULT_OVERLAY }, checkUpdates: true,
+  games: { ...DEFAULT_GAMES },
 });
+
+/** The profile in force: the owner's, or a running game's (P13). */
+export const game = $state<{ state: Effective | null }>({ state: null });
 
 /** Profile presets, loaded with the preferences. */
 export const profiles = $state<{ list: ProfileSpec[] }>({ list: [] });
@@ -20,16 +25,21 @@ export async function loadPrefs(): Promise<void> {
   if (!listening) {
     listening = true;
     void onSettingsChanged((s) => Object.assign(prefs, s));
+    void onGameState((e) => (game.state = e));
   }
-  const [s, list] = await Promise.all([getSettings(), getProfiles()]);
+  const [s, list, state] = await Promise.all([getSettings(), getProfiles(), getGameState()]);
   profiles.list = list;
   Object.assign(prefs, s);
+  game.state = state;
 }
 
-/** The chosen profile's preset (Desktop until loaded). */
+/** The profile in force (a running game's, else the owner's). */
+export const activeProfile = () => game.state?.profile ?? prefs.profile;
+
+/** The preset of the profile in force (Desktop until loaded). */
 export function profileSpec(): ProfileSpec {
   return (
-    profiles.list.find((p) => p.id === prefs.profile) ?? {
+    profiles.list.find((p) => p.id === activeProfile()) ?? {
       id: 'desktop',
       name: 'Desktop',
       description: '',
