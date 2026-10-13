@@ -579,7 +579,7 @@ Budget: no new process or thread; one more check per second in the existing game
 footprint within ±2 MB of 0.2.0. While a game runs, the engine keeps its update rate with the
 window hidden (the profile's or the game's own; Gaming = 2 s instead of the 5 s tray rate).
 
-- [x] Built (2026-10-13, branch `v2-p13-game-profiles`), field check open:
+- [x] Built (2026-10-13, branch `v2-p13-game-profiles`, 4723a88):
       - `vyro_core::gaming::auto`: per-game `GameRule` (profile, "Don't switch", whose fan
         settings, overlay on/off, update rate 0.5/1/2/5 s, "Not a game"), `GameAutomation`
         (on by default, default profile Gaming, opt-in GPU-load trigger, rules) kept in the app's
@@ -600,10 +600,11 @@ window hidden (the profile's or the game's own; Gaming = 2 s instead of the 5 s 
         game"), "Game profiles" card (the game in front, saved and recently played games),
         Settings → Gaming (on/off, default profile, GPU-load trigger), Settings → Profile shows
         the profile in force.
-- [ ] Field check (MS-7E24): a game without settings switches to Gaming (tray check mark) and
-      back to Desktop on exit; a saved game with Silent, Benchmark's fans and 1 s updates;
-      a tray pick mid-game sticks after exit; a windowed saved game is detected and measured;
-      "Not a game" on a fullscreen non-game; footprint re-measured.
+- [x] Field check (2026-10-13, MS-7E24), all passed: a game without settings switches to
+      Gaming (tray check mark) and back to Desktop on exit; a saved game with Silent,
+      Benchmark's fans and 1 s updates; a tray pick mid-game sticks after exit; a windowed
+      saved game is detected and measured; "Not a game" on a fullscreen non-game; footprint
+      re-measured.
 
 ### P14 — Gaming Overlay 2.0 (M8)
 - [ ] Minimal / Performance / Full / Graph modes and customization; canvas graphs ≤ 30 fps.
