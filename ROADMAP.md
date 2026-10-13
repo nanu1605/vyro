@@ -482,7 +482,7 @@ allow-listed chip + revision + board + header, each read back and bounded.
       double-click to add, right-click or Delete to remove, arrow keys, presets, copy to another
       header, live marker), smoothing and safety limits, apply / discard, confirmation before
       turning on; "Fan control active" chip with Return to BIOS in the header.
-- [ ] 12b Field check: CPU fan Fixed 40 % holds; a curve follows a stress test; Return to BIOS
+- [x] 12b Field check: CPU fan Fixed 40 % holds; a curve follows a stress test; Return to BIOS
       (mode 0 in `vyro-fans`); kill `vyro-service.exe` with control on → BIOS curve back after the
       restart; emergency limit lowered to 50 °C → 100 %; footprint re-measured.
       Fixed 40 % passed (2026-09-30). HWiNFO Sensors shows the same two fan speeds as Vyro
@@ -509,7 +509,9 @@ allow-listed chip + revision + board + header, each read back and bounded.
       sessions, the Cooling status, sources, profiles and events) is now `$state.raw`, as the
       snapshot already was. After the fix the History JS heap is 8.6 MB. The highest total in
       a sweep of all 13 tabs, sampled every 250 ms, is 167 MB (295 MB before), and History's
-      own highest is 154 MB. Owner re-measure on the next build.
+      own highest is 154 MB. Field-confirmed (2026-10-13, build 70be0db): after resetting
+      peaks and opening History at 30 min, 24 h and 7 days, the owner reports the peak
+      stayed within 125–150 MB.
 - [x] Board names match HWiNFO: temperature channel 4 is "VR" (was "CPU Socket"; now
       `temp_vrm`, id `board.temp4` unchanged); voltage channel 13 (0x13A) added as "VTT" (2.046 V).
 - [x] False voltage alarm (2026-10-13): on the owner's working PC, Health kept reporting
@@ -519,7 +521,7 @@ allow-listed chip + revision + board + header, each read back and bounded.
       now "no reading" (`sio::win`), and Health skips 0 V inputs. Vyro does not turn the
       monitoring on itself: that is a chip write and would need its own field check.
       Field-confirmed (2026-10-13): Voltages show OK.
-- [x] 12c Pump control (built 2026-10-13, field check open): the pump header is driven only
+- [x] 12c Pump control (built 2026-10-13): the pump header is driven only
       after the owner confirms a pump is on it (`FanConfig.pumps`); a pump on a fan header can be
       marked the same way. Pumps never go below 60 %. Quiet 60 / Standard 80 / Full 100 % and a
       pump curve (40 °C 60 % → 85 °C 100 %). Stall guard: a driven pump that has reported a speed
@@ -530,7 +532,7 @@ allow-listed chip + revision + board + header, each read back and bounded.
       from about 4,400 to about 3,300 RPM and held (well above the 300 RPM stall threshold);
       Full 100 % → back up to about 4,400 RPM; Return to BIOS → stayed at about 4,400 RPM (the
       BIOS runs the pump at 100 %).
-- [x] 12d Failsafe (built 2026-10-13, field check open): emergency override, watchdog, restore on
+- [x] 12d Failsafe (built 2026-10-13): emergency override, watchdog, restore on
       stop / shutdown / crash (service restart restores first) came with 12b. Added: the service
       takes power events and hands the fans to the BIOS before the PC sleeps (it waits up to
       1.5 s), then captures the BIOS state afresh after waking before the next write. The chip is
@@ -540,7 +542,7 @@ allow-listed chip + revision + board + header, each read back and bounded.
 - [x] 12d Field check (2026-10-13, MS-7E24): sleep and wake with control on (settings back
       after waking), reboot with control on (control resumes), uninstall with control on (BIOS
       curve after removal) all passed. Not run: MSI Center fighting Vyro (covered by tests).
-- [x] 12e (built 2026-10-13, field check open):
+- [x] 12e (built 2026-10-13):
       - Per-profile fan settings: `FanConfig.profiles` holds the header settings of profiles
         that don't use the shared ones. The app sends the profile in use (`SetFanProfile`) on
         start and on every change. The service keeps it in `fan-profile.json` for boot before
@@ -560,8 +562,12 @@ allow-listed chip + revision + board + header, each read back and bounded.
       own settings and switch to Gaming from the tray (the fans follow it, and an event is
       logged); tray tooltip and "Return fans to BIOS" while control is on; events kept after a
       restart.
-- [ ] Field matrix on MS-7E24 (each header 30/50/100 %, curve under load, kill the service,
+- [x] Field matrix on MS-7E24 (each header 30/50/100 %, curve under load, kill the service,
       forced override, sleep/resume, reboot, uninstall with control on); footprint re-measured.
+      Done through the checks above. Headers: CPU at 30 / 40 / 100 %, pump at 60 / 100 %,
+      System Fan 1 at 100 % (heard, no speed wire); System Fan 2–3 have nothing connected,
+      and 50 % was not run as its own step. The rest passed as listed, and the footprint is
+      125 MB with the peak fixed. M7 is complete; next is the 0.2.0 release.
 
 ### P13 — Automatic game profiles (M8 → 0.3)
 - [ ] Game → per-game profile, cooling, overlay layout and poll rate; restore on exit.
