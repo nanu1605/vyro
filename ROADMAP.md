@@ -493,7 +493,8 @@ allow-listed chip + revision + board + header, each read back and bounded.
       (2026-10-13): `vyro-fans` reads mode 0x00 afterwards. Curve passed (2026-10-13): the fans
       followed a stress test and slowed after it. Killing `vyro-service.exe` with control on
       brought the BIOS curve back (2026-10-13; the restarted service restores the saved state),
-      and control resumed after the restart. Open: the 50 °C override, footprint.
+      and control resumed after the restart. With the CPU limit at 50 °C under load every
+      controlled fan went to 100 % (2026-10-13). Open: footprint.
 - [x] Board names match HWiNFO: temperature channel 4 is "VR" (was "CPU Socket"; now
       `temp_vrm`, id `board.temp4` unchanged); voltage channel 13 (0x13A) added as "VTT" (2.046 V).
 - [x] 12c Pump control (built 2026-10-13, field check open): the pump header is driven only
