@@ -491,8 +491,9 @@ allow-listed chip + revision + board + header, each read back and bounded.
       louder (2026-10-01), so the case hub is on SYS_FAN1 with no speed wire: Vyro drives it but
       cannot see it spin, so a stalled fan there is not detectable. Return to BIOS passed
       (2026-10-13): `vyro-fans` reads mode 0x00 afterwards. Curve passed (2026-10-13): the fans
-      followed a stress test and slowed after it. Open: killing the service, the 50 °C override,
-      footprint.
+      followed a stress test and slowed after it. Killing `vyro-service.exe` with control on
+      brought the BIOS curve back (2026-10-13; the restarted service restores the saved state).
+      Open: control resumes after that restart, the 50 °C override, footprint.
 - [x] Board names match HWiNFO: temperature channel 4 is "VR" (was "CPU Socket"; now
       `temp_vrm`, id `board.temp4` unchanged); voltage channel 13 (0x13A) added as "VTT" (2.046 V).
 - [x] 12c Pump control (built 2026-10-13, field check open): the pump header is driven only
