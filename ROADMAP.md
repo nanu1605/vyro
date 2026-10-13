@@ -567,7 +567,10 @@ allow-listed chip + revision + board + header, each read back and bounded.
       Done through the checks above. Headers: CPU at 30 / 40 / 100 %, pump at 60 / 100 %,
       System Fan 1 at 100 % (heard, no speed wire); System Fan 2–3 have nothing connected,
       and 50 % was not run as its own step. The rest passed as listed, and the footprint is
-      125 MB with the peak fixed. M7 is complete; next is the 0.2.0 release.
+      125 MB with the peak fixed. M7 is complete.
+- [x] **0.2.0 released** (2026-10-13): `v2` merged into `main` (117d5eb); Release run
+      38372955933 (started from the Actions tab on `main`) tagged `v0.2.0` and published the
+      9.7 MB MSI, `latest.json` and checksums here and to `nanu1605/vyro-releases`.
 
 ### P13 — Automatic game profiles (M8 → 0.3)
 - [ ] Game → per-game profile, cooling, overlay layout and poll rate; restore on exit.
