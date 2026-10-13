@@ -1,13 +1,16 @@
 //! Gaming (P10): frame rate and frame times of the game in the foreground, from PresentMon's
 //! ETW capture. The app names the process to capture ([`CaptureTarget`]); the engine runs the
 //! capture, puts the live figures in the snapshot ([`GameSnapshot`]) and the `game.*` sensors,
-//! and keeps a summary of every session ([`GameSession`]).
+//! and keeps a summary of every session ([`GameSession`]). With a history store, every tick of
+//! a session and its markers are kept too, for the replay (P15, [`replay`], [`markers`]).
 
 pub mod auto;
 pub mod capture;
 pub mod csv;
 pub mod foreground;
+pub mod markers;
 pub mod overlay;
+pub mod replay;
 pub mod stats;
 
 use std::path::PathBuf;
@@ -17,6 +20,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::history::History;
 use crate::profiles::Profile;
 use crate::provider::{BoxError, Provider};
 use crate::registry::{Group, Registry, SensorDesc, SensorKey, Source, Unit};
@@ -24,6 +28,8 @@ use crate::snapshot::SensorSnapshot;
 use crate::{lock, unix_now};
 use capture::{Capture, End, Launch};
 use csv::Frame;
+use markers::{Detector, Frames, GameEvent};
+use replay::GameSample;
 use stats::{Totals, Window};
 
 /// Game sessions kept.
@@ -33,6 +39,8 @@ pub const MIN_SESSION_SECS: i64 = 30;
 /// No frame for this long: the game is paused, minimized or loading.
 const STALE: Duration = Duration::from_secs(3);
 pub const SESSIONS_FILE: &str = "games.json";
+/// `games.json` once its sessions are in the history store.
+pub const IMPORTED_FILE: &str = "games.json.imported";
 
 /// The process the app wants captured (the fullscreen app in the foreground).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -132,10 +140,13 @@ pub struct FramePoint {
 }
 
 /// Summary of one game session, kept in the engine's data folder.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct GameSession {
+    /// In the history store (0: not stored).
+    #[serde(default)]
+    pub id: i64,
     pub app: String,
     pub runtime: Option<String>,
     /// Unix seconds.
@@ -154,6 +165,12 @@ pub struct GameSession {
     /// Profile in force when it ended (logged since 0.3).
     #[serde(default)]
     pub profile: Option<Profile>,
+    /// Unix seconds (since 0.3).
+    #[serde(default)]
+    pub ended: Option<i64>,
+    /// Its replay is kept (since 0.3; the oldest go when the history store is full).
+    #[serde(default)]
+    pub has_timeline: bool,
 }
 
 /// Running mean and maximum of a reading over the session.
@@ -196,12 +213,55 @@ struct Session {
     cpu_usage: Track,
     gpu_usage: Track,
     profile: Option<Profile>,
+    /// In the history store.
+    id: Option<i64>,
+    begun: Instant,
+    /// Time of the last sample, ms from `begun`.
+    sampled: Option<i64>,
+    detector: Detector,
 }
 
 impl Session {
+    fn new(
+        target: CaptureTarget,
+        generation: u64,
+        started: i64,
+        context: Option<GameContext>,
+    ) -> Self {
+        Self {
+            target,
+            generation,
+            capture: None,
+            started,
+            app: None,
+            runtime: None,
+            present_mode: None,
+            window: Window::default(),
+            totals: Totals::default(),
+            last_frame: None,
+            failed: None,
+            ended: false,
+            cpu_temp: Track::default(),
+            gpu_temp: Track::default(),
+            cpu_usage: Track::default(),
+            gpu_usage: Track::default(),
+            profile: context.map(|c| c.profile),
+            id: None,
+            begun: Instant::now(),
+            sampled: None,
+            detector: Detector::new(context),
+        }
+    }
+
+    /// Milliseconds since the session began.
+    fn now_ms(&self) -> i64 {
+        i64::try_from(self.begun.elapsed().as_millis()).unwrap_or(i64::MAX)
+    }
+
     fn summary(&self) -> GameSession {
         let t = &self.totals;
         GameSession {
+            id: self.id.unwrap_or(0),
             app: self.app.clone().unwrap_or_else(|| self.target.name.clone()),
             runtime: self.runtime.clone(),
             started: self.started,
@@ -217,8 +277,19 @@ impl Session {
             cpu_usage_avg: self.cpu_usage.avg(),
             gpu_usage_avg: self.gpu_usage.avg(),
             profile: self.profile,
+            ended: None,
+            has_timeline: self.id.is_some(),
         }
     }
+}
+
+/// What a tick or a context change leaves for the history store, written once the gaming lock
+/// is released (the store's lock is always taken last).
+struct Record {
+    id: i64,
+    sample: Option<GameSample>,
+    events: Vec<GameEvent>,
+    summary: Option<GameSession>,
 }
 
 struct Inner {
@@ -234,13 +305,28 @@ struct Inner {
 pub struct Gaming {
     inner: Arc<Mutex<Inner>>,
     launch: Launch,
+    /// The JSON log, used only without a history store.
     path: Option<PathBuf>,
+    store: Option<Arc<Mutex<History>>>,
 }
 
 impl Gaming {
-    /// `dir`: where the session log lives (`None`: memory only).
-    pub fn new(launch: Launch, dir: Option<&std::path::Path>) -> Arc<Self> {
-        let path = dir.map(|d| d.join(SESSIONS_FILE));
+    /// `store`: the history store, which keeps sessions with their replays; a `games.json`
+    /// in `dir` is moved into it once. Without one, sessions are kept in `dir/games.json`
+    /// (`None`: memory only).
+    pub fn new(
+        launch: Launch,
+        dir: Option<&std::path::Path>,
+        store: Option<Arc<Mutex<History>>>,
+    ) -> Arc<Self> {
+        let json = dir.map(|d| d.join(SESSIONS_FILE));
+        let path = match (&store, json) {
+            (Some(store), Some(json)) => {
+                import(store, &json);
+                None
+            }
+            (_, json) => json,
+        };
         let sessions = path.as_deref().map(load).unwrap_or_default();
         Arc::new(Self {
             inner: Arc::new(Mutex::new(Inner {
@@ -251,6 +337,7 @@ impl Gaming {
             })),
             launch,
             path,
+            store,
         })
     }
 
@@ -280,28 +367,19 @@ impl Gaming {
             return;
         };
         log::info!("gaming: capturing {} ({})", target.name, target.pid);
+        let context = lock(&self.inner).context;
+        let mut session = Session::new(target.clone(), 0, unix_now(), context);
+        if let Some(store) = &self.store {
+            session.id = lock(store)
+                .game_begin(&session.summary())
+                .inspect_err(|e| log::warn!("gaming: cannot store the session: {e}"))
+                .ok();
+        }
         let generation = {
             let mut inner = lock(&self.inner);
             inner.generation += 1;
-            inner.session = Some(Session {
-                target: target.clone(),
-                generation: inner.generation,
-                capture: None,
-                started: unix_now(),
-                app: None,
-                runtime: None,
-                present_mode: None,
-                window: Window::default(),
-                totals: Totals::default(),
-                last_frame: None,
-                failed: None,
-                ended: false,
-                cpu_temp: Track::default(),
-                gpu_temp: Track::default(),
-                cpu_usage: Track::default(),
-                gpu_usage: Track::default(),
-                profile: inner.context.map(|c| c.profile),
-            });
+            session.generation = inner.generation;
+            inner.session = Some(session);
             inner.generation
         };
         let frames = Arc::clone(&self.inner);
@@ -361,17 +439,54 @@ impl Gaming {
         }
     }
 
-    /// The app's view of the game: in front, profile, overlay.
+    /// The app's view of the game: in front, profile, overlay. Changes during a session are
+    /// marked on its replay.
     pub fn set_context(&self, context: Option<GameContext>) {
-        let mut inner = lock(&self.inner);
-        inner.context = context;
-        if let (Some(s), Some(c)) = (inner.session.as_mut(), context) {
-            s.profile = Some(c.profile);
+        let record = {
+            let mut inner = lock(&self.inner);
+            inner.context = context;
+            inner.session.as_mut().and_then(|s| {
+                if let Some(c) = context {
+                    s.profile = Some(c.profile);
+                }
+                let t = s.now_ms();
+                let events = s.detector.context(t, context);
+                s.id.map(|id| Record {
+                    id,
+                    sample: None,
+                    events,
+                    summary: None,
+                })
+            })
+        };
+        self.store(record);
+    }
+
+    /// Hands a tick's sample and markers to the history store.
+    fn store(&self, record: Option<Record>) {
+        let (Some(store), Some(r)) = (&self.store, record) else {
+            return;
+        };
+        let mut h = lock(store);
+        if let Some(sample) = r.sample {
+            h.game_sample(r.id, sample);
+        }
+        for e in r.events {
+            h.game_event(r.id, e);
+        }
+        if let Some(summary) = &r.summary {
+            h.game_update(r.id, summary);
         }
     }
 
     /// The session log, newest first.
     pub fn sessions(&self) -> Vec<GameSession> {
+        if let Some(store) = &self.store {
+            match lock(store).game_sessions(MAX_SESSIONS) {
+                Ok(list) => return list,
+                Err(e) => log::warn!("gaming: sessions: {e}"),
+            }
+        }
         lock(&self.inner).sessions.iter().rev().cloned().collect()
     }
 
@@ -381,7 +496,20 @@ impl Gaming {
             c.stop();
         }
         let summary = s.summary();
-        if summary.secs < MIN_SESSION_SECS {
+        let keep = summary.secs >= MIN_SESSION_SECS;
+        if let (Some(store), Some(id)) = (&self.store, s.id) {
+            let ended = s.started + s.now_ms() / 1000;
+            let mut h = lock(store);
+            let done = if keep {
+                h.game_finish(id, ended, &summary)
+            } else {
+                h.game_discard(id)
+            };
+            if let Err(e) = done {
+                log::warn!("gaming: cannot store the session: {e}");
+            }
+        }
+        if !keep {
             return;
         }
         log::info!(
@@ -390,6 +518,9 @@ impl Gaming {
             summary.secs,
             summary.avg_fps.unwrap_or(0.0)
         );
+        if self.store.is_some() {
+            return;
+        }
         let all = {
             let mut inner = lock(&self.inner);
             inner.sessions.push(summary);
@@ -407,6 +538,13 @@ impl Gaming {
     /// This tick's view of the capture; also tracks temperatures and load for the summary.
     /// Ends a session whose game has exited.
     fn tick(&self, snap: &SensorSnapshot) -> Option<GameSnapshot> {
+        let (game, record) = self.tick_locked(snap)?;
+        self.store(record);
+        Some(game)
+    }
+
+    /// [`Self::tick`] under the gaming lock: the snapshot and what goes to the store.
+    fn tick_locked(&self, snap: &SensorSnapshot) -> Option<(GameSnapshot, Option<Record>)> {
         let mut inner = lock(&self.inner);
         let s = inner.session.as_mut()?;
         if s.ended {
@@ -440,7 +578,23 @@ impl Gaming {
         } else {
             stats::Live::default()
         };
-        Some(GameSnapshot {
+        // The replay: a sample and the markers of every tick with frames.
+        let record = match s.id {
+            Some(id) if fresh => {
+                let t = s.now_ms();
+                let since = s.sampled.map_or(1000, |at| t - at);
+                s.sampled = Some(t);
+                let frames = Frames::new(live.fps, &live.timeline, since);
+                Some(Record {
+                    id,
+                    sample: Some(GameSample::new(t, &frames, live.frame_ms, snap)),
+                    events: s.detector.step(t, &frames, snap),
+                    summary: Some(s.summary()),
+                })
+            }
+            _ => None,
+        };
+        let game = GameSnapshot {
             state,
             detail: s.failed.clone(),
             app: s.app.clone().unwrap_or_else(|| s.target.name.clone()),
@@ -461,12 +615,37 @@ impl Gaming {
             session_fps: s.totals.fps(),
             session_low1_fps: s.totals.low(99.0),
             timeline: live.timeline,
-        })
+        };
+        Some((game, record))
     }
 
     /// Ends the running session (engine shutting down).
     pub fn stop(&self) {
         self.set_target(None);
+    }
+}
+
+/// Moves the sessions of a `games.json` (0.2) into the history store and renames the file.
+fn import(store: &Mutex<History>, json: &std::path::Path) {
+    if !json.exists() {
+        return;
+    }
+    let sessions = load(json);
+    match lock(store).game_import(&sessions) {
+        Ok(()) => {
+            log::info!(
+                "gaming: {} session(s) moved to the history store",
+                sessions.len()
+            );
+            // Windows will not rename over an earlier import's file. The sessions are in the
+            // store now: the log must not stay, or they would be imported again.
+            let done = json.with_file_name(IMPORTED_FILE);
+            let _ = std::fs::remove_file(&done);
+            if let Err(e) = std::fs::rename(json, &done).or_else(|_| std::fs::remove_file(json)) {
+                log::warn!("gaming: cannot move {} aside: {e}", json.display());
+            }
+        }
+        Err(e) => log::warn!("gaming: cannot import {}: {e}", json.display()),
     }
 }
 
@@ -553,10 +732,129 @@ mod tests {
         })
     }
 
+    /// A finished minute of Long.exe at 100 FPS.
+    fn long_session(id: Option<i64>) -> Session {
+        let context = GameContext {
+            in_front: true,
+            profile: Profile::Gaming,
+            auto: true,
+            overlay: false,
+        };
+        let mut s = Session::new(target(5).unwrap(), 0, 1000, Some(context));
+        s.app = Some("Long.exe".into());
+        s.runtime = Some("DXGI".into());
+        s.id = id;
+        let mut at = 0.0;
+        while at < 60_000.0 {
+            s.totals.push(&Frame {
+                app: "Long.exe".into(),
+                pid: 5,
+                runtime: "DXGI".into(),
+                present_mode: None,
+                start_ms: at,
+                frame_ms: 10.0,
+                cpu_busy_ms: Some(3.0),
+                gpu_busy_ms: Some(4.0),
+                display_latency_ms: None,
+                displayed_ms: None,
+            });
+            at += 10.0;
+        }
+        s.cpu_temp.add(Some(70.0));
+        s.cpu_temp.add(Some(80.0));
+        s
+    }
+
+    #[test]
+    fn with_a_history_store_sessions_keep_their_replay() {
+        let dir = tempfile::tempdir().unwrap();
+        // A 0.2 log is moved into the store.
+        let old = vec![GameSession {
+            app: "Old.exe".into(),
+            started: 500,
+            secs: 3600,
+            ..GameSession::default()
+        }];
+        save(&dir.path().join(SESSIONS_FILE), &old).unwrap();
+        let store = Arc::new(Mutex::new(
+            History::open_in_memory(crate::HistoryConfig::default()).unwrap(),
+        ));
+        let gaming = Gaming::new(
+            capture::simulated("SimGame.exe"),
+            Some(dir.path()),
+            Some(Arc::clone(&store)),
+        );
+        assert!(!dir.path().join(SESSIONS_FILE).exists());
+        assert!(dir.path().join(IMPORTED_FILE).exists());
+        assert_eq!(gaming.sessions()[0].app, "Old.exe");
+        // A second log (back to 0.2 and up again) replaces the earlier import's file.
+        save(&dir.path().join(SESSIONS_FILE), &old).unwrap();
+        Gaming::new(
+            capture::simulated("x"),
+            Some(dir.path()),
+            Some(Arc::clone(&store)),
+        );
+        assert!(!dir.path().join(SESSIONS_FILE).exists());
+        assert_eq!(gaming.sessions().len(), 2);
+        let again = gaming.sessions()[0].id;
+        lock(&store).game_discard(again).unwrap();
+
+        // A live capture records a sample per tick and marks an alt-tab.
+        let ctx = |in_front| {
+            Some(GameContext {
+                in_front,
+                profile: Profile::Gaming,
+                auto: true,
+                overlay: false,
+            })
+        };
+        gaming.set_context(ctx(true));
+        gaming.set_target(target(77));
+        let mut reg = Registry::new();
+        let mut p = GameProvider::new(Arc::clone(&gaming));
+        p.init(&mut reg).unwrap();
+        let mut snap = SensorSnapshot::default();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut ticks = 0;
+        while ticks < 3 {
+            p.poll(&mut reg, &mut snap).unwrap();
+            if snap.game.as_ref().unwrap().state == CaptureState::Capturing {
+                ticks += 1;
+            }
+            assert!(Instant::now() < deadline, "no frames");
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        gaming.set_context(ctx(false));
+        let id = lock(&gaming.inner).session.as_ref().unwrap().id.unwrap();
+        let tl = lock(&store).game_timeline(id, 100).unwrap().unwrap();
+        assert_eq!(tl.samples.len(), 3);
+        assert!(tl.samples.iter().all(|s| s.fps.is_some()));
+        assert_eq!(tl.events.len(), 1);
+        assert_eq!(tl.events[0].marker, markers::Marker::Left);
+        // Too short: forgotten when it ends.
+        gaming.set_target(None);
+        assert!(lock(&store).game_timeline(id, 100).unwrap().is_none());
+
+        // A long one is kept with its summary.
+        let s = long_session(None);
+        let id = lock(&store).game_begin(&s.summary()).unwrap();
+        let mut s = s;
+        s.id = Some(id);
+        gaming.finish(s);
+        let list = gaming.sessions();
+        assert_eq!(list.len(), 2);
+        assert_eq!(
+            (list[0].id, list[0].app.as_str(), list[0].secs),
+            (id, "Long.exe", 60)
+        );
+        assert!(list[0].has_timeline && list[0].ended.is_some());
+        assert!(!list[1].has_timeline, "imported: summary only");
+    }
+
     #[test]
     fn captures_reports_and_logs_a_session() {
         let dir = tempfile::tempdir().unwrap();
-        let gaming = Gaming::new(capture::simulated("SimGame.exe"), Some(dir.path()));
+        let gaming = Gaming::new(capture::simulated("SimGame.exe"), Some(dir.path()), None);
         let mut reg = Registry::new();
         let mut p = GameProvider::new(Arc::clone(&gaming));
         p.init(&mut reg).unwrap();
@@ -592,44 +890,7 @@ mod tests {
         assert!(gaming.sessions().is_empty());
 
         // A long session is logged and saved.
-        let mut s = Session {
-            target: target(5).unwrap(),
-            generation: 0,
-            capture: None,
-            started: 1000,
-            app: Some("Long.exe".into()),
-            runtime: Some("DXGI".into()),
-            present_mode: None,
-            window: Window::default(),
-            totals: Totals::default(),
-            last_frame: None,
-            failed: None,
-            ended: false,
-            cpu_temp: Track::default(),
-            gpu_temp: Track::default(),
-            cpu_usage: Track::default(),
-            gpu_usage: Track::default(),
-            profile: Some(Profile::Gaming),
-        };
-        let mut at = 0.0;
-        while at < 60_000.0 {
-            s.totals.push(&Frame {
-                app: "Long.exe".into(),
-                pid: 5,
-                runtime: "DXGI".into(),
-                present_mode: None,
-                start_ms: at,
-                frame_ms: 10.0,
-                cpu_busy_ms: Some(3.0),
-                gpu_busy_ms: Some(4.0),
-                display_latency_ms: None,
-                displayed_ms: None,
-            });
-            at += 10.0;
-        }
-        s.cpu_temp.add(Some(70.0));
-        s.cpu_temp.add(Some(80.0));
-        gaming.finish(s);
+        gaming.finish(long_session(None));
         let logged = gaming.sessions();
         assert_eq!(logged.len(), 1);
         assert_eq!(logged[0].secs, 60);
@@ -637,14 +898,14 @@ mod tests {
         assert_eq!(logged[0].cpu_temp_max, Some(80.0));
         assert_eq!(logged[0].profile, Some(Profile::Gaming));
         assert!((logged[0].avg_fps.unwrap() - 100.0).abs() < 1e-6);
-        let again = Gaming::new(capture::simulated("x"), Some(dir.path()));
+        let again = Gaming::new(capture::simulated("x"), Some(dir.path()), None);
         assert_eq!(again.sessions(), logged);
     }
 
     #[test]
     fn a_failed_start_is_reported() {
         let fail: Launch = Arc::new(|_| Err(std::io::Error::other("PresentMon.exe missing")));
-        let gaming = Gaming::new(fail, None);
+        let gaming = Gaming::new(fail, None, None);
         gaming.set_target(target(3));
         let g = gaming.tick(&SensorSnapshot::default()).unwrap();
         assert_eq!(g.state, CaptureState::Unavailable);

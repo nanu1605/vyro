@@ -5,7 +5,11 @@ import type { Profile } from "./Profile";
 /**
  * Summary of one game session, kept in the engine's data folder.
  */
-export type GameSession = { app: string, runtime: string | null, 
+export type GameSession = { 
+/**
+ * In the history store (0: not stored).
+ */
+id: number, app: string, runtime: string | null, 
 /**
  * Unix seconds.
  */
@@ -13,4 +17,12 @@ started: number, secs: number, frames: number, avgFps: number | null, low1Fps: n
 /**
  * Profile in force when it ended (logged since 0.3).
  */
-profile: Profile | null, };
+profile: Profile | null, 
+/**
+ * Unix seconds (since 0.3).
+ */
+ended: number | null, 
+/**
+ * Its replay is kept (since 0.3; the oldest go when the history store is full).
+ */
+hasTimeline: boolean, };

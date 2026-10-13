@@ -639,7 +639,46 @@ taken in the field check.
       "overlay unavailable"; "Vyro itself" with the overlay shown and hidden.
 
 ### P15 — Game session replay (M8)
-- [ ] `game_sessions` / `game_events`, timeline with event markers and history context.
+Owner's choice (2026-10-13): full detail, every reading of the last 100 sessions, inside the
+200 MB history cap. Budget: no new process or thread; one sample per tick while a game is
+captured, written with the history store's existing 10 s batch (≤ 0.4 MB per hour played);
+a 2 h replay keeps the page's JS heap ≤ 10 MB and its total within 25 MB of the Dashboard;
+nothing is loaded until a replay is opened. The history database moves to schema v2 (three
+new tables, added in place): going back to 0.2 would turn its history off, since 0.2 refuses
+a newer schema.
+
+- [x] Built (2026-10-13, branch `v2-p15-replay`, bd7b43a; 14df117 moves `games.json` aside even
+      over an earlier import, which Windows will not rename over):
+      - Store (`history::games`, schema v2): `game_session` (summary as JSON), `game_sample`
+        (one row per tick; readings as scaled integers, about 44 bytes a sample: 80 KB per
+        hour played at 2 s updates, 156 KB at 1 s, 312 KB at 0.5 s) and `game_event`, written
+        with the history's 10 s batch. The running session's summary is refreshed with each
+        batch; a session left open by a crash is closed at its last sample. The newest 100
+        sessions are kept; over the 200 MB cap the oldest data goes first, a replay or history
+        (a dropped replay keeps its summary). 0.2's `games.json` is imported once (summaries
+        only) and renamed `games.json.imported`.
+      - Markers (`gaming::markers`): a frame-rate drop below 60 % of the last 30 s median
+        (after 10 s of frames, until back above 80 %); a stutter, a frame ≥ 3× the median and
+        ≥ 25 ms; CPU and GPU thermal and power limits and other clock limits (CPU current
+        limit, GPU hardware slowdown) when they come on, again only after 30 s off; switching
+        away and back, profile changes, the overlay shown or hidden. Frame-rate markers are
+        10 s apart at least; at most 200 per kind.
+      - IPC protocol 7: session ids, `GameTimeline` (downsampled in the service to ≤ 1500
+        samples, keeping each bucket's slowest stretch and worst frame) and `HistoryWindow`
+        (`History::query_window`: raw within 30 min, 10 s within a day, 1 min within a week).
+      - UI: Replay in the Gaming tab's session list (its code loads on first use): summary,
+        frame rate, frame time, use, temperatures and power on one time axis with a shared
+        crosshair; a marker lane and list with filters; any moment by clicking a chart or with
+        the slider. A moment shows its marker, the game's readings then and a minute either
+        side of the PC's sensor history (or that history older than 7 days is gone). Browser
+        preview: a 2 h replay keeps the JS heap at 5.1–5.8 MB and the page 10–13 MB above the
+        Dashboard; opening and closing it six times does not grow memory; axe clean, no
+        overflow at 390 px.
+- [x] Field check (2026-10-13, MS-7E24), all passed: two sessions with an alt-tab, a profile
+      change, an overlay toggle and heavy load; markers at the right moments and their context
+      matches History; sessions and replays kept after a service restart; disk growth
+      measured. With P13 and P14 also field-checked, M8 is complete; 0.3.0 waits for the
+      owner's go-ahead.
 
 ### P19 — Hardware change detection (M9 → 0.4; first, P16 cites it)
 - [ ] Inventory diffs into `hardware_changes` and a PC change history.

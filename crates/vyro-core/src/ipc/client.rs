@@ -13,8 +13,10 @@ use super::{read_frame, recv, send, Hello, Reply, Request, Role, Welcome, MAX_ME
 use crate::alerts::{AlertFired, AlertRule};
 use crate::engine::EngineApi;
 use crate::fan::{FanConfig, FanEvent, FanStatus};
+use crate::gaming::replay::GameTimeline;
 use crate::gaming::{CaptureTarget, GameContext, GameSession};
 use crate::health::HealthEvent;
+use crate::history::WindowSeries;
 use crate::info::{DriveInfo, PawnIoStatus};
 use crate::profiles::Profile;
 use crate::{lock, HistoryRange, HistorySeries, SensorSnapshot, SensorTree, SnapshotSink};
@@ -360,6 +362,23 @@ impl EngineApi for RemoteEngine {
         self.call(&Request::GameSessions)
     }
 
+    fn game_timeline(&self, id: i64) -> Result<Option<GameTimeline>, String> {
+        self.call(&Request::GameTimeline { id })
+    }
+
+    fn history_window(
+        &self,
+        metrics: &[String],
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<WindowSeries>, String> {
+        self.call(&Request::HistoryWindow {
+            metrics: metrics.to_vec(),
+            from,
+            to,
+        })
+    }
+
     fn fan_status(&self) -> Result<FanStatus, String> {
         self.call(&Request::FanStatus)
     }
@@ -508,6 +527,14 @@ mod tests {
         );
         assert!(remote.set_ping_host("bad host!").is_err());
         assert_eq!(remote.insights().unwrap_err(), "history store unavailable");
+        assert_eq!(
+            remote.game_timeline(1).unwrap_err(),
+            "history store unavailable"
+        );
+        assert!(remote
+            .history_window(&["cpu.usage.total".into()], 100, 10_000)
+            .unwrap_err()
+            .starts_with("at most"));
         assert!(!remote.drives().unwrap().is_empty());
         // A real answer on an elevated Windows runner, `None` elsewhere: either way it arrives.
         assert!(remote.bitlocker_system_drive().is_ok());

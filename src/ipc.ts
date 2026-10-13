@@ -6,7 +6,7 @@ import { listen } from '@tauri-apps/api/event';
 import { evaluate } from './curve';
 import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
-import type { AlertFired, AlertRule, BackendStatus, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, Insight, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insight, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -59,6 +59,21 @@ export async function getSensorTree(snap: SensorSnapshot | null): Promise<Sensor
 export async function getGameSessions(): Promise<GameSession[]> {
   if (!inTauri) return (await import('./sim-game')).SAMPLE_SESSIONS;
   return invoke<GameSession[]>('get_game_sessions');
+}
+
+/** A logged session with its samples and markers; `null` once it is gone. */
+export async function getGameTimeline(id: number): Promise<GameTimeline | null> {
+  if (!inTauri) return (await import('./sim-replay')).simTimeline(id);
+  return invoke<GameTimeline | null>('get_game_timeline', { id });
+}
+
+/** Sensor history from `from` to `to` (unix seconds): the context of a moment in a replay. */
+export async function getHistoryWindow(metrics: string[], from: number, to: number): Promise<WindowSeries[]> {
+  if (!inTauri) {
+    const { simWindow } = await import('./sim-tree');
+    return metrics.map((m) => simWindow(m, from, to));
+  }
+  return invoke<WindowSeries[]>('get_history_window', { metrics, from: Math.floor(from), to: Math.ceil(to) });
 }
 
 // Browser preview only: a simulated reference board (MS-7E24) whose fan configuration lives in
