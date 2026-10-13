@@ -614,7 +614,8 @@ page's renderer is 42–46 MB in every mode (JS heap 2.1–2.3 MB, 68–174 DOM 
 mode changes about 4 MB; most of it is the WebView's fixed cost. The figure on Windows is
 taken in the field check.
 
-- [x] Built (2026-10-13, branch `v2-p14-overlay`), field check open:
+- [x] Built (2026-10-13, branch `v2-p14-overlay`, df67965; with 0d77a60, which marks fan control
+      off before the BIOS settings go back, a race the Windows CI run found):
       - `vyro_core::gaming::overlay`: `OverlayMode` (Minimal, Performance, Full, Graph),
         `OverlayMetric` (13 readings: FPS, 1 % and 0.1 % lows, frame time, latency, CPU and
         GPU use, temperature and power, VRAM, what limits the frame rate), each mode's
@@ -633,9 +634,9 @@ taken in the field check.
       - UI: `OverlayPlate` (shared by the overlay window and the preview), canvas
         `OverlayGraph`, Settings → Overlay card with a live preview over a stand-in game
         scene, and per-game mode in the Game profiles card.
-- [ ] Field check (MS-7E24): the four modes over a borderless game; changes apply live; the
-      game keeps input focus; exclusive fullscreen still reports "overlay unavailable";
-      "Vyro itself" with the overlay shown and hidden.
+- [x] Field check (2026-10-13, MS-7E24), all passed: the four modes over a borderless game;
+      changes apply live; the game keeps input focus; exclusive fullscreen still reports
+      "overlay unavailable"; "Vyro itself" with the overlay shown and hidden.
 
 ### P15 — Game session replay (M8)
 - [ ] `game_sessions` / `game_events`, timeline with event markers and history context.
