@@ -246,6 +246,7 @@ impl Poller {
 
         if let Some(fans) = &self.fans {
             fans.on_tick(|id| reg.get(id).and_then(|s| s.value));
+            snap.fan_control = fans.brief();
         }
 
         let (cpu_key, ram_key) = *self.app_keys.get_or_insert_with(|| {

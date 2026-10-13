@@ -2,6 +2,7 @@
 import type { FanCapability } from "./FanCapability";
 import type { FanConfig } from "./FanConfig";
 import type { HeaderStatus } from "./HeaderStatus";
+import type { Profile } from "./Profile";
 
 export type FanStatus = { capability: FanCapability, config: FanConfig, 
 /**
@@ -15,4 +16,8 @@ overrideReason: string | null, lastError: string | null, headers: Array<HeaderSt
 /**
  * Lowest speed for any header treated as a pump.
  */
-pumpMinPct: number, };
+pumpMinPct: number, 
+/**
+ * The profile whose header settings are in force.
+ */
+profile: Profile, };

@@ -519,8 +519,25 @@ allow-listed chip + revision + board + header, each read back and bounded.
 - [x] 12d Field check (2026-10-13, MS-7E24): sleep and wake with control on (settings back
       after waking), reboot with control on (control resumes), uninstall with control on (BIOS
       curve after removal) all passed. Not run: MSI Center fighting Vyro (covered by tests).
-- [ ] 12e Curves per profile, `fan_profiles` / `fan_control_events`, "hardware control active"
-      indicator with one-click restore; off by default.
+- [x] 12e (built 2026-10-13, field check open):
+      - Per-profile fan settings: `FanConfig.profiles` holds the header settings of profiles
+        that don't use the shared ones. The app sends the profile in use (`SetFanProfile`) on
+        start and on every change. The service keeps it in `fan-profile.json` for boot before
+        sign-in. On, off, the limits, pumps and names apply to every profile.
+      - Stored in `fan-control.json` with the rest of the configuration (one atomic file)
+        instead of a `fan_profiles` table.
+      - Fan event log: on and off, Return to BIOS, full speed and back, faults, watchdog,
+        crash recovery, rewrites, sleep and wake, profile changes. Kept in the history store's
+        `event` table under kind `fan` (7 days, 1,000 entries), not a separate
+        `fan_control_events` table, so no migration is needed. Shown in the Cooling tab.
+      - Header names ("Case fans") in `FanConfig.labels`.
+      - Each snapshot carries `fanControl { active, fullSpeed }`. The header chip and the tray
+        follow it: the tooltip reads "fan control on" or "fans at full speed", and the tray
+        menu has "Return fans to BIOS". The app's 5 s fan status poll is gone.
+      - Control is off by default and needs confirmation (from 12b).
+- [ ] 12e Field check: name System Fan 1; give Gaming its own settings and switch to Gaming from
+      the tray (the fans follow it, and an event is logged); tray tooltip and "Return fans to
+      BIOS" while control is on; events kept after a restart.
 - [ ] Field matrix on MS-7E24 (each header 30/50/100 %, curve under load, kill the service,
       forced override, sleep/resume, reboot, uninstall with control on); footprint re-measured.
 

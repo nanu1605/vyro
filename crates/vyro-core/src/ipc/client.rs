@@ -12,10 +12,11 @@ use super::PROTOCOL_VERSION;
 use super::{read_frame, recv, send, Hello, Reply, Request, Role, Welcome, MAX_MESSAGE};
 use crate::alerts::{AlertFired, AlertRule};
 use crate::engine::EngineApi;
-use crate::fan::{FanConfig, FanStatus};
+use crate::fan::{FanConfig, FanEvent, FanStatus};
 use crate::gaming::{CaptureTarget, GameSession};
 use crate::health::HealthEvent;
 use crate::info::{DriveInfo, PawnIoStatus};
+use crate::profiles::Profile;
 use crate::{lock, HistoryRange, HistorySeries, SensorSnapshot, SensorTree, SnapshotSink};
 
 /// Longest pause between reconnection attempts.
@@ -356,6 +357,14 @@ impl EngineApi for RemoteEngine {
 
     fn restore_fans(&self) -> Result<(), String> {
         self.call(&Request::RestoreFans)
+    }
+
+    fn fan_events(&self) -> Result<Vec<FanEvent>, String> {
+        self.call(&Request::FanEvents)
+    }
+
+    fn set_fan_profile(&self, profile: Profile) -> Result<(), String> {
+        self.call(&Request::SetFanProfile { profile })
     }
 
     /// Stops reconnecting; the service keeps running.

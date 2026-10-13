@@ -97,6 +97,7 @@ fn main() {
             commands::get_fan_status,
             commands::set_fan_config,
             commands::restore_fans,
+            commands::get_fan_events,
             updates::get_update_status,
             updates::check_for_updates,
             updates::install_update,

@@ -27,9 +27,9 @@
   import { animator } from './anim';
   import { fmt, fmtGB } from './format';
   import { loadUpdates, update } from './updates.svelte';
-  import { getBackendStatus, getFanStatus, getPawnIoStatus, inTauri, onBackendStatus, onSensors, restoreFans, setUiVisible } from './ipc';
+  import { getBackendStatus, getPawnIoStatus, inTauri, onBackendStatus, onSensors, restoreFans, setUiVisible } from './ipc';
   import { loadPrefs, profileSpec, temp, tempOrNull, tempText, tempUnit } from './prefs.svelte';
-  import type { AlertFired, BackendStatus, FanStatus, PawnIoStatus, SensorSnapshot } from './types';
+  import type { AlertFired, BackendStatus, PawnIoStatus, SensorSnapshot } from './types';
 
   const TABS = [
     { id: 'dashboard', label: 'Dashboard' },
@@ -158,25 +158,16 @@
   const game = $derived(snap?.game ?? null);
   const cpuFan = $derived(snap?.fans.find((f) => f.kind === 'fan') ?? null);
 
-  // Fan control (P12): the header shows whenever Vyro drives fans, from any tab.
-  let fans = $state.raw<FanStatus | null>(null);
-  const loadFans = () =>
-    getFanStatus(snap)
-      .then((s) => (fans = s))
-      .catch(() => {});
+  // Fan control (P12): the header shows whenever Vyro drives fans, from any tab. Each snapshot
+  // says so; nothing is polled.
+  const fans = $derived(snap?.fanControl ?? null);
   async function fansToBios(): Promise<void> {
     await restoreFans().catch(() => {});
-    loadFans();
   }
 
   onMount(() => {
     visited[tab] = true;
     loadPawnIo();
-    loadFans();
-    // The Cooling tab refreshes every tick while shown; elsewhere every 5 s is enough.
-    const fanTimer = setInterval(() => {
-      if (!document.hidden && tab !== 'cooling') loadFans();
-    }, 5000);
     void loadPrefs().catch(() => {});
     void loadUpdates().catch(() => {});
     let stop: (() => void) | undefined;
@@ -209,7 +200,6 @@
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       disposed = true;
-      clearInterval(fanTimer);
       stop?.();
       stopBackend?.();
       document.removeEventListener('visibilitychange', onVisibility);
@@ -243,8 +233,8 @@
     {#if fans?.active}
       <div class="fan-chip" role="status">
         <button type="button" class="chip-open" onclick={() => select('cooling')}>
-          <span class="fan-dot" class:hot={fans.overrideReason} aria-hidden="true"></span>
-          {fans.overrideReason ? 'Fans at full speed' : 'Fan control active'}
+          <span class="fan-dot" class:hot={fans.fullSpeed} aria-hidden="true"></span>
+          {fans.fullSpeed ? 'Fans at full speed' : 'Fan control active'}
         </button>
         <button type="button" class="chip-bios" onclick={fansToBios} title="Hand every fan back to the BIOS">
           Return to BIOS
@@ -256,7 +246,7 @@
   <main>
     {#if visited.cooling}
       <div id="panel-cooling" role="tabpanel" aria-labelledby="tab-cooling" hidden={tab !== 'cooling'}>
-        <CoolingPanel {snap} {backend} active={tab === 'cooling'} onstatus={(s) => (fans = s)} />
+        <CoolingPanel {snap} {backend} active={tab === 'cooling'} />
       </div>
     {/if}
     <div id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard" hidden={tab !== 'dashboard'}>

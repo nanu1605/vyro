@@ -3,19 +3,28 @@
   import Card from './Card.svelte';
   import CurveEditor from './CurveEditor.svelte';
   import { defaultCurve, PRESETS, PUMP_CURVE, PUMP_SPEEDS, type Preset } from '../curve';
-  import { fmt } from '../format';
-  import { getFanStatus, getSensorTree, restoreFans, setFanConfig } from '../ipc';
+  import { fmt, fmtDateTime } from '../format';
+  import { getFanEvents, getFanStatus, getProfiles, getSensorTree, restoreFans, setFanConfig } from '../ipc';
   import { fmtTemp } from '../prefs.svelte';
-  import type { BackendStatus, FanConfig, FanStatus, HeaderMode, HeaderStatus, SensorSnapshot } from '../types';
+  import type {
+    BackendStatus,
+    FanConfig,
+    FanEvent,
+    FanStatus,
+    HeaderConfig,
+    HeaderMode,
+    HeaderStatus,
+    Profile,
+    ProfileSpec,
+    SensorSnapshot,
+  } from '../types';
 
   interface Props {
     snap: SensorSnapshot | null;
     backend: BackendStatus | null;
     active: boolean;
-    /** Tells the header when Vyro drives fans (for the "fan control active" chip). */
-    onstatus?: (s: FanStatus) => void;
   }
-  let { snap, backend, active, onstatus }: Props = $props();
+  let { snap, backend, active }: Props = $props();
 
   let status = $state<FanStatus | null>(null);
   /** The configuration being edited; `null` follows the engine's. */
@@ -24,17 +33,27 @@
   let busy = $state(false);
   let sources = $state<Array<{ id: string; name: string }>>([]);
   let confirm = $state<HTMLDialogElement | null>(null);
+  let profiles = $state<ProfileSpec[]>([]);
+  let events = $state<FanEvent[]>([]);
+  /** Which header settings the cards edit: every profile's, or one profile's own. `null`
+   * follows the profile in use. */
+  let slotPick = $state<Profile | 'all' | null>(null);
+  /** Header being renamed, and the name typed so far. */
+  let renaming = $state<number | null>(null);
+  let nameDraft = $state('');
 
   const config = $derived(draft ?? status?.config ?? null);
+  const inUse = $derived(status?.profile ?? 'desktop');
+  const slot = $derived<Profile | 'all'>(slotPick ?? (config?.profiles[inUse] ? inUse : 'all'));
+  /** The slot has header settings of its own (every profile's always does). */
+  const editable = $derived(slot === 'all' || config?.profiles[slot] != null);
+  const profileName = (p: Profile) => profiles.find((x) => x.id === p)?.name ?? p;
   const dirty = $derived(draft != null);
   const writable = $derived(status?.capability.state === 'writable');
 
   function refresh(): void {
     getFanStatus(snap)
-      .then((s) => {
-        status = s;
-        onstatus?.(s);
-      })
+      .then((s) => (status = s))
       .catch((e: unknown) => (error = String(e)));
   }
   // Every tick while shown.
@@ -43,6 +62,30 @@
     if (!active) return;
     void ts;
     untrack(refresh);
+  });
+  // Profile names, loaded once.
+  $effect(() => {
+    if (!active || profiles.length) return;
+    untrack(() =>
+      getProfiles()
+        .then((p) => (profiles = p))
+        .catch(() => {}),
+    );
+  });
+  // The log: when shown, and whenever fan control changes state.
+  const eventKey = $derived(
+    status
+      ? `${status.config.enabled}|${status.active}|${status.overrideReason}|${status.lastError}|${status.profile}`
+      : '',
+  );
+  $effect(() => {
+    if (!active) return;
+    void eventKey;
+    untrack(() =>
+      getFanEvents()
+        .then((e) => (events = e.slice(-15).reverse()))
+        .catch(() => {}),
+    );
   });
   // Temperature sensors a curve can follow, loaded once.
   $effect(() => {
@@ -67,16 +110,53 @@
     draft = c;
   }
 
+  /** The header list the cards show and edit (a profile without its own shows the shared one). */
+  function listOf(c: FanConfig): HeaderConfig[] {
+    return slot === 'all' ? c.headers : (c.profiles[slot] ?? c.headers);
+  }
+
   function modeOf(c: FanConfig, index: number): HeaderMode {
-    return c.headers.find((h) => h.index === index)?.mode ?? { mode: 'bios' };
+    return listOf(c).find((h) => h.index === index)?.mode ?? { mode: 'bios' };
   }
 
   function setMode(index: number, mode: HeaderMode): void {
+    if (!editable) return;
     edit((c) => {
-      const h = c.headers.find((x) => x.index === index);
+      const list = listOf(c);
+      const h = list.find((x) => x.index === index);
       if (h) h.mode = mode;
-      else c.headers.push({ index, mode });
+      else list.push({ index, mode });
     });
+  }
+
+  /** Gives a profile its own header settings, starting from the shared ones. */
+  function ownSettings(p: Profile): void {
+    edit((c) => (c.profiles[p] = JSON.parse(JSON.stringify(c.headers)) as HeaderConfig[]));
+    slotPick = p;
+  }
+
+  /** A profile goes back to the shared header settings. */
+  function useShared(p: Profile): void {
+    edit((c) => delete c.profiles[p]);
+    slotPick = p;
+  }
+
+  const labelOf = (c: FanConfig, h: HeaderStatus) => c.labels[h.index] ?? h.name;
+
+  function startRename(h: HeaderStatus): void {
+    if (!config) return;
+    renaming = h.index;
+    nameDraft = config.labels[h.index] ?? '';
+  }
+
+  /** An empty name goes back to the board's. */
+  function saveName(h: HeaderStatus): void {
+    const name = nameDraft.trim().slice(0, 32).trim();
+    edit((c) => {
+      if (name && name !== h.name) c.labels[h.index] = name;
+      else delete c.labels[h.index];
+    });
+    renaming = null;
   }
 
   /** Treated as a pump: the board's pump header, or one the owner marked. */
@@ -102,10 +182,13 @@
   function setPump(h: HeaderStatus, on: boolean): void {
     edit((c) => {
       c.pumps = on ? [...c.pumps.filter((i) => i !== h.index), h.index] : c.pumps.filter((i) => i !== h.index);
-      const entry = c.headers.find((x) => x.index === h.index);
-      if (!entry) return;
-      if (!on && h.kind === 'pump') entry.mode = { mode: 'bios' };
-      else if (on && entry.mode.mode === 'fixed') entry.mode.pct = Math.max(entry.mode.pct, floorOf(c, h));
+      // Every profile's settings: the pump header may only be driven while confirmed.
+      for (const list of [c.headers, ...Object.values(c.profiles)]) {
+        const entry = list?.find((x) => x.index === h.index);
+        if (!entry) continue;
+        if (!on && h.kind === 'pump') entry.mode = { mode: 'bios' };
+        else if (on && entry.mode.mode === 'fixed') entry.mode.pct = Math.max(entry.mode.pct, floorOf(c, h));
+      }
     });
   }
 
@@ -222,11 +305,47 @@
       </div>
     {/if}
 
+    <div class="slot-bar">
+      <label>
+        Fan settings for
+        <select value={slot} onchange={(e) => (slotPick = e.currentTarget.value as Profile | 'all')}>
+          <option value="all">Every profile</option>
+          {#each profiles as p (p.id)}
+            <option value={p.id}
+              >{p.name}{p.id === inUse ? ' (in use)' : ''}{config.profiles[p.id] ? ' · own settings' : ''}</option
+            >
+          {/each}
+        </select>
+      </label>
+      {#if slot !== 'all'}
+        {#if config.profiles[slot]}
+          <button type="button" onclick={() => useShared(slot as Profile)}>Use the settings for every profile</button>
+        {:else}
+          <button type="button" onclick={() => ownSettings(slot as Profile)}
+            >Give {profileName(slot)} its own fan settings</button
+          >
+        {/if}
+      {/if}
+      <p class="note">
+        {#if slot === 'all'}
+          Every profile uses these, unless it has its own.
+          {#if config.profiles[inUse]}The {profileName(inUse)} profile in use has its own.{/if}
+        {:else if !config.profiles[slot]}
+          {profileName(slot)} uses the settings for every profile.
+        {:else if slot !== inUse}
+          {profileName(slot)} isn’t in use now: these apply when you switch to it.
+        {:else}
+          In use now.
+        {/if}
+        Turning control on or off, the safety limits, pumps and names apply to every profile.
+      </p>
+    </div>
+
     <div class="grid">
       {#each status.headers as h (h.index)}
         {@const mode = modeOf(config, h.index)}
         <Card
-          title={h.name}
+          title={labelOf(config, h)}
           subtitle={h.connected ? `${fmt(h.rpm)} RPM · ${fmt(h.dutyPct)} %` : `No speed reading · ${fmt(h.dutyPct)} %`}
           wide={mode.mode === 'curve'}
         >
@@ -237,6 +356,7 @@
             {:else}
               <span class="tag">BIOS</span> following the BIOS curve
             {/if}
+            {#if config.labels[h.index]}<span class="board-name">· {h.name}</span>{/if}
           </p>
           {#if !h.controllable}
             <p class="note">Vyro cannot control this header on this motherboard.</p>
@@ -265,7 +385,8 @@
                 BIOS.
               </p>
             {/if}
-            <div class="modes" role="radiogroup" aria-label="{h.name} mode">
+            <fieldset class="plain" disabled={!editable}>
+            <div class="modes" role="radiogroup" aria-label="{labelOf(config, h)} mode">
               {#each [['bios', 'BIOS'], ['fixed', 'Fixed'], ['curve', 'Curve']] as const as [kind, text] (kind)}
                 <button
                   type="button"
@@ -341,7 +462,7 @@
                       }}
                     >
                       <option value="" disabled>header…</option>
-                      {#each others(h) as o (o.index)}<option value={o.index}>{o.name}</option>{/each}
+                      {#each others(h) as o (o.index)}<option value={o.index}>{labelOf(config, o)}</option>{/each}
                     </select>
                   </label>
                 {/if}
@@ -408,6 +529,7 @@
                 </p>
               </details>
             {/if}
+            </fieldset>
             {#if h.kind === 'pump'}
               <button type="button" class="link" onclick={() => setPump(h, false)}>No pump on this header?</button>
             {:else}
@@ -420,6 +542,29 @@
                 A pump is plugged in here (never below {status.pumpMinPct} %)
               </label>
             {/if}
+          {/if}
+          {#if renaming === h.index}
+            <form
+              class="rename"
+              onsubmit={(e) => {
+                e.preventDefault();
+                saveName(h);
+              }}
+            >
+              <input
+                type="text"
+                maxlength="32"
+                placeholder={h.name}
+                aria-label="Name for {h.name}"
+                bind:value={nameDraft}
+              />
+              <button type="submit">Save</button>
+              <button type="button" onclick={() => (renaming = null)}>Cancel</button>
+            </form>
+          {:else}
+            <button type="button" class="link" onclick={() => startRename(h)}>
+              {config.labels[h.index] ? 'Rename' : `Name this header (e.g. “Case fans”)`}
+            </button>
           {/if}
         </Card>
       {/each}
@@ -455,6 +600,21 @@
           when it stops, crashes, loses its sensors, the pump stops reporting a speed, or the PC goes to sleep. Closing
           this window does not stop fan control; the Vyro service keeps running it.
         </p>
+      </Card>
+
+      <Card title="Recent events" subtitle={events.length ? null : 'Nothing yet'}>
+        {#if events.length}
+          <ul class="events">
+            {#each events as ev, i (i)}
+              <li class:bad={ev.kind === 'fault' || ev.kind === 'watchdog' || ev.kind === 'fullSpeed'}>
+                <time datetime={new Date(ev.ts * 1000).toISOString()}>{fmtDateTime(ev.ts)}</time>
+                <span>{ev.message}</span>
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <p class="note">Turning control on or off, full-speed moments, faults, sleep and profile changes show here.</p>
+        {/if}
       </Card>
     </div>
 
@@ -644,6 +804,74 @@
     margin-top: 0.5rem;
   }
   .note.warn {
+    color: var(--warn);
+  }
+  .slot-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.8rem;
+    margin: 0 0 0.75rem;
+    font-size: 0.82rem;
+  }
+  .slot-bar label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .slot-bar .note {
+    flex-basis: 100%;
+    margin: 0;
+  }
+  fieldset.plain {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  fieldset.plain:disabled {
+    opacity: 0.6;
+  }
+  .board-name {
+    margin-left: 0.3rem;
+    color: var(--muted);
+  }
+  .rename {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.7rem;
+  }
+  .rename input {
+    flex: 1 1 10rem;
+    min-width: 0;
+    padding: 0.2rem 0.4rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.82rem;
+  }
+  .events {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.8rem;
+  }
+  .events li {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.6rem;
+  }
+  .events time {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .events .bad span {
     color: var(--warn);
   }
   .confirm-pump {

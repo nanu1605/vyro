@@ -3,6 +3,7 @@ import type { AlertFired } from "./AlertFired";
 import type { AppSnapshot } from "./AppSnapshot";
 import type { BoardSnapshot } from "./BoardSnapshot";
 import type { CpuSnapshot } from "./CpuSnapshot";
+import type { FanBrief } from "./FanBrief";
 import type { FanSnapshot } from "./FanSnapshot";
 import type { GameSnapshot } from "./GameSnapshot";
 import type { GpuSnapshot } from "./GpuSnapshot";
@@ -31,4 +32,8 @@ health: HealthReport,
 /**
  * Alerts that fired on this tick (usually none).
  */
-alerts: Array<AlertFired>, };
+alerts: Array<AlertFired>, 
+/**
+ * Whether Vyro drives fans (P12), for the header chip and the tray.
+ */
+fanControl: FanBrief, };

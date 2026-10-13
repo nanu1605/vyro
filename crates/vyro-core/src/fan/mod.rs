@@ -12,6 +12,10 @@
 //! Pumps (12c): the pump header is driven only after the owner confirms it drives a pump
 //! ([`FanConfig::pumps`]); a pump plugged into a fan header can be marked the same way. A
 //! pump never goes below [`PUMP_MIN_PCT`] %.
+//!
+//! Profiles (12e): each P9c profile can have its own header settings
+//! ([`FanConfig::profiles`]); the others use [`FanConfig::headers`]. Turning control on or off,
+//! the safety limits, pumps and names apply to every profile.
 
 pub mod controller;
 #[cfg(windows)]
@@ -20,11 +24,12 @@ mod win;
 #[cfg(windows)]
 pub use win::open_device;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::profiles::Profile;
 use crate::sio::control::{Board, Header};
 use crate::snapshot::FanKind;
 
@@ -38,6 +43,9 @@ pub const MAX_POINTS: usize = 8;
 pub const PUMP_STALL_RPM: f64 = 300.0;
 /// ...on this many ticks in a row has stopped: control ends and the BIOS takes over.
 pub const PUMP_STALL_TICKS: u32 = 3;
+
+/// Longest name the owner can give a header.
+pub const MAX_LABEL: usize = 32;
 
 /// Registry id of a header's fan speed.
 pub fn rpm_id(header: u16) -> String {
@@ -116,6 +124,12 @@ pub struct FanConfig {
     /// once listed; every listed header keeps the pump floor and the stall check.
     #[serde(default)]
     pub pumps: Vec<u16>,
+    /// Names the owner gave headers ("Case fans"), shown instead of the board's.
+    #[serde(default)]
+    pub labels: BTreeMap<u16, String>,
+    /// Header settings of profiles that do not use [`Self::headers`].
+    #[serde(default)]
+    pub profiles: BTreeMap<Profile, Vec<HeaderConfig>>,
 }
 
 impl Default for FanConfig {
@@ -126,11 +140,24 @@ impl Default for FanConfig {
             emergency_cpu_c: 95.0,
             emergency_gpu_c: 90.0,
             pumps: Vec::new(),
+            labels: BTreeMap::new(),
+            profiles: BTreeMap::new(),
         }
     }
 }
 
 impl FanConfig {
+    /// The configuration in force while `profile` is active: its own header settings, if it
+    /// has any.
+    pub fn effective(&self, profile: Profile) -> FanConfig {
+        let mut c = self.clone();
+        if let Some(own) = c.profiles.remove(&profile) {
+            c.headers = own;
+        }
+        c.profiles.clear();
+        c
+    }
+
     pub fn mode(&self, index: u16) -> &HeaderMode {
         self.headers
             .iter()
@@ -216,6 +243,8 @@ pub struct FanStatus {
     pub headers: Vec<HeaderStatus>,
     /// Lowest speed for any header treated as a pump.
     pub pump_min_pct: u8,
+    /// The profile whose header settings are in force.
+    pub profile: Profile,
 }
 
 impl FanStatus {
@@ -230,9 +259,65 @@ impl FanStatus {
             last_error: None,
             headers: Vec::new(),
             pump_min_pct: PUMP_MIN_PCT,
+            profile: Profile::default(),
         }
     }
 }
+
+/// Fan control as each sensor snapshot reports it, so the header chip and the tray follow it
+/// without asking the service.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FanBrief {
+    /// Vyro drives at least one header.
+    pub active: bool,
+    /// A safety rule runs the driven headers at full speed.
+    pub full_speed: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum FanEventKind {
+    /// Control turned on.
+    On,
+    /// Control turned off by the owner.
+    Off,
+    /// "Return to BIOS".
+    Bios,
+    /// A safety rule set full speed.
+    FullSpeed,
+    /// Full speed no longer needed.
+    Normal,
+    /// A fault ended control (stopped pump, a register that did not keep a write, I/O errors,
+    /// another program driving the fans).
+    Fault,
+    /// Sensor readings stopped: the BIOS took over until they resume.
+    Watchdog,
+    /// A BIOS state left by a crash was written back at start.
+    Recovered,
+    /// A header lost Vyro's setting and was written again.
+    Rewritten,
+    Sleep,
+    Wake,
+    /// Another profile's header settings are now in force.
+    Profile,
+}
+
+/// One entry of the fan control log (kept in the history store, kind [`EVENT_KIND`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FanEvent {
+    /// Unix seconds.
+    pub ts: i64,
+    pub kind: FanEventKind,
+    pub message: String,
+}
+
+/// History-store event kind of [`FanEvent`]s.
+pub const EVENT_KIND: &str = "fan";
 
 /// Speed on `points` at `temp`: linear between points, flat beyond the ends.
 pub fn evaluate(points: &[CurvePoint], temp: f64) -> f64 {
@@ -276,8 +361,33 @@ pub fn validate(cfg: &FanConfig, board: Option<&Board>) -> Result<(), String> {
             return Err(format!("header {p} cannot be marked as a pump"));
         }
     }
+    for (index, label) in &cfg.labels {
+        if board.is_some() && find(*index).is_none() {
+            return Err(format!("header {index} cannot be named"));
+        }
+        if label.trim().is_empty() || label.trim() != label || label.chars().count() > MAX_LABEL {
+            return Err(format!(
+                "names are 1–{MAX_LABEL} characters without spaces at either end"
+            ));
+        }
+    }
+    validate_headers(cfg, &cfg.headers, board)?;
+    for (profile, headers) in &cfg.profiles {
+        validate_headers(cfg, headers, board)
+            .map_err(|e| format!("{}: {e}", profile.spec().name))?;
+    }
+    Ok(())
+}
+
+/// One header list (shared, or a profile's) against the board and the pump confirmations.
+fn validate_headers(
+    cfg: &FanConfig,
+    headers: &[HeaderConfig],
+    board: Option<&Board>,
+) -> Result<(), String> {
+    let find = |index: u16| board.and_then(|b| b.headers.iter().find(|x| x.index == index));
     let mut seen = Vec::new();
-    for h in &cfg.headers {
+    for h in headers {
         if seen.contains(&h.index) {
             return Err(format!("header {} is listed twice", h.index));
         }
@@ -767,6 +877,54 @@ mod tests {
     }
 
     #[test]
+    fn a_profile_with_its_own_settings_replaces_the_shared_ones() {
+        let mut c = cfg(&[(0, HeaderMode::Fixed { pct: 40.0 })]);
+        c.profiles.insert(
+            Profile::Gaming,
+            vec![HeaderConfig {
+                index: 0,
+                mode: HeaderMode::Fixed { pct: 70.0 },
+            }],
+        );
+        assert_eq!(
+            c.effective(Profile::Gaming).mode(0),
+            &HeaderMode::Fixed { pct: 70.0 }
+        );
+        assert_eq!(
+            c.effective(Profile::Silent).mode(0),
+            &HeaderMode::Fixed { pct: 40.0 }
+        );
+        assert!(c.effective(Profile::Gaming).profiles.is_empty());
+        assert_eq!(validate(&c, Some(board())), Ok(()));
+        // A profile's list is checked like the shared one.
+        c.profiles.insert(
+            Profile::Work,
+            vec![HeaderConfig {
+                index: 1,
+                mode: HeaderMode::Fixed { pct: 70.0 },
+            }],
+        );
+        assert!(validate(&c, Some(board()))
+            .unwrap_err()
+            .starts_with("Work: "));
+    }
+
+    #[test]
+    fn header_names_are_checked() {
+        let b = Some(board());
+        let mut c = cfg(&[]);
+        c.labels.insert(2, "Case fans".into());
+        assert_eq!(validate(&c, b), Ok(()));
+        for bad in ["", " Case", &"x".repeat(MAX_LABEL + 1)] {
+            c.labels.insert(2, bad.into());
+            assert!(validate(&c, b).is_err(), "{bad:?}");
+        }
+        c.labels.clear();
+        c.labels.insert(9, "Nowhere".into());
+        assert!(validate(&c, b).is_err());
+    }
+
+    #[test]
     fn config_round_trips_as_json() {
         let c = cfg(&[
             (
@@ -778,8 +936,19 @@ mod tests {
             (2, HeaderMode::Fixed { pct: 40.0 }),
             (3, HeaderMode::Bios),
         ]);
+        let mut c = c;
+        c.labels.insert(2, "Case fans".into());
+        c.profiles.insert(Profile::Gaming, vec![]);
         let json = serde_json::to_string(&c).unwrap();
         assert!(json.contains(r#""mode":"curve""#));
+        assert!(json.contains(r#""labels":{"2":"Case fans"}"#), "{json}");
+        assert!(json.contains(r#""profiles":{"gaming":[]}"#), "{json}");
         assert_eq!(serde_json::from_str::<FanConfig>(&json).unwrap(), c);
+        // A file from before pumps, names and profiles still loads.
+        let old = r#"{"enabled":false,"headers":[],"emergencyCpuC":95,"emergencyGpuC":90}"#;
+        assert_eq!(
+            serde_json::from_str::<FanConfig>(old).unwrap(),
+            FanConfig::default()
+        );
     }
 }

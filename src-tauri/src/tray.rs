@@ -11,6 +11,7 @@ use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem,
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, Window, WindowEvent, Wry};
 use vyro_core::alerts::AlertFired;
+use vyro_core::fan::FanBrief;
 use vyro_core::profiles::Profile;
 use vyro_core::units::TempUnit;
 use vyro_core::{lock, unix_now};
@@ -194,6 +195,27 @@ pub struct ProfileItems(Vec<(Profile, CheckMenuItem<Wry>)>);
 /// The tray's "Game overlay" item.
 pub struct OverlayItem(CheckMenuItem<Wry>);
 
+/// "Return fans to BIOS", enabled while Vyro drives fans.
+pub struct FanItem(MenuItem<Wry>);
+
+/// Shows fan control in the tray: the tooltip says so and the menu offers the way back to the
+/// BIOS. False until the tray exists (the caller tries again with the next snapshot).
+pub fn set_fan_state(app: &AppHandle, fans: FanBrief) -> bool {
+    let Some(tray) = app.tray_by_id("main") else {
+        return false;
+    };
+    let tip = match (fans.active, fans.full_speed) {
+        (true, true) => "Vyro · fans at full speed",
+        (true, false) => "Vyro · fan control on",
+        (false, _) => "Vyro",
+    };
+    let _ = tray.set_tooltip(Some(tip));
+    if let Some(item) = app.try_state::<FanItem>() {
+        let _ = item.0.set_enabled(fans.active);
+    }
+    true
+}
+
 /// Saves `settings` and applies them: the profile's poll rate, the tray check mark, and the
 /// window's view (via [`SETTINGS_EVENT`]).
 pub fn apply(app: &AppHandle, settings: Settings) -> Result<(), String> {
@@ -203,6 +225,10 @@ pub fn apply(app: &AppHandle, settings: Settings) -> Result<(), String> {
     };
     if let Some(engine) = app.try_state::<Engine>() {
         engine.set_poll_interval(settings.profile.spec().poll_ms);
+        // The service puts the profile's own fan settings in force, if it has any.
+        if let Err(e) = engine.api.set_fan_profile(settings.profile) {
+            log::warn!("fans: profile: {e}");
+        }
     }
     if let Some(items) = app.try_state::<ProfileItems>() {
         for (p, item) in &items.0 {
@@ -255,10 +281,13 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     )?;
     app.manage(OverlayItem(overlay.clone()));
 
+    let fans = MenuItem::with_id(app, "fans-bios", "Return fans to BIOS", false, None::<&str>)?;
+    app.manage(FanItem(fans.clone()));
+
     let show = MenuItem::with_id(app, "show", "Show Vyro", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Vyro", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&show, &profiles, &overlay, &sep, &quit])?;
+    let menu = Menu::with_items(app, &[&show, &profiles, &overlay, &fans, &sep, &quit])?;
     let mut tray = TrayIconBuilder::with_id("main")
         .tooltip("Vyro")
         .menu(&menu)
@@ -266,6 +295,13 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, e| match e.id.as_ref() {
             "show" => show_main(app),
             "quit" => app.exit(0),
+            "fans-bios" => {
+                if let Some(engine) = app.try_state::<Engine>() {
+                    if let Err(e) = engine.api.restore_fans() {
+                        log::warn!("fans: return to BIOS: {e}");
+                    }
+                }
+            }
             "overlay" => {
                 if let Some(store) = app.try_state::<SettingsStore>() {
                     let mut settings = store.get();

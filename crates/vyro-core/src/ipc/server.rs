@@ -313,6 +313,8 @@ impl Server {
             Request::FanStatus => json(e.fan_status()),
             Request::SetFanConfig { config } => json(e.set_fan_config(config)),
             Request::RestoreFans => json(e.restore_fans()),
+            Request::FanEvents => json(e.fan_events()),
+            Request::SetFanProfile { profile } => json(e.set_fan_profile(profile)),
         }
     }
 }

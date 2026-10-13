@@ -40,6 +40,7 @@ export function emptySnapshot(ts: number): SensorSnapshot {
     game: null,
     health: { overall: 'unknown', subsystems: [] },
     alerts: [],
+    fanControl: { active: false, fullSpeed: false },
   };
 }
 

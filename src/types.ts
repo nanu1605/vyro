@@ -81,3 +81,6 @@ export type { FanStatus } from './bindings/FanStatus';
 export type { HeaderConfig } from './bindings/HeaderConfig';
 export type { HeaderMode } from './bindings/HeaderMode';
 export type { HeaderStatus } from './bindings/HeaderStatus';
+export type { FanBrief } from './bindings/FanBrief';
+export type { FanEvent } from './bindings/FanEvent';
+export type { FanEventKind } from './bindings/FanEventKind';

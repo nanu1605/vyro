@@ -7,7 +7,9 @@ use ts_rs::TS;
 
 use crate::alerts::AlertFired;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS,
+)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum Profile {

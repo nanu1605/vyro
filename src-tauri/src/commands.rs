@@ -283,3 +283,11 @@ pub async fn set_fan_config(
 pub async fn restore_fans(engine: State<'_, Engine>) -> Result<(), String> {
     with_engine(&engine, |e| e.restore_fans()).await
 }
+
+/// The fan control log, newest last.
+#[tauri::command]
+pub async fn get_fan_events(
+    engine: State<'_, Engine>,
+) -> Result<Vec<vyro_core::fan::FanEvent>, String> {
+    with_engine(&engine, |e| e.fan_events()).await
+}

@@ -15,20 +15,25 @@
 //! - a file left by a crash is written back when the next controller starts, before anything
 //!   else (the service restarts itself after a crash).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use super::{
-    validate, Decision, FanCapability, FanConfig, FanStatus, HeaderMode, HeaderStatus, Runtime,
-    PUMP_MIN_PCT,
+    validate, Decision, FanBrief, FanCapability, FanConfig, FanEvent, FanEventKind, FanStatus,
+    HeaderMode, HeaderStatus, Runtime, PUMP_MIN_PCT,
 };
+use crate::profiles::Profile;
 use crate::sio::control::{self, BiosState, Board, ControlError};
 
 pub const CONFIG_FILE: &str = "fan-control.json";
 pub const RESTORE_FILE: &str = "fan-restore.json";
+/// The profile whose header settings are in force (set by the app).
+pub const PROFILE_FILE: &str = "fan-profile.json";
+/// Fan events kept in memory for the UI.
+pub const RECENT_EVENTS: usize = 100;
 /// No tick for this long while driving fans → BIOS control until ticks resume.
 pub const WATCHDOG: Duration = Duration::from_secs(10);
 /// Longest tick interval while fans are driven (the poller's tray interval is longer).
@@ -98,7 +103,11 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 struct Inner {
+    /// Everything the owner configured (every profile).
     config: FanConfig,
+    /// The profile in use and the configuration in force for it.
+    profile: Profile,
+    effective: FanConfig,
     runtime: Runtime,
     decision: Option<Decision>,
     fresh: bool,
@@ -110,25 +119,72 @@ struct Inner {
     /// The PC is going to sleep: the BIOS drives every header until it wakes.
     suspended: bool,
     stop: bool,
+    /// Newest last, at most [`RECENT_EVENTS`].
+    recent: VecDeque<FanEvent>,
+    /// Not yet handed to the event sink (the worker does that, holding no lock).
+    pending: Vec<FanEvent>,
 }
+
+impl Inner {
+    fn record(&mut self, kind: FanEventKind, message: String) {
+        log::info!("fans: {message}");
+        let ev = FanEvent {
+            ts: crate::unix_now(),
+            kind,
+            message,
+        };
+        if self.recent.len() >= RECENT_EVENTS {
+            self.recent.pop_front();
+        }
+        self.recent.push_back(ev.clone());
+        if self.pending.len() >= RECENT_EVENTS {
+            self.pending.remove(0);
+        }
+        self.pending.push(ev);
+    }
+
+    fn set_profile(&mut self, profile: Profile) {
+        self.profile = profile;
+        self.effective = self.config.effective(profile);
+    }
+}
+
+/// Where fan events go besides memory (the service: the history store).
+pub type EventSink = Box<dyn Fn(&FanEvent) + Send + Sync>;
 
 struct Shared {
     inner: Mutex<Inner>,
     wake: Condvar,
     config_path: Option<PathBuf>,
+    profile_path: Option<PathBuf>,
+    events: Option<EventSink>,
     started: Instant,
+}
+
+/// Writes `value` as JSON through a temporary file, so a crash never leaves half a file.
+fn write_json(path: &Path, value: &impl serde::Serialize) -> Result<(), String> {
+    let json = serde_json::to_vec_pretty(value).map_err(|e| e.to_string())?;
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, json)
+        .and_then(|()| std::fs::rename(&tmp, path))
+        .map_err(|e| format!("saving {}: {e}", path.display()))
 }
 
 impl Shared {
     fn save(&self, cfg: &FanConfig) -> Result<(), String> {
-        let Some(path) = &self.config_path else {
-            return Ok(());
-        };
-        let json = serde_json::to_vec_pretty(cfg).map_err(|e| e.to_string())?;
-        let tmp = path.with_extension("json.tmp");
-        std::fs::write(&tmp, json)
-            .and_then(|()| std::fs::rename(&tmp, path))
-            .map_err(|e| format!("saving {}: {e}", path.display()))
+        self.config_path
+            .as_deref()
+            .map_or(Ok(()), |p| write_json(p, cfg))
+    }
+
+    /// Hands recorded events to the sink. Call without holding `inner`.
+    fn flush_events(&self) {
+        let pending = std::mem::take(&mut lock(&self.inner).pending);
+        if let Some(sink) = &self.events {
+            for ev in &pending {
+                sink(ev);
+            }
+        }
     }
 }
 
@@ -158,24 +214,45 @@ pub fn load_config(path: &Path, board: Option<&Board>) -> FanConfig {
 }
 
 /// Writes back a BIOS state a previous run left behind (it crashed while driving fans).
-pub fn recover(dev: &mut dyn FanDevice, restore_path: &Path) {
+/// True when one was restored.
+pub fn recover(dev: &mut dyn FanDevice, restore_path: &Path) -> bool {
     match control::load(restore_path) {
-        Ok(None) => {}
+        Ok(None) => false,
         Ok(Some(state)) => match dev.restore(&state) {
             Ok(()) => {
                 let _ = std::fs::remove_file(restore_path);
-                log::warn!("fans: BIOS fan control restored after an unclean stop");
+                true
             }
-            Err(e) => log::error!("fans: restoring the saved BIOS state failed: {e}"),
+            Err(e) => {
+                log::error!("fans: restoring the saved BIOS state failed: {e}");
+                false
+            }
         },
-        Err(e) => log::error!("fans: {} unreadable: {e}", restore_path.display()),
+        Err(e) => {
+            log::error!("fans: {} unreadable: {e}", restore_path.display());
+            false
+        }
     }
 }
 
-fn shared(config: FanConfig, chip: Option<ChipState>, config_path: Option<PathBuf>) -> Arc<Shared> {
+struct Files {
+    config: Option<PathBuf>,
+    profile: Option<PathBuf>,
+}
+
+fn shared(
+    config: FanConfig,
+    profile: Profile,
+    chip: Option<ChipState>,
+    files: Files,
+    events: Option<EventSink>,
+) -> Arc<Shared> {
+    let effective = config.effective(profile);
     Arc::new(Shared {
         inner: Mutex::new(Inner {
             config,
+            profile,
+            effective,
             runtime: Runtime::default(),
             decision: None,
             fresh: false,
@@ -186,9 +263,13 @@ fn shared(config: FanConfig, chip: Option<ChipState>, config_path: Option<PathBu
             chip,
             suspended: false,
             stop: false,
+            recent: VecDeque::new(),
+            pending: Vec::new(),
         }),
         wake: Condvar::new(),
-        config_path,
+        config_path: files.config,
+        profile_path: files.profile,
+        events,
         started: Instant::now(),
     })
 }
@@ -198,32 +279,69 @@ impl FanControl {
         Self {
             capability,
             board: None,
-            shared: shared(FanConfig::default(), None, None),
+            shared: shared(
+                FanConfig::default(),
+                Profile::default(),
+                None,
+                Files {
+                    config: None,
+                    profile: None,
+                },
+                None,
+            ),
             worker: Mutex::new(None),
         }
     }
 
+    /// [`Self::start_with`] without an event sink (events stay in memory).
+    pub fn start(dev: Box<dyn FanDevice>, dir: Option<&Path>, watchdog: Duration) -> Self {
+        Self::start_with(dev, dir, watchdog, None)
+    }
+
     /// Restores anything a crash left behind, loads the saved configuration and starts the
-    /// worker. `dir` holds the configuration and the BIOS state file (`None`: memory only,
-    /// for tests and the simulator).
-    pub fn start(mut dev: Box<dyn FanDevice>, dir: Option<&Path>, watchdog: Duration) -> Self {
+    /// worker. `dir` holds the configuration, the profile in use and the BIOS state file
+    /// (`None`: memory only, for tests and the simulator); `events` also receives every fan
+    /// event.
+    pub fn start_with(
+        mut dev: Box<dyn FanDevice>,
+        dir: Option<&Path>,
+        watchdog: Duration,
+        events: Option<EventSink>,
+    ) -> Self {
         let board = dev.board();
         let restore_path = dir.map(|d| d.join(RESTORE_FILE));
-        if let Some(p) = &restore_path {
-            recover(dev.as_mut(), p);
-        }
-        let config_path = dir.map(|d| d.join(CONFIG_FILE));
-        let config = config_path
+        let recovered = restore_path
+            .as_deref()
+            .is_some_and(|p| recover(dev.as_mut(), p));
+        let files = Files {
+            config: dir.map(|d| d.join(CONFIG_FILE)),
+            profile: dir.map(|d| d.join(PROFILE_FILE)),
+        };
+        let config = files
+            .config
             .as_deref()
             .map_or_else(FanConfig::default, |p| load_config(p, Some(board)));
+        let profile = files
+            .profile
+            .as_deref()
+            .and_then(|p| std::fs::read(p).ok())
+            .and_then(|b| serde_json::from_slice::<Profile>(&b).ok())
+            .unwrap_or_default();
         let mut me = Self {
             capability: FanCapability::Writable {
                 board: board.name.into(),
             },
             board: Some(board),
-            shared: shared(config, dev.read().ok(), config_path),
+            shared: shared(config, profile, dev.read().ok(), files, events),
             worker: Mutex::new(None),
         };
+        if recovered {
+            lock(&me.shared.inner).record(
+                FanEventKind::Recovered,
+                "Vyro stopped unexpectedly while driving fans: the BIOS settings were put back"
+                    .into(),
+            );
+        }
         let shared = Arc::clone(&me.shared);
         let worker = Worker {
             dev,
@@ -259,7 +377,22 @@ impl FanControl {
 
     /// Whether ticks must come at least every [`MAX_TICK`].
     pub fn drives(&self) -> bool {
-        self.board.is_some() && lock(&self.shared.inner).config.drives_any()
+        self.board.is_some() && lock(&self.shared.inner).effective.drives_any()
+    }
+
+    /// What each snapshot reports about fan control.
+    pub fn brief(&self) -> FanBrief {
+        let inner = lock(&self.shared.inner);
+        FanBrief {
+            active: inner.active,
+            full_speed: inner.active && inner.override_reason.is_some(),
+        }
+    }
+
+    /// Recent fan events, newest last (this run only; the service keeps older ones in the
+    /// history store).
+    pub fn events(&self) -> Vec<FanEvent> {
+        lock(&self.shared.inner).recent.iter().cloned().collect()
     }
 
     /// Decides this tick's speeds from the registry (called by the poller after the
@@ -272,7 +405,7 @@ impl FanControl {
         let mut g = lock(&self.shared.inner);
         let inner = &mut *g;
         if let Some(chip) = &inner.chip {
-            for h in &inner.config.headers {
+            for h in &inner.effective.headers {
                 if h.mode != HeaderMode::Bios {
                     if let Some(&raw) = chip.outputs.get(usize::from(h.index)) {
                         inner.runtime.seed(h.index, control::percent(raw));
@@ -280,7 +413,15 @@ impl FanControl {
                 }
             }
         }
-        let d = inner.runtime.decide(&inner.config, board, now, read);
+        let d = inner.runtime.decide(&inner.effective, board, now, read);
+        match (&inner.override_reason, &d.override_reason) {
+            (None, Some(why)) => inner.record(FanEventKind::FullSpeed, why.clone()),
+            (Some(_), None) => inner.record(
+                FanEventKind::Normal,
+                "Full speed no longer needed: fans back to their settings".into(),
+            ),
+            _ => {}
+        }
         inner.override_reason.clone_from(&d.override_reason);
         inner.decision = Some(d);
         inner.fresh = true;
@@ -297,9 +438,46 @@ impl FanControl {
         if !cfg.enabled {
             inner.runtime.reset();
         }
+        match (inner.config.enabled, cfg.enabled) {
+            (false, true) => inner.record(FanEventKind::On, "Fan control turned on".into()),
+            (true, false) => inner.record(FanEventKind::Off, "Fan control turned off".into()),
+            _ => {}
+        }
         inner.config = cfg;
+        let profile = inner.profile;
+        inner.set_profile(profile);
         inner.last_error = None;
         Ok(())
+    }
+
+    /// Puts `profile`'s header settings in force (remembered across restarts).
+    pub fn set_profile(&self, profile: Profile) -> Result<(), String> {
+        {
+            let mut inner = lock(&self.shared.inner);
+            if inner.profile == profile {
+                return Ok(());
+            }
+            inner.set_profile(profile);
+            let own = inner.config.profiles.contains_key(&profile);
+            if inner.config.enabled {
+                inner.record(
+                    FanEventKind::Profile,
+                    format!(
+                        "{} profile: {}",
+                        profile.spec().name,
+                        if own {
+                            "its own fan settings"
+                        } else {
+                            "the fan settings for every profile"
+                        }
+                    ),
+                );
+            }
+        }
+        self.shared
+            .profile_path
+            .as_deref()
+            .map_or(Ok(()), |p| write_json(p, &profile))
     }
 
     /// Turns control off (saved) and hands every header back to the BIOS.
@@ -307,9 +485,14 @@ impl FanControl {
         let cfg = {
             let mut inner = lock(&self.shared.inner);
             inner.config.enabled = false;
+            inner.effective.enabled = false;
             inner.runtime.reset();
             inner.decision = Some(Decision::default());
             inner.fresh = true;
+            inner.record(
+                FanEventKind::Bios,
+                "Returned to BIOS: fan control turned off".into(),
+            );
             inner.config.clone()
         };
         self.shared.wake.notify_one();
@@ -335,6 +518,17 @@ impl FanControl {
             inner.last_tick = None;
             inner.decision = None;
             inner.fresh = false;
+            if inner.effective.drives_any() {
+                let (kind, message) = if on {
+                    (
+                        FanEventKind::Sleep,
+                        "PC going to sleep: fans handed to the BIOS",
+                    )
+                } else {
+                    (FanEventKind::Wake, "PC woke up: fan control resumes")
+                };
+                inner.record(kind, message.into());
+            }
         }
         self.shared.wake.notify_one();
         if on {
@@ -342,9 +536,6 @@ impl FanControl {
             while lock(&self.shared.inner).active && Instant::now() < until {
                 std::thread::sleep(Duration::from_millis(20));
             }
-            log::info!("fans: suspended for sleep");
-        } else {
-            log::info!("fans: resumed after sleep");
         }
     }
 
@@ -394,6 +585,7 @@ impl FanControl {
             last_error: inner.last_error.clone(),
             headers,
             pump_min_pct: PUMP_MIN_PCT,
+            profile: inner.profile,
         }
     }
 
@@ -442,6 +634,7 @@ impl Worker {
             match self.wait() {
                 Step::Stop => {
                     self.restore_all();
+                    self.shared.flush_events();
                     return;
                 }
                 Step::Suspend => self.restore_all(),
@@ -449,8 +642,12 @@ impl Worker {
                     if self.bios.is_some() {
                         self.restore_all();
                         if self.bios.is_none() {
-                            self.note_error(
-                                "sensor readings stopped: BIOS fan control restored".into(),
+                            let why = "sensor readings stopped: BIOS fan control restored";
+                            self.note_error(why.into());
+                            lock(&self.shared.inner).record(
+                                FanEventKind::Watchdog,
+                                "Sensor readings stopped: the BIOS took over until they resume"
+                                    .into(),
                             );
                         }
                     }
@@ -470,11 +667,14 @@ impl Worker {
             if let Some(c) = &chip {
                 self.check_drift(c);
             }
-            let mut inner = lock(&self.shared.inner);
-            if chip.is_some() {
-                inner.chip = chip;
+            {
+                let mut inner = lock(&self.shared.inner);
+                if chip.is_some() {
+                    inner.chip = chip;
+                }
+                inner.active = self.bios.is_some() && !self.applied.is_empty();
             }
-            inner.active = self.bios.is_some() && !self.applied.is_empty();
+            self.shared.flush_events();
         }
     }
 
@@ -513,13 +713,21 @@ impl Worker {
                     .into(),
             );
         }
-        log::warn!("fans: header(s) {lost:?} lost Vyro's setting; writing it again");
+        let names: Vec<&str> = lost
+            .iter()
+            .filter_map(|h| self.dev.board().headers.iter().find(|x| x.index == *h))
+            .map(|h| h.name)
+            .collect();
         for h in lost {
             self.applied.remove(&h);
         }
         // Rewrite with the latest decision even if no tick arrives first.
         let mut inner = lock(&self.shared.inner);
         inner.fresh = inner.decision.is_some();
+        inner.record(
+            FanEventKind::Rewritten,
+            format!("{} lost Vyro's setting and was set again", names.join(", ")),
+        );
     }
 
     fn wait(&mut self) -> Step {
@@ -538,7 +746,7 @@ impl Worker {
         if inner.suspended {
             return Step::Suspend;
         }
-        let stale = inner.config.drives_any()
+        let stale = inner.effective.drives_any()
             && inner.last_tick.is_none_or(|t| t.elapsed() > self.watchdog);
         if stale && self.bios.is_some() {
             return Step::Stale;
@@ -558,8 +766,18 @@ impl Worker {
         let cfg = {
             let mut inner = lock(&self.shared.inner);
             inner.config.enabled = false;
+            inner.effective.enabled = false;
             inner.runtime.reset();
             inner.decision = None;
+            let mut first = e.chars();
+            let e = first
+                .next()
+                .map(|c| c.to_uppercase().chain(first).collect::<String>())
+                .unwrap_or_default();
+            inner.record(
+                FanEventKind::Fault,
+                format!("{e}. Fan control turned off and the BIOS settings put back"),
+            );
             inner.config.clone()
         };
         if let Err(save) = self.shared.save(&cfg) {
@@ -1098,6 +1316,75 @@ mod tests {
         assert!(!st.config.enabled);
         assert!(st.last_error.unwrap().contains("pump may have stopped"));
         assert_eq!(lock(&dev.0).mode, 0);
+    }
+
+    #[test]
+    fn profiles_switch_header_settings_and_the_choice_is_remembered() {
+        let dir = tmp_dir("profile");
+        let dev = SimDevice::new();
+        let fc = FanControl::start(Box::new(dev.clone()), Some(&dir), WATCHDOG);
+        let mut cfg = on(vec![fixed(0, 40.0)]);
+        cfg.profiles.insert(Profile::Gaming, vec![fixed(0, 70.0)]);
+        fc.set_config(cfg).unwrap();
+        tick(&fc, &dev, 50.0, 2);
+        assert_eq!(lock(&dev.0).log[1], "set 0 102");
+        fc.set_profile(Profile::Gaming).unwrap();
+        tick(&fc, &dev, 50.0, 3);
+        assert_eq!(lock(&dev.0).log[2], "set 0 179");
+        assert_eq!(fc.status(|_| None).profile, Profile::Gaming);
+        drop(fc);
+        let fc = FanControl::start(Box::new(SimDevice::new()), Some(&dir), WATCHDOG);
+        assert_eq!(fc.status(|_| None).profile, Profile::Gaming, "remembered");
+        drop(fc);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn events_are_logged_and_handed_to_the_sink() {
+        let got = Arc::new(Mutex::new(Vec::<FanEvent>::new()));
+        let sink = Arc::clone(&got);
+        let dev = SimDevice::new();
+        let fc = FanControl::start_with(
+            Box::new(dev.clone()),
+            None,
+            WATCHDOG,
+            Some(Box::new(move |e: &FanEvent| lock(&sink).push(e.clone()))),
+        );
+        fc.set_config(on(vec![fixed(0, 40.0)])).unwrap();
+        tick(&fc, &dev, 50.0, 2);
+        assert_eq!(
+            fc.brief(),
+            FanBrief {
+                active: true,
+                full_speed: false
+            }
+        );
+        // Hot: full speed, then normal again.
+        fc.on_tick(|id| (id == CPU_TEMP).then_some(99.0));
+        settle();
+        assert!(fc.brief().full_speed);
+        tick(&fc, &dev, 50.0, 3);
+        fc.restore().unwrap();
+        wait_for_restore(&dev);
+        let kinds: Vec<FanEventKind> = fc.events().iter().map(|e| e.kind).collect();
+        assert_eq!(
+            kinds,
+            [
+                FanEventKind::On,
+                FanEventKind::FullSpeed,
+                FanEventKind::Normal,
+                FanEventKind::Bios
+            ]
+        );
+        assert!(fc.events()[1].message.starts_with("CPU at 99 °C"));
+        for _ in 0..100 {
+            if lock(&got).len() == 4 {
+                break;
+            }
+            settle();
+        }
+        assert_eq!(*lock(&got), fc.events(), "the sink gets every event");
+        assert!(!fc.brief().active);
     }
 
     #[test]

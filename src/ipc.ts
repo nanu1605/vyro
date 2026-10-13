@@ -4,7 +4,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { evaluate } from './curve';
-import type { AlertFired, AlertRule, BackendStatus, FanConfig, FanStatus, HeaderStatus, GameSession, GameSnapshot, Insight, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, Insight, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -12,7 +12,11 @@ export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in
 export async function onSensors(cb: (s: SensorSnapshot) => void): Promise<() => void> {
   if (!inTauri) {
     const { startSim } = await import('./sim');
-    return startSim(cb);
+    // The simulated board's fan control, as the service reports it in each snapshot.
+    return startSim((s) => {
+      const f = simFanStatus(s);
+      cb({ ...s, fanControl: { active: f.active, fullSpeed: f.active && f.overrideReason != null } });
+    });
   }
   const unlisten = await listen<SensorSnapshot>('sensors', (e) => cb(e.payload));
   const latest = await invoke<SensorSnapshot | null>('get_latest');
@@ -57,7 +61,13 @@ export async function getGameSessions(): Promise<GameSession[]> {
 
 // Browser preview only: a simulated reference board (MS-7E24) whose fan configuration lives in
 // memory. Duties follow the configuration at once (no ramp, no hysteresis).
-let browserFans: FanConfig = { enabled: false, headers: [], emergencyCpuC: 95, emergencyGpuC: 90, pumps: [] };
+let browserFans: FanConfig = {
+  enabled: false, headers: [], emergencyCpuC: 95, emergencyGpuC: 90, pumps: [], labels: {}, profiles: {},
+};
+let browserFanEvents: FanEvent[] = [];
+function simFanEvent(kind: FanEventKind, message: string): void {
+  browserFanEvents = [...browserFanEvents.slice(-99), { ts: Math.floor(Date.now() / 1000), kind, message }];
+}
 const SIM_PUMP_MIN = 60;
 const SIM_HEADERS = [
   { index: 0, name: 'CPU Fan', kind: 'fan', minPct: 20 },
@@ -71,7 +81,8 @@ function simFanStatus(snap: SensorSnapshot | null): FanStatus {
   const cpu = snap?.cpu.tempPackage ?? null;
   const hot = cpu != null && cpu >= browserFans.emergencyCpuC;
   const headers: HeaderStatus[] = SIM_HEADERS.map((h) => {
-    const mode = browserFans.headers.find((c) => c.index === h.index)?.mode ?? { mode: 'bios' as const };
+    const list = browserFans.profiles[browserSettings.profile] ?? browserFans.headers;
+    const mode = list.find((c) => c.index === h.index)?.mode ?? { mode: 'bios' as const };
     const pump = h.kind === 'pump' || browserFans.pumps.includes(h.index);
     const driven =
       browserFans.enabled && mode.mode !== 'bios' && (h.kind !== 'pump' || browserFans.pumps.includes(h.index));
@@ -101,6 +112,7 @@ function simFanStatus(snap: SensorSnapshot | null): FanStatus {
     lastError: null,
     headers,
     pumpMinPct: SIM_PUMP_MIN,
+    profile: browserSettings.profile,
   };
 }
 
@@ -114,9 +126,12 @@ export async function getFanStatus(snap: SensorSnapshot | null): Promise<FanStat
 /** Validates, saves and applies a fan configuration (the engine refuses invalid ones). */
 export async function setFanConfig(config: FanConfig): Promise<void> {
   if (!inTauri) {
-    if (config.headers.some((h) => h.index === 1 && h.mode.mode !== 'bios') && !config.pumps.includes(1)) {
+    const lists = [config.headers, ...Object.values(config.profiles).filter((l) => l != null)];
+    if (lists.some((l) => l.some((h) => h.index === 1 && h.mode.mode !== 'bios')) && !config.pumps.includes(1)) {
       throw new Error('confirm that Pump Fan drives your pump before Vyro controls it');
     }
+    if (!browserFans.enabled && config.enabled) simFanEvent('on', 'Fan control turned on');
+    if (browserFans.enabled && !config.enabled) simFanEvent('off', 'Fan control turned off');
     browserFans = JSON.parse(JSON.stringify(config)) as FanConfig;
     return;
   }
@@ -127,9 +142,16 @@ export async function setFanConfig(config: FanConfig): Promise<void> {
 export async function restoreFans(): Promise<void> {
   if (!inTauri) {
     browserFans = { ...browserFans, enabled: false };
+    simFanEvent('bios', 'Returned to BIOS: fan control turned off');
     return;
   }
   await invoke('restore_fans');
+}
+
+/** The fan control log, newest last. */
+export async function getFanEvents(): Promise<FanEvent[]> {
+  if (!inTauri) return [...browserFanEvents];
+  return invoke<FanEvent[]>('get_fan_events');
 }
 
 /** Findings from history (unusual temperatures, throttling, slow fans, power changes). */

@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use crate::alerts::AlertRule;
 use crate::fan::FanConfig;
 use crate::gaming::CaptureTarget;
+use crate::profiles::Profile;
 use crate::HistoryRange;
 
 pub use client::{RemoteEngine, RemoteStatus};
@@ -117,6 +118,11 @@ pub enum Request {
         config: FanConfig,
     },
     RestoreFans,
+    FanEvents,
+    #[serde(rename_all = "camelCase")]
+    SetFanProfile {
+        profile: Profile,
+    },
 }
 
 /// The answer to a [`Request`]: the method's result as JSON, or an error message.
@@ -220,6 +226,12 @@ mod tests {
             r#"{"method":"setCaptureTarget","params":{"target":{"pid":9,"name":"g.exe"}}}"#
         );
         assert_eq!(json(&Request::RestoreFans), r#"{"method":"restoreFans"}"#);
+        assert_eq!(
+            json(&Request::SetFanProfile {
+                profile: Profile::Gaming
+            }),
+            r#"{"method":"setFanProfile","params":{"profile":"gaming"}}"#
+        );
         let set = json(&Request::SetFanConfig {
             config: FanConfig::default(),
         });

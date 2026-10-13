@@ -12,11 +12,12 @@ use ts_rs::TS;
 use crate::alerts::{self, AlertEngine, AlertFired, AlertRule};
 use crate::analysis::{self, Insight, SeriesMap};
 use crate::fan::controller::{self, FanControl, SimDevice};
-use crate::fan::{FanCapability, FanConfig, FanStatus};
+use crate::fan::{FanCapability, FanConfig, FanEvent, FanStatus};
 use crate::gaming::{CaptureTarget, GameProvider, GameSession, Gaming};
 use crate::health::{self, HealthEvent};
 use crate::info::{DriveInfo, PawnIoStatus};
 use crate::poller::{EVENT_ALERT, EVENT_HEALTH};
+use crate::profiles::Profile;
 use crate::sio::control;
 use crate::{
     lock, unix_now, History, HistoryConfig, HistoryRange, HistorySeries, Poller, PollerConfig,
@@ -100,6 +101,10 @@ pub trait EngineApi: Send + Sync {
     fn set_fan_config(&self, config: FanConfig) -> Result<(), String>;
     /// Turns fan control off and hands every header back to the BIOS.
     fn restore_fans(&self) -> Result<(), String>;
+    /// Fan control log, newest last (kept across restarts where there is a history store).
+    fn fan_events(&self) -> Result<Vec<FanEvent>, String>;
+    /// The P9c profile in use: its own fan settings apply, if it has any.
+    fn set_fan_profile(&self, profile: Profile) -> Result<(), String>;
     /// Stops polling and flushes history. Safe to call more than once.
     fn shutdown(&self);
 }
@@ -146,7 +151,7 @@ impl LocalEngine {
         log::info!("alerts: {} rule(s)", rules.len());
         let alerts = Arc::new(Mutex::new(AlertEngine::new(rules)));
         let gaming = Gaming::new(Gaming::default_launch(), dir);
-        let fans = Arc::new(Self::start_fans(cfg.fan_control, dir));
+        let fans = Arc::new(Self::start_fans(cfg.fan_control, dir, history.clone()));
 
         // The game provider runs last: its session summary reads this tick's temperatures.
         let game: Box<dyn Provider> = Box::new(GameProvider::new(Arc::clone(&gaming)));
@@ -177,7 +182,11 @@ impl LocalEngine {
 
     /// The fan controller: the simulated chip in simulation, the real one only in the service
     /// and only where `fan::open_device` allows it.
-    fn start_fans(wanted: bool, dir: Option<&std::path::Path>) -> FanControl {
+    fn start_fans(
+        wanted: bool,
+        dir: Option<&std::path::Path>,
+        history: Option<Arc<Mutex<History>>>,
+    ) -> FanControl {
         if Self::simulated() {
             return FanControl::start(Box::new(SimDevice::new()), None, controller::WATCHDOG);
         }
@@ -186,9 +195,17 @@ impl LocalEngine {
                 reason: "fan control runs in the Vyro service".into(),
             });
         }
+        // Fan events are kept with the health and alert events.
+        let events = history.map(|h| -> controller::EventSink {
+            Box::new(move |ev: &FanEvent| {
+                if let Err(e) = lock(&h).log_events(crate::fan::EVENT_KIND, ev.ts, &[ev]) {
+                    log::warn!("fan events: {e}");
+                }
+            })
+        });
         #[cfg(windows)]
         match crate::fan::open_device() {
-            Ok(dev) => FanControl::start(dev, dir, controller::WATCHDOG),
+            Ok(dev) => FanControl::start_with(dev, dir, controller::WATCHDOG, events),
             Err(cap) => {
                 log::info!("fans: control not possible: {cap:?}");
                 FanControl::unavailable(cap)
@@ -196,7 +213,7 @@ impl LocalEngine {
         }
         #[cfg(not(windows))]
         {
-            let _ = dir;
+            let _ = (dir, events);
             FanControl::unavailable(FanCapability::Unavailable {
                 reason: "fan control needs Windows".into(),
             })
@@ -403,6 +420,21 @@ impl EngineApi for LocalEngine {
 
     fn restore_fans(&self) -> Result<(), String> {
         self.fans.restore()
+    }
+
+    /// From the history store, else this run's.
+    fn fan_events(&self) -> Result<Vec<FanEvent>, String> {
+        let stored = self.history.as_ref().and_then(|h| {
+            lock(h)
+                .events::<FanEvent>(crate::fan::EVENT_KIND, controller::RECENT_EVENTS as i64)
+                .inspect_err(|e| log::warn!("fan events: {e}"))
+                .ok()
+        });
+        Ok(stored.unwrap_or_else(|| self.fans.events()))
+    }
+
+    fn set_fan_profile(&self, profile: Profile) -> Result<(), String> {
+        self.fans.set_profile(profile)
     }
 
     fn shutdown(&self) {
