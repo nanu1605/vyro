@@ -851,7 +851,10 @@ within +1 MB of P16. History schema unchanged; IPC protocol 10.
       is logged as a repeat); the diagnostic record names the busy program.
 
 ### P17 — Performance Score (M9)
-- [ ] Formula drafted for sign-off (decision 22); versioned, inputs shown.
+- [x] Formula v1 drafted for sign-off (decision 22): [`docs/performance-score.md`](docs/performance-score.md)
+      (2026-10-15, branch `v2-p17-score`, stacked on `v2-p18-alerts`). Nine observed inputs,
+      weighted, with fixed breakpoints and a coverage rule; stored daily with its version.
+- [ ] Owner's sign-off, then build.
 
 ### P20 — Benchmark mode (M10 → 0.4)
 - [ ] Own workloads, hard stop, variance; `benchmark_runs` / `benchmark_metrics`.
