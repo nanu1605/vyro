@@ -416,6 +416,10 @@
     {/if}
   </Card>
 
+  {#await import('./RemoteCard.svelte') then { default: RemoteCard }}
+    <RemoteCard {active} />
+  {/await}
+
   <Card title="Sensor service">
     {#if !backend}
       <p class="note">Browser preview: no service.</p>

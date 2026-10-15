@@ -22,7 +22,7 @@ hand.
   Intel) from <https://github.com/GameTechDev/PresentMon>, licensed under MIT (text in
   `THIRD_PARTY_LICENSES.md`). The sensor service runs it to measure game frame rates.
 
-## Rust crates (322)
+## Rust crates (323)
 
 Compiled into `vyro.exe` for Windows. Full license texts are in each crate's source package (crates.io) and repository.
 
@@ -184,6 +184,7 @@ Compiled into `vyro.exe` for Windows. Full license texts are in each crate's sou
 | ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 | https://github.com/cryptocorrosion/cryptocorrosion |
 | precomputed-hash | 0.1.1 | MIT | https://github.com/emilio/precomputed-hash |
 | proc-macro2 | 1.0.107 | MIT OR Apache-2.0 | https://github.com/dtolnay/proc-macro2 |
+| qrcodegen | 1.8.0 | MIT | https://github.com/nayuki/QR-Code-generator |
 | quick-xml | 0.42.0 | MIT | https://github.com/tafia/quick-xml |
 | quote | 1.0.47 | MIT OR Apache-2.0 | https://github.com/dtolnay/quote |
 | rand | 0.9.5 | MIT OR Apache-2.0 | https://github.com/rust-random/rand |

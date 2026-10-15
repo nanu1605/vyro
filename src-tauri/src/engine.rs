@@ -64,6 +64,8 @@ pub struct Engine {
     game: AtomicBool,
     /// A benchmark runs (P20): it watches the readings with the window hidden too.
     bench: AtomicBool,
+    /// A phone watches the remote companion (P26).
+    remote: AtomicBool,
 }
 
 impl Engine {
@@ -124,6 +126,7 @@ impl Engine {
             overlay: AtomicBool::new(false),
             game: AtomicBool::new(false),
             bench: AtomicBool::new(false),
+            remote: AtomicBool::new(false),
         })
     }
 
@@ -153,14 +156,21 @@ impl Engine {
         }
     }
 
-    /// The window's rate while it, the overlay, a game or a benchmark needs readings; the tray
-    /// rate otherwise.
+    pub fn set_remote(&self, on: bool) {
+        if self.remote.swap(on, Ordering::SeqCst) != on {
+            self.sync_rate();
+        }
+    }
+
+    /// The window's rate while it, the overlay, a game, a benchmark or a remote viewer needs
+    /// readings; the tray rate otherwise.
     fn sync_rate(&self) {
         self.api.set_visible(
             self.visible.load(Ordering::SeqCst)
                 || self.overlay.load(Ordering::SeqCst)
                 || self.game.load(Ordering::SeqCst)
-                || self.bench.load(Ordering::SeqCst),
+                || self.bench.load(Ordering::SeqCst)
+                || self.remote.load(Ordering::SeqCst),
         );
     }
 
@@ -182,8 +192,8 @@ impl Engine {
 fn sink(app: &AppHandle, shown: &Arc<AtomicBool>) -> impl Fn(&SensorSnapshot) + Send + 'static {
     let app = app.clone();
     let shown = Arc::clone(shown);
-    // Fan state and alerts last shown in the tray; none yet.
-    let tray_state: Mutex<Option<(FanBrief, Vec<String>)>> = Mutex::new(None);
+    // Fan state, the remote companion and alerts last shown in the tray; none yet.
+    let tray_state: Mutex<Option<(FanBrief, bool, Vec<String>)>> = Mutex::new(None);
     // The drives last seen, to check the PC change history when one comes or goes.
     let drives: Mutex<Option<Vec<String>>> = Mutex::new(None);
     move |snap: &SensorSnapshot| {
@@ -200,8 +210,12 @@ fn sink(app: &AppHandle, shown: &Arc<AtomicBool>) -> impl Fn(&SensorSnapshot) + 
                 *last = Some(ids.into_iter().map(String::from).collect());
             }
         }
+        let remote = app
+            .try_state::<crate::remote::Remote>()
+            .is_some_and(|r| r.running());
         let tray = (
             snap.fan_control,
+            remote,
             snap.alert_state
                 .tray()
                 .into_iter()
@@ -210,7 +224,9 @@ fn sink(app: &AppHandle, shown: &Arc<AtomicBool>) -> impl Fn(&SensorSnapshot) + 
         );
         {
             let mut shown = lock(&tray_state);
-            if shown.as_ref() != Some(&tray) && crate::tray::set_tray_state(&app, tray.0, &tray.1) {
+            if shown.as_ref() != Some(&tray)
+                && crate::tray::set_tray_state(&app, tray.0, tray.1, &tray.2)
+            {
                 *shown = Some(tray);
             }
         }
@@ -223,6 +239,7 @@ fn sink(app: &AppHandle, shown: &Arc<AtomicBool>) -> impl Fn(&SensorSnapshot) + 
         crate::bench::note_snapshot(&app, snap);
         crate::gaming::note_alerts(&app, &snap.alert_state);
         crate::overlay::update(&app, snap);
+        crate::remote::publish(&app, snap);
         for alert in &snap.alerts {
             notify(&app, alert);
         }

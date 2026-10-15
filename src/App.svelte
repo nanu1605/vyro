@@ -19,12 +19,12 @@
   import CoolingPanel from './components/CoolingPanel.svelte';
   import { animator } from './anim';
   import { loadUpdates, update } from './updates.svelte';
-  import { getBackendStatus, getHardwareChanges, getPawnIoStatus, inTauri, onBackendStatus, onHardwareChanged, onSensors, onWindowOpened, restoreFans, setUiVisible } from './ipc';
+  import { getBackendStatus, getHardwareChanges, getPawnIoStatus, getRemoteBrief, inTauri, onBackendStatus, onHardwareChanged, onRemote, onSensors, onWindowOpened, restoreFans, setUiVisible } from './ipc';
   import { loadSeen, newestId, saveSeen } from './changes';
   import { loadSeenKeys, markSeen, unseen } from './insights';
   import { loadPrefs, prefs, profileSpec, tempText } from './prefs.svelte';
   import { applyLook, savedLook, uiState } from './themes';
-  import type { AlertFired, BackendStatus, PawnIoStatus, SensorSnapshot } from './types';
+  import type { AlertFired, BackendStatus, PawnIoStatus, RemoteBrief, SensorSnapshot } from './types';
 
   const TABS = [
     { id: 'dashboard', label: 'Dashboard' },
@@ -206,6 +206,14 @@
     await restoreFans().catch(() => {});
   }
 
+  // Remote companion (P26): the header says so while it is on, from any tab.
+  let remote = $state.raw<RemoteBrief | null>(null);
+  function openRemote(): void {
+    select('settings');
+    // The card loads with the panel.
+    setTimeout(() => document.getElementById('remote')?.scrollIntoView({ block: 'start' }), 150);
+  }
+
   onMount(() => {
     visited[tab] = true;
     loadPawnIo();
@@ -222,6 +230,7 @@
     let stopBackend: (() => void) | undefined;
     let stopChanges: (() => void) | undefined;
     let stopOpened: (() => void) | undefined;
+    let stopRemote: (() => void) | undefined;
     let disposed = false;
     // Opened again from the tray: back to the Dashboard unless "Last tab" is chosen.
     void onWindowOpened(() => {
@@ -240,6 +249,13 @@
     getBackendStatus()
       .then((s) => (backend = s))
       .catch(() => {});
+    getRemoteBrief()
+      .then((b) => (remote = b))
+      .catch(() => {});
+    void onRemote((b) => (remote = b)).then((fn) => {
+      if (disposed) fn();
+      else stopRemote = fn;
+    });
     void onBackendStatus((s) => {
       backend = s;
       // A restarted service may see PawnIO differently.
@@ -269,6 +285,7 @@
       stopBackend?.();
       stopChanges?.();
       stopOpened?.();
+      stopRemote?.();
       document.removeEventListener('visibilitychange', onVisibility);
     };
   });
@@ -305,6 +322,18 @@
         </button>
       {/each}
     </div>
+    {#if remote?.running}
+      <button
+        type="button"
+        class="remote-chip"
+        onclick={openRemote}
+        title="Open Settings → Remote"
+        aria-label="Remote companion on{remote.watching ? `, ${remote.watching} watching` : ''}. Open its settings."
+      >
+        <span class="remote-dot" class:live={remote.watching > 0} aria-hidden="true"></span>
+        Remote{remote.watching ? ` · ${remote.watching} watching` : ''}
+      </button>
+    {/if}
     {#if fans?.active}
       <div class="fan-chip" role="status">
         <button type="button" class="chip-open" onclick={() => select('cooling')}>
@@ -502,6 +531,28 @@
     to {
       opacity: 0.3;
     }
+  }
+  .remote-chip {
+    display: flex;
+    align-items: center;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+    border-radius: 999px;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  .remote-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-right: 0.4rem;
+    border: 1.5px solid var(--accent);
+    border-radius: 50%;
+  }
+  .remote-dot.live {
+    background: var(--accent);
   }
   .fan-chip {
     display: flex;

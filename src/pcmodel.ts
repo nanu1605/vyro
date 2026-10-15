@@ -7,6 +7,7 @@
 
 import { detectCard, type DetectedCard, type GpuShape } from './gpuspecs';
 import type { DriveInfo, GpuSnapshot, HardwareId, SensorSnapshot } from './types';
+import { LIMITS } from './limits';
 
 export type PartKind = 'board' | 'cpu' | 'cooler' | 'aio' | 'radiator' | 'vrm' | 'chipset' | 'ram' | 'slot' | 'gpu' | 'm2' | 'drive' | 'fan' | 'psu';
 export type HeatGroup = 'cpu' | 'gpu' | 'board' | 'storage';
@@ -252,18 +253,7 @@ export function buildPc(input: PcInput): Part[] {
 // Readings and the thermal map
 // ---------------------------------------------------------------------------------------------
 
-/** Health's limits, °C: [warning, problem]. */
-export const LIMITS = {
-  cpu: [90, 99],
-  gpu: [85, 92],
-  hotspot: [100, 108],
-  ram: [75, 85],
-  nvme: [75, 85],
-  sata: [60, 70],
-  vrm: [95, 105],
-  chipset: [80, 90],
-  system: [55, 65],
-} as const satisfies Record<string, readonly [number, number]>;
+export { LIMITS };
 
 export interface PartTemp {
   /** °C. */

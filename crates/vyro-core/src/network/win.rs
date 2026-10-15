@@ -459,6 +459,32 @@ fn is_listed(row: &IfRow, addrs: &HashMap<u32, Addrs>) -> bool {
     listed(row.if_type, row.hardware, row.filter, row.up, gw)
 }
 
+/// This PC's IPv4 addresses on adapters that are up, for the remote companion's address
+/// (P26). No Wi-Fi queries and no logging: Settings asks for it whenever it shows.
+pub fn local_ipv4() -> Vec<crate::remote::net::LocalAddr> {
+    let rows = if_rows();
+    let addrs = addresses();
+    let primary = primary_index();
+    let mut out = Vec::new();
+    for r in rows.iter().filter(|r| r.up) {
+        let Some(a) = addrs.get(&r.index) else {
+            continue;
+        };
+        for ip in &a.ipv4 {
+            let ip = ip.split_once('/').map_or(ip.as_str(), |(ip, _)| ip);
+            if let Ok(ip) = ip.parse::<Ipv4Addr>() {
+                out.push(crate::remote::net::LocalAddr {
+                    ip,
+                    primary: primary == Some(r.index),
+                    virtual_adapter: !r.hardware,
+                    gateway: !a.gateways.is_empty(),
+                });
+            }
+        }
+    }
+    out
+}
+
 /// Every listed adapter with its configuration (for `get_network`).
 pub fn collect() -> Vec<NetAdapterInfo> {
     let rows = if_rows();
