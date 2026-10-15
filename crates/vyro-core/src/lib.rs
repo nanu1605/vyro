@@ -7,6 +7,7 @@ pub mod amd;
 pub mod autostart;
 pub mod bench;
 pub mod changes;
+pub mod dashboard;
 pub mod devices;
 pub mod diag;
 pub mod display;

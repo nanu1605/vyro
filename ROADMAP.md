@@ -1240,7 +1240,104 @@ Budget:
       - The defaults above are what you want.
 
 ### P24 — Custom dashboard builder (M11)
-- [ ] Depth decided at start; `dashboard_layouts` with presets.
+On `v2-p24-dashboard`, stacked on `v2-p22-devices` (it replaces the Dashboard markup both
+touch).
+
+Depth decided at start (2026-10-15; the owner can change it at the field check):
+- **A flow grid, not free placement.** Widgets sit in order on a 12-column grid. Each is 3,
+  4, 6, 8 or 12 columns wide and 1 to 4 rows tall. Cards with more to show grow past their
+  rows instead of scrolling. Under 900 px the grid has 6 columns, and under 560 px each widget
+  takes the full width. Order instead of x/y keeps every layout tidy at any window size, and
+  every edit works from the keyboard.
+- **Editing.** "Edit layout" on the Dashboard shows each widget's bar:
+  - drag to move it, or move it earlier or later;
+  - wider, narrower, taller or shorter, or drag its corner;
+  - its settings (which reading, which GPU);
+  - duplicate and remove.
+  A palette adds widgets. "Done" saves; "Cancel" drops the changes.
+- **Lock and reset.** A layout can be locked (no editing until it is unlocked). "Reset"
+  puts a layout back to the preset it came from.
+- **Layouts.** A picker on the Dashboard switches between saved layouts. You can make a new
+  one (a copy of the current), rename it, or delete it (not the last). Up to 12 layouts of
+  up to 40 widgets each.
+- **Presets.** Seven ship as layouts: Default (today's Dashboard, widget for widget),
+  Gaming, Work, Streaming, Benchmark, Monitoring and Minimal.
+- **Widgets.**
+  - Gauge: CPU or a GPU.
+  - Reading: any of about 35 live values. CPU usage, clock, temperature and power; GPU usage,
+    clock, temperature, hotspot, power, VRAM and fan, for each GPU; memory; system power;
+    each fan and pump; download, upload and ping; disk read, write and the hottest drive; the
+    game's FPS, 1 % low and frame time.
+  - Graph: the last minute of a reading.
+  - History: the last hour of a recorded sensor, from the history store.
+  - Game: FPS, 1 % low and the frame-time graph.
+  - Health: the grade and the top findings.
+  - Events: the latest health events.
+  - Today's cards: CPU cores, CPU sensors, GPUs, memory, power, board and fans, and Vyro
+    itself.
+- **Profiles.** The compact profiles (Battery saver) still hide the detail cards (cores,
+  memory, power, board, Vyro itself) in every layout, and say so.
+- **Storage.** `dashboard_layouts` is kept as `dashboard.json` in the app's config folder,
+  next to `settings.json` but apart from it, so a damaged layout file can never reset the
+  other settings. It is checked on load: sizes clamped, counts capped, ids made unique.
+
+Budget:
+- **No new polling.** Widgets draw from the snapshot the Dashboard already gets each tick.
+  A History widget reads the store when shown and then once a minute; Events reads once a
+  minute while shown.
+- **Edits.** Edits stay in memory until "Done": one small file write per save, none while
+  dragging.
+- **Memory.** The Default layout renders the same components as today. Each Graph widget
+  keeps 60 points. Within +1 MB with 40 widgets.
+- **Bundle.** The editor (palette, bars, settings) loads on first "Edit layout"; the main
+  bundle grows under 8 kB.
+- **Versions.** IPC protocol stays 13; the settings file is unchanged.
+
+- [x] Built (2026-10-15, branch `v2-p24-dashboard`, stacked on `v2-p22-devices`):
+      - **Model.** `vyro-core/src/dashboard.rs` checks what is stored: widths snap to the grid,
+        rows are clamped, counts capped, ids made valid and unique, and kinds from a later
+        version kept.
+      - **Store.** `src-tauri/src/dashboard.rs` keeps `dashboard.json`: written through a
+        temporary file, and a file that does not load is renamed `dashboard.bad.json`.
+        `get_dashboard` and `set_dashboard` are its commands.
+      - **UI.** `src/dashboard.ts` holds the readings, the Default preset and what to show.
+        `dashboard-presets.ts` holds the other six presets; `dashboard-edit.ts` the palette,
+        sources and edits. All are unit-tested:
+        - every preset resolves on this PC;
+        - Default matches the old Dashboard tile for tile;
+        - each reading reads the snapshot;
+        - move, resize, duplicate, remove, add, reset, new and delete behave.
+      - **Components.**
+        - `DashboardGrid` is the picker, Lock and the grid.
+        - `DashWidget` draws gauges, readings and cards.
+        - `DashExtra` (Graph, History, Game, Health, Events) loads with the first one shown.
+        - `DashboardEditor` loads on the first "Edit layout". It has the bars, a menu per
+          widget, the palette, drag by the bar, the corner (pointer, or arrow keys) and
+          spoken results.
+        - "Save as new layout" takes the edits; the original stays as it was.
+      - **Fixed along the way:** the History widget read the store every tick (it now reads
+        once a minute), and dragging a corner started a move (now only the bar moves a
+        widget).
+      - **Checked:**
+        - frontend tests (111), core tests (567) and app tests under Wine (14) pass;
+        - axe is clean on the Dashboard and the editor in all six themes, and on all seven
+          presets;
+        - no overflow at 1440, 800 or 390 px;
+        - moving by the menu and by dragging works, and so does resizing by keys and by the
+          corner;
+        - a new layout survives a reload, and the lock survives a reload.
+      - **Bundle: over budget.** The main bundle grows 11.9 kB (5.7 kB gzipped), over the
+        8 kB budget: the readings table and the widget renderer have to be there at first
+        paint. The editor (13.3 kB), the less-used widgets (7.3 kB) and the other presets
+        (1.7 kB) load when needed.
+- [ ] Field check (MS-7E24):
+      - The Dashboard looks as before on Default (the tiles are now four to a row).
+      - Build a layout: add, move (drag and keyboard), resize (corner and keys), duplicate,
+        remove, change a reading. Press Done, restart Vyro: it is still there.
+      - Switch between the presets while a game runs (Gaming shows the frame times).
+      - Lock a layout: Edit is off until unlocked. Reset puts a preset back.
+      - With 40 widgets on a layout, Vyro's memory and CPU in Task Manager stay near today's.
+      - The depth chosen above (flow grid, layout-level lock) is what you want.
 
 ### P23 — 3-D GPU / My PC / thermal map (M11)
 - [ ] Three.js on demand (≤ 30 fps, 2-D fallback), within the installer and memory budgets.

@@ -1,23 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import GaugePanel from './components/GaugePanel.svelte';
-  import StatTile from './components/StatTile.svelte';
   import AppStatus from './components/AppStatus.svelte';
   import HardwarePanel from './components/HardwarePanel.svelte';
   import SystemPanel from './components/SystemPanel.svelte';
   import SettingsPanel from './components/SettingsPanel.svelte';
   import DisplaysPanel from './components/DisplaysPanel.svelte';
+  import DashboardGrid from './components/DashboardGrid.svelte';
   import StoragePanel from './components/StoragePanel.svelte';
-  import MemoryCard from './components/MemoryCard.svelte';
   import NetworkPanel from './components/NetworkPanel.svelte';
-  import PowerCard from './components/PowerCard.svelte';
-  import SelfCard from './components/SelfCard.svelte';
-  import CoresCard from './components/CoresCard.svelte';
-  import CpuSensorsCard from './components/CpuSensorsCard.svelte';
-  import BoardCard from './components/BoardCard.svelte';
   import PawnIoBanner from './components/PawnIoBanner.svelte';
   import ServiceBanner from './components/ServiceBanner.svelte';
-  import GpuCard from './components/GpuCard.svelte';
   import ProcessesPanel from './components/ProcessesPanel.svelte';
   import SensorsPanel from './components/SensorsPanel.svelte';
   import HistoryPanel from './components/HistoryPanel.svelte';
@@ -26,12 +18,11 @@
   import GamingPanel from './components/GamingPanel.svelte';
   import CoolingPanel from './components/CoolingPanel.svelte';
   import { animator } from './anim';
-  import { fmt, fmtGB } from './format';
   import { loadUpdates, update } from './updates.svelte';
   import { getBackendStatus, getHardwareChanges, getPawnIoStatus, inTauri, onBackendStatus, onHardwareChanged, onSensors, onWindowOpened, restoreFans, setUiVisible } from './ipc';
   import { loadSeen, newestId, saveSeen } from './changes';
   import { loadSeenKeys, markSeen, unseen } from './insights';
-  import { loadPrefs, prefs, profileSpec, temp, tempOrNull, tempText, tempUnit } from './prefs.svelte';
+  import { loadPrefs, prefs, profileSpec, tempText } from './prefs.svelte';
   import { applyLook, savedLook, uiState } from './themes';
   import type { AlertFired, BackendStatus, PawnIoStatus, SensorSnapshot } from './types';
 
@@ -192,9 +183,6 @@
     document.documentElement.dataset.motion = spec.motion;
   });
 
-  const cpu = $derived(snap?.cpu ?? null);
-  const gpu = $derived(snap?.gpu[0] ?? null);
-  const mem = $derived(snap?.memory ?? null);
   // CPU temperature / power and board fans come through PawnIO (Phase 6).
   let pawnio = $state.raw<PawnIoStatus | null>(null);
   // Sensor service connection (P8); without it the app reads unprivileged sensors itself.
@@ -206,8 +194,6 @@
       .then((s) => (pawnio = s))
       .catch(() => {});
   const NEEDS_DRIVER = $derived(pawnio?.state === 'ready' ? 'not reported' : 'needs PawnIO');
-  const game = $derived(snap?.game ?? null);
-  const cpuFan = $derived(snap?.fans.find((f) => f.kind === 'fan') ?? null);
 
   // Fan control (P12): the header shows whenever Vyro drives fans, from any tab. Each snapshot
   // says so; nothing is polled.
@@ -355,72 +341,15 @@
           <span class="go">Health →</span>
         </button>
       {/if}
-      <div class="gauges">
-        <GaugePanel
-          label="CPU"
-          ts={snap?.ts ?? 0}
-          usage={cpu?.usageTotal ?? null}
-          mhz={cpu?.mhzCurrent ?? null}
-          detail={cpu?.mhzBoost != null ? `base ${fmt(cpu.mhzBase)} · boost ${fmt(cpu.mhzBoost)} MHz` : null}
-        />
-        <div class="gpu">
-          <GaugePanel
-            label="GPU"
-            ts={snap?.ts ?? 0}
-            usage={gpu?.usage ?? null}
-            mhz={gpu?.mhzCore ?? null}
-            detail={gpu?.name ?? 'No GPU detected'}
-          />
-        </div>
-      </div>
-
-      <div class="tiles">
-        {#if game && game.state !== 'unavailable'}
-          <button type="button" class="tile-link" onclick={() => select('gaming')} aria-label="Game: {game.app}, open Gaming">
-            <StatTile label="Game FPS" value={game.fps} unit="FPS" sub={game.low1Fps != null ? `1% low ${fmt(game.low1Fps)} · ${game.app}` : game.app} />
-          </button>
-        {/if}
-        <StatTile label="CPU package" value={tempOrNull(cpu?.tempPackage)} unit={tempUnit()} warn={temp(80)} hot={temp(95)} sub={cpu?.tempPackage == null ? NEEDS_DRIVER : null} />
-        <StatTile label="CPU power" value={cpu?.powerPkgW} unit="W" digits={1} sub={cpu?.powerPkgW == null ? NEEDS_DRIVER : null} />
-        <StatTile label="GPU temp" value={tempOrNull(gpu?.tempEdge)} unit={tempUnit()} warn={temp(80)} hot={temp(90)} />
-        <StatTile label="GPU hotspot" value={tempOrNull(gpu?.tempHotspot)} unit={tempUnit()} warn={temp(90)} hot={temp(105)} />
-        <StatTile
-          label="VRAM"
-          value={gpu?.vramUsedMB != null ? gpu.vramUsedMB / 1024 : null}
-          unit="GB"
-          digits={1}
-          sub={gpu?.vramTotalMB != null ? `of ${fmtGB(gpu.vramTotalMB)} GB` : null}
-        />
-        <StatTile
-          label="Memory"
-          value={mem?.usedMB != null ? mem.usedMB / 1024 : null}
-          unit="GB"
-          digits={1}
-          sub={mem?.totalMB != null ? `of ${fmtGB(mem.totalMB)} GB` : null}
-        />
-        <StatTile label="System power" value={snap?.power.estTotalW} unit="W" sub={snap?.power.estTotalW == null ? NEEDS_DRIVER : 'estimated'} />
-        <StatTile label={cpuFan?.name ?? 'CPU fan'} value={cpuFan?.rpm} unit="RPM" sub={cpuFan?.rpm == null ? NEEDS_DRIVER : null} />
-      </div>
-
-      <div class="cards">
-        {#if !compact}<CoresCard {cpu} />{/if}
-        <CpuSensorsCard {cpu} />
-        {#each snap?.gpu ?? [] as g, i (i)}
-          <GpuCard gpu={g} />
-        {/each}
-        {#if !compact}
-          <MemoryCard {mem} />
-          <PowerCard power={snap?.power ?? null} gpus={snap?.gpu ?? []} />
-          <BoardCard board={snap?.board ?? null} fans={snap?.fans ?? []} voltages={snap?.voltages ?? []} pending={NEEDS_DRIVER} />
-          <SelfCard app={snap?.app ?? null} {uiFps} />
-        {/if}
-      </div>
-      {#if compact}
-        <p class="compact-note">
-          {spec.name} profile: compact dashboard.
-          <button type="button" class="link" onclick={() => select('settings')}>Change profile</button>
-        </p>
-      {/if}
+      <DashboardGrid
+        {snap}
+        active={tab === 'dashboard'}
+        needs={NEEDS_DRIVER}
+        {uiFps}
+        {compact}
+        profileName={spec.name}
+        onselect={select}
+      />
     </div>
 
     {#if visited.history}
@@ -718,64 +647,9 @@
     color: var(--muted);
     font-size: 0.8rem;
   }
-  .gauges {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-  }
-  .gpu {
-    --accent: var(--accent-gpu);
-    display: contents;
-  }
-  .tiles {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
-    gap: 0.75rem;
-    margin-top: 1rem;
-  }
-  .tile-link {
-    display: grid;
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius);
-    background: none;
-    color: inherit;
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-  }
-  .tile-link:hover :global(.tile) {
-    border-color: var(--accent-gpu);
-  }
-  .cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
-    gap: 0.75rem;
-    margin-top: 1rem;
-  }
   .waiting {
     margin: 0 0 0.9rem;
     color: var(--muted);
     font-size: 0.85rem;
-  }
-  .compact-note {
-    margin: 0.75rem 0 0;
-    color: var(--muted);
-    font-size: 0.8rem;
-  }
-  .compact-note .link {
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--text);
-    font: inherit;
-    text-decoration: underline dotted var(--muted);
-    text-underline-offset: 3px;
-    cursor: pointer;
-  }
-  @media (max-width: 720px) {
-    .gauges {
-      grid-template-columns: 1fr;
-    }
   }
 </style>
