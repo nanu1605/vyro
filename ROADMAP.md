@@ -677,8 +677,13 @@ a newer schema.
 - [x] Field check (2026-10-13, MS-7E24), all passed: two sessions with an alt-tab, a profile
       change, an overlay toggle and heavy load; markers at the right moments and their context
       matches History; sessions and replays kept after a service restart; disk growth
-      measured. With P13 and P14 also field-checked, M8 is complete; 0.3.0 waits for the
-      owner's go-ahead.
+      measured. With P13 and P14 also field-checked, M8 is complete.
+- [x] **0.3.0 released** (2026-10-15): `v2` merged into `main` (2cc7be0); Release run
+      38685441589 (started from the Actions tab on `main`) tagged `v0.3.0` and published the
+      9.9 MB MSI, `latest.json` and checksums here and to `nanu1605/vyro-releases`. Before the
+      merge, a sweep of all 13 tabs in the browser preview, sampled every 250 ms with a replay
+      and its context open on Gaming, peaked at 154 MB (0.2.0: 167 MB); the "Vyro itself"
+      figures on the reference PC were not re-measured for the README.
 
 ### P19 — Hardware change detection (M9 → 0.4; first, P16 cites it)
 - [ ] Inventory diffs into `hardware_changes` and a PC change history.
