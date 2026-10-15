@@ -1,7 +1,7 @@
 //! Connects the app to the sensor engine: the Vyro service when it runs (the app itself stays
 //! unelevated), else an in-process engine without the privileged sensors.
 
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -11,6 +11,7 @@ use vyro_core::alerts::AlertFired;
 use vyro_core::engine::{
     BackendMode, BackendStatus, ClientPids, EngineApi, EngineConfig, LocalEngine,
 };
+use vyro_core::fan::FanBrief;
 use vyro_core::ipc::{RemoteEngine, RemoteStatus};
 use vyro_core::{lock, Inventory, PollerConfig, SensorSnapshot};
 
@@ -148,8 +149,8 @@ impl Engine {
 fn sink(app: &AppHandle, shown: &Arc<AtomicBool>) -> impl Fn(&SensorSnapshot) + Send + 'static {
     let app = app.clone();
     let shown = Arc::clone(shown);
-    // Fan state last shown in the tray (bit 0 active, bit 1 full speed); none yet.
-    let tray_fans = AtomicU8::new(u8::MAX);
+    // Fan state and alerts last shown in the tray; none yet.
+    let tray_state: Mutex<Option<(FanBrief, Vec<String>)>> = Mutex::new(None);
     // The drives last seen, to check the PC change history when one comes or goes.
     let drives: Mutex<Option<Vec<String>>> = Mutex::new(None);
     move |snap: &SensorSnapshot| {
@@ -166,10 +167,19 @@ fn sink(app: &AppHandle, shown: &Arc<AtomicBool>) -> impl Fn(&SensorSnapshot) + 
                 *last = Some(ids.into_iter().map(String::from).collect());
             }
         }
-        let fans = snap.fan_control;
-        let bits = u8::from(fans.active) | u8::from(fans.full_speed) << 1;
-        if tray_fans.load(Ordering::Relaxed) != bits && crate::tray::set_fan_state(&app, fans) {
-            tray_fans.store(bits, Ordering::Relaxed);
+        let tray = (
+            snap.fan_control,
+            snap.alert_state
+                .tray()
+                .into_iter()
+                .map(String::from)
+                .collect::<Vec<_>>(),
+        );
+        {
+            let mut shown = lock(&tray_state);
+            if shown.as_ref() != Some(&tray) && crate::tray::set_tray_state(&app, tray.0, &tray.1) {
+                *shown = Some(tray);
+            }
         }
         if shown.load(Ordering::SeqCst) {
             if let Err(e) = app.emit(SENSORS_EVENT, snap) {
@@ -177,6 +187,7 @@ fn sink(app: &AppHandle, shown: &Arc<AtomicBool>) -> impl Fn(&SensorSnapshot) + 
             }
         }
         crate::gaming::note_snapshot(&app, snap);
+        crate::gaming::note_alerts(&app, &snap.alert_state);
         crate::overlay::update(&app, snap);
         for alert in &snap.alerts {
             notify(&app, alert);
@@ -317,6 +328,11 @@ fn migrate_alert_rules(app: &AppHandle, api: &Arc<dyn EngineApi>) {
 /// Shows a fired alert as a Windows notification, if the profile lets it through (silent
 /// unless the rule and the profile ask for sound).
 pub fn notify(app: &AppHandle, alert: &AlertFired) {
+    if !alert.notify {
+        // Logged only, or it repeats an alert just shown about the same part.
+        log::info!("alert (not shown): {}: {}", alert.title, alert.message);
+        return;
+    }
     show_notification(app, alert, false);
 }
 

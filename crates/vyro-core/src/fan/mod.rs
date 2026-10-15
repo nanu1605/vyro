@@ -245,6 +245,20 @@ pub struct FanStatus {
     pub pump_min_pct: u8,
     /// The profile whose header settings are in force.
     pub profile: Profile,
+    /// An alert running the driven headers faster, while it lasts.
+    #[serde(default)]
+    pub boost: Option<FanBoost>,
+}
+
+/// An alert's fan action in force (P18).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FanBoost {
+    /// Percentage points on top of each driven header's speed.
+    pub pct: u8,
+    /// The alert rule asking for it.
+    pub rule: String,
 }
 
 impl FanStatus {
@@ -260,6 +274,7 @@ impl FanStatus {
             headers: Vec::new(),
             pump_min_pct: PUMP_MIN_PCT,
             profile: Profile::default(),
+            boost: None,
         }
     }
 }
@@ -303,6 +318,10 @@ pub enum FanEventKind {
     Wake,
     /// Another profile's header settings are now in force.
     Profile,
+    /// An alert raised the fans Vyro drives (P18).
+    Boost,
+    /// That alert cleared: the fans follow their settings again.
+    BoostEnd,
 }
 
 /// One entry of the fan control log (kept in the history store, kind [`EVENT_KIND`]).
@@ -473,6 +492,9 @@ pub struct Decision {
 pub struct Runtime {
     runs: HashMap<u16, Run>,
     last_s: Option<f64>,
+    /// Percentage points an alert adds to every driven header (P18): on top of its curve
+    /// (ramped like any change) or fixed speed. Safety full speed is unaffected.
+    pub boost: f64,
 }
 
 impl Runtime {
@@ -503,6 +525,7 @@ impl Runtime {
             return out;
         }
         let finite = |id: &str| read(id).filter(|v| v.is_finite());
+        let boost = self.boost.clamp(0.0, 100.0);
         let emergency = match (finite(CPU_TEMP), finite(GPU_TEMP)) {
             (Some(c), _) if c >= cfg.emergency_cpu_c => Some(format!(
                 "CPU at {c:.0} °C (limit {:.0} °C): fans at full speed",
@@ -542,7 +565,7 @@ impl Runtime {
             } else {
                 match mode {
                     HeaderMode::Bios => continue,
-                    HeaderMode::Fixed { pct } => Some(*pct),
+                    HeaderMode::Fixed { pct } => Some(*pct + boost),
                     HeaderMode::Curve { curve } => match finite(&curve.source) {
                         Some(t) => {
                             out.sources.push((h.index, t));
@@ -550,7 +573,7 @@ impl Runtime {
                                 .held_c
                                 .map_or(t, |held| held.clamp(t, t + curve.hysteresis_c.max(0.0)));
                             run.held_c = Some(held);
-                            let target = evaluate(&curve.points, held);
+                            let target = evaluate(&curve.points, held) + boost;
                             Some(ramp(run.pct, target, dt, curve))
                         }
                         None => {
@@ -874,6 +897,52 @@ mod tests {
         let d = rt.decide(&c, board(), 2.0, |id| (id == CPU_TEMP).then_some(40.0));
         assert_eq!(d.targets, vec![(0, 30.0), (2, 95.0)]);
         assert_eq!(d.override_reason, None);
+    }
+
+    #[test]
+    fn an_alert_boost_raises_driven_headers_only() {
+        let mut rt = Runtime::default();
+        let c = cfg(&[
+            (0, HeaderMode::Fixed { pct: 40.0 }),
+            (1, HeaderMode::Bios),
+            (
+                2,
+                HeaderMode::Curve {
+                    curve: curve(&[(40.0, 30.0), (80.0, 100.0)]),
+                },
+            ),
+        ]);
+        let read = |temp: f64| move |id: &str| (id == CPU_TEMP).then_some(temp);
+        assert_eq!(
+            rt.decide(&c, board(), 0.0, read(40.0)).targets,
+            vec![(0, 40.0), (2, 30.0)]
+        );
+        rt.boost = 20.0;
+        // Fixed jumps; the curve ramps up at its 10 %/s; the BIOS header is left alone.
+        let d = rt.decide(&c, board(), 1.0, read(40.0));
+        assert_eq!(d.targets, vec![(0, 60.0), (2, 40.0)]);
+        let d = rt.decide(&c, board(), 2.0, read(40.0));
+        assert_eq!(d.targets, vec![(0, 60.0), (2, 50.0)]);
+        // Never past 100 %.
+        for t in 3..12 {
+            rt.decide(&c, board(), f64::from(t), read(80.0));
+        }
+        let d = rt.decide(&c, board(), 12.0, read(80.0));
+        assert_eq!(d.targets, vec![(0, 60.0), (2, 100.0)]);
+        // Over: back down at the curve's ramp.
+        rt.boost = 0.0;
+        let d = rt.decide(&c, board(), 13.0, read(40.0));
+        assert_eq!(d.targets, vec![(0, 40.0), (2, 95.0)]);
+        // Nothing at all with control off.
+        rt.boost = 50.0;
+        let off = FanConfig {
+            enabled: false,
+            ..c.clone()
+        };
+        assert!(rt
+            .decide(&off, board(), 14.0, read(40.0))
+            .targets
+            .is_empty());
     }
 
     #[test]

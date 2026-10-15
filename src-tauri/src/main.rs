@@ -90,6 +90,7 @@ fn main() {
             commands::get_alert_rules,
             commands::set_alert_rules,
             commands::get_alert_log,
+            commands::get_alert_usual,
             commands::test_alert,
             commands::get_settings,
             commands::set_settings,

@@ -150,9 +150,11 @@
       {/if}
     </div>
 
-    {#if auto?.game && (auto.auto || auto.suppressed)}
+    {#if auto?.game && (auto.auto || auto.suppressed || auto.alert)}
       <div class="auto" role="status">
-        {#if auto.suppressed}
+        {#if auto.alert}
+          <p><b>{nameOf(auto.profile)} profile</b> while the alert “{auto.alert}” holds.</p>
+        {:else if auto.suppressed}
           <p>Your <b>{nameOf(auto.base)}</b> profile stays while {game.app} runs.</p>
         {:else}
           <p>

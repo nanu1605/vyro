@@ -42,6 +42,7 @@ export function emptySnapshot(ts: number): SensorSnapshot {
     alerts: [],
     fanControl: { active: false, fullSpeed: false },
     insights: { attention: [] },
+    alertState: { active: [] },
   };
 }
 

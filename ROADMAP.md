@@ -790,7 +790,65 @@ same time, not shown to be the cause".
       and the tab dot work; footprint within budget.
 
 ### P18 — Smart compound alerts (M9)
-- [ ] AND/OR, rate of change, FOR duration, cooldown; fan action only with control enabled.
+Started while P16 waits for its field check, on `v2-p18-alerts` stacked on
+`v2-p16-intelligence` (it merges after P16). Defaults chosen without the owner, open to change
+at the field check: an alert's profile and fan actions last while its conditions hold and end
+30 s after they clear; a profile the owner picks meanwhile wins until that alert clears; fans
+are only ever raised (5–50 points on top of what Vyro already drives, never a header left to
+the BIOS) and only while fan control is on; two alerts about the same part within a minute
+notify once (a hardware problem always notifies); the diagnostic record keeps readings and the
+five busiest program names, nothing else.
+
+Budget: no new thread; per tick, the rules' conditions plus a short buffer for each sensor a
+rate condition watches (at most 10 minutes of readings); the usual values for "above usual"
+come from the 10-minute intelligence pass (one week query per sensor a rule watches). A
+diagnostic record adds about 1.5 KB to its fired alert in the existing event log. Footprint
+within +1 MB of P16. History schema unchanged; IPC protocol 10.
+
+- [x] Built (2026-10-15, branch `v2-p18-alerts`):
+      - Rules (`vyro_core::alerts`): besides one sensor against a limit and System Health, a
+        rule can hold up to five sensor conditions, all of them or any one: above or below a
+        limit, rising or falling by an amount within 5–600 s, or an amount above or below the
+        sensor's usual reading (a CPU or GPU temperature for the load of the moment, from the
+        past week's fit; anything else its weekly median; nothing until about a day of history,
+        the last hour left out). Each condition can have a clearing margin (hysteresis); the
+        rule must hold for its hold time, then stays quiet for its cooldown; a missing reading
+        neither trips nor clears a rule, but never keeps its actions going.
+      - Actions: a notification (with or without sound, or none: logged only), the rule's name
+        in the tray tooltip, a profile, the fans Vyro drives raised by 5–50 points, and a
+        diagnostic record (the rule's readings, key temperatures, loads, power and fan speeds,
+        and the five busiest program names) kept with the fired alert. Tray, profile and fans
+        last while the conditions hold and end 30 s after they clear; the first active rule's
+        profile and the largest boost apply. Two alerts about the same part (CPU, GPU, fans,
+        memory, storage) within a minute notify once and the second is logged as a repeat; a
+        hardware problem always notifies.
+      - Fan boost (service): added to each driven header's curve (ramped like any change) or
+        fixed speed, capped at 100 %; safety full speed still wins; nothing with control off,
+        and never a header left to the BIOS. The fan log records when an alert raised the
+        fans and when they went back; Cooling says so while it lasts.
+      - Profile (app): an alert's profile wins over a game's; a profile the owner picks while
+        it holds wins until that alert clears. Settings and the Gaming strip say which alert
+        put it in force.
+      - IPC protocol 10 (`AlertUsual`, `SensorSnapshot::alert_state`, `FanStatus::boost`, rule
+        conditions and actions). Rules saved before load unchanged; a single plain limit is
+        still saved the old way, so going back to 0.3 only drops rules that use the new kinds
+        (`alerts.json` is then moved aside and the defaults used).
+      - UI: the rule editor (Health tab) with condition rows, all/any, the usual reading for
+        "above usual", and the actions; "Active" on rules that hold; the log shows actions,
+        repeats and the diagnostic record. Tests: compound and any-of rules, a missing reading,
+        hysteresis on a hovering reading, a fast rise against a slow climb, above usual with
+        and without history, actions ending 30 s after clearing, a lost sensor, a rule turned
+        off, repeats within a minute, the diagnostic record, validation, old rule files; the
+        fan boost on fixed and curve headers, its cap and its gate; the alert profile against
+        games and manual picks; the tray tooltip. Browser preview: axe clean, no overflow at
+        390 px; the main bundle grows 12.8 kB (the preview's rules and log load separately).
+- [ ] Field check (MS-7E24): a CPU-only stress test leaves an "all of" CPU-and-GPU rule quiet
+      and a game with a heavy CPU load fires it; "rises 15 °C within 30 s" fires on starting a
+      stress test; with fan control on, a fan action raises only the driven fans (Cooling log
+      and readings) and they return 30 s after the rule clears, and with control off nothing
+      changes; a profile action switches the profile (tray check mark) and back, and picking
+      a profile meanwhile keeps it; two CPU rules firing within a minute notify once (the second
+      is logged as a repeat); the diagnostic record names the busy program.
 
 ### P17 — Performance Score (M9)
 - [ ] Formula drafted for sign-off (decision 22); versioned, inputs shown.

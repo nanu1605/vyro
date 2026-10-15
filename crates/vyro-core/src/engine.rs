@@ -83,6 +83,9 @@ pub trait EngineApi: Send + Sync {
     fn set_alert_rules(&self, rules: Vec<AlertRule>) -> Result<(), String>;
     /// Fired alerts, oldest first.
     fn alert_log(&self) -> Result<Vec<AlertFired>, String>;
+    /// `sensor`'s usual reading now, for "above usual" conditions (P18): `None` until there
+    /// is about a day of history.
+    fn alert_usual(&self, sensor: &str) -> Result<Option<f64>, String>;
     /// Drives with full health data, read fresh (SMART needs administrator rights).
     fn drives(&self) -> Result<Vec<DriveInfo>, String>;
     /// Whether the engine can use PawnIO (CPU temperature and power, board and RAM sensors).
@@ -175,6 +178,7 @@ impl LocalEngine {
         let gaming = Gaming::new(Gaming::default_launch(), dir, history.clone());
         let fans = Arc::new(Self::start_fans(cfg.fan_control, dir, history.clone()));
         let intel = Intel::new(Arc::clone(&registry), history.clone(), unix_now());
+        intel.set_alert_sensors(lock(&alerts).usual_sensors(), unix_now());
 
         // The game provider runs last: its session summary reads this tick's temperatures.
         let game: Box<dyn Provider> = Box::new(GameProvider::new(Arc::clone(&gaming)));
@@ -333,7 +337,12 @@ impl EngineApi for LocalEngine {
     }
 
     fn set_alert_rules(&self, rules: Vec<AlertRule>) -> Result<(), String> {
-        lock(&self.alerts).set_rules(rules.clone())?;
+        let usual = {
+            let mut alerts = lock(&self.alerts);
+            alerts.set_rules(rules.clone())?;
+            alerts.usual_sensors()
+        };
+        self.intel.set_alert_sensors(usual, unix_now());
         match &self.alerts_path {
             Some(path) => alerts::save(path, &rules)
                 .map_err(|e| format!("rules applied but not saved ({}): {e}", path.display())),
@@ -353,6 +362,10 @@ impl EngineApi for LocalEngine {
                     .ok()
             })
             .unwrap_or_else(|| lock(&self.alerts).log()))
+    }
+
+    fn alert_usual(&self, sensor: &str) -> Result<Option<f64>, String> {
+        self.intel.usual_for(sensor, unix_now())
     }
 
     fn drives(&self) -> Result<Vec<DriveInfo>, String> {

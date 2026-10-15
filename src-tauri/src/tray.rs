@@ -202,22 +202,39 @@ pub struct OverlayItem(CheckMenuItem<Wry>);
 /// "Return fans to BIOS", enabled while Vyro drives fans.
 pub struct FanItem(MenuItem<Wry>);
 
-/// Shows fan control in the tray: the tooltip says so and the menu offers the way back to the
-/// BIOS. False until the tray exists (the caller tries again with the next snapshot).
-pub fn set_fan_state(app: &AppHandle, fans: FanBrief) -> bool {
+/// Shows fan control and the alerts that ask to be named (P18) in the tray: the tooltip says so
+/// and the menu offers the way back to the BIOS. False until the tray exists (the caller tries
+/// again with the next snapshot).
+pub fn set_tray_state(app: &AppHandle, fans: FanBrief, alerts: &[String]) -> bool {
     let Some(tray) = app.tray_by_id("main") else {
         return false;
     };
-    let tip = match (fans.active, fans.full_speed) {
-        (true, true) => "Vyro · fans at full speed",
-        (true, false) => "Vyro · fan control on",
-        (false, _) => "Vyro",
-    };
-    let _ = tray.set_tooltip(Some(tip));
+    let _ = tray.set_tooltip(Some(tooltip(fans, alerts)));
     if let Some(item) = app.try_state::<FanItem>() {
         let _ = item.0.set_enabled(fans.active);
     }
     true
+}
+
+/// "Vyro · fan control on · alert: Hot under load" (Windows keeps 127 characters).
+fn tooltip(fans: FanBrief, alerts: &[String]) -> String {
+    let mut tip = String::from(match (fans.active, fans.full_speed) {
+        (true, true) => "Vyro · fans at full speed",
+        (true, false) => "Vyro · fan control on",
+        (false, _) => "Vyro",
+    });
+    if !alerts.is_empty() {
+        tip.push_str(if alerts.len() == 1 {
+            " · alert: "
+        } else {
+            " · alerts: "
+        });
+        tip.push_str(&alerts.join(", "));
+    }
+    if tip.chars().count() > 127 {
+        tip = tip.chars().take(126).collect::<String>() + "…";
+    }
+    tip
 }
 
 /// Saves `settings` and applies them: the profile in force (the owner's, or a game's), the
@@ -385,15 +402,13 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
     if !store.hinted.swap(true, Ordering::Relaxed) {
         notify(
             app,
-            &AlertFired {
-                ts: unix_now(),
-                rule_id: "tray".into(),
-                title: "Vyro is still running".into(),
-                message:
-                    "Monitoring and alerts continue in the tray. Right-click the icon to quit."
-                        .into(),
-                sound: false,
-            },
+            &AlertFired::new(
+                unix_now(),
+                "tray",
+                "Vyro is still running".into(),
+                "Monitoring and alerts continue in the tray. Right-click the icon to quit.".into(),
+                false,
+            ),
         );
     }
 }
@@ -401,6 +416,23 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_tooltip_names_fan_control_and_alerts() {
+        let on = FanBrief {
+            active: true,
+            full_speed: false,
+        };
+        assert_eq!(tooltip(FanBrief::default(), &[]), "Vyro");
+        assert_eq!(
+            tooltip(on, &["Hot under load".into()]),
+            "Vyro · fan control on · alert: Hot under load"
+        );
+        let many: Vec<String> = (0..20).map(|i| format!("Alert number {i}")).collect();
+        let tip = tooltip(FanBrief::default(), &many);
+        assert!(tip.starts_with("Vyro · alerts: Alert number 0, "));
+        assert_eq!(tip.chars().count(), 127);
+    }
 
     #[test]
     fn settings_from_0_2_get_automatic_game_profiles() {

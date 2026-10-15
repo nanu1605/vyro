@@ -109,7 +109,12 @@
         </label>
       {/each}
     </fieldset>
-    {#if game.state?.game && game.state.auto}
+    {#if game.state?.alert}
+      <p class="note" role="status">
+        {nameOf(game.state.profile)} is in use while the alert “{game.state.alert}” holds; it ends 30 s after the alert
+        clears. Picking a profile here keeps it instead.
+      </p>
+    {:else if game.state?.game && game.state.auto}
       <p class="note" role="status">
         {nameOf(game.state.profile)} is in use while {snap?.game?.app ?? game.state.game} runs; {nameOf(game.state.base)} comes
         back when it closes. Picking a profile here keeps it for the rest of the game.

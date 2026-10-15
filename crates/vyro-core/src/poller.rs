@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use crate::alerts::{AlertEngine, Reading};
+use crate::alerts::{AlertEngine, Reading, TickInputs};
 use crate::fan::{self, controller::FanControl};
 use crate::health::{HealthEvent, HealthMonitor};
 use crate::history::History;
@@ -298,8 +298,29 @@ impl Poller {
                     })
                 })
             };
+            let usual = |id: &str| {
+                self.intel
+                    .as_ref()
+                    .and_then(|i| i.usual_now(id, |load| reg.get(load).and_then(|s| s.value)))
+            };
             let health = lock(&self.health);
-            snap.alerts = lock(alerts).evaluate(snap.ts, reading, health.fresh());
+            let mut engine = lock(alerts);
+            snap.alerts = engine.evaluate_with(
+                snap.ts,
+                reading,
+                &TickInputs {
+                    health: health.fresh(),
+                    usual: Some(&usual),
+                    fans_on: snap.fan_control.active,
+                    processes: &snap.processes,
+                },
+            );
+            snap.alert_state = engine.brief();
+            drop(engine);
+            drop(health);
+            if let Some(fans) = &self.fans {
+                fans.set_boost(snap.alert_state.fan_boost());
+            }
         }
 
         let digest = self.intel.as_ref().and_then(|intel| {
@@ -482,6 +503,11 @@ mod tests {
             for_secs: 0,
             cooldown_secs: 3600,
             sound: false,
+            actions: crate::alerts::AlertActions {
+                record: true,
+                profile: Some(crate::profiles::Profile::Silent),
+                ..crate::alerts::AlertActions::default()
+            },
         };
         let alerts = Arc::new(Mutex::new(AlertEngine::new(vec![rule])));
         let history = Arc::new(Mutex::new(
@@ -499,6 +525,12 @@ mod tests {
         assert!(snaps[0].alerts[0].message.starts_with("CPU Total at"));
         assert!(snaps[1..].iter().all(|s| s.alerts.is_empty()));
         assert_eq!(lock(&alerts).log().len(), 1);
+        // It holds on every tick, so its profile stays asked for; the record has readings.
+        assert!(snaps.iter().all(
+            |s| s.alert_state.profile() == Some((crate::profiles::Profile::Silent, "Busy CPU"))
+        ));
+        let d = snaps[0].alerts[0].diagnostic.as_ref().unwrap();
+        assert_eq!(d.readings[0].id, "cpu.usage.total");
         // Persisted for the next start.
         let stored: Vec<crate::alerts::AlertFired> =
             lock(&history).events(EVENT_ALERT, 10).unwrap();

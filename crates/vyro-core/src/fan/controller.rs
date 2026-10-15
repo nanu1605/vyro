@@ -22,8 +22,8 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use super::{
-    validate, Decision, FanBrief, FanCapability, FanConfig, FanEvent, FanEventKind, FanStatus,
-    HeaderMode, HeaderStatus, Runtime, PUMP_MIN_PCT,
+    validate, Decision, FanBoost, FanBrief, FanCapability, FanConfig, FanEvent, FanEventKind,
+    FanStatus, HeaderMode, HeaderStatus, Runtime, PUMP_MIN_PCT,
 };
 use crate::profiles::Profile;
 use crate::sio::control::{self, BiosState, Board, ControlError};
@@ -123,6 +123,8 @@ struct Inner {
     recent: VecDeque<FanEvent>,
     /// Not yet handed to the event sink (the worker does that, holding no lock).
     pending: Vec<FanEvent>,
+    /// An alert's boost (P18), kept while the alert holds; applies only while control is on.
+    boost: Option<FanBoost>,
 }
 
 impl Inner {
@@ -265,6 +267,7 @@ fn shared(
             stop: false,
             recent: VecDeque::new(),
             pending: Vec::new(),
+            boost: None,
         }),
         wake: Condvar::new(),
         config_path: files.config,
@@ -413,6 +416,7 @@ impl FanControl {
                 }
             }
         }
+        inner.runtime.boost = inner.boost.as_ref().map_or(0.0, |b| f64::from(b.pct));
         let d = inner.runtime.decide(&inner.effective, board, now, read);
         match (&inner.override_reason, &d.override_reason) {
             (None, Some(why)) => inner.record(FanEventKind::FullSpeed, why.clone()),
@@ -428,6 +432,37 @@ impl FanControl {
         inner.last_tick = Some(Instant::now());
         drop(g);
         self.shared.wake.notify_one();
+    }
+
+    /// An alert's fan action (P18): `Some` while the alert holds, `None` once it cleared.
+    /// Raises every header Vyro drives by that many points, never a header left to the BIOS
+    /// and nothing while control is off. Called every tick; only changes are recorded.
+    pub fn set_boost(&self, boost: Option<(u8, &str)>) {
+        if self.board.is_none() {
+            return;
+        }
+        let next = boost.map(|(pct, rule)| FanBoost {
+            pct: pct.min(crate::alerts::MAX_FAN_BOOST),
+            rule: rule.to_owned(),
+        });
+        let mut inner = lock(&self.shared.inner);
+        if inner.boost == next {
+            return;
+        }
+        if inner.effective.drives_any() {
+            match &next {
+                Some(b) => inner.record(
+                    FanEventKind::Boost,
+                    format!("Alert “{}”: fans Vyro drives +{} %", b.rule, b.pct),
+                ),
+                None => {
+                    let rule = inner.boost.as_ref().map_or("", |b| b.rule.as_str());
+                    let message = format!("Alert “{rule}” cleared: fans back to their settings");
+                    inner.record(FanEventKind::BoostEnd, message);
+                }
+            }
+        }
+        inner.boost = next;
     }
 
     /// Validates, saves and applies a configuration.
@@ -586,6 +621,7 @@ impl FanControl {
             headers,
             pump_min_pct: PUMP_MIN_PCT,
             profile: inner.profile,
+            boost: inner.boost.clone().filter(|_| inner.effective.drives_any()),
         }
     }
 
@@ -1340,6 +1376,49 @@ mod tests {
         assert_eq!(fc.status(|_| None).profile, Profile::Gaming, "remembered");
         drop(fc);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn an_alert_boost_is_written_recorded_and_ends() {
+        let dev = SimDevice::new();
+        let fc = FanControl::start(Box::new(dev.clone()), None, WATCHDOG);
+        fc.set_config(on(vec![fixed(0, 40.0)])).unwrap();
+        tick(&fc, &dev, 50.0, 2);
+        assert_eq!(lock(&dev.0).log[1], "set 0 102");
+        fc.set_boost(Some((20, "Hot under load")));
+        fc.set_boost(Some((20, "Hot under load")));
+        tick(&fc, &dev, 50.0, 3);
+        assert_eq!(lock(&dev.0).log[2], "set 0 153");
+        assert_eq!(
+            fc.status(|_| None).boost,
+            Some(FanBoost {
+                pct: 20,
+                rule: "Hot under load".into()
+            })
+        );
+        fc.set_boost(None);
+        tick(&fc, &dev, 50.0, 4);
+        assert_eq!(lock(&dev.0).log[3], "set 0 102");
+        let events = fc.events();
+        let kinds: Vec<FanEventKind> = events.iter().map(|e| e.kind).collect();
+        assert_eq!(
+            kinds,
+            [
+                FanEventKind::On,
+                FanEventKind::Boost,
+                FanEventKind::BoostEnd
+            ]
+        );
+        assert_eq!(
+            events[1].message,
+            "Alert “Hot under load”: fans Vyro drives +20 %"
+        );
+        // With control off an alert changes nothing and logs nothing.
+        fc.restore().unwrap();
+        wait_for_restore(&dev);
+        fc.set_boost(Some((30, "Hot under load")));
+        assert_eq!(fc.status(|_| None).boost, None);
+        assert_eq!(fc.events().len(), 4, "only the return to BIOS");
     }
 
     #[test]
