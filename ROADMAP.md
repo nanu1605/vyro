@@ -721,10 +721,11 @@ so going back to 0.3 turns its history off; IPC protocol 8.
         filters, day groups, "New" on entries not seen yet; the same change on several memory
         modules at once is one entry) and a dot on the Hardware tab until new changes are
         shown. Browser preview: axe clean, no overflow at 390 px; the main bundle grows 7.9 kB.
-- [ ] Field check (MS-7E24): "Tracking started" on the first start; a GPU driver update (or
-      rollback) with before → after; a monitor unplugged and plugged back logs nothing, a
-      different one logs "connected for the first time"; an EXPO / RAM setting changed in the
-      BIOS logs a Settings change; the list survives a service restart.
+- [x] Field check (MS-7E24, 2026-10-15, test build `vyro-windows-d590d8c`): all five checks
+      passed: "Tracking started" on the first start; a GPU driver update (or rollback) with
+      before → after; a monitor unplugged and plugged back logs nothing, a different one logs
+      "connected for the first time"; an EXPO / RAM setting changed in the BIOS logs a Settings
+      change; the list survives a service restart.
 
 ### P16 — Intelligence engine (M9)
 - [ ] Derived metrics → baselines → events → cause chains; measured vs inferred, confidence.
