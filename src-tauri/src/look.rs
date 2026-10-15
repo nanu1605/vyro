@@ -131,3 +131,33 @@ mod tests {
         assert_eq!(serde_json::to_string(&OpenOn::Last).unwrap(), "\"last\"");
     }
 }
+
+/// My PC (P23): drawn in 3-D or as a flat plan, and the owner's corrections to each GPU's shape
+/// by card key. The UI checks the shapes; they are kept as written, so a newer shape loads
+/// unchanged.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct MyPc {
+    pub three_d: bool,
+    pub gpu_shapes: std::collections::BTreeMap<String, serde_json::Value>,
+}
+
+impl Default for MyPc {
+    fn default() -> Self {
+        Self {
+            three_d: true,
+            gpu_shapes: std::collections::BTreeMap::new(),
+        }
+    }
+}
+
+/// Reads a settings section, falling back to its default when it does not parse, so one
+/// damaged section never resets the whole file.
+pub fn lenient<'de, D, T>(d: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned + Default,
+{
+    let v = serde_json::Value::deserialize(d)?;
+    Ok(serde_json::from_value(v).unwrap_or_default())
+}

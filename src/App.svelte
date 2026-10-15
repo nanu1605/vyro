@@ -36,6 +36,7 @@
     { id: 'benchmark', label: 'Benchmark' },
     { id: 'processes', label: 'Processes' },
     { id: 'hardware', label: 'Hardware' },
+    { id: 'mypc', label: 'My PC' },
     { id: 'storage', label: 'Storage' },
     { id: 'network', label: 'Network' },
     { id: 'displays', label: 'Displays' },
@@ -71,6 +72,7 @@
     benchmark: false,
     processes: false,
     hardware: false,
+    mypc: false,
     storage: false,
     network: false,
     displays: false,
@@ -167,6 +169,8 @@
   );
 
   let uiFps = $state(0);
+  /** The window is hidden (tray): views that draw continuously stop and free their resources. */
+  let pageHidden = $state(typeof document !== 'undefined' && document.hidden);
 
   // Theme and accent (P25), from the settings; the page state colours the header rail.
   $effect(() => applyLook({ theme: prefs.theme, accent: prefs.accent, openOn: prefs.openOn }));
@@ -254,6 +258,7 @@
     });
 
     const onVisibility = () => {
+      pageHidden = document.hidden;
       animator.setHidden(document.hidden);
       setUiVisible(!document.hidden);
     };
@@ -400,6 +405,14 @@
     {#if visited.hardware}
       <div id="panel-hardware" role="tabpanel" aria-labelledby="tab-hardware" hidden={tab !== 'hardware'}>
         <HardwarePanel newSince={changesNewSince} />
+      </div>
+    {/if}
+    {#if visited.mypc}
+      <div id="panel-mypc" role="tabpanel" aria-labelledby="tab-mypc" hidden={tab !== 'mypc'}>
+        <!-- Loaded on first visit; its 3-D view (Three.js) exists only while the tab shows. -->
+        {#await import('./components/MyPcPanel.svelte') then { default: MyPcPanel }}
+          <MyPcPanel {snap} active={tab === 'mypc' && !pageHidden} onselect={select} />
+        {/await}
       </div>
     {/if}
     {#if visited.storage}

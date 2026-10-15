@@ -18,7 +18,7 @@ use vyro_core::units::TempUnit;
 use vyro_core::{lock, unix_now};
 
 use crate::engine::{notify, Engine};
-use crate::look::{Accent, OpenOn, Theme};
+use crate::look::{Accent, MyPc, OpenOn, Theme};
 use crate::overlay::OverlaySettings;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,6 +45,9 @@ pub struct Settings {
     pub accent: Accent,
     /// Which tab the window opens on.
     pub open_on: OpenOn,
+    /// My PC (P23).
+    #[serde(deserialize_with = "crate::look::lenient")]
+    pub my_pc: MyPc,
 }
 
 /// Emitted with the new [`Settings`] after any change (window or tray menu).
@@ -64,6 +67,7 @@ impl Default for Settings {
             theme: Theme::default(),
             accent: Accent::default(),
             open_on: OpenOn::default(),
+            my_pc: MyPc::default(),
         }
     }
 }
@@ -481,5 +485,22 @@ mod tests {
         assert_eq!(s.theme, Theme::Midnight);
         assert_eq!(s.accent, Accent::Blue);
         assert_eq!(s.open_on, OpenOn::Last);
+    }
+
+    #[test]
+    fn a_damaged_my_pc_section_keeps_the_rest() {
+        let s: Settings = serde_json::from_str(r#"{"profile":"work"}"#).unwrap();
+        assert!(s.my_pc.three_d);
+        let s: Settings =
+            serde_json::from_str(r#"{"profile":"work","myPc":{"threeD":"yes","gpuShapes":7}}"#)
+                .unwrap();
+        assert_eq!(s.profile, Profile::Work);
+        assert_eq!(s.my_pc, MyPc::default());
+        let s: Settings = serde_json::from_str(
+            r#"{"myPc":{"threeD":false,"gpuShapes":{"10de:2786:51411458":{"fans":3,"glow":true}}}}"#,
+        )
+        .unwrap();
+        assert!(!s.my_pc.three_d);
+        assert_eq!(s.my_pc.gpu_shapes["10de:2786:51411458"]["glow"], true);
     }
 }

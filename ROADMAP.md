@@ -1340,7 +1340,103 @@ Budget:
       - The depth chosen above (flow grid, layout-level lock) is what you want.
 
 ### P23 — 3-D GPU / My PC / thermal map (M11)
-- [ ] Three.js on demand (≤ 30 fps, 2-D fallback), within the installer and memory budgets.
+On `v2-p23-visual`, stacked on `v2-p24-dashboard` (it adds a tab next to the ones P22 and P24
+touch).
+
+Defaults chosen at build (2026-10-15). The owner can change them at the field check:
+- **Where.** A "My PC" tab after Hardware with three views: PC (the default), GPU and Thermal
+  map. Each can be drawn in 3-D or as a flat 2-D plan; the choice is remembered.
+- **Stylized, our own models only.** No exact-board renders and no brand logos. The PC is a
+  generic ATX tower with its side off. It holds:
+  - the board, the CPU with a tower cooler (or an AIO block and radiator when a pump is
+    reported) and the RAM sticks in the populated slots;
+  - each discrete GPU in a PCIe slot;
+  - M.2 drives on the board and SATA drives in the cage;
+  - the case fans Vyro reads, and a PSU.
+  Monitors are listed beside it (they have no temperatures).
+- **GPU model.** Built from a bundled table:
+  - The reference designs are keyed by PCI device id: NVIDIA Founders Edition (RTX 20 to
+    50), AMD reference (RX 6000, 7000 and 9000) and Intel Arc Limited Edition.
+  - Partner cards (another subsystem vendor) get a shape from the GPU's tier: fans, length,
+    thickness and power connectors.
+  - Anything else gets a generic two-fan card.
+  - "Does this look like your card?" lets the owner set fans, length, thickness, power
+    connectors and colour. That is kept in the settings per card.
+  - Integrated graphics are noted on the CPU, not drawn as a card.
+- **Live.** Fans spin at their reported RPM (scaled, so it reads as speed, not a blur). Parts
+  carry their temperature on a label, and clicking a part or its label shows its details
+  with a link to its tab.
+- **Thermal map.** Each part is coloured by how close it is to its limits: blue when cool,
+  green at normal, amber at the warning limit, red at the problem limit. The limits are the
+  ones Health uses. Modes CPU, GPU, Board, Storage and Full colour only those parts (the
+  rest grey).
+- **Motion.** Fans spin at up to 30 fps with the profile's full motion and up to 10 fps with
+  reduced motion; with motion off nothing spins. Without spinning or dragging, a frame is
+  drawn only when a reading changes.
+
+Budget:
+- **On demand only.** Three.js (0.186.1, MIT) loads with the tab's first visit, in its own
+  chunk; the main bundle grows under 2 kB.
+- **Nothing when hidden.** One WebGL context, only while the tab shows. Leaving the tab, hiding
+  the window or switching to 2-D stops the loop and frees the context (renderer disposed,
+  context lost), so there is no GPU work or GPU memory while hidden.
+- **Shown.** At most 30 fps, under 5 % of one CPU core while spinning (field check), and the
+  WebView's GPU process within +40 MB.
+- **Installer.** Grows under 0.3 MB.
+- **Versions.** The settings gain `myPc` (2-D or 3-D, and the owner's GPU shapes); old files
+  load with the defaults. IPC protocol stays 13.
+
+- [x] Built (2026-10-15, branch `v2-p23-visual`, stacked on `v2-p24-dashboard`):
+      - **Models.**
+        - `src/gpuspecs.ts` holds the reference designs by device id and the partner names by
+          subsystem vendor. A partner card's shape follows its tier, parsed from the model
+          number (NVIDIA, AMD with RDNA 4's naming, and Intel Arc). Shapes read back from the
+          settings are checked.
+        - `src/pcmodel.ts` lays out the tower from the hardware list and the snapshot, reads
+          each part's temperature against Health's limits, and holds the heat ramp. Both are
+          unit-tested: every part fits the case, an AIO or a tower cooler, RAM by slot name,
+          a second GPU below the first, integrated graphics left out, and heat and colours
+          rising with the temperature.
+      - **3-D (`src/scene3d.ts`, loaded with the tab).**
+        - Stylized meshes: fins, fans with blades, the card with its fans, plugs and bracket.
+        - Orbit and zoom, and a click picks a part.
+        - Frames are drawn only while something spins or moves, or once per reading, at most
+          30, 10 or 0 a second by the profile's motion.
+        - `dispose` frees everything and loses the context. Each scene gets a fresh canvas,
+          because a canvas whose context was freed cannot have another.
+      - **Tab (`MyPcPanel`, `PcPlan`).**
+        - PC, GPU and Thermal map views; label chips and a readings list; details with a link
+          to the part's tab; the displays; "Does this look like your card?".
+        - The 2-D plan is used when chosen or when WebGL is missing.
+        - The settings gain `myPc` (a damaged section falls back to its defaults without
+          touching the rest).
+        - Three.js joins `THIRD_PARTY_NOTICES.md`.
+      - **Checked:**
+        - frontend tests (125), core tests (567) and app tests under Wine (15) pass;
+        - axe is clean on PC, Thermal map and GPU in all six themes, and on the 2-D plan;
+        - no overflow at 1440, 800 or 390 px;
+        - spinning fans draw 10 to 11 frames a second under reduced motion;
+        - with the fans still, it draws one frame per reading (4 in 4 s);
+        - leaving the tab or hiding the window removes the canvas and loses its context;
+        - correcting the card to two fans redraws it.
+      - **Fixed along the way:**
+        - thermal colours were lost (Three.js wants `rgb()` with commas);
+        - switching views reused a freed canvas;
+        - the card form overflowed;
+        - the plan drew edge-on fans as discs;
+        - the label chips crowd narrow views (they hide under 520 px; the list has the same
+          readings).
+      - **Bundle.** The main bundle grows 0.9 kB. The tab is a 27 kB chunk and Three.js with
+        the scene a 566 kB chunk (142 kB gzipped), both loaded on first visit.
+- [ ] Field check (MS-7E24):
+      - The PC view shows your cooler type, RAM sticks, GPU, drives and fans, each where
+        expected. Labels match the Sensors tab.
+      - The GPU looks like your card, or can be corrected and stays corrected after a restart.
+      - Fans spin faster under load. The thermal map turns amber or red near the Health limits
+        (a stress test or a benchmark).
+      - Task Manager: Vyro's CPU while the tab spins its fans; the WebView's GPU process memory
+        before, while and after the tab (it drops back after leaving it).
+      - The 3-D toggle off gives the plan. The defaults above are what you want.
 
 ### P26 — Remote companion (M12 → 0.5)
 - [ ] Off by default, LAN-only, token + QR pairing, expiry, revoke; transport decided at start.
