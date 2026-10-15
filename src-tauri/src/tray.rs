@@ -18,6 +18,7 @@ use vyro_core::units::TempUnit;
 use vyro_core::{lock, unix_now};
 
 use crate::engine::{notify, Engine};
+use crate::look::{Accent, OpenOn, Theme};
 use crate::overlay::OverlaySettings;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,6 +40,11 @@ pub struct Settings {
     pub check_updates: bool,
     /// Automatic game profiles and each saved game's own settings.
     pub games: GameAutomation,
+    /// Colours (P25).
+    pub theme: Theme,
+    pub accent: Accent,
+    /// Which tab the window opens on.
+    pub open_on: OpenOn,
 }
 
 /// Emitted with the new [`Settings`] after any change (window or tray menu).
@@ -55,6 +61,9 @@ impl Default for Settings {
             overlay: OverlaySettings::default(),
             check_updates: true,
             games: GameAutomation::default(),
+            theme: Theme::default(),
+            accent: Accent::default(),
+            open_on: OpenOn::default(),
         }
     }
 }
@@ -105,6 +114,12 @@ pub fn show_main(app: &AppHandle) {
         engine.set_visible(true);
     }
     if let Some(w) = app.get_webview_window("main") {
+        // Opened from the tray: the page may go back to the Dashboard ("Open on").
+        if !w.is_visible().unwrap_or(true) {
+            if let Err(e) = app.emit(crate::look::OPENED_EVENT, ()) {
+                log::debug!("emit {}: {e}", crate::look::OPENED_EVENT);
+            }
+        }
         set_webview_active(&w, true);
         let _ = w.unminimize();
         let _ = w.show();
@@ -255,6 +270,7 @@ pub fn apply(app: &AppHandle, mut settings: Settings) -> Result<(), String> {
         None => Ok(()),
     };
     crate::gaming::apply_effective(app);
+    crate::look::paint(app, settings.theme);
     if let Some(item) = app.try_state::<OverlayItem>() {
         let _ = item.0.set_checked(settings.overlay.enabled);
     }
@@ -446,5 +462,24 @@ mod tests {
         assert!(s.games.enabled);
         assert_eq!(s.games.default_profile, Some(Profile::Gaming));
         assert!(s.games.rules.is_empty());
+    }
+
+    #[test]
+    fn settings_from_0_3_open_on_the_dashboard_in_midnight() {
+        let s: Settings =
+            serde_json::from_str(r#"{"profile":"gaming","temperatureUnit":"f"}"#).unwrap();
+        assert_eq!(s.profile, Profile::Gaming);
+        assert_eq!(s.theme, Theme::Midnight);
+        assert_eq!(s.accent, Accent::Theme);
+        assert_eq!(s.open_on, OpenOn::Dashboard);
+        // A theme from a newer version keeps the rest of the file.
+        let s: Settings = serde_json::from_str(
+            r#"{"profile":"work","theme":"aurora","accent":"blue","openOn":"last"}"#,
+        )
+        .unwrap();
+        assert_eq!(s.profile, Profile::Work);
+        assert_eq!(s.theme, Theme::Midnight);
+        assert_eq!(s.accent, Accent::Blue);
+        assert_eq!(s.open_on, OpenOn::Last);
     }
 }

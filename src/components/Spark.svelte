@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { onTheme } from '../themes';
   import { Ring, drawSparkline } from '../sparkline';
 
   interface Series {
@@ -49,7 +50,11 @@
   onMount(() => {
     const ro = new ResizeObserver(draw);
     ro.observe(canvas);
-    return () => ro.disconnect();
+    const offTheme = onTheme(draw);
+    return () => {
+      ro.disconnect();
+      offTheme();
+    };
   });
 
   $effect(() => {

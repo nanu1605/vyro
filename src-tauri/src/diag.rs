@@ -232,17 +232,23 @@ pub async fn export_diagnostics(
 /// Shows an exported report in Explorer; only files in the reports folder.
 #[tauri::command]
 pub fn reveal_report(app: AppHandle, path: String) -> Result<(), String> {
-    let dir = reports_dir(&app)?;
-    let p = Path::new(&path);
-    if p.parent() != Some(dir.as_path()) || !p.is_file() {
-        return Err("Not a Vyro report.".into());
+    reveal_in(&reports_dir(&app)?, &path).map_err(|()| "Not a Vyro report.".into())
+}
+
+/// Opens Explorer on a file, only when it sits directly in `dir`.
+pub(crate) fn reveal_in(dir: &Path, path: &str) -> Result<(), ()> {
+    let p = Path::new(path);
+    if p.parent() != Some(dir) || !p.is_file() {
+        return Err(());
     }
     #[cfg(windows)]
     {
-        std::process::Command::new("explorer.exe")
+        if let Err(e) = std::process::Command::new("explorer.exe")
             .arg(format!("/select,{}", p.display()))
             .spawn()
-            .map_err(|e| e.to_string())?;
+        {
+            log::warn!("explorer: {e}");
+        }
     }
     Ok(())
 }

@@ -7,7 +7,9 @@ mod commands;
 mod diag;
 mod engine;
 mod gaming;
+mod look;
 mod overlay;
+mod share;
 mod tray;
 mod updates;
 
@@ -125,6 +127,8 @@ fn main() {
             diag::delete_diagnostic,
             diag::export_diagnostics,
             diag::reveal_report,
+            share::save_share_card,
+            share::reveal_card,
             updates::get_update_status,
             updates::check_for_updates,
             updates::install_update,
