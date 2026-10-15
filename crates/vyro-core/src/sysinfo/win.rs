@@ -384,20 +384,39 @@ unsafe fn startup_task(task: &IRegisteredTask) -> Option<StartupApp> {
 
 /// Newest-first power events from the System log (no elevation needed).
 pub fn power_events(limit: usize) -> Vec<PowerEvent> {
+    let mut out = Vec::new();
+    system_log(events::QUERY, limit, |xml| {
+        if let Some(event) = events::parse_event(xml) {
+            out.push(event);
+        }
+    });
+    out.truncate(limit);
+    out
+}
+
+/// Unexpected shutdowns and hardware errors since `since` (the Performance Score's
+/// Stability); `None` when the System log cannot be read.
+pub fn stability_counts(since: i64) -> Option<crate::score::StabilityCounts> {
+    let mut found = Vec::new();
+    let query = events::stability_query(crate::unix_now() - since);
+    let ok = system_log(&query, 10_000, |xml| {
+        found.extend(events::parse_stability(xml));
+    });
+    ok.then(|| events::count_stability(found, since))
+}
+
+/// Renders up to `limit` events of the System log matching `xpath`, newest first. False when
+/// the log cannot be queried.
+fn system_log(xpath: &str, limit: usize, mut each: impl FnMut(&str)) -> bool {
     let flags = EvtQueryChannelPath.0 | EvtQueryReverseDirection.0;
     // SAFETY: strings outlive the call; the returned handle is closed below.
-    let Ok(query) = (unsafe {
-        EvtQuery(
-            None,
-            &HSTRING::from("System"),
-            &HSTRING::from(events::QUERY),
-            flags,
-        )
-    }) else {
-        return Vec::new();
+    let Ok(query) =
+        (unsafe { EvtQuery(None, &HSTRING::from("System"), &HSTRING::from(xpath), flags) })
+    else {
+        return false;
     };
-    let mut out = Vec::new();
-    while out.len() < limit {
+    let mut seen = 0usize;
+    while seen < limit {
         let mut handles = [0isize; 16];
         let mut returned = 0u32;
         // SAFETY: `handles` receives up to 16 event handles, each closed below.
@@ -406,10 +425,11 @@ pub fn power_events(limit: usize) -> Vec<PowerEvent> {
         }
         for &h in handles.iter().take(returned as usize) {
             let h = EVT_HANDLE(h);
-            if out.len() < limit {
-                if let Some(event) = render_xml(h).as_deref().and_then(events::parse_event) {
-                    out.push(event);
+            if seen < limit {
+                if let Some(xml) = render_xml(h) {
+                    each(&xml);
                 }
+                seen += 1;
             }
             // SAFETY: handle from EvtNext, closed once.
             let _ = unsafe { EvtClose(h) };
@@ -417,7 +437,7 @@ pub fn power_events(limit: usize) -> Vec<PowerEvent> {
     }
     // SAFETY: query handle closed once.
     let _ = unsafe { EvtClose(query) };
-    out
+    true
 }
 
 fn render_xml(event: EVT_HANDLE) -> Option<String> {

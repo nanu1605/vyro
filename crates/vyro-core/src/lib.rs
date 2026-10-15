@@ -27,6 +27,7 @@ pub mod profiles;
 pub mod provider;
 pub mod ram;
 pub mod registry;
+pub mod score;
 pub mod sim;
 pub mod sio;
 pub mod snapshot;

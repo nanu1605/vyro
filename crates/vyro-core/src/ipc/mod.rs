@@ -38,8 +38,9 @@ pub use transport::{connect, default_endpoint, Conn, Listener};
 /// session ids. 8: PC change history (P19): `RecordInventory`, `HardwareChanges`. 9: the
 /// intelligence engine (P16): `Insights` answers with findings and vital signs, and
 /// `SensorSnapshot::insights`. 10: compound alerts (P18): rule conditions and actions,
-/// `AlertUsual`, `SensorSnapshot::alert_state`, `FanStatus::boost`.
-pub const PROTOCOL_VERSION: u32 = 10;
+/// `AlertUsual`, `SensorSnapshot::alert_state`, `FanStatus::boost`. 11: Performance Score
+/// (P17): `PerformanceScore`.
+pub const PROTOCOL_VERSION: u32 = 11;
 /// Windows service name (installed by the MSI).
 pub const SERVICE_NAME: &str = "VyroService";
 /// Largest request the server accepts (alert rules are the biggest, a few KB).
@@ -116,6 +117,7 @@ pub enum Request {
     },
     BitlockerSystemDrive,
     Insights,
+    PerformanceScore,
     /// The process whose frames to capture (per client session; ends with the session).
     #[serde(rename_all = "camelCase")]
     SetCaptureTarget {
@@ -272,6 +274,10 @@ mod tests {
         );
         assert_eq!(json(&Request::RestoreFans), r#"{"method":"restoreFans"}"#);
         assert_eq!(
+            json(&Request::PerformanceScore),
+            r#"{"method":"performanceScore"}"#
+        );
+        assert_eq!(
             json(&Request::AlertUsual {
                 sensor: "cpu.temp.package".into()
             }),
@@ -318,7 +324,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&hello).unwrap(),
-            r#"{"protocol":10,"role":"snapshots","session":7,"pid":42,"visible":false}"#
+            r#"{"protocol":11,"role":"snapshots","session":7,"pid":42,"visible":false}"#
         );
         let reply: Reply = Err("nope".into());
         assert_eq!(serde_json::to_string(&reply).unwrap(), r#"{"Err":"nope"}"#);

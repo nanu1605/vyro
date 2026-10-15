@@ -87,6 +87,7 @@ fn main() {
             commands::get_health,
             commands::get_health_events,
             commands::get_insights,
+            commands::get_performance_score,
             commands::get_alert_rules,
             commands::set_alert_rules,
             commands::get_alert_log,

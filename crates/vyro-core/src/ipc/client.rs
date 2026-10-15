@@ -353,6 +353,10 @@ impl EngineApi for RemoteEngine {
         self.call(&Request::Insights)
     }
 
+    fn performance_score(&self) -> Result<crate::score::ScoreReport, String> {
+        self.call(&Request::PerformanceScore)
+    }
+
     /// Remembered for reconnects.
     fn set_capture_target(&self, target: Option<CaptureTarget>) -> Result<(), String> {
         lock(&self.shared.capture).clone_from(&target);
@@ -542,6 +546,10 @@ mod tests {
         );
         assert!(remote.set_ping_host("bad host!").is_err());
         assert_eq!(remote.insights().unwrap_err(), "history store unavailable");
+        assert_eq!(
+            remote.performance_score().unwrap_err(),
+            "history store unavailable"
+        );
         assert_eq!(
             remote.alert_usual("cpu.temp.package").unwrap_err(),
             "history store unavailable"

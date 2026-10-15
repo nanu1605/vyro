@@ -97,6 +97,9 @@ pub trait EngineApi: Send + Sync {
     /// The intelligence engine's findings (P16), with their evidence and causes, and the
     /// vital signs. Worked out from the history store; kept a minute.
     fn insights(&self) -> Result<Insights, String>;
+    /// The Performance Score (P17) now, with every input, and the daily scores of the past
+    /// year.
+    fn performance_score(&self) -> Result<crate::score::ScoreReport, String>;
     /// Captures frames of this process (the fullscreen app in the foreground), or stops.
     fn set_capture_target(&self, target: Option<CaptureTarget>) -> Result<(), String>;
     /// The app's view of the captured game: in front, profile, overlay (`None`: no game).
@@ -179,6 +182,7 @@ impl LocalEngine {
         let fans = Arc::new(Self::start_fans(cfg.fan_control, dir, history.clone()));
         let intel = Intel::new(Arc::clone(&registry), history.clone(), unix_now());
         intel.set_alert_sensors(lock(&alerts).usual_sensors(), unix_now());
+        intel.set_score_sources(Self::score_sources());
 
         // The game provider runs last: its session summary reads this tick's temperatures.
         let game: Box<dyn Provider> = Box::new(GameProvider::new(Arc::clone(&gaming)));
@@ -271,6 +275,33 @@ impl LocalEngine {
     /// for the duration (the service forwards the power events).
     pub fn set_suspended(&self, on: bool) {
         self.fans.set_suspended(on);
+    }
+
+    /// The score's inputs outside the history: the CPU's brand, the drives and the event log
+    /// (sample drives and a clean log in simulation).
+    fn score_sources() -> crate::intel::runner::ScoreSources {
+        #[cfg(target_arch = "x86_64")]
+        let cpu_brand = crate::hwid::cpuid::read_live().brand;
+        #[cfg(not(target_arch = "x86_64"))]
+        let cpu_brand = None;
+        let sim = Self::simulated();
+        crate::intel::runner::ScoreSources {
+            cpu_brand,
+            drives: Box::new(move || {
+                #[cfg(windows)]
+                if !sim {
+                    return crate::storage::collect();
+                }
+                crate::storage::sample()
+            }),
+            stability: Box::new(move |since| {
+                if sim {
+                    Some(crate::score::StabilityCounts::default())
+                } else {
+                    crate::sysinfo::stability_counts(since)
+                }
+            }),
+        }
     }
 
     fn simulated() -> bool {
@@ -403,6 +434,10 @@ impl EngineApi for LocalEngine {
 
     fn insights(&self) -> Result<Insights, String> {
         self.intel.insights(unix_now())
+    }
+
+    fn performance_score(&self) -> Result<crate::score::ScoreReport, String> {
+        self.intel.score_report(unix_now())
     }
 
     fn set_capture_target(&self, target: Option<CaptureTarget>) -> Result<(), String> {
@@ -583,6 +618,21 @@ mod tests {
         let insights = engine.insights().unwrap();
         assert!(insights.findings.is_empty(), "{insights:?}");
         assert_eq!(insights.vitals.len(), 6);
+        // The Performance Score: drives and the (simulated) event log, but no score before
+        // about a day of history; nothing kept.
+        let report = engine.performance_score().unwrap();
+        assert_eq!(report.latest.score, None);
+        assert!(report.history.is_empty());
+        let has = |id: crate::score::ScoreInputId| {
+            report
+                .latest
+                .inputs
+                .iter()
+                .any(|i| i.id == id && i.score.is_some())
+        };
+        assert!(has(crate::score::ScoreInputId::Storage));
+        assert!(has(crate::score::ScoreInputId::Stability));
+        assert!(!has(crate::score::ScoreInputId::Thermals));
         // The PC change history starts with the first inventory.
         let first = engine.record_inventory(PcInventory::default()).unwrap();
         assert_eq!(engine.hardware_changes(10).unwrap(), first);

@@ -1,8 +1,9 @@
-# Vyro Performance Score: formula v1 (draft for sign-off)
+# Vyro Performance Score: formula v1
 
-Status: **draft, awaiting the owner's sign-off** (decision 22). Nothing is built until it is
-signed off; after that this formula is fixed, and any change to an input, a breakpoint or a weight
-becomes formula v2. Every stored score keeps its version, so older scores stay comparable.
+Status: **signed off by the owner on 2026-10-15** (decision 22), with Stability counting hardware
+errors and the score shown at the top of Insights. This formula is now fixed: any change to an
+input, a breakpoint or a weight becomes formula v2. Every stored score keeps its version, so older
+scores stay comparable.
 
 ## What it measures
 
@@ -156,7 +157,7 @@ counts.
 **Combining.** The sub-score is the worse of the two.
 - **Missing.** The input is missing while ping is off or the PC is offline.
 - **Weight.** It weighs only 5 because it measures the connection more than the PC.
-- **New history metric.** P17 adds lost replies to the history; today only the round trip is kept.
+- **History.** Both the round trip and lost replies are already in the history.
 
 ### 8. Stability (15)
 **Inputs.** These come from the Windows System event log over the last 30 days:
@@ -212,9 +213,9 @@ evenings of gaming.
 | Change from usual | no warnings | 100 | 10 |
 | **Score** | | **98, Excellent** | 9 of 9 |
 
-## Open points for the sign-off
-1. **Weights.** Thermals 15, Sustained clocks 10, Throttling 15, Cooling 10, Storage 10, Memory 10,
-   Network 5, Stability 15, Change from usual 10.
-2. **Network.** Keep it at weight 5, or leave it out (it is the connection, not the PC).
-3. **Stability.** Add the WHEA hardware errors (recommended), or use unexpected shutdowns only.
-4. **Where it shows.** For example at the top of Insights, with its inputs and a one-year trend.
+## Sign-off (2026-10-15)
+1. **Weights.** Approved as drafted: Thermals 15, Sustained clocks 10, Throttling 15, Cooling 10,
+   Storage 10, Memory 10, Network 5, Stability 15, Change from usual 10.
+2. **Network.** Kept at weight 5.
+3. **Stability.** Counts the WHEA hardware errors as well as unexpected shutdowns.
+4. **Where it shows.** At the top of Insights, with its inputs and a one-year trend.

@@ -214,6 +214,14 @@ pub async fn get_insights(engine: State<'_, Engine>) -> Result<vyro_core::intel:
     with_engine(&engine, |e| e.insights()).await
 }
 
+/// The Performance Score now with its inputs, and the daily scores of the past year (P17).
+#[tauri::command]
+pub async fn get_performance_score(
+    engine: State<'_, Engine>,
+) -> Result<vyro_core::score::ScoreReport, String> {
+    with_engine(&engine, |e| e.performance_score()).await
+}
+
 /// Whether the engine can use PawnIO (low-level sensors: CPU temperature and power, board
 /// fans).
 #[tauri::command]
