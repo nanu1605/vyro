@@ -107,8 +107,16 @@ fn drive_label(engine: &Engine, dir: &Path) -> Option<String> {
     })
 }
 
+/// Inventory and DXGI names of one GPU differ in brackets and spacing ("Radeon(TM)" and
+/// "Radeon TM").
 fn same_gpu(a: &str, b: &str) -> bool {
-    let n = |s: &str| s.to_ascii_lowercase().replace(['(', ')'], "");
+    let n = |s: &str| {
+        s.to_ascii_lowercase()
+            .replace(['(', ')'], " ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
     let (a, b) = (n(a), n(b));
     a == b || a.contains(&b) || b.contains(&a)
 }
