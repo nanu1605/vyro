@@ -27,7 +27,8 @@
   import { animator } from './anim';
   import { fmt, fmtGB } from './format';
   import { loadUpdates, update } from './updates.svelte';
-  import { getBackendStatus, getPawnIoStatus, inTauri, onBackendStatus, onSensors, restoreFans, setUiVisible } from './ipc';
+  import { getBackendStatus, getHardwareChanges, getPawnIoStatus, inTauri, onBackendStatus, onHardwareChanged, onSensors, restoreFans, setUiVisible } from './ipc';
+  import { loadSeen, newestId, saveSeen } from './changes';
   import { loadPrefs, profileSpec, temp, tempOrNull, tempText, tempUnit } from './prefs.svelte';
   import type { AlertFired, BackendStatus, PawnIoStatus, SensorSnapshot } from './types';
 
@@ -86,6 +87,18 @@
     toasts = [...toasts.slice(-2), { ...a, key }];
     setTimeout(() => (toasts = toasts.filter((t) => t.key !== key)), 10_000);
   }
+
+  // PC change history (P19): a dot on Hardware until its new changes have been shown.
+  let newestChange = $state(0);
+  let changesSeen = $state(loadSeen());
+  let changesNewSince = $state(Number.POSITIVE_INFINITY);
+  $effect(() => {
+    if (tab === 'hardware' && newestChange > changesSeen) {
+      changesNewSince = changesSeen;
+      changesSeen = newestChange;
+      saveSeen(newestChange);
+    }
+  });
 
   /** Sensor opened from the explorer, charted alone at the top of History. */
   let historyFocus = $state<string | null>(null);
@@ -172,7 +185,15 @@
     void loadUpdates().catch(() => {});
     let stop: (() => void) | undefined;
     let stopBackend: (() => void) | undefined;
+    let stopChanges: (() => void) | undefined;
     let disposed = false;
+    getHardwareChanges(1)
+      .then((v) => (newestChange = Math.max(newestChange, newestId(v))))
+      .catch(() => {});
+    void onHardwareChanged((found) => (newestChange = Math.max(newestChange, newestId(found)))).then((fn) => {
+      if (disposed) fn();
+      else stopChanges = fn;
+    });
     getBackendStatus()
       .then((s) => (backend = s))
       .catch(() => {});
@@ -202,6 +223,7 @@
       disposed = true;
       stop?.();
       stopBackend?.();
+      stopChanges?.();
       document.removeEventListener('visibilitychange', onVisibility);
     };
   });
@@ -226,6 +248,10 @@
           {#if t.id === 'health' && (overall === 'warn' || overall === 'fail')}
             <span class="alert-dot {overall}" aria-hidden="true"></span>
             <span class="sr-only">({overall === 'fail' ? 'problem' : 'warning'})</span>
+          {/if}
+          {#if t.id === 'hardware' && newestChange > changesSeen}
+            <span class="alert-dot new" aria-hidden="true"></span>
+            <span class="sr-only">(new PC changes)</span>
           {/if}
         </button>
       {/each}
@@ -364,7 +390,7 @@
 
     {#if visited.hardware}
       <div id="panel-hardware" role="tabpanel" aria-labelledby="tab-hardware" hidden={tab !== 'hardware'}>
-        <HardwarePanel />
+        <HardwarePanel newSince={changesNewSince} />
       </div>
     {/if}
     {#if visited.storage}
@@ -497,6 +523,9 @@
   }
   .alert-dot.fail {
     background: var(--hot);
+  }
+  .alert-dot.new {
+    background: var(--accent);
   }
   .toasts {
     position: fixed;

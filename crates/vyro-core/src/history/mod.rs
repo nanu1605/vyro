@@ -8,6 +8,7 @@
 //! Game sessions for the replay (P15) live in the same file (see `games`), so one size cap
 //! covers both; when over it, the oldest data goes first, whichever it is.
 
+mod changes;
 mod games;
 mod schema;
 
@@ -808,6 +809,37 @@ mod tests {
         // Long windows stay within MAX_POINTS.
         let w = h.query_window("a", now - 1700, now, now).unwrap();
         assert_eq!(w.step_secs, 3);
+    }
+
+    #[test]
+    fn a_v2_file_gains_the_change_tables_and_keeps_its_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("history.sqlite");
+        {
+            // As 0.3 left it: a v2 file with a game session.
+            let mut h = History::open(&path, HistoryConfig::default()).unwrap();
+            h.record(T0, [("a", 7.0)]).unwrap();
+            h.conn
+                .execute_batch(
+                    "DROP TABLE pc_inventory; DROP TABLE hardware_change; PRAGMA user_version = 2;",
+                )
+                .unwrap();
+        }
+        let mut h = History::open(&path, HistoryConfig::default()).unwrap();
+        assert_eq!(
+            h.query("a", HistoryRange::M5, T0 + 1).unwrap().points[0].avg,
+            7.0
+        );
+        assert!(h.hardware_changes(10).unwrap().is_empty());
+        let first = h
+            .record_inventory(crate::changes::PcInventory::default(), T0)
+            .unwrap();
+        assert_eq!(first[0].kind, crate::changes::ChangeKind::Tracking);
+        let version: i32 = h
+            .conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, 3);
     }
 
     #[test]

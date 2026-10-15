@@ -11,6 +11,7 @@ use ts_rs::TS;
 
 use crate::alerts::{self, AlertEngine, AlertFired, AlertRule};
 use crate::analysis::{self, Insight, SeriesMap};
+use crate::changes::{HardwareChange, PcInventory, MAX_CHANGES};
 use crate::fan::controller::{self, FanControl, SimDevice};
 use crate::fan::{FanCapability, FanConfig, FanEvent, FanStatus};
 use crate::gaming::replay::{self, GameTimeline};
@@ -110,6 +111,11 @@ pub trait EngineApi: Send + Sync {
         from: i64,
         to: i64,
     ) -> Result<Vec<WindowSeries>, String>;
+    /// Compares the PC as the app sees it with the last inventory and keeps the changes (P19).
+    /// Returns the new ones.
+    fn record_inventory(&self, inventory: PcInventory) -> Result<Vec<HardwareChange>, String>;
+    /// The PC change history, newest first (at most `limit`).
+    fn hardware_changes(&self, limit: u32) -> Result<Vec<HardwareChange>, String>;
     /// Fan control: capability, configuration and each header's state.
     fn fan_status(&self) -> Result<FanStatus, String>;
     /// Validates, saves and applies a fan configuration.
@@ -451,6 +457,20 @@ impl EngineApi for LocalEngine {
             .collect()
     }
 
+    fn record_inventory(&self, inventory: PcInventory) -> Result<Vec<HardwareChange>, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history)
+            .record_inventory(inventory, unix_now())
+            .map_err(|e| e.to_string())
+    }
+
+    fn hardware_changes(&self, limit: u32) -> Result<Vec<HardwareChange>, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history)
+            .hardware_changes(i64::from(limit).min(MAX_CHANGES))
+            .map_err(|e| e.to_string())
+    }
+
     fn fan_status(&self) -> Result<FanStatus, String> {
         // Registry first and released before the controller's lock (the poller takes them in
         // that order).
@@ -571,6 +591,9 @@ mod tests {
         assert!(engine.set_ping_host("not a host!").is_err());
         // A few seconds of history: no baselines yet, so nothing to report.
         assert_eq!(engine.insights(), Ok(Vec::new()));
+        // The PC change history starts with the first inventory.
+        let first = engine.record_inventory(PcInventory::default()).unwrap();
+        assert_eq!(engine.hardware_changes(10).unwrap(), first);
         engine.shutdown();
         engine.shutdown();
 

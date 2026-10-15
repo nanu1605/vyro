@@ -686,7 +686,46 @@ a newer schema.
       figures on the reference PC were not re-measured for the README.
 
 ### P19 — Hardware change detection (M9 → 0.4; first, P16 cites it)
-- [ ] Inventory diffs into `hardware_changes` and a PC change history.
+Owner's choices (2026-10-15): a detected change goes into the list with a dot on the Hardware
+tab, no notification; every Windows update counts, monthly builds included. Budget: no new
+process or thread and nothing in the 1 Hz tick; the app builds a fingerprint of the PC
+(identity and version fields only) after its inventory warm-up and when monitors or drives
+change, under 50 ms on top of the warm-up it already does; the engine compares it with the last
+one and keeps the list in the history database (under 50 KB); footprint within ±1 MB of 0.3.0.
+Serial numbers are never stored: where one tells two identical devices apart, a salted hash of
+it is part of the key. The history database moves to schema v3 (two new tables, added in place),
+so going back to 0.3 turns its history off; IPC protocol 8.
+
+- [x] Built (2026-10-15, branch `v2-p19-changes`):
+      - `vyro_core::changes`: `fingerprint` (CPU; board and BIOS; each memory module by slot
+        with its configured speed and voltage; GPUs with driver and VBIOS; internal drives
+        with firmware; Windows edition and build; UEFI, Secure Boot, TPM, virtualization,
+        hypervisor; and as hot-plug classes monitors by EDID, USB drives and physical network
+        adapters) and `record`, which compares with what is known: added, removed, replaced
+        (another device in the same slot, or one out and one in), a field changed with before →
+        after, a hot-plug device seen for the first time (with that kind's devices before and
+        now), and a monitor or adapter not seen for 30 days. What could not be read is not a
+        change: missing fields keep their last value and a kind that came back empty is left
+        as it was. Identities use raw numbers, so a change in how sizes are written never reads
+        as another part.
+      - Store (schema v3): `pc_inventory` (what is known, one row) and `hardware_change` (the
+        newest 1000, never pruned by age or the size cap; about 200 bytes a change). Serials
+        cross the local pipe but only a salted hash inside the key is kept; a test checks no
+        serial or MAC reaches the database.
+      - IPC protocol 8 (`RecordInventory`, `HardwareChanges`). The app checks after its
+        inventory warm-up, when the set of monitors changes (not on a resolution or HDR
+        switch) and when a drive comes or goes, on a short-lived thread; drives are compared
+        only when the service reads them, since the app's own engine reads serials and firmware
+        another way.
+      - UI: "PC changes" card at the top of the Hardware tab (newest five, "Show all", category
+        filters, day groups, "New" on entries not seen yet; the same change on several memory
+        modules at once is one entry) and a dot on the Hardware tab until new changes are
+        shown. Browser preview: axe clean, no overflow at 390 px; the main bundle grows 7.9 kB.
+- [x] Field check (MS-7E24, 2026-10-15, test build `vyro-windows-d590d8c`): all five checks
+      passed: "Tracking started" on the first start; a GPU driver update (or rollback) with
+      before → after; a monitor unplugged and plugged back logs nothing, a different one logs
+      "connected for the first time"; an EXPO / RAM setting changed in the BIOS logs a Settings
+      change; the list survives a service restart.
 
 ### P16 — Intelligence engine (M9)
 - [ ] Derived metrics → baselines → events → cause chains; measured vs inferred, confidence.

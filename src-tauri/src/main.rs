@@ -1,6 +1,7 @@
 // Release builds are GUI-only on Windows (no console window).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod changes;
 mod commands;
 mod engine;
 mod gaming;
@@ -58,6 +59,7 @@ fn main() {
                 log::warn!("settings: {e}");
             }
             gaming::watch(app.handle());
+            changes::check(app.handle(), changes::Reason::Start);
             updates::watch(app.handle());
             if minimized {
                 tray::park_after_start(app.handle());
@@ -96,6 +98,7 @@ fn main() {
             commands::set_autostart,
             gaming::get_game_sessions,
             gaming::get_game_timeline,
+            changes::get_hardware_changes,
             gaming::get_history_window,
             gaming::get_game_state,
             gaming::pick_profile,

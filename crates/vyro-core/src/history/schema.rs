@@ -9,10 +9,14 @@
 //! empty while it runs; `timeline` 0 once its samples are gone), `game_sample` (one row per
 //! tick, readings as scaled integers, see `gaming::replay::COLUMNS`) and `game_event` (its
 //! markers). A v1 file gains the tables in place.
+//!
+//! v3 (P19) adds the PC change history: `pc_inventory` (the last inventory seen, as JSON; one
+//! row) and `hardware_change` (one row per change, kept by count rather than age). Later 0.4
+//! tables join v3 the same way, since `init` creates missing tables on every open.
 
 use rusqlite::Connection;
 
-pub const VERSION: i32 = 2;
+pub const VERSION: i32 = 3;
 
 const CREATE: &str = "
 CREATE TABLE IF NOT EXISTS metric (
@@ -78,6 +82,17 @@ CREATE TABLE IF NOT EXISTS game_event (
     json    TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS game_event_session ON game_event(session, t);
+CREATE TABLE IF NOT EXISTS pc_inventory (
+    id   INTEGER PRIMARY KEY,
+    ts   INTEGER NOT NULL,
+    json TEXT    NOT NULL
+);
+CREATE TABLE IF NOT EXISTS hardware_change (
+    id       INTEGER PRIMARY KEY,
+    ts       INTEGER NOT NULL,
+    category TEXT    NOT NULL,
+    json     TEXT    NOT NULL
+);
 ";
 
 /// Applies pragmas and creates tables. A database written by a newer schema is refused

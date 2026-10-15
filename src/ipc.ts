@@ -6,7 +6,7 @@ import { listen } from '@tauri-apps/api/event';
 import { evaluate } from './curve';
 import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
-import type { AlertFired, AlertRule, BackendStatus, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insight, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insight, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -479,6 +479,18 @@ export async function getSystemInfo(): Promise<SystemInfo> {
 export async function getDisplays(): Promise<DisplayInfo[]> {
   if (!inTauri) return (await import('./sample-displays')).sampleDisplays;
   return invoke<DisplayInfo[]>('get_displays');
+}
+
+/** The PC change history (P19), newest first. */
+export async function getHardwareChanges(limit = 1000): Promise<HardwareChange[]> {
+  if (!inTauri) return (await import('./sim-changes')).SAMPLE_CHANGES.slice(0, limit);
+  return invoke<HardwareChange[]>('get_hardware_changes', { limit });
+}
+
+/** Fires with the new changes when a check finds any (at start, or when a monitor or drive comes). */
+export async function onHardwareChanged(cb: (found: HardwareChange[]) => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<HardwareChange[]>('hardware-changed', (e) => cb(e.payload));
 }
 
 /** Fires after monitors are plugged, unplugged or reconfigured (debounced by the engine). */
