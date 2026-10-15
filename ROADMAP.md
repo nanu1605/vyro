@@ -986,7 +986,73 @@ Budget:
       - A run after a GPU driver update lists the change.
 
 ### P21 — One-click diagnostics + reports (M10)
-- [ ] Checks with telemetry evidence; HTML / JSON / Markdown / PDF, serials redacted.
+On `v2-p21-diag`, stacked on `v2-p20-bench`. Checks v1 are in
+[`docs/diagnostics.md`](docs/diagnostics.md).
+
+Defaults chosen at build (2026-10-15). The owner can change them at the field check:
+- **Passive.** No load (the Benchmark does that). 13 checks read the week's history and digests,
+  the Health log, SMART, the System event log and the readings now; the limits follow
+  Performance Score formula v1 where they overlap.
+- **Status.** Pass / Attention / Info / Unavailable; every Attention cites its telemetry.
+- **Where it shows.** A Diagnostics card in Health, below each part's status.
+- **Exports.** HTML, JSON, Markdown and PDF, written to `Documents\Vyro Reports` and shown in
+  Explorer. Serial numbers are never stored, and are added to an export only when asked.
+
+Budget:
+- **No new thread.** The checks run on a blocking task of the app's async runtime, and the engine
+  works the report out in one request (about a second: the week's minutes are already read for
+  the score).
+- **Stored.** The newest 50 reports, each about 10 KB of JSON plus 13 finding rows (under 1 MB).
+- **Versions.** History schema stays v3 (tables created in place); IPC protocol 13.
+- **Bundle.** The card loads on first visit, so the main bundle grows under 3 kB.
+
+- [x] Checks v1 written (2026-10-15): [`docs/diagnostics.md`](docs/diagnostics.md).
+- [x] Built (2026-10-15, branch `v2-p21-diag`, stacked on `v2-p20-bench`):
+      - **Checks (`vyro_core::diag::checks`).** Pure, over formula v1's measures plus each
+        drive, the Health log, the readings now, PawnIO, fan control and what the app sends
+        (how it reaches the engine, the PC summary, the GPU drivers).
+        - Thermals, clock stability, power limits (Info), throttling, fans and pump (the owner's
+          own choice does not count), memory, storage, network, hardware errors, changes from
+          usual (P16 warnings with their evidence), drivers (Info), sensors, service.
+        - Each is Pass, Attention, Info or Unavailable (saying why), with citations: value,
+          unit, source, sensor and how long ago. Summaries carry no temperatures, so the
+          citations follow the chosen unit.
+        - The score's measures now also count the power-limit shares, which formula v1 does
+          not use.
+      - **Store.** `diagnostic_runs` (the report as JSON) and `diagnostic_findings` (one row per
+        check), newest 50 kept. IPC protocol 13 (`RunDiagnostics`, `DiagnosticRuns`,
+        `DiagnosticRun`, `DeleteDiagnostic`).
+      - **Exports from one report.**
+        - HTML (self-contained, prints well), JSON, Markdown, and a PDF that Vyro writes
+          itself: A4, standard Helvetica, WinAnsi, wrapped with Helvetica's widths, page
+          numbers.
+        - Citations format the same in Rust and TypeScript (halves round away from zero, as
+          `toFixed` does), in °C or °F.
+        - Serial numbers (board, drives) are read only for an export that asks for them, and
+          never kept.
+        - Saved to `Documents\Vyro Reports\vyro-diagnostics-<date>-<time>.<ext>`; "Show in
+          folder" opens Explorer on it (files in that folder only).
+      - **UI.** The Diagnostics card in Health (loaded on first visit).
+        - Run diagnostics.
+        - Counts and earlier reports.
+        - Attention first, open: what to do, and the citations with links into History.
+        - Export buttons and "Include serial numbers"; delete a report.
+        - Browser preview with a report that has a stopped fan.
+      - **Checks.**
+        - Rust tests: every problem turns Attention and cites its telemetry, the owner's choice
+          and missing data, the formatting, all four exports showing the same values in °C and
+          °F, serials only when asked, and the PDF's structure (cross-reference offsets, page
+          count). poppler reads the PDF and its text extracts cleanly.
+        - Browser preview: axe clean, no overflow at 1440 and 390 px (°F).
+        - The main bundle grows 1.5 kB; the card is an 8 kB chunk.
+- [ ] Field check (MS-7E24):
+      - A run completes in about a second, and its values match History, Storage and Event Viewer.
+      - Unplugging a case fan for a minute turns Fans and pump to Attention after the Health
+        event.
+      - Each of the four exports opens (the PDF in Edge) and shows the on-screen values.
+      - An export without serials contains none; with them it contains the drives' and the
+        board's.
+      - Running without the service turns Service and Sensors to Attention.
 
 ### P25 — Themes, open on Dashboard, shareable cards (M11 → 0.5; first, small)
 - [ ] "Open on" setting (Dashboard default), themes + accent passing axe-core, share cards.

@@ -10,6 +10,7 @@
 
 mod bench;
 mod changes;
+mod diag;
 mod digest;
 mod games;
 mod schema;

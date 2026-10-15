@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use crate::alerts::AlertRule;
 use crate::bench::BenchRun;
 use crate::changes::PcInventory;
+use crate::diag::DiagAppInfo;
 use crate::fan::FanConfig;
 use crate::gaming::{CaptureTarget, GameContext};
 use crate::profiles::Profile;
@@ -41,8 +42,9 @@ pub use transport::{connect, default_endpoint, Conn, Listener};
 /// `SensorSnapshot::insights`. 10: compound alerts (P18): rule conditions and actions,
 /// `AlertUsual`, `SensorSnapshot::alert_state`, `FanStatus::boost`. 11: Performance Score
 /// (P17): `PerformanceScore`. 12: benchmark runs (P20): `AddBenchmark`, `BenchmarkRuns`,
-/// `BenchmarkRun`, `DeleteBenchmark`.
-pub const PROTOCOL_VERSION: u32 = 12;
+/// `BenchmarkRun`, `DeleteBenchmark`. 13: diagnostics (P21): `RunDiagnostics`, `DiagnosticRuns`,
+/// `DiagnosticRun`, `DeleteDiagnostic`.
+pub const PROTOCOL_VERSION: u32 = 13;
 /// Windows service name (installed by the MSI).
 pub const SERVICE_NAME: &str = "VyroService";
 /// Largest request the server accepts (alert rules are the biggest, a few KB).
@@ -162,6 +164,20 @@ pub enum Request {
     },
     #[serde(rename_all = "camelCase")]
     DeleteBenchmark {
+        id: i64,
+    },
+    /// Runs the diagnostics with what the app knows (P21).
+    #[serde(rename_all = "camelCase")]
+    RunDiagnostics {
+        app: DiagAppInfo,
+    },
+    DiagnosticRuns,
+    #[serde(rename_all = "camelCase")]
+    DiagnosticRun {
+        id: i64,
+    },
+    #[serde(rename_all = "camelCase")]
+    DeleteDiagnostic {
         id: i64,
     },
     FanStatus,
@@ -330,6 +346,14 @@ mod tests {
             r#"{"method":"deleteBenchmark","params":{"id":3}}"#
         );
         assert_eq!(
+            json(&Request::DiagnosticRun { id: 4 }),
+            r#"{"method":"diagnosticRun","params":{"id":4}}"#
+        );
+        assert!(json(&Request::RunDiagnostics {
+            app: DiagAppInfo::default()
+        })
+        .starts_with(r#"{"method":"runDiagnostics","params":{"app":{"appVersion":"#));
+        assert_eq!(
             json(&Request::SetFanProfile {
                 profile: Profile::Gaming
             }),
@@ -348,7 +372,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&hello).unwrap(),
-            r#"{"protocol":12,"role":"snapshots","session":7,"pid":42,"visible":false}"#
+            r#"{"protocol":13,"role":"snapshots","session":7,"pid":42,"visible":false}"#
         );
         let reply: Reply = Err("nope".into());
         assert_eq!(serde_json::to_string(&reply).unwrap(), r#"{"Err":"nope"}"#);

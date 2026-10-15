@@ -16,7 +16,8 @@
 //! (P16) keeps a week of minute digests for the intelligence engine (see `intel::digest`), and
 //! `score` (P17) one Performance Score a day for a year (see `score`), and `benchmark_runs` /
 //! `benchmark_metrics` (P20) the newest 100 benchmark runs, whole and metric by metric (see
-//! `bench`).
+//! `bench`), and `diagnostic_runs` / `diagnostic_findings` (P21) the newest 50 diagnostics
+//! reports, whole and check by check (see `diag`).
 
 use rusqlite::Connection;
 
@@ -117,6 +118,21 @@ CREATE TABLE IF NOT EXISTS benchmark_runs (
     errors INTEGER NOT NULL,
     json   TEXT    NOT NULL
 );
+CREATE TABLE IF NOT EXISTS diagnostic_runs (
+    id          INTEGER PRIMARY KEY,
+    ts          INTEGER NOT NULL,
+    version     INTEGER NOT NULL,
+    attention   INTEGER NOT NULL,
+    unavailable INTEGER NOT NULL,
+    json        TEXT    NOT NULL
+);
+CREATE TABLE IF NOT EXISTS diagnostic_findings (
+    run_id   INTEGER NOT NULL,
+    check_id TEXT    NOT NULL,
+    status   TEXT    NOT NULL,
+    summary  TEXT    NOT NULL,
+    PRIMARY KEY (run_id, check_id)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS benchmark_metrics (
     run_id INTEGER NOT NULL,
     key    TEXT    NOT NULL,

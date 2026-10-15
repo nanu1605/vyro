@@ -231,6 +231,10 @@ pub struct Measures {
     pub deviation: Option<Vec<Confidence>>,
     /// Why history-based inputs are missing when there is too little history.
     pub thin: Option<String>,
+    /// Share of loaded time the CPU / GPU held its power limit, 0–1 (diagnostics only; not a
+    /// formula v1 input).
+    pub power_cpu: Option<f64>,
+    pub power_gpu: Option<f64>,
 }
 
 /// `x` on straight lines between `points` (x rising), flat beyond the ends.
