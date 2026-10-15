@@ -22,6 +22,7 @@
   import SensorsPanel from './components/SensorsPanel.svelte';
   import HistoryPanel from './components/HistoryPanel.svelte';
   import HealthPanel from './components/HealthPanel.svelte';
+  import InsightsPanel from './components/InsightsPanel.svelte';
   import GamingPanel from './components/GamingPanel.svelte';
   import CoolingPanel from './components/CoolingPanel.svelte';
   import { animator } from './anim';
@@ -29,6 +30,7 @@
   import { loadUpdates, update } from './updates.svelte';
   import { getBackendStatus, getHardwareChanges, getPawnIoStatus, inTauri, onBackendStatus, onHardwareChanged, onSensors, restoreFans, setUiVisible } from './ipc';
   import { loadSeen, newestId, saveSeen } from './changes';
+  import { loadSeenKeys, markSeen, unseen } from './insights';
   import { loadPrefs, profileSpec, temp, tempOrNull, tempText, tempUnit } from './prefs.svelte';
   import type { AlertFired, BackendStatus, PawnIoStatus, SensorSnapshot } from './types';
 
@@ -37,6 +39,7 @@
     { id: 'cooling', label: 'Cooling' },
     { id: 'history', label: 'History' },
     { id: 'health', label: 'Health' },
+    { id: 'insights', label: 'Insights' },
     { id: 'gaming', label: 'Gaming' },
     { id: 'processes', label: 'Processes' },
     { id: 'hardware', label: 'Hardware' },
@@ -65,6 +68,7 @@
     cooling: false,
     history: false,
     health: false,
+    insights: false,
     gaming: false,
     processes: false,
     hardware: false,
@@ -100,10 +104,13 @@
     }
   });
 
-  /** Sensor opened from the explorer, charted alone at the top of History. */
+  /** Sensor opened from the explorer or Insights, charted alone at the top of History, with
+   * the moment it was opened for. */
   let historyFocus = $state<string | null>(null);
-  function openHistory(id: string): void {
+  let historyAt = $state<number | null>(null);
+  function openHistory(id: string, at: number | null = null): void {
     historyFocus = id;
+    historyAt = at;
     select('history');
   }
 
@@ -138,6 +145,17 @@
 
   // Replaced wholesale every tick; no deep reactivity needed.
   let snap = $state.raw<SensorSnapshot | null>(null);
+
+  // Insights (P16): a dot on the tab until the findings worth a look have been shown.
+  let insightsSeen = $state(loadSeenKeys());
+  let insightsFresh = $state<string[]>([]);
+  const insightsNew = $derived(unseen(snap?.insights?.attention ?? [], insightsSeen));
+  $effect(() => {
+    if (tab === 'insights' && insightsNew.length) {
+      insightsFresh = insightsNew;
+      insightsSeen = markSeen(insightsSeen, insightsNew);
+    }
+  });
   const overall = $derived(snap?.health.overall ?? 'unknown');
   /** Warnings and problems for the dashboard strip, worst first. */
   const attention = $derived(
@@ -253,6 +271,10 @@
             <span class="alert-dot new" aria-hidden="true"></span>
             <span class="sr-only">(new PC changes)</span>
           {/if}
+          {#if t.id === 'insights' && insightsNew.length}
+            <span class="alert-dot new" aria-hidden="true"></span>
+            <span class="sr-only">(new findings)</span>
+          {/if}
         </button>
       {/each}
     </div>
@@ -366,13 +388,25 @@
 
     {#if visited.history}
       <div id="panel-history" role="tabpanel" aria-labelledby="tab-history" hidden={tab !== 'history'}>
-        <HistoryPanel {snap} active={tab === 'history'} focus={historyFocus} onclearfocus={() => (historyFocus = null)} />
+        <HistoryPanel
+          {snap}
+          active={tab === 'history'}
+          focus={historyFocus}
+          focusAt={historyAt}
+          onclearfocus={() => ((historyFocus = null), (historyAt = null))}
+        />
       </div>
     {/if}
 
     {#if visited.health}
       <div id="panel-health" role="tabpanel" aria-labelledby="tab-health" hidden={tab !== 'health'}>
-        <HealthPanel {snap} active={tab === 'health'} onhistory={openHistory} />
+        <HealthPanel {snap} active={tab === 'health'} oninsights={() => select('insights')} />
+      </div>
+    {/if}
+
+    {#if visited.insights}
+      <div id="panel-insights" role="tabpanel" aria-labelledby="tab-insights" hidden={tab !== 'insights'}>
+        <InsightsPanel active={tab === 'insights'} fresh={insightsFresh} onhistory={openHistory} />
       </div>
     {/if}
 
@@ -495,6 +529,8 @@
     background: var(--panel);
   }
   .tabs button {
+    /* Holds the tab's screen-reader note, so it scrolls with the tab instead of widening the page. */
+    position: relative;
     padding: 0.35rem 0.85rem;
     border: 0;
     border-radius: 7px;

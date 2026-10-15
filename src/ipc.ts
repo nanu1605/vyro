@@ -6,7 +6,7 @@ import { listen } from '@tauri-apps/api/event';
 import { evaluate } from './curve';
 import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
-import type { AlertFired, AlertRule, BackendStatus, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insight, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -14,10 +14,16 @@ export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in
 export async function onSensors(cb: (s: SensorSnapshot) => void): Promise<() => void> {
   if (!inTauri) {
     const { startSim } = await import('./sim');
-    // The simulated board's fan control, as the service reports it in each snapshot.
+    const { SIM_ATTENTION } = await import('./sim-insights');
+    // The simulated board's fan control and the preview's findings, as the service reports
+    // them in each snapshot.
     return startSim((s) => {
       const f = simFanStatus(s);
-      cb({ ...s, fanControl: { active: f.active, fullSpeed: f.active && f.overrideReason != null } });
+      cb({
+        ...s,
+        fanControl: { active: f.active, fullSpeed: f.active && f.overrideReason != null },
+        insights: { attention: SIM_ATTENTION },
+      });
     });
   }
   const unlisten = await listen<SensorSnapshot>('sensors', (e) => cb(e.payload));
@@ -171,24 +177,10 @@ export async function getFanEvents(): Promise<FanEvent[]> {
   return invoke<FanEvent[]>('get_fan_events');
 }
 
-/** Findings from history (unusual temperatures, throttling, slow fans, power changes). */
-export async function getInsights(): Promise<Insight[]> {
-  if (!inTauri) {
-    const now = Math.floor(Date.now() / 1000);
-    return [
-      {
-        kind: 'unusualTemp', status: 'warn', title: 'CPU running hotter than usual', ts: null,
-        detail: 'Over the last 30 minutes: 68 °C at 22 % load. At that load it usually runs near 58 °C (past week). Dust, a changed fan curve, a warmer room or a cooler problem can cause this.',
-        metrics: ['cpu.temp.package', 'cpu.usage.total'],
-      },
-      {
-        kind: 'powerChange', status: 'ok', title: 'Power rose to 188 W', ts: now - 5400,
-        detail: 'CPU + GPU power went from 45 W to 188 W: GPU #0 +135 W (load 3 % → 97 %), CPU +8 W (load 5 % → 12 %).',
-        metrics: ['cpu.power.package', 'gpu.0.power'],
-      },
-    ];
-  }
-  return invoke<Insight[]>('get_insights');
+/** The intelligence engine's findings and vital signs (P16). */
+export async function getInsights(): Promise<Insights> {
+  if (!inTauri) return (await import('./sim-insights')).simInsights();
+  return invoke<Insights>('get_insights');
 }
 
 /** Recent health changes, oldest first. */

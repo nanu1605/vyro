@@ -343,7 +343,7 @@ impl EngineApi for RemoteEngine {
         self.call(&Request::BitlockerSystemDrive)
     }
 
-    fn insights(&self) -> Result<Vec<crate::analysis::Insight>, String> {
+    fn insights(&self) -> Result<crate::intel::Insights, String> {
         self.call(&Request::Insights)
     }
 

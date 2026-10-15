@@ -12,7 +12,8 @@
 //!
 //! v3 (P19) adds the PC change history: `pc_inventory` (the last inventory seen, as JSON; one
 //! row) and `hardware_change` (one row per change, kept by count rather than age). Later 0.4
-//! tables join v3 the same way, since `init` creates missing tables on every open.
+//! tables join v3 the same way, since `init` creates missing tables on every open: `digest`
+//! (P16) keeps a week of minute digests for the intelligence engine (see `intel::digest`).
 
 use rusqlite::Connection;
 
@@ -92,6 +93,10 @@ CREATE TABLE IF NOT EXISTS hardware_change (
     ts       INTEGER NOT NULL,
     category TEXT    NOT NULL,
     json     TEXT    NOT NULL
+);
+CREATE TABLE IF NOT EXISTS digest (
+    ts   INTEGER PRIMARY KEY,
+    json TEXT    NOT NULL
 );
 ";
 

@@ -15,6 +15,10 @@ use crate::snapshot::{SensorSnapshot, Status, StorageKind};
 
 /// Events kept in memory for the Health view.
 pub const MAX_EVENTS: usize = 200;
+/// CPU package and GPU edge temperature limits (warning, problem), °C; the intelligence engine
+/// measures thermal headroom against the problem limit.
+pub const CPU_TEMP: (f64, f64) = (90.0, 99.0);
+pub const GPU_TEMP: (f64, f64) = (85.0, 92.0);
 /// Ticks a fan must have spun before 0 RPM counts as "stopped" (not an empty header).
 const SPIN_TICKS: u32 = 5;
 
@@ -207,8 +211,8 @@ impl HealthMonitor {
             "cpu.temp",
             "CPU",
             s.cpu.temp_package,
-            90.0,
-            99.0,
+            CPU_TEMP.0,
+            CPU_TEMP.1,
         );
         if s.cpu.throttle_thermal == Some(true) {
             c.push(
@@ -222,7 +226,14 @@ impl HealthMonitor {
         // GPU
         for (i, g) in s.gpu.iter().enumerate() {
             let k = |w: &str| format!("gpu.{i}.{w}");
-            c.temp(Subsystem::Gpu, &k("temp"), &g.name, g.temp_edge, 85.0, 92.0);
+            c.temp(
+                Subsystem::Gpu,
+                &k("temp"),
+                &g.name,
+                g.temp_edge,
+                GPU_TEMP.0,
+                GPU_TEMP.1,
+            );
             let hot = format!("{} hotspot", g.name);
             c.temp(
                 Subsystem::Gpu,

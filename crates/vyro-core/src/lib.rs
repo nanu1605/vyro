@@ -4,7 +4,6 @@
 
 pub mod alerts;
 pub mod amd;
-pub mod analysis;
 pub mod autostart;
 pub mod changes;
 pub mod display;
@@ -15,6 +14,7 @@ pub mod health;
 pub mod history;
 pub mod hwid;
 pub mod info;
+pub mod intel;
 pub mod inventory;
 pub mod ipc;
 #[cfg(windows)]

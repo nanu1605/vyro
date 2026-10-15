@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::alerts::{self, AlertEngine, AlertFired, AlertRule};
-use crate::analysis::{self, Insight, SeriesMap};
 use crate::changes::{HardwareChange, PcInventory, MAX_CHANGES};
 use crate::fan::controller::{self, FanControl, SimDevice};
 use crate::fan::{FanCapability, FanConfig, FanEvent, FanStatus};
@@ -19,6 +18,7 @@ use crate::gaming::{CaptureTarget, GameContext, GameProvider, GameSession, Gamin
 use crate::health::{self, HealthEvent};
 use crate::history::WindowSeries;
 use crate::info::{DriveInfo, PawnIoStatus};
+use crate::intel::{Insights, Intel};
 use crate::poller::{EVENT_ALERT, EVENT_HEALTH};
 use crate::profiles::Profile;
 use crate::sio::control;
@@ -91,9 +91,9 @@ pub trait EngineApi: Send + Sync {
     fn set_ping_host(&self, host: &str) -> Result<(), String>;
     /// BitLocker protection of the system drive (needs administrator rights).
     fn bitlocker_system_drive(&self) -> Result<Option<bool>, String>;
-    /// Findings from the history store: unusual temperatures, throttling, slow fans, power
-    /// changes.
-    fn insights(&self) -> Result<Vec<Insight>, String>;
+    /// The intelligence engine's findings (P16), with their evidence and causes, and the
+    /// vital signs. Worked out from the history store; kept a minute.
+    fn insights(&self) -> Result<Insights, String>;
     /// Captures frames of this process (the fullscreen app in the foreground), or stops.
     fn set_capture_target(&self, target: Option<CaptureTarget>) -> Result<(), String>;
     /// The app's view of the captured game: in front, profile, overlay (`None`: no game).
@@ -150,6 +150,7 @@ pub struct LocalEngine {
     clients: ClientPids,
     gaming: Arc<Gaming>,
     fans: Arc<FanControl>,
+    intel: Arc<Intel>,
 }
 
 impl LocalEngine {
@@ -173,6 +174,7 @@ impl LocalEngine {
         let alerts = Arc::new(Mutex::new(AlertEngine::new(rules)));
         let gaming = Gaming::new(Gaming::default_launch(), dir, history.clone());
         let fans = Arc::new(Self::start_fans(cfg.fan_control, dir, history.clone()));
+        let intel = Intel::new(Arc::clone(&registry), history.clone(), unix_now());
 
         // The game provider runs last: its session summary reads this tick's temperatures.
         let game: Box<dyn Provider> = Box::new(GameProvider::new(Arc::clone(&gaming)));
@@ -184,7 +186,8 @@ impl LocalEngine {
                 Poller::with_boxed,
             )
             .with_alerts(Arc::clone(&alerts))
-            .with_fans(Arc::clone(&fans));
+            .with_fans(Arc::clone(&fans))
+            .with_intel(Arc::clone(&intel));
         if let Some(history) = &history {
             poller = poller.with_history(Arc::clone(history));
         }
@@ -198,6 +201,7 @@ impl LocalEngine {
             clients,
             gaming,
             fans,
+            intel,
         })
     }
 
@@ -384,36 +388,8 @@ impl EngineApi for LocalEngine {
         })
     }
 
-    fn insights(&self) -> Result<Vec<Insight>, String> {
-        let history = self.history.as_ref().ok_or("history store unavailable")?;
-        let tree = lock(&self.registry).tree();
-        let ids = analysis::wanted(&tree);
-        let names = tree
-            .groups
-            .iter()
-            .flat_map(|g| g.sensors.iter())
-            .map(|s| (s.id.clone(), s.name.clone()))
-            .collect();
-        let now = unix_now();
-        let mut windows: [SeriesMap; 3] = Default::default();
-        {
-            let mut h = lock(history);
-            let ranges = [HistoryRange::D7, HistoryRange::H24, HistoryRange::H1];
-            for (map, range) in windows.iter_mut().zip(ranges) {
-                for id in &ids {
-                    let s = h.query(id, range, now).map_err(|e| e.to_string())?;
-                    map.insert(id.clone(), s.points);
-                }
-            }
-        }
-        let [week, day, hour] = &windows;
-        Ok(analysis::analyze(&analysis::Inputs {
-            now,
-            week,
-            day,
-            hour,
-            names: &names,
-        }))
+    fn insights(&self) -> Result<Insights, String> {
+        self.intel.insights(unix_now())
     }
 
     fn set_capture_target(&self, target: Option<CaptureTarget>) -> Result<(), String> {
@@ -505,6 +481,7 @@ impl EngineApi for LocalEngine {
     }
 
     fn set_fan_profile(&self, profile: Profile) -> Result<(), String> {
+        self.intel.set_profile(profile);
         self.fans.set_profile(profile)
     }
 
@@ -590,7 +567,9 @@ mod tests {
         assert_eq!(engine.alert_rules().unwrap(), rules);
         assert!(engine.set_ping_host("not a host!").is_err());
         // A few seconds of history: no baselines yet, so nothing to report.
-        assert_eq!(engine.insights(), Ok(Vec::new()));
+        let insights = engine.insights().unwrap();
+        assert!(insights.findings.is_empty(), "{insights:?}");
+        assert_eq!(insights.vitals.len(), 6);
         // The PC change history starts with the first inventory.
         let first = engine.record_inventory(PcInventory::default()).unwrap();
         assert_eq!(engine.hardware_changes(10).unwrap(), first);
