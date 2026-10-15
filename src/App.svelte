@@ -48,6 +48,7 @@
     { id: 'storage', label: 'Storage' },
     { id: 'network', label: 'Network' },
     { id: 'displays', label: 'Displays' },
+    { id: 'devices', label: 'Devices' },
     { id: 'system', label: 'System' },
     { id: 'sensors', label: 'Sensors' },
     { id: 'settings', label: 'Settings' },
@@ -82,6 +83,7 @@
     storage: false,
     network: false,
     displays: false,
+    devices: false,
     system: false,
     sensors: false,
     settings: false,
@@ -484,6 +486,14 @@
     {#if visited.displays}
       <div id="panel-displays" role="tabpanel" aria-labelledby="tab-displays" hidden={tab !== 'displays'}>
         <DisplaysPanel />
+      </div>
+    {/if}
+    {#if visited.devices}
+      <div id="panel-devices" role="tabpanel" aria-labelledby="tab-devices" hidden={tab !== 'devices'}>
+        <!-- Loaded on first visit, like Benchmark. -->
+        {#await import('./components/DevicesPanel.svelte') then { default: DevicesPanel }}
+          <DevicesPanel active={tab === 'devices'} />
+        {/await}
       </div>
     {/if}
     {#if visited.system}

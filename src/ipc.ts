@@ -7,7 +7,7 @@ import { evaluate } from './curve';
 import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
 import { savedLook, type AccentId, type OpenOn, type ThemeId } from './themes';
-import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Devices, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -606,6 +606,19 @@ export async function getSystemInfo(): Promise<SystemInfo> {
 export async function getDisplays(): Promise<DisplayInfo[]> {
   if (!inTauri) return (await import('./sample-displays')).sampleDisplays;
   return invoke<DisplayInfo[]>('get_displays');
+}
+
+/** Peripherals, wireless battery and sound devices (P22), read fresh. */
+export async function getDevices(): Promise<Devices> {
+  if (!inTauri) return (await import('./sample-devices')).sampleDevices;
+  return invoke<Devices>('get_devices');
+}
+
+/** Fires once things settle after a device arrives, leaves, connects or disconnects. Starts
+ * after the first `getDevices`. */
+export async function onDevicesChanged(cb: () => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen('devices-changed', () => cb());
 }
 
 /** The PC change history (P19), newest first. */
