@@ -65,6 +65,7 @@ export function effectiveFor(
   const plain: Effective = {
     base, profile: base, fans: base, pollMs: pollOf(base), overlay: null, overlayMode: null, game: null, auto: false, suppressed: false,
     alert: null,
+    benchmark: false,
   };
   if (!game) return plain;
   const rule = ruleFor(auto, game);

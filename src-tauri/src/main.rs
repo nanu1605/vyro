@@ -1,6 +1,7 @@
 // Release builds are GUI-only on Windows (no console window).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod bench;
 mod changes;
 mod commands;
 mod engine;
@@ -50,6 +51,7 @@ fn main() {
             let engine = Engine::start(app.handle(), !minimized)?;
             app.manage(overlay::Overlay::default());
             app.manage(gaming::GameState::default());
+            app.manage(bench::BenchState::default());
             app.manage(updates::Updates::new(can_update, current));
             app.manage(engine);
             app.manage(tray::SettingsStore::load(app.handle()));
@@ -109,6 +111,13 @@ fn main() {
             commands::set_fan_config,
             commands::restore_fans,
             commands::get_fan_events,
+            bench::benchmark_preflight,
+            bench::start_benchmark,
+            bench::stop_benchmark,
+            bench::get_benchmark_progress,
+            bench::get_benchmark_runs,
+            bench::get_benchmark_run,
+            bench::delete_benchmark,
             updates::get_update_status,
             updates::check_for_updates,
             updates::install_update,
@@ -118,6 +127,8 @@ fn main() {
 
     app.run(|handle, event| {
         if let tauri::RunEvent::Exit = event {
+            // Ends a benchmark's load and keeps the stopped run before the engine goes.
+            bench::stop_and_wait(handle, "Vyro quit.", std::time::Duration::from_secs(3));
             if let Some(engine) = handle.try_state::<Engine>() {
                 engine.shutdown();
             }

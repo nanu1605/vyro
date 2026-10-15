@@ -6,7 +6,7 @@ import { listen } from '@tauri-apps/api/event';
 import { evaluate } from './curve';
 import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
-import type { AlertFired, AlertRule, BackendStatus, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -195,6 +195,58 @@ export async function getInsights(): Promise<Insights> {
 export async function getPerformanceScore(): Promise<ScoreReport> {
   if (!inTauri) return (await import('./sim-score')).simScore();
   return invoke<ScoreReport>('get_performance_score');
+}
+
+// Benchmark mode (P20): the run happens in the app; results are kept by the engine.
+
+/** What a run would use, and what stands in its way now. */
+export async function getBenchmarkPreflight(): Promise<Preflight> {
+  if (!inTauri) return (await import('./sim-bench')).simPreflight();
+  return invoke<Preflight>('benchmark_preflight');
+}
+
+export async function startBenchmark(mode: BenchMode): Promise<void> {
+  if (!inTauri) return (await import('./sim-bench')).simStart(mode);
+  return invoke('start_benchmark', { mode });
+}
+
+export async function stopBenchmark(): Promise<void> {
+  if (!inTauri) return (await import('./sim-bench')).simStop();
+  return invoke('stop_benchmark');
+}
+
+/** Where the run is, while one goes on. */
+export async function getBenchmarkProgress(): Promise<BenchProgress | null> {
+  if (!inTauri) return (await import('./sim-bench')).simProgress();
+  return invoke<BenchProgress | null>('get_benchmark_progress');
+}
+
+/** Kept runs, newest first. */
+export async function getBenchmarkRuns(): Promise<RunSummary[]> {
+  if (!inTauri) return (await import('./sim-bench')).simRuns();
+  return invoke<RunSummary[]>('get_benchmark_runs');
+}
+
+export async function getBenchmarkRun(id: number): Promise<BenchRun | null> {
+  if (!inTauri) return (await import('./sim-bench')).simRun(id);
+  return invoke<BenchRun | null>('get_benchmark_run', { id });
+}
+
+export async function deleteBenchmark(id: number): Promise<boolean> {
+  if (!inTauri) return (await import('./sim-bench')).simDelete(id);
+  return invoke<boolean>('delete_benchmark', { id });
+}
+
+/** About four times a second while a run goes on (and the window shows). */
+export async function onBenchProgress(cb: (p: BenchProgress) => void): Promise<() => void> {
+  if (!inTauri) return (await import('./sim-bench')).onSimProgress(cb);
+  return listen<BenchProgress>('bench-progress', (e) => cb(e.payload));
+}
+
+/** The finished or stopped run, once kept. */
+export async function onBenchDone(cb: (r: BenchRun) => void): Promise<() => void> {
+  if (!inTauri) return (await import('./sim-bench')).onSimDone(cb);
+  return listen<BenchRun>('bench-done', (e) => cb(e.payload));
 }
 
 /** Recent health changes, oldest first. */

@@ -169,6 +169,9 @@ pub struct Effective {
     pub suppressed: bool,
     /// The alert rule whose profile is in force (P18), if any.
     pub alert: Option<String>,
+    /// A benchmark run has the Benchmark profile in force (P20).
+    #[serde(default)]
+    pub benchmark: bool,
 }
 
 /// Follows the game being played and the owner's picks.
@@ -180,6 +183,9 @@ pub struct Switcher {
     alert: Option<(Profile, String)>,
     /// The owner picked a profile while that alert held.
     alert_kept: bool,
+    /// A benchmark runs (P20), and whether the owner picked a profile during it.
+    bench: bool,
+    bench_kept: bool,
 }
 
 impl Switcher {
@@ -208,6 +214,20 @@ impl Switcher {
         if self.alert.is_some() {
             self.alert_kept = true;
         }
+        if self.bench {
+            self.bench_kept = true;
+        }
+    }
+
+    /// A benchmark run starts or ends: while it runs, the Benchmark profile is in force over a
+    /// game's and an alert's, unless the owner picks another. Returns whether it changed.
+    pub fn set_benchmark(&mut self, on: bool) -> bool {
+        if self.bench == on {
+            return false;
+        }
+        self.bench = on;
+        self.bench_kept = false;
+        true
     }
 
     /// The profile an alert puts in force while it holds, with the alert's name (`None` once
@@ -227,6 +247,16 @@ impl Switcher {
 
     pub fn effective(&self, base: Profile, auto: &GameAutomation) -> Effective {
         let e = self.for_game(base, auto);
+        if self.bench && !self.bench_kept {
+            let p = Profile::Benchmark;
+            return Effective {
+                profile: p,
+                fans: p,
+                poll_ms: p.spec().poll_ms,
+                benchmark: true,
+                ..e
+            };
+        }
         match &self.alert {
             Some((profile, name)) if !self.alert_kept => Effective {
                 profile: *profile,
@@ -251,6 +281,7 @@ impl Switcher {
             auto: false,
             suppressed: false,
             alert: None,
+            benchmark: false,
         };
         let Some(game) = self.game.as_deref() else {
             return plain;
@@ -453,6 +484,30 @@ mod tests {
         // The next game switches again.
         s.set_game(Some("game.exe"));
         assert_eq!(s.effective(Profile::Work, &auto).profile, Profile::Gaming);
+    }
+
+    #[test]
+    fn a_benchmark_run_has_its_profile_until_the_owner_picks_another() {
+        let auto = GameAutomation::default();
+        let mut s = Switcher::default();
+        s.set_alert(Some((Profile::Silent, "Too loud")));
+        assert!(s.set_benchmark(true));
+        assert!(!s.set_benchmark(true));
+        let e = s.effective(Profile::Desktop, &auto);
+        assert_eq!(
+            (e.profile, e.fans, e.poll_ms, e.benchmark),
+            (Profile::Benchmark, Profile::Benchmark, 500, true)
+        );
+        // The owner picks: their profile wins (here the alert's, still holding).
+        s.manual();
+        let e = s.effective(Profile::Desktop, &auto);
+        assert_eq!((e.profile, e.benchmark), (Profile::Desktop, false));
+        // The next run starts without that pick.
+        s.set_benchmark(false);
+        s.set_benchmark(true);
+        assert!(s.effective(Profile::Work, &auto).benchmark);
+        s.set_benchmark(false);
+        assert_eq!(s.effective(Profile::Work, &auto).profile, Profile::Work);
     }
 
     #[test]

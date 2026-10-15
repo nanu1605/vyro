@@ -40,6 +40,8 @@ pub struct Engine {
     /// A game runs: the engine keeps its update rate (the profile's or the game's own) with
     /// the window hidden too, for the overlay and the session log.
     game: AtomicBool,
+    /// A benchmark runs (P20): it watches the readings with the window hidden too.
+    bench: AtomicBool,
 }
 
 impl Engine {
@@ -99,6 +101,7 @@ impl Engine {
             visible: shown,
             overlay: AtomicBool::new(false),
             game: AtomicBool::new(false),
+            bench: AtomicBool::new(false),
         })
     }
 
@@ -122,12 +125,20 @@ impl Engine {
         }
     }
 
-    /// The window's rate while it, the overlay or a game needs readings; the tray rate otherwise.
+    pub fn set_bench(&self, on: bool) {
+        if self.bench.swap(on, Ordering::SeqCst) != on {
+            self.sync_rate();
+        }
+    }
+
+    /// The window's rate while it, the overlay, a game or a benchmark needs readings; the tray
+    /// rate otherwise.
     fn sync_rate(&self) {
         self.api.set_visible(
             self.visible.load(Ordering::SeqCst)
                 || self.overlay.load(Ordering::SeqCst)
-                || self.game.load(Ordering::SeqCst),
+                || self.game.load(Ordering::SeqCst)
+                || self.bench.load(Ordering::SeqCst),
         );
     }
 
@@ -187,6 +198,7 @@ fn sink(app: &AppHandle, shown: &Arc<AtomicBool>) -> impl Fn(&SensorSnapshot) + 
             }
         }
         crate::gaming::note_snapshot(&app, snap);
+        crate::bench::note_snapshot(&app, snap);
         crate::gaming::note_alerts(&app, &snap.alert_state);
         crate::overlay::update(&app, snap);
         for alert in &snap.alerts {

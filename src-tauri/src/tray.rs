@@ -391,6 +391,8 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
         return;
     };
     let app = window.app_handle();
+    // A benchmark never runs on unseen (P20).
+    crate::bench::stop(app, "The Vyro window was closed.");
     let Some(store) = app.try_state::<SettingsStore>() else {
         return;
     };

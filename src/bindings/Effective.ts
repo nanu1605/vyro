@@ -45,4 +45,8 @@ suppressed: boolean,
 /**
  * The alert rule whose profile is in force (P18), if any.
  */
-alert: string | null, };
+alert: string | null, 
+/**
+ * A benchmark run has the Benchmark profile in force (P20).
+ */
+benchmark: boolean, };

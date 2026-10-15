@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::alerts::{self, AlertEngine, AlertFired, AlertRule};
+use crate::bench::{BenchRun, RunSummary};
 use crate::changes::{HardwareChange, PcInventory, MAX_CHANGES};
 use crate::fan::controller::{self, FanControl, SimDevice};
 use crate::fan::{FanCapability, FanConfig, FanEvent, FanStatus};
@@ -122,6 +123,14 @@ pub trait EngineApi: Send + Sync {
     fn record_inventory(&self, inventory: PcInventory) -> Result<Vec<HardwareChange>, String>;
     /// The PC change history, newest first (at most `limit`).
     fn hardware_changes(&self, limit: u32) -> Result<Vec<HardwareChange>, String>;
+    /// Keeps a benchmark run (P20; the app runs it); returns its id.
+    fn add_benchmark(&self, run: BenchRun) -> Result<i64, String>;
+    /// Kept benchmark runs, newest first, with their metrics.
+    fn benchmark_runs(&self) -> Result<Vec<RunSummary>, String>;
+    /// One kept benchmark run in full; `None` once it is gone.
+    fn benchmark_run(&self, id: i64) -> Result<Option<BenchRun>, String>;
+    /// Forgets a benchmark run; false when there was none.
+    fn delete_benchmark(&self, id: i64) -> Result<bool, String>;
     /// Fan control: capability, configuration and each header's state.
     fn fan_status(&self) -> Result<FanStatus, String>;
     /// Validates, saves and applies a fan configuration.
@@ -492,6 +501,28 @@ impl EngineApi for LocalEngine {
         let history = self.history.as_ref().ok_or("history store unavailable")?;
         lock(history)
             .hardware_changes(i64::from(limit).min(MAX_CHANGES))
+            .map_err(|e| e.to_string())
+    }
+
+    fn add_benchmark(&self, run: BenchRun) -> Result<i64, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history).add_benchmark(&run).map_err(|e| e.to_string())
+    }
+
+    fn benchmark_runs(&self) -> Result<Vec<RunSummary>, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history).benchmark_runs().map_err(|e| e.to_string())
+    }
+
+    fn benchmark_run(&self, id: i64) -> Result<Option<BenchRun>, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history).benchmark_run(id).map_err(|e| e.to_string())
+    }
+
+    fn delete_benchmark(&self, id: i64) -> Result<bool, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history)
+            .delete_benchmark(id)
             .map_err(|e| e.to_string())
     }
 

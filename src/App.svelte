@@ -41,6 +41,7 @@
     { id: 'health', label: 'Health' },
     { id: 'insights', label: 'Insights' },
     { id: 'gaming', label: 'Gaming' },
+    { id: 'benchmark', label: 'Benchmark' },
     { id: 'processes', label: 'Processes' },
     { id: 'hardware', label: 'Hardware' },
     { id: 'storage', label: 'Storage' },
@@ -70,6 +71,7 @@
     health: false,
     insights: false,
     gaming: false,
+    benchmark: false,
     processes: false,
     hardware: false,
     storage: false,
@@ -413,6 +415,15 @@
     {#if visited.gaming}
       <div id="panel-gaming" role="tabpanel" aria-labelledby="tab-gaming" hidden={tab !== 'gaming'}>
         <GamingPanel {snap} {backend} active={tab === 'gaming'} onsettings={() => select('settings')} />
+      </div>
+    {/if}
+
+    {#if visited.benchmark}
+      <div id="panel-benchmark" role="tabpanel" aria-labelledby="tab-benchmark" hidden={tab !== 'benchmark'}>
+        <!-- Loaded on first visit: most sessions never open it. -->
+        {#await import('./components/BenchmarkPanel.svelte') then { default: BenchmarkPanel }}
+          <BenchmarkPanel active={tab === 'benchmark'} />
+        {/await}
       </div>
     {/if}
 

@@ -14,7 +14,9 @@
 //! row) and `hardware_change` (one row per change, kept by count rather than age). Later 0.4
 //! tables join v3 the same way, since `init` creates missing tables on every open: `digest`
 //! (P16) keeps a week of minute digests for the intelligence engine (see `intel::digest`), and
-//! `score` (P17) one Performance Score a day for a year (see `score`).
+//! `score` (P17) one Performance Score a day for a year (see `score`), and `benchmark_runs` /
+//! `benchmark_metrics` (P20) the newest 100 benchmark runs, whole and metric by metric (see
+//! `bench`).
 
 use rusqlite::Connection;
 
@@ -105,6 +107,23 @@ CREATE TABLE IF NOT EXISTS score (
     formula INTEGER NOT NULL,
     json    TEXT    NOT NULL
 );
+CREATE TABLE IF NOT EXISTS benchmark_runs (
+    id     INTEGER PRIMARY KEY,
+    ts     INTEGER NOT NULL,
+    method INTEGER NOT NULL,
+    mode   TEXT    NOT NULL,
+    status TEXT    NOT NULL,
+    busy   INTEGER NOT NULL,
+    errors INTEGER NOT NULL,
+    json   TEXT    NOT NULL
+);
+CREATE TABLE IF NOT EXISTS benchmark_metrics (
+    run_id INTEGER NOT NULL,
+    key    TEXT    NOT NULL,
+    value  REAL    NOT NULL,
+    spread REAL,
+    PRIMARY KEY (run_id, key)
+) WITHOUT ROWID;
 ";
 
 /// Applies pragmas and creates tables. A database written by a newer schema is refused

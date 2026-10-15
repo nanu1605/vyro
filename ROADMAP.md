@@ -894,7 +894,96 @@ stays v3 (the `score` table is created in place); IPC protocol 11.
       trend the next day.
 
 ### P20 — Benchmark mode (M10 → 0.4)
-- [ ] Own workloads, hard stop, variance; `benchmark_runs` / `benchmark_metrics`.
+On `v2-p20-bench`, stacked on `v2-p17-score`. Method v1 is in
+[`docs/benchmark.md`](docs/benchmark.md).
+
+Defaults chosen at build (2026-10-15). The owner can change them at the field check:
+- **Modes.** Quick (about 3 min) covers CPU single/multi, memory, storage, GPU compute and
+  graphics. Full (about 13 min) adds 10 one-minute loops of CPU and GPU load together.
+- **Passes.** A warm-up, then 3 measured passes per area. The result is the median and the spread.
+- **What runs where.**
+  - The load runs in the app, so quitting Vyro always ends it.
+  - The GPU work is Direct3D 11 on the high-performance GPU.
+  - Storage uses a 1 GiB uncached temporary file in the Windows temporary folder.
+  - The Benchmark profile is in force during a run.
+- **Stops.** Stop, closing or quitting the window, Health's problem limits (CPU 99 °C, GPU 92 °C),
+  a new Health problem, readings missing for 10 s, or twice the planned time. All load ends
+  within a second.
+- **Comparison.** The newest earlier completed run of the same method that was not busy. A change counts beyond the
+  larger of 3 % and either run's spread, and setup differences are listed.
+
+Budget:
+- **Idle.** Nothing: no thread, no polling.
+- **During a run.**
+  - Threads: a runner thread plus one worker per logical processor (4 for storage, 1 for the GPU),
+    all joined at the end.
+  - Memory: up to 512 MiB of RAM for the memory area and about 320 MiB of video memory, freed
+    after each area.
+  - Disk: a 1 GiB temporary file, about 3 GiB written per run.
+- **Stored.** One `benchmark_runs` row (about 8 KB) and about 25 `benchmark_metrics` rows per run,
+  newest 100 runs kept (under 1 MB).
+- **Versions.** History schema stays v3 (the tables are created in place); IPC protocol 12.
+- **Bundle.** The main bundle grows under 15 kB.
+
+- [x] Method v1 written (2026-10-15): [`docs/benchmark.md`](docs/benchmark.md).
+- [x] Built (2026-10-15, branch `v2-p20-bench`, stacked on `v2-p17-score`):
+      - **Workloads (`vyro_core::bench`):**
+        - CPU rounds of four fixed kernels (hash, LZ match search, matrix product, sort), each
+          round checked against a reference checksum.
+        - Memory: read and copy over two 256 MiB buffers, with known sums, and latency along a
+          Sattolo cycle over 256 MiB.
+        - Storage: a 1 GiB uncached file, written whole first, then 3 capped passes each of
+          sequential write and read (4 threads, 1 MiB blocks) and random 4K reads at QD1.
+          Every sector carries its own offset, so data read back is checked. The file is
+          deleted on drop, and stale files at the next run.
+        - Direct3D 11 on the high-performance adapter: FP32 multiply-add chains, a 128 MiB
+          video memory copy, an integer hash checked on the CPU, and an offscreen 2560 × 1440
+          scene (400 instanced draws a frame, two frames in flight). GPU work goes out in
+          batches of about 20 ms; a reset counts as a GPU driver reset.
+      - **Runner.**
+        - Settles for 3 s first (marks a busy PC), then runs each area on its own thread while
+          watching the readings: peaks, average power and clocks over the measured passes,
+          throttled seconds, and fans at full speed.
+        - Stops on Health's problem limits (2 readings in a row), a new Health problem, a game
+          starting, 10 s without readings, or twice the planned time. A test asserts every
+          worker stops within a second.
+        - Works out scaling, efficiency (points per W, frames per joule) and stability (wrong
+          checksums, read-back errors, WHEA errors during the run, GPU resets).
+        - Full adds 10 one-minute loops of CPU and graphics together: stability is the worst
+          loop ÷ the best, plus clock sag.
+        - EcoQoS is off for the process during a run.
+      - **Store.** `benchmark_runs` (the run as JSON, plus mode, status, busy and errors) and
+        `benchmark_metrics` (value and spread per metric), newest 100 kept. IPC protocol 12
+        (`AddBenchmark`, `BenchmarkRuns`, `BenchmarkRun`, `DeleteBenchmark`).
+      - **App.**
+        - The run thread lives in the app.
+        - Readings come from the snapshot sink; the engine keeps the window's rate while a
+          run goes on.
+        - The Switcher's benchmark layer puts the Benchmark profile in force: owner's pick >
+          benchmark > alert > game > base.
+        - A run stops on Stop, on the window closing or hiding to the tray, and on quit
+          (waits up to 3 s so the stopped run is kept and the file deleted).
+        - Each run records its setup, including the active power plan (`sysinfo::power_plan`).
+      - **UI: the Benchmark tab, loaded on first visit.**
+        - Quick or Full, start checks, live progress with Stop and the areas finished.
+        - The result per area: median, ± spread, change against the baseline, and the readings.
+        - The comparison with the newest earlier completed, non-busy run (or any run picked),
+          what changed in between (setup differences and P19 hardware changes), and the Setup.
+        - The list of runs with two-click delete.
+        - Browser preview with past runs and a compressed live run.
+      - **Checks.**
+        - Rust tests: workloads, store, Switcher layer, IPC wire shapes. The Windows CI job also
+          runs every GPU workload on WARP and checks the shader's hashes against the CPU's.
+        - Browser preview: axe clean and no overflow at 1440 and 390 px.
+        - The main bundle grows 3.1 kB; the tab is a 19 kB chunk.
+- [ ] Field check (MS-7E24, RTX 5060 Ti):
+      - A Quick run completes in about 3 minutes, then a second scores within noise of the first.
+      - The CPU multi-thread peak temperature and power match HWMonitor.
+      - The GPU areas name the RTX 5060 Ti (not the iGPU), and Graphics holds it at full load.
+      - Stop, closing the window and quitting each end all load within a second (Task Manager)
+        and leave no `vyro-bench-*.tmp` in `%TEMP%`.
+      - A Full run's Sustained loops read steady.
+      - A run after a GPU driver update lists the change.
 
 ### P21 — One-click diagnostics + reports (M10)
 - [ ] Checks with telemetry evidence; HTML / JSON / Markdown / PDF, serials redacted.
