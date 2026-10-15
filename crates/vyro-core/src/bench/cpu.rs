@@ -170,13 +170,18 @@ pub fn spin(
 ) -> u64 {
     let mut s = Scratch::default();
     let mut done = 0u64;
-    while !stop.load(Ordering::Relaxed) && Instant::now() < until {
+    // At least one round unless stopped: a worker the OS starts after the pass's end (a busy
+    // PC) still counts, so a pass never scores zero.
+    while !stop.load(Ordering::Relaxed) {
         if round(inp, &mut s) != expect {
             errors.fetch_add(1, Ordering::Relaxed);
         }
         done += 1;
         if let Some(c) = count {
             c.fetch_add(1, Ordering::Relaxed);
+        }
+        if Instant::now() >= until {
+            break;
         }
     }
     done

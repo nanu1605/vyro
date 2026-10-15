@@ -43,6 +43,9 @@ fn cpu_rounds_are_deterministic_and_checked() {
     assert_eq!(cpu::spin(&a, r, until, &stop, &errors, None), 0);
     let pts = cpu::pass(&a, r, 2, 0.03, &no_stop(), &AtomicU32::new(0));
     assert!(pts > 0.0);
+    // A worker that starts after the pass's end (a busy PC) still counts one round.
+    assert!(cpu::spin(&a, r, Instant::now(), &no_stop(), &errors, None) >= 1);
+    assert!(cpu::pass(&a, r, 2, 0.0, &no_stop(), &AtomicU32::new(0)) > 0.0);
 }
 
 #[test]
