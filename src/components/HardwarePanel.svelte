@@ -1,10 +1,17 @@
 <script lang="ts">
   import Card from './Card.svelte';
+  import ChangesCard from './ChangesCard.svelte';
   import KV from './KV.svelte';
   import LoadState from './LoadState.svelte';
   import { fmt, fmtKB, fmtMB, hex4, NA } from '../format';
   import { getHardwareId } from '../ipc';
   import type { CacheInfo, HardwareId } from '../types';
+
+  interface Props {
+    /** PC changes above this id are marked new. */
+    newSince?: number;
+  }
+  let { newSince }: Props = $props();
 
   let hw = $state.raw<HardwareId | null>(null);
   let error = $state<string | null>(null);
@@ -46,6 +53,7 @@
   <LoadState what="hardware information" {error} loading={!hw} retry={load} />
 {:else}
   <div class="grid">
+    <ChangesCard {newSince} />
     <Card title="Processor" subtitle={cpu?.brand ?? 'Unknown CPU'} wide>
       <div class="split">
         <KV

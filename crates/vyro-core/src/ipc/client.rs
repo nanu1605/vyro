@@ -11,6 +11,7 @@ use super::transport::{connect, Conn};
 use super::PROTOCOL_VERSION;
 use super::{read_frame, recv, send, Hello, Reply, Request, Role, Welcome, MAX_MESSAGE};
 use crate::alerts::{AlertFired, AlertRule};
+use crate::changes::{HardwareChange, PcInventory};
 use crate::engine::EngineApi;
 use crate::fan::{FanConfig, FanEvent, FanStatus};
 use crate::gaming::replay::GameTimeline;
@@ -379,6 +380,14 @@ impl EngineApi for RemoteEngine {
         })
     }
 
+    fn record_inventory(&self, inventory: PcInventory) -> Result<Vec<HardwareChange>, String> {
+        self.call(&Request::RecordInventory { inventory })
+    }
+
+    fn hardware_changes(&self, limit: u32) -> Result<Vec<HardwareChange>, String> {
+        self.call(&Request::HardwareChanges { limit })
+    }
+
     fn fan_status(&self) -> Result<FanStatus, String> {
         self.call(&Request::FanStatus)
     }
@@ -535,6 +544,16 @@ mod tests {
             .history_window(&["cpu.usage.total".into()], 100, 10_000)
             .unwrap_err()
             .starts_with("at most"));
+        assert_eq!(
+            remote
+                .record_inventory(crate::changes::PcInventory::default())
+                .unwrap_err(),
+            "history store unavailable"
+        );
+        assert_eq!(
+            remote.hardware_changes(10).unwrap_err(),
+            "history store unavailable"
+        );
         assert!(!remote.drives().unwrap().is_empty());
         // A real answer on an elevated Windows runner, `None` elsewhere: either way it arrives.
         assert!(remote.bitlocker_system_drive().is_ok());

@@ -104,7 +104,7 @@ pub async fn get_displays() -> Result<Vec<DisplayInfo>, String> {
 }
 
 #[cfg(windows)]
-fn collect_displays() -> Vec<DisplayInfo> {
+pub(crate) fn collect_displays() -> Vec<DisplayInfo> {
     if std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1") {
         return vyro_core::display::sample();
     }
@@ -112,7 +112,7 @@ fn collect_displays() -> Vec<DisplayInfo> {
 }
 
 #[cfg(not(windows))]
-fn collect_displays() -> Vec<DisplayInfo> {
+pub(crate) fn collect_displays() -> Vec<DisplayInfo> {
     vyro_core::display::sample()
 }
 
@@ -132,7 +132,7 @@ pub async fn get_network() -> Result<Vec<NetAdapterInfo>, String> {
 }
 
 #[cfg(windows)]
-fn collect_network() -> Vec<NetAdapterInfo> {
+pub(crate) fn collect_network() -> Vec<NetAdapterInfo> {
     if std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1") {
         return vyro_core::network::sample();
     }
@@ -140,7 +140,7 @@ fn collect_network() -> Vec<NetAdapterInfo> {
 }
 
 #[cfg(not(windows))]
-fn collect_network() -> Vec<NetAdapterInfo> {
+pub(crate) fn collect_network() -> Vec<NetAdapterInfo> {
     vyro_core::network::sample()
 }
 

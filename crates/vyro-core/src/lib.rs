@@ -6,6 +6,7 @@ pub mod alerts;
 pub mod amd;
 pub mod analysis;
 pub mod autostart;
+pub mod changes;
 pub mod display;
 pub mod engine;
 pub mod fan;

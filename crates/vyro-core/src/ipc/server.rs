@@ -315,6 +315,8 @@ impl Server {
             Request::HistoryWindow { metrics, from, to } => {
                 json(e.history_window(&metrics, from, to))
             }
+            Request::RecordInventory { inventory } => json(e.record_inventory(inventory)),
+            Request::HardwareChanges { limit } => json(e.hardware_changes(limit)),
             Request::FanStatus => json(e.fan_status()),
             Request::SetFanConfig { config } => json(e.set_fan_config(config)),
             Request::RestoreFans => json(e.restore_fans()),

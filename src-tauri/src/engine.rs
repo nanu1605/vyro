@@ -87,6 +87,7 @@ impl Engine {
                 if let Err(e) = app.emit(DISPLAYS_EVENT, ()) {
                     log::debug!("emit {DISPLAYS_EVENT}: {e}");
                 }
+                crate::changes::check(&app, crate::changes::Reason::Displays);
             });
         }
 
@@ -149,7 +150,22 @@ fn sink(app: &AppHandle, shown: &Arc<AtomicBool>) -> impl Fn(&SensorSnapshot) + 
     let shown = Arc::clone(shown);
     // Fan state last shown in the tray (bit 0 active, bit 1 full speed); none yet.
     let tray_fans = AtomicU8::new(u8::MAX);
+    // The drives last seen, to check the PC change history when one comes or goes.
+    let drives: Mutex<Option<Vec<String>>> = Mutex::new(None);
     move |snap: &SensorSnapshot| {
+        let ids: Vec<&str> = snap.storage.iter().map(|d| d.id.as_str()).collect();
+        {
+            let mut last = lock(&drives);
+            let same = last
+                .as_ref()
+                .is_some_and(|l| l.iter().map(String::as_str).eq(ids.iter().copied()));
+            if !same {
+                if last.is_some() {
+                    crate::changes::check(&app, crate::changes::Reason::Drives);
+                }
+                *last = Some(ids.into_iter().map(String::from).collect());
+            }
+        }
         let fans = snap.fan_control;
         let bits = u8::from(fans.active) | u8::from(fans.full_speed) << 1;
         if tray_fans.load(Ordering::Relaxed) != bits && crate::tray::set_fan_state(&app, fans) {

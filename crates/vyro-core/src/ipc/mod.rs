@@ -22,6 +22,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::alerts::AlertRule;
+use crate::changes::PcInventory;
 use crate::fan::FanConfig;
 use crate::gaming::{CaptureTarget, GameContext};
 use crate::profiles::Profile;
@@ -34,8 +35,8 @@ pub use transport::{connect, default_endpoint, Conn, Listener};
 /// 2: `AppSnapshot::parts`. 3: `SensorSnapshot::game`, capture target and game sessions.
 /// 4: `GameSnapshot::timeline` replaces the raw frame times. 5: fan control (0.2).
 /// 6: `SetGameContext` (P13). 7: game session replay (P15): `GameTimeline`, `HistoryWindow`,
-/// session ids.
-pub const PROTOCOL_VERSION: u32 = 7;
+/// session ids. 8: PC change history (P19): `RecordInventory`, `HardwareChanges`.
+pub const PROTOCOL_VERSION: u32 = 8;
 /// Windows service name (installed by the MSI).
 pub const SERVICE_NAME: &str = "VyroService";
 /// Largest request the server accepts (alert rules are the biggest, a few KB).
@@ -128,6 +129,15 @@ pub enum Request {
         metrics: Vec<String>,
         from: i64,
         to: i64,
+    },
+    /// The PC as the app sees it (P19); serials cross the pipe but are never stored.
+    #[serde(rename_all = "camelCase")]
+    RecordInventory {
+        inventory: PcInventory,
+    },
+    #[serde(rename_all = "camelCase")]
+    HardwareChanges {
+        limit: u32,
     },
     FanStatus,
     #[serde(rename_all = "camelCase")]
@@ -267,6 +277,16 @@ mod tests {
             r#"{"method":"historyWindow","params":{"metrics":["cpu.usage.total"],"from":100,"to":220}}"#
         );
         assert_eq!(
+            json(&Request::RecordInventory {
+                inventory: PcInventory::default()
+            }),
+            r#"{"method":"recordInventory","params":{"inventory":{"items":[]}}}"#
+        );
+        assert_eq!(
+            json(&Request::HardwareChanges { limit: 50 }),
+            r#"{"method":"hardwareChanges","params":{"limit":50}}"#
+        );
+        assert_eq!(
             json(&Request::SetFanProfile {
                 profile: Profile::Gaming
             }),
@@ -285,7 +305,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&hello).unwrap(),
-            r#"{"protocol":7,"role":"snapshots","session":7,"pid":42,"visible":false}"#
+            r#"{"protocol":8,"role":"snapshots","session":7,"pid":42,"visible":false}"#
         );
         let reply: Reply = Err("nope".into());
         assert_eq!(serde_json::to_string(&reply).unwrap(), r#"{"Err":"nope"}"#);
