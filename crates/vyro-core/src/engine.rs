@@ -13,8 +13,10 @@ use crate::alerts::{self, AlertEngine, AlertFired, AlertRule};
 use crate::analysis::{self, Insight, SeriesMap};
 use crate::fan::controller::{self, FanControl, SimDevice};
 use crate::fan::{FanCapability, FanConfig, FanEvent, FanStatus};
-use crate::gaming::{CaptureTarget, GameProvider, GameSession, Gaming};
+use crate::gaming::replay::{self, GameTimeline};
+use crate::gaming::{CaptureTarget, GameContext, GameProvider, GameSession, Gaming};
 use crate::health::{self, HealthEvent};
+use crate::history::WindowSeries;
 use crate::info::{DriveInfo, PawnIoStatus};
 use crate::poller::{EVENT_ALERT, EVENT_HEALTH};
 use crate::profiles::Profile;
@@ -93,8 +95,21 @@ pub trait EngineApi: Send + Sync {
     fn insights(&self) -> Result<Vec<Insight>, String>;
     /// Captures frames of this process (the fullscreen app in the foreground), or stops.
     fn set_capture_target(&self, target: Option<CaptureTarget>) -> Result<(), String>;
+    /// The app's view of the captured game: in front, profile, overlay (`None`: no game).
+    fn set_game_context(&self, context: Option<GameContext>) -> Result<(), String>;
     /// Logged game sessions, newest first.
     fn game_sessions(&self) -> Result<Vec<GameSession>, String>;
+    /// A logged session with its samples (at most [`replay::MAX_POINTS`]) and markers; `None`
+    /// once it is gone.
+    fn game_timeline(&self, id: i64) -> Result<Option<GameTimeline>, String>;
+    /// Sensor history from `from` to `to` (unix seconds): the context of a moment in a replay.
+    /// At most [`MAX_WINDOW_METRICS`] metrics over at most [`MAX_WINDOW_SECS`].
+    fn history_window(
+        &self,
+        metrics: &[String],
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<WindowSeries>, String>;
     /// Fan control: capability, configuration and each header's state.
     fn fan_status(&self) -> Result<FanStatus, String>;
     /// Validates, saves and applies a fan configuration.
@@ -150,7 +165,7 @@ impl LocalEngine {
             .map_or_else(alerts::default_rules, alerts::load);
         log::info!("alerts: {} rule(s)", rules.len());
         let alerts = Arc::new(Mutex::new(AlertEngine::new(rules)));
-        let gaming = Gaming::new(Gaming::default_launch(), dir);
+        let gaming = Gaming::new(Gaming::default_launch(), dir, history.clone());
         let fans = Arc::new(Self::start_fans(cfg.fan_control, dir, history.clone()));
 
         // The game provider runs last: its session summary reads this tick's temperatures.
@@ -248,6 +263,10 @@ impl LocalEngine {
         !cfg!(windows) || std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1")
     }
 }
+
+/// Limits of [`EngineApi::history_window`].
+pub const MAX_WINDOW_METRICS: usize = 24;
+pub const MAX_WINDOW_SECS: i64 = 600;
 
 impl EngineApi for LocalEngine {
     fn latest(&self) -> Option<SensorSnapshot> {
@@ -396,8 +415,40 @@ impl EngineApi for LocalEngine {
         Ok(())
     }
 
+    fn set_game_context(&self, context: Option<GameContext>) -> Result<(), String> {
+        self.gaming.set_context(context);
+        Ok(())
+    }
+
     fn game_sessions(&self) -> Result<Vec<GameSession>, String> {
         Ok(self.gaming.sessions())
+    }
+
+    fn game_timeline(&self, id: i64) -> Result<Option<GameTimeline>, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history)
+            .game_timeline(id, replay::MAX_POINTS)
+            .map_err(|e| e.to_string())
+    }
+
+    fn history_window(
+        &self,
+        metrics: &[String],
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<WindowSeries>, String> {
+        if metrics.len() > MAX_WINDOW_METRICS || to < from || to - from > MAX_WINDOW_SECS {
+            return Err(format!(
+                "at most {MAX_WINDOW_METRICS} readings over {MAX_WINDOW_SECS} s"
+            ));
+        }
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        let now = unix_now();
+        let mut h = lock(history);
+        metrics
+            .iter()
+            .map(|m| h.query_window(m, from, to, now).map_err(|e| e.to_string()))
+            .collect()
     }
 
     fn fan_status(&self) -> Result<FanStatus, String> {

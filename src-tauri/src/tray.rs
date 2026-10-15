@@ -12,6 +12,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Emitter, Manager, Window, WindowEvent, Wry};
 use vyro_core::alerts::AlertFired;
 use vyro_core::fan::FanBrief;
+use vyro_core::gaming::auto::GameAutomation;
 use vyro_core::profiles::Profile;
 use vyro_core::units::TempUnit;
 use vyro_core::{lock, unix_now};
@@ -36,6 +37,8 @@ pub struct Settings {
     pub overlay: OverlaySettings,
     /// Look for a new release daily (release builds only).
     pub check_updates: bool,
+    /// Automatic game profiles and each saved game's own settings.
+    pub games: GameAutomation,
 }
 
 /// Emitted with the new [`Settings`] after any change (window or tray menu).
@@ -51,6 +54,7 @@ impl Default for Settings {
             game_capture: true,
             overlay: OverlaySettings::default(),
             check_updates: true,
+            games: GameAutomation::default(),
         }
     }
 }
@@ -216,25 +220,24 @@ pub fn set_fan_state(app: &AppHandle, fans: FanBrief) -> bool {
     true
 }
 
-/// Saves `settings` and applies them: the profile's poll rate, the tray check mark, and the
-/// window's view (via [`SETTINGS_EVENT`]).
-pub fn apply(app: &AppHandle, settings: Settings) -> Result<(), String> {
+/// Saves `settings` and applies them: the profile in force (the owner's, or a game's), the
+/// tray, and the window's view (via [`SETTINGS_EVENT`]). A new profile here is the owner's
+/// pick and wins over a running game's.
+pub fn apply(app: &AppHandle, mut settings: Settings) -> Result<(), String> {
+    for rule in &mut settings.games.rules {
+        rule.exe = rule.exe.trim().to_ascii_lowercase();
+    }
+    settings.games.validate()?;
     let saved = match app.try_state::<SettingsStore>() {
-        Some(store) => store.set(settings.clone()),
+        Some(store) => {
+            if store.get().profile != settings.profile {
+                crate::gaming::manual_pick(app);
+            }
+            store.set(settings.clone())
+        }
         None => Ok(()),
     };
-    if let Some(engine) = app.try_state::<Engine>() {
-        engine.set_poll_interval(settings.profile.spec().poll_ms);
-        // The service puts the profile's own fan settings in force, if it has any.
-        if let Err(e) = engine.api.set_fan_profile(settings.profile) {
-            log::warn!("fans: profile: {e}");
-        }
-    }
-    if let Some(items) = app.try_state::<ProfileItems>() {
-        for (p, item) in &items.0 {
-            let _ = item.set_checked(*p == settings.profile);
-        }
-    }
+    crate::gaming::apply_effective(app);
     if let Some(item) = app.try_state::<OverlayItem>() {
         let _ = item.0.set_checked(settings.overlay.enabled);
     }
@@ -242,6 +245,31 @@ pub fn apply(app: &AppHandle, settings: Settings) -> Result<(), String> {
         log::debug!("emit {SETTINGS_EVENT}: {e}");
     }
     saved
+}
+
+/// A profile picked in the tray or the window: saved as the owner's profile and put in force,
+/// also when it already was the owner's while a game's was in force.
+pub fn pick_profile(app: &AppHandle, profile: Profile) -> Result<(), String> {
+    let Some(store) = app.try_state::<SettingsStore>() else {
+        return Ok(());
+    };
+    crate::gaming::manual_pick(app);
+    apply(
+        app,
+        Settings {
+            profile,
+            ..store.get()
+        },
+    )
+}
+
+/// Moves the tray's check mark to the profile in force.
+pub fn check_profile(app: &AppHandle, profile: Profile) {
+    if let Some(items) = app.try_state::<ProfileItems>() {
+        for (p, item) in &items.0 {
+            let _ = item.set_checked(*p == profile);
+        }
+    }
 }
 
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
@@ -318,14 +346,8 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
                 let Ok(profile) = serde_json::from_value::<Profile>(name.into()) else {
                     return;
                 };
-                if let Some(store) = app.try_state::<SettingsStore>() {
-                    let settings = Settings {
-                        profile,
-                        ..store.get()
-                    };
-                    if let Err(e) = apply(app, settings) {
-                        log::warn!("settings: {e}");
-                    }
+                if let Err(e) = pick_profile(app, profile) {
+                    log::warn!("settings: {e}");
                 }
             }
         })
@@ -373,5 +395,22 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
                 sound: false,
             },
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_from_0_2_get_automatic_game_profiles() {
+        let s: Settings =
+            serde_json::from_str(r#"{"profile":"work","gameCapture":true,"checkUpdates":false}"#)
+                .unwrap();
+        assert_eq!(s.profile, Profile::Work);
+        assert!(!s.check_updates);
+        assert!(s.games.enabled);
+        assert_eq!(s.games.default_profile, Some(Profile::Gaming));
+        assert!(s.games.rules.is_empty());
     }
 }

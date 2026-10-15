@@ -4,10 +4,15 @@
 //! aggregates. `WITHOUT ROWID` keeps rows clustered by metric so range queries and per-metric
 //! pruning are primary-key range scans. `event` keeps health changes and fired alerts (JSON per
 //! row, by kind) so they survive a restart.
+//!
+//! v2 (P15) adds game sessions for the replay: `game_session` (the summary as JSON; `ended` is
+//! empty while it runs; `timeline` 0 once its samples are gone), `game_sample` (one row per
+//! tick, readings as scaled integers, see `gaming::replay::COLUMNS`) and `game_event` (its
+//! markers). A v1 file gains the tables in place.
 
 use rusqlite::Connection;
 
-pub const VERSION: i32 = 1;
+pub const VERSION: i32 = 2;
 
 const CREATE: &str = "
 CREATE TABLE IF NOT EXISTS metric (
@@ -43,6 +48,36 @@ CREATE TABLE IF NOT EXISTS agg1m (
     max    REAL    NOT NULL,
     PRIMARY KEY (metric, ts)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS game_session (
+    id       INTEGER PRIMARY KEY,
+    started  INTEGER NOT NULL,
+    ended    INTEGER,
+    timeline INTEGER NOT NULL DEFAULT 1,
+    json     TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS game_session_started ON game_session(started);
+CREATE TABLE IF NOT EXISTS game_sample (
+    session      INTEGER NOT NULL,
+    t            INTEGER NOT NULL,
+    fps          INTEGER,
+    fps_min      INTEGER,
+    frame_ms     INTEGER,
+    frame_max_ms INTEGER,
+    cpu_usage    INTEGER,
+    gpu_usage    INTEGER,
+    cpu_temp     INTEGER,
+    gpu_temp     INTEGER,
+    cpu_power    INTEGER,
+    gpu_power    INTEGER,
+    PRIMARY KEY (session, t)
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS game_event (
+    id      INTEGER PRIMARY KEY,
+    session INTEGER NOT NULL,
+    t       INTEGER NOT NULL,
+    json    TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS game_event_session ON game_event(session, t);
 ";
 
 /// Applies pragmas and creates tables. A database written by a newer schema is refused

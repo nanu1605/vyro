@@ -1,7 +1,7 @@
 // Browser-only stand-in for the engine's sensor registry: derives a sensor tree from the
 // simulated snapshot and tracks min / max / avg the way the Rust registry does.
 
-import type { Group, HistoryRange, HistorySeries, Sensor, SensorSnapshot, SensorTree, Source, Unit } from './types';
+import type { Group, HistoryRange, HistorySeries, Sensor, SensorSnapshot, SensorTree, Source, Unit, WindowSeries } from './types';
 
 const GROUP_ORDER: Group[] = ['cpu', 'gpu', 'memory', 'storage', 'board', 'fans', 'voltages', 'network', 'power', 'system', 'game', 'app'];
 
@@ -133,4 +133,23 @@ export function simHistory(metric: string, range: HistoryRange, now = Math.floor
     points.push({ ts, avg, min: Math.max(0, avg - spread), max: avg + spread });
   }
   return { metric, range, stepSecs: step, points };
+}
+
+/** History between two moments, from the tier the engine would use for their age (`query_window`). */
+export function simWindow(metric: string, from: number, to: number, now = Math.floor(Date.now() / 1000)): WindowSeries {
+  const age = now - from;
+  const res = age < 1800 ? 1 : age < 86400 ? 10 : age < 604800 ? 60 : 0;
+  if (!res) return { metric, stepSecs: 0, points: [] };
+  const step = Math.ceil(Math.max(res, Math.ceil((to - from + 1) / 600)) / res) * res;
+  const [base, swing] = profile(metric);
+  const seed = hash(metric) * 100;
+  const points = [];
+  for (let ts = Math.floor(from / step) * step; ts <= to; ts += step) {
+    const t = ts / 60;
+    const load = 0.5 + 0.35 * Math.sin(t / 37 + seed) + 0.15 * Math.sin(ts / 13 + seed * 2);
+    const avg = Math.max(0, base + swing * (load - 0.5) * 2);
+    const spread = step > 1 ? swing * 0.1 : 0;
+    points.push({ ts, avg, min: Math.max(0, avg - spread), max: avg + spread });
+  }
+  return { metric, stepSecs: step, points };
 }

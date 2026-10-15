@@ -13,8 +13,10 @@ use super::{read_frame, recv, send, Hello, Reply, Request, Role, Welcome, MAX_ME
 use crate::alerts::{AlertFired, AlertRule};
 use crate::engine::EngineApi;
 use crate::fan::{FanConfig, FanEvent, FanStatus};
-use crate::gaming::{CaptureTarget, GameSession};
+use crate::gaming::replay::GameTimeline;
+use crate::gaming::{CaptureTarget, GameContext, GameSession};
 use crate::health::HealthEvent;
+use crate::history::WindowSeries;
 use crate::info::{DriveInfo, PawnIoStatus};
 use crate::profiles::Profile;
 use crate::{lock, HistoryRange, HistorySeries, SensorSnapshot, SensorTree, SnapshotSink};
@@ -40,6 +42,7 @@ struct Shared {
     poll_ms: std::sync::atomic::AtomicU32,
     /// Capture target asked for; sent again after a reconnect.
     capture: Mutex<Option<CaptureTarget>>,
+    game: Mutex<Option<GameContext>>,
     stop: AtomicBool,
     latest: Mutex<Option<SensorSnapshot>>,
     status: Mutex<RemoteStatus>,
@@ -82,6 +85,11 @@ impl Shared {
                     if let Some(target) = lock(&shared.capture).clone() {
                         reqs.push(Request::SetCaptureTarget {
                             target: Some(target),
+                        });
+                    }
+                    if let Some(context) = *lock(&shared.game) {
+                        reqs.push(Request::SetGameContext {
+                            context: Some(context),
                         });
                     }
                     for req in reqs {
@@ -127,6 +135,7 @@ impl RemoteEngine {
             visible: AtomicBool::new(visible),
             poll_ms: std::sync::atomic::AtomicU32::new(0),
             capture: Mutex::new(None),
+            game: Mutex::new(None),
             stop: AtomicBool::new(false),
             latest: Mutex::new(None),
             status: Mutex::new(RemoteStatus::default()),
@@ -343,8 +352,31 @@ impl EngineApi for RemoteEngine {
         self.call(&Request::SetCaptureTarget { target })
     }
 
+    /// Remembered for reconnects.
+    fn set_game_context(&self, context: Option<GameContext>) -> Result<(), String> {
+        *lock(&self.shared.game) = context;
+        self.call(&Request::SetGameContext { context })
+    }
+
     fn game_sessions(&self) -> Result<Vec<GameSession>, String> {
         self.call(&Request::GameSessions)
+    }
+
+    fn game_timeline(&self, id: i64) -> Result<Option<GameTimeline>, String> {
+        self.call(&Request::GameTimeline { id })
+    }
+
+    fn history_window(
+        &self,
+        metrics: &[String],
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<WindowSeries>, String> {
+        self.call(&Request::HistoryWindow {
+            metrics: metrics.to_vec(),
+            from,
+            to,
+        })
     }
 
     fn fan_status(&self) -> Result<FanStatus, String> {
@@ -495,6 +527,14 @@ mod tests {
         );
         assert!(remote.set_ping_host("bad host!").is_err());
         assert_eq!(remote.insights().unwrap_err(), "history store unavailable");
+        assert_eq!(
+            remote.game_timeline(1).unwrap_err(),
+            "history store unavailable"
+        );
+        assert!(remote
+            .history_window(&["cpu.usage.total".into()], 100, 10_000)
+            .unwrap_err()
+            .starts_with("at most"));
         assert!(!remote.drives().unwrap().is_empty());
         // A real answer on an elevated Windows runner, `None` elsewhere: either way it arrives.
         assert!(remote.bitlocker_system_drive().is_ok());

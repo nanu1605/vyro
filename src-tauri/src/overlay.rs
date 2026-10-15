@@ -1,16 +1,19 @@
-//! Companion overlay (P10b): a small always-on-top, click-through window in a corner of the
-//! game's monitor with the frame rate and temperatures. It is an ordinary desktop window over
-//! the game (nothing is injected), so it shows over borderless and windowed-fullscreen games,
-//! not over exclusive fullscreen ones. It never takes focus, exists only while a captured
-//! game is in front and the overlay is switched on, and is destroyed afterwards.
+//! Companion overlay (P10b, P14): an always-on-top, click-through window in a corner of the
+//! game's monitor with the readings the owner picked (Minimal, Performance, Full or Graph mode).
+//! It is an ordinary desktop window over the game (nothing is injected), so it shows over
+//! borderless and windowed-fullscreen games, not over exclusive fullscreen ones. It never takes
+//! focus, exists only while a captured game is in front and the overlay is switched on, and is
+//! destroyed afterwards.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use vyro_core::gaming::foreground::Rect;
-use vyro_core::gaming::{CaptureState, GameSnapshot};
+use vyro_core::gaming::overlay::{self as layout, OverlayMetric, OverlayMode, OverlayRow};
+use vyro_core::gaming::{CaptureState, FramePoint, GameSnapshot};
 use vyro_core::{lock, SensorSnapshot};
 
 use crate::engine::Engine;
@@ -24,6 +27,10 @@ pub const EVENT: &str = "overlay";
 /// `--in-process-gpu`: no separate GPU process (tens of MB for a page this light).
 pub const WEBVIEW_ARGS: &str =
     "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --in-process-gpu";
+/// How often the overlay may refresh, ms.
+pub const UPDATE_CHOICES: [u32; 3] = [500, 1000, 2000];
+/// Offsets from the corner, at most (logical px).
+pub const MAX_OFFSET: u16 = 200;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,22 +42,137 @@ pub enum Corner {
     BottomRight,
 }
 
+/// Colour of the frame rate and graph (fixed choices until themes arrive).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Accent {
+    #[default]
+    Green,
+    Cyan,
+    Amber,
+    Pink,
+    White,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
+#[serde(rename_all = "camelCase", from = "StoredOverlay")]
 pub struct OverlaySettings {
     pub enabled: bool,
+    pub mode: OverlayMode,
     pub corner: Corner,
-    /// Adds the frame-time graph and CPU / GPU readings to the FPS figures.
-    pub detailed: bool,
+    /// From the corner inward, logical px.
+    pub offset_x: u16,
+    pub offset_y: u16,
+    /// Percent, 75–200.
+    pub scale: u16,
+    /// Background opacity, percent.
+    pub opacity: u8,
+    /// Readings shown; empty: the mode's.
+    pub metrics: Vec<OverlayMetric>,
+    /// Frame-time graph in Performance and Full mode (Graph mode always has it).
+    pub graph: bool,
+    /// Refreshes at most this often, ms.
+    pub update_ms: u32,
+    pub accent: Accent,
+    /// Tighter spacing.
+    pub compact: bool,
 }
 
 impl Default for OverlaySettings {
     fn default() -> Self {
         Self {
             enabled: false,
+            mode: OverlayMode::Performance,
             corner: Corner::TopLeft,
-            detailed: true,
+            offset_x: 0,
+            offset_y: 0,
+            scale: 100,
+            opacity: 72,
+            metrics: Vec::new(),
+            graph: true,
+            update_ms: 1000,
+            accent: Accent::Green,
+            compact: false,
         }
+    }
+}
+
+/// Settings as saved, also by 0.2 (`detailed` instead of a mode).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredOverlay {
+    enabled: Option<bool>,
+    mode: Option<OverlayMode>,
+    corner: Option<Corner>,
+    detailed: Option<bool>,
+    offset_x: Option<u16>,
+    offset_y: Option<u16>,
+    scale: Option<u16>,
+    opacity: Option<u8>,
+    metrics: Option<Vec<OverlayMetric>>,
+    graph: Option<bool>,
+    update_ms: Option<u32>,
+    accent: Option<Accent>,
+    compact: Option<bool>,
+}
+
+impl From<StoredOverlay> for OverlaySettings {
+    fn from(s: StoredOverlay) -> Self {
+        let d = Self::default();
+        let mode = s.mode.unwrap_or(match s.detailed {
+            Some(false) => OverlayMode::Minimal,
+            _ => OverlayMode::Performance,
+        });
+        Self {
+            enabled: s.enabled.unwrap_or(d.enabled),
+            mode,
+            corner: s.corner.unwrap_or(d.corner),
+            offset_x: s.offset_x.unwrap_or(0),
+            offset_y: s.offset_y.unwrap_or(0),
+            scale: s.scale.unwrap_or(d.scale),
+            opacity: s.opacity.unwrap_or(d.opacity),
+            metrics: s.metrics.unwrap_or_default(),
+            graph: s.graph.unwrap_or(d.graph),
+            update_ms: s.update_ms.unwrap_or(d.update_ms),
+            accent: s.accent.unwrap_or(d.accent),
+            compact: s.compact.unwrap_or(d.compact),
+        }
+        .clamped()
+    }
+}
+
+impl OverlaySettings {
+    /// Every value within what the window offers.
+    pub fn clamped(mut self) -> Self {
+        self.offset_x = self.offset_x.min(MAX_OFFSET);
+        self.offset_y = self.offset_y.min(MAX_OFFSET);
+        self.scale = self.scale.clamp(layout::SCALE_MIN, layout::SCALE_MAX);
+        self.opacity = self.opacity.min(100);
+        if !UPDATE_CHOICES.contains(&self.update_ms) {
+            self.update_ms = 1000;
+        }
+        self
+    }
+
+    /// The readings shown.
+    pub fn shown(&self) -> Vec<OverlayMetric> {
+        layout::metrics(self.mode, &self.metrics)
+    }
+
+    /// The graph shows (always in Graph mode).
+    pub fn graph_shown(&self) -> bool {
+        self.mode == OverlayMode::Graph || (self.graph && self.mode != OverlayMode::Minimal)
+    }
+
+    /// Room the window needs, logical px.
+    pub fn size(&self) -> (f64, f64) {
+        layout::size(
+            self.mode,
+            &self.shown(),
+            self.graph_shown(),
+            self.compact,
+            self.scale,
+        )
     }
 }
 
@@ -58,13 +180,38 @@ impl Default for OverlaySettings {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OverlayData<'a> {
-    pub game: &'a GameSnapshot,
-    pub detailed: bool,
-    pub cpu_temp: Option<f64>,
-    pub cpu_usage: Option<f64>,
-    pub gpu_temp: Option<f64>,
-    pub gpu_usage: Option<f64>,
-    pub gpu_power: Option<f64>,
+    pub app: &'a str,
+    pub paused: bool,
+    pub mode: OverlayMode,
+    pub rows: Vec<OverlayRow>,
+    /// Frame-time graph points (empty when the graph is off).
+    pub timeline: &'a [Option<FramePoint>],
+    pub corner: Corner,
+    pub scale: u16,
+    pub opacity: u8,
+    pub accent: Accent,
+    pub compact: bool,
+}
+
+impl<'a> OverlayData<'a> {
+    pub fn new(settings: &OverlaySettings, snap: &SensorSnapshot, game: &'a GameSnapshot) -> Self {
+        Self {
+            app: &game.app,
+            paused: game.state != CaptureState::Capturing,
+            mode: settings.mode,
+            rows: layout::rows(&settings.shown(), snap, game),
+            timeline: if settings.graph_shown() {
+                &game.timeline
+            } else {
+                &[]
+            },
+            corner: settings.corner,
+            scale: settings.scale,
+            opacity: settings.opacity,
+            accent: settings.accent,
+            compact: settings.compact,
+        }
+    }
 }
 
 /// Overlay state, kept by the app.
@@ -76,8 +223,16 @@ pub struct Overlay {
     monitor: Mutex<Option<Rect>>,
     /// The window exists and shows.
     shown: AtomicBool,
-    /// Size and corner the window was placed with, to move it when they change.
-    placed: Mutex<Option<(Corner, bool, Rect)>>,
+    /// Settings and monitor the window was placed with, to move it when they change.
+    placed: Mutex<Option<(OverlaySettings, Rect)>>,
+    /// Last readings sent (the update rate).
+    sent: Mutex<Option<Instant>>,
+}
+
+/// The overlay window shows.
+pub fn shown(app: &AppHandle) -> bool {
+    app.try_state::<Overlay>()
+        .is_some_and(|o| o.shown.load(Ordering::SeqCst))
 }
 
 /// From the game watcher, once a second.
@@ -91,27 +246,26 @@ pub fn set_front(app: &AppHandle, in_front: bool, monitor: Option<Rect>) {
     }
 }
 
-/// Logical size of the overlay window.
-fn size(detailed: bool) -> (f64, f64) {
-    if detailed {
-        (236.0, 168.0)
-    } else {
-        (172.0, 64.0)
-    }
-}
-
-/// Top-left corner of a `w`×`h` window in `corner` of `monitor` (physical pixels), with a
-/// margin.
-pub fn place(monitor: Rect, corner: Corner, w: i32, h: i32, margin: i32) -> (i32, i32) {
-    let left = monitor.left + margin;
-    let right = monitor.right - margin - w;
-    let top = monitor.top + margin;
-    let bottom = monitor.bottom - margin - h;
+/// Top-left corner of a `w`×`h` window in `corner` of `monitor` (physical pixels), `dx` and
+/// `dy` in from the corner.
+pub fn place(monitor: Rect, corner: Corner, w: i32, h: i32, dx: i32, dy: i32) -> (i32, i32) {
+    let left = monitor.left + dx;
+    let right = monitor.right - dx - w;
+    let top = monitor.top + dy;
+    let bottom = monitor.bottom - dy - h;
     match corner {
         Corner::TopLeft => (left, top),
         Corner::TopRight => (right, top),
         Corner::BottomLeft => (left, bottom),
         Corner::BottomRight => (right, bottom),
+    }
+}
+
+/// The overlay settings in force: the game's own mode, if it has one.
+fn in_force(app: &AppHandle, settings: OverlaySettings) -> OverlaySettings {
+    match crate::gaming::overlay_mode(app) {
+        Some(mode) => OverlaySettings { mode, ..settings },
+        None => settings,
     }
 }
 
@@ -121,34 +275,34 @@ pub fn update(app: &AppHandle, snap: &SensorSnapshot) {
     else {
         return;
     };
-    let settings = store.get().overlay;
+    let settings = in_force(app, store.get().overlay);
     let game = snap
         .game
         .as_ref()
         .filter(|g| g.state != CaptureState::Unavailable);
     let monitor = *lock(&o.monitor);
-    let want = settings.enabled && o.in_front.load(Ordering::SeqCst) && game.is_some();
+    let enabled = crate::gaming::overlay_wanted(app, settings.enabled);
+    let want = enabled && o.in_front.load(Ordering::SeqCst) && game.is_some();
     match (want, monitor, game) {
         (true, Some(monitor), Some(game)) => {
-            let placed = Some((settings.corner, settings.detailed, monitor));
-            let moved = *lock(&o.placed) != placed;
-            if !o.shown.swap(true, Ordering::SeqCst) || moved {
+            let placed = Some((settings.clone(), monitor));
+            let changed = *lock(&o.placed) != placed;
+            if !o.shown.swap(true, Ordering::SeqCst) || changed {
                 *lock(&o.placed) = placed;
+                *lock(&o.sent) = None;
                 show(app, monitor, &settings);
             } else {
                 raise(app);
             }
-            let gpu = snap.gpu.first();
-            let data = OverlayData {
-                game,
-                detailed: settings.detailed,
-                cpu_temp: snap.cpu.temp_package,
-                cpu_usage: snap.cpu.usage_total,
-                gpu_temp: gpu.and_then(|g| g.temp_edge),
-                gpu_usage: gpu.and_then(|g| g.usage),
-                gpu_power: gpu.and_then(|g| g.power_w),
-            };
-            if let Err(e) = app.emit_to(LABEL, EVENT, data) {
+            // At most once per update_ms (a little early is fine: ticks are not exact).
+            let due = Duration::from_millis(u64::from(settings.update_ms).saturating_sub(150));
+            let mut sent = lock(&o.sent);
+            if sent.is_some_and(|t| t.elapsed() < due) {
+                return;
+            }
+            *sent = Some(Instant::now());
+            drop(sent);
+            if let Err(e) = app.emit_to(LABEL, EVENT, OverlayData::new(&settings, snap, game)) {
                 log::debug!("emit {EVENT}: {e}");
             }
         }
@@ -171,14 +325,17 @@ fn show(app: &AppHandle, monitor: Rect, settings: &OverlaySettings) {
             .ok()
             .flatten()
             .map_or(1.0, |m| m.scale_factor());
-        let (lw, lh) = size(settings.detailed);
+        let (lw, lh) = settings.size();
         let (w, h) = ((lw * scale).round() as i32, (lh * scale).round() as i32);
+        let margin = 16.0;
+        let px = |logical: u16| ((margin + f64::from(logical)) * scale).round() as i32;
         let (x, y) = place(
             monitor,
             settings.corner,
             w,
             h,
-            (16.0 * scale).round() as i32,
+            px(settings.offset_x),
+            px(settings.offset_y),
         );
         let window = match handle.get_webview_window(LABEL) {
             Some(w) => w,
@@ -290,10 +447,19 @@ mod tests {
             right: 5120,
             bottom: 1440,
         };
-        assert_eq!(place(m, Corner::TopLeft, 200, 100, 16), (2576, 16));
-        assert_eq!(place(m, Corner::TopRight, 200, 100, 16), (4904, 16));
-        assert_eq!(place(m, Corner::BottomLeft, 200, 100, 16), (2576, 1324));
-        assert_eq!(place(m, Corner::BottomRight, 200, 100, 16), (4904, 1324));
+        assert_eq!(place(m, Corner::TopLeft, 200, 100, 16, 16), (2576, 16));
+        assert_eq!(place(m, Corner::TopRight, 200, 100, 16, 16), (4904, 16));
+        assert_eq!(place(m, Corner::BottomLeft, 200, 100, 16, 16), (2576, 1324));
+        assert_eq!(
+            place(m, Corner::BottomRight, 200, 100, 16, 16),
+            (4904, 1324)
+        );
+        // Offsets move inward from the corner, on each axis.
+        assert_eq!(place(m, Corner::TopLeft, 200, 100, 66, 116), (2626, 116));
+        assert_eq!(
+            place(m, Corner::BottomRight, 200, 100, 66, 116),
+            (4854, 1224)
+        );
     }
 
     #[test]
@@ -310,7 +476,46 @@ mod tests {
     fn settings_default_off_and_read_partial_json() {
         let s: OverlaySettings = serde_json::from_str(r#"{"corner":"bottomRight"}"#).unwrap();
         assert!(!s.enabled);
-        assert!(s.detailed);
+        assert_eq!(s.mode, OverlayMode::Performance);
         assert_eq!(s.corner, Corner::BottomRight);
+        assert_eq!((s.scale, s.opacity, s.update_ms), (100, 72, 1000));
+    }
+
+    #[test]
+    fn settings_from_0_2_keep_their_look() {
+        let detailed: OverlaySettings =
+            serde_json::from_str(r#"{"enabled":true,"corner":"topRight","detailed":true}"#)
+                .unwrap();
+        assert_eq!(
+            (detailed.enabled, detailed.mode, detailed.graph),
+            (true, OverlayMode::Performance, true)
+        );
+        let plain: OverlaySettings = serde_json::from_str(r#"{"detailed":false}"#).unwrap();
+        assert_eq!(plain.mode, OverlayMode::Minimal);
+        // Saved again, without the old field.
+        let json = serde_json::to_string(&plain).unwrap();
+        assert!(
+            !json.contains("detailed") && json.contains(r#""mode":"minimal""#),
+            "{json}"
+        );
+    }
+
+    #[test]
+    fn values_out_of_range_are_brought_back() {
+        let s: OverlaySettings = serde_json::from_str(
+            r#"{"scale":500,"opacity":150,"offsetX":900,"updateMs":250,"mode":"graph"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            (s.scale, s.opacity, s.offset_x, s.update_ms),
+            (200, 100, 200, 1000)
+        );
+        assert!(s.graph_shown(), "graph mode always has the graph");
+        let minimal = OverlaySettings {
+            mode: OverlayMode::Minimal,
+            ..OverlaySettings::default()
+        };
+        assert!(!minimal.graph_shown());
+        assert_eq!(minimal.shown(), vec![OverlayMetric::Fps]);
     }
 }

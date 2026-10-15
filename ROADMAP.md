@@ -573,13 +573,112 @@ allow-listed chip + revision + board + header, each read back and bounded.
       9.7 MB MSI, `latest.json` and checksums here and to `nanu1605/vyro-releases`.
 
 ### P13 — Automatic game profiles (M8 → 0.3)
-- [ ] Game → per-game profile, cooling, overlay layout and poll rate; restore on exit.
+Owner's choices (2026-10-13): games without their own settings get the Gaming profile; the
+per-game "refresh Hz" is Vyro's update rate (the monitor's refresh rate is not touched).
+Budget: no new process or thread; one more check per second in the existing game watcher;
+footprint within ±2 MB of 0.2.0. While a game runs, the engine keeps its update rate with the
+window hidden (the profile's or the game's own; Gaming = 2 s instead of the 5 s tray rate).
+
+- [x] Built (2026-10-13, branch `v2-p13-game-profiles`, 4723a88):
+      - `vyro_core::gaming::auto`: per-game `GameRule` (profile, "Don't switch", whose fan
+        settings, overlay on/off, update rate 0.5/1/2/5 s, "Not a game"), `GameAutomation`
+        (on by default, default profile Gaming, opt-in GPU-load trigger, rules) kept in the app's
+        `settings.json`, and the `Switcher`. The owner's profile is never changed by a game, so
+        closing it restores everything. A profile picked in the tray or Settings while a game
+        runs becomes the owner's and keeps the game's settings out until it closes ("Keep
+        Desktop" does the same without changing the profile).
+      - Detection (`foreground.rs`): fullscreen or borderless as before; a saved game also in a
+        window; with the opt-in trigger, an app in front using ≥ 60 % of the GPU for 10 s;
+        never Vyro, the shell, browsers and players, or an app marked "Not a game". Frame-rate
+        capture follows its own setting, so profiles also switch with capture off.
+      - App: `apply_effective` puts the profile's update rate, the fan settings (12e's
+        per-profile fans) and the overlay choice in force and moves the tray check mark;
+        `profile-state` tells the window (motion and dashboard density follow the profile in
+        force). IPC protocol 6: `SetGameContext` (in front, profile, automatic, overlay) for
+        the service; sessions now log their profile.
+      - UI: Gaming tab strip ("Gaming profile while Game.exe runs… Keep Desktop / Not a
+        game"), "Game profiles" card (the game in front, saved and recently played games),
+        Settings → Gaming (on/off, default profile, GPU-load trigger), Settings → Profile shows
+        the profile in force.
+- [x] Field check (2026-10-13, MS-7E24), all passed: a game without settings switches to
+      Gaming (tray check mark) and back to Desktop on exit; a saved game with Silent,
+      Benchmark's fans and 1 s updates; a tray pick mid-game sticks after exit; a windowed
+      saved game is detected and measured; "Not a game" on a fullscreen non-game; footprint
+      re-measured.
 
 ### P14 — Gaming Overlay 2.0 (M8)
-- [ ] Minimal / Performance / Full / Graph modes and customization; canvas graphs ≤ 30 fps.
+Budget: the same overlay window as P10b (no new process); the modes add at most a few MB to it
+and nothing when no game is in front; the graph redraws only when readings arrive (≤ 2 Hz,
+far below the 30 fps cap) with no animation between. In the browser preview the overlay
+page's renderer is 42–46 MB in every mode (JS heap 2.1–2.3 MB, 68–174 DOM nodes), so the
+mode changes about 4 MB; most of it is the WebView's fixed cost. The figure on Windows is
+taken in the field check.
+
+- [x] Built (2026-10-13, branch `v2-p14-overlay`, df67965; with 0d77a60, which marks fan control
+      off before the BIOS settings go back, a race the Windows CI run found):
+      - `vyro_core::gaming::overlay`: `OverlayMode` (Minimal, Performance, Full, Graph),
+        `OverlayMetric` (13 readings: FPS, 1 % and 0.1 % lows, frame time, latency, CPU and
+        GPU use, temperature and power, VRAM, what limits the frame rate), each mode's
+        defaults, `rows` from the snapshot, and `size` for the window. P13's `GameRule` gains
+        a per-game overlay mode.
+      - Settings (`src-tauri/src/overlay.rs`): mode, corner plus offsets, size 75–200 %,
+        background opacity, own choice of readings, graph, refresh every 0.5/1/2 s, colour,
+        compact. A 0.2 `settings.json` keeps its look (`detailed` → Performance, otherwise
+        Minimal); out-of-range values are brought back.
+      - Window: sized as an upper bound for what it shows; the page pins the plate to the
+        window's corner on the screen's corner, so spare room is invisible (the window is
+        transparent and click-through). In the browser preview every mode fits its window
+        at 100 % and 150 %, normal and compact (20 cases, including Minimal with all 13
+        readings wrapping onto a second line). Readings go out at most once per refresh
+        interval.
+      - UI: `OverlayPlate` (shared by the overlay window and the preview), canvas
+        `OverlayGraph`, Settings → Overlay card with a live preview over a stand-in game
+        scene, and per-game mode in the Game profiles card.
+- [x] Field check (2026-10-13, MS-7E24), all passed: the four modes over a borderless game;
+      changes apply live; the game keeps input focus; exclusive fullscreen still reports
+      "overlay unavailable"; "Vyro itself" with the overlay shown and hidden.
 
 ### P15 — Game session replay (M8)
-- [ ] `game_sessions` / `game_events`, timeline with event markers and history context.
+Owner's choice (2026-10-13): full detail, every reading of the last 100 sessions, inside the
+200 MB history cap. Budget: no new process or thread; one sample per tick while a game is
+captured, written with the history store's existing 10 s batch (≤ 0.4 MB per hour played);
+a 2 h replay keeps the page's JS heap ≤ 10 MB and its total within 25 MB of the Dashboard;
+nothing is loaded until a replay is opened. The history database moves to schema v2 (three
+new tables, added in place): going back to 0.2 would turn its history off, since 0.2 refuses
+a newer schema.
+
+- [x] Built (2026-10-13, branch `v2-p15-replay`, bd7b43a; 14df117 moves `games.json` aside even
+      over an earlier import, which Windows will not rename over):
+      - Store (`history::games`, schema v2): `game_session` (summary as JSON), `game_sample`
+        (one row per tick; readings as scaled integers, about 44 bytes a sample: 80 KB per
+        hour played at 2 s updates, 156 KB at 1 s, 312 KB at 0.5 s) and `game_event`, written
+        with the history's 10 s batch. The running session's summary is refreshed with each
+        batch; a session left open by a crash is closed at its last sample. The newest 100
+        sessions are kept; over the 200 MB cap the oldest data goes first, a replay or history
+        (a dropped replay keeps its summary). 0.2's `games.json` is imported once (summaries
+        only) and renamed `games.json.imported`.
+      - Markers (`gaming::markers`): a frame-rate drop below 60 % of the last 30 s median
+        (after 10 s of frames, until back above 80 %); a stutter, a frame ≥ 3× the median and
+        ≥ 25 ms; CPU and GPU thermal and power limits and other clock limits (CPU current
+        limit, GPU hardware slowdown) when they come on, again only after 30 s off; switching
+        away and back, profile changes, the overlay shown or hidden. Frame-rate markers are
+        10 s apart at least; at most 200 per kind.
+      - IPC protocol 7: session ids, `GameTimeline` (downsampled in the service to ≤ 1500
+        samples, keeping each bucket's slowest stretch and worst frame) and `HistoryWindow`
+        (`History::query_window`: raw within 30 min, 10 s within a day, 1 min within a week).
+      - UI: Replay in the Gaming tab's session list (its code loads on first use): summary,
+        frame rate, frame time, use, temperatures and power on one time axis with a shared
+        crosshair; a marker lane and list with filters; any moment by clicking a chart or with
+        the slider. A moment shows its marker, the game's readings then and a minute either
+        side of the PC's sensor history (or that history older than 7 days is gone). Browser
+        preview: a 2 h replay keeps the JS heap at 5.1–5.8 MB and the page 10–13 MB above the
+        Dashboard; opening and closing it six times does not grow memory; axe clean, no
+        overflow at 390 px.
+- [x] Field check (2026-10-13, MS-7E24), all passed: two sessions with an alt-tab, a profile
+      change, an overlay toggle and heavy load; markers at the right moments and their context
+      matches History; sessions and replays kept after a service restart; disk growth
+      measured. With P13 and P14 also field-checked, M8 is complete; 0.3.0 waits for the
+      owner's go-ahead.
 
 ### P19 — Hardware change detection (M9 → 0.4; first, P16 cites it)
 - [ ] Inventory diffs into `hardware_changes` and a PC change history.

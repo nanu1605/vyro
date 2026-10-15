@@ -309,7 +309,12 @@ impl Server {
                     Err("capture needs a snapshot stream open".into())
                 }
             }
+            Request::SetGameContext { context } => json(e.set_game_context(context)),
             Request::GameSessions => json(e.game_sessions()),
+            Request::GameTimeline { id } => json(e.game_timeline(id)),
+            Request::HistoryWindow { metrics, from, to } => {
+                json(e.history_window(&metrics, from, to))
+            }
             Request::FanStatus => json(e.fan_status()),
             Request::SetFanConfig { config } => json(e.set_fan_config(config)),
             Request::RestoreFans => json(e.restore_fans()),

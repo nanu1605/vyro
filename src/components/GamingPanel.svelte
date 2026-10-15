@@ -1,13 +1,16 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import Card from './Card.svelte';
   import KV from './KV.svelte';
   import Meter from './Meter.svelte';
   import FrameTimeGraph from './FrameTimeGraph.svelte';
   import LoadState from './LoadState.svelte';
+  import GameProfiles from './GameProfiles.svelte';
   import { fmt, fmtDateTime, fmtDuration, NA } from '../format';
-  import { getGameSessions } from '../ipc';
-  import { fmtTemp, prefs } from '../prefs.svelte';
+  import { newRule, pollLabel, ruleFor, withRule } from '../games';
+  import { getGameSessions, keepProfile } from '../ipc';
+  import { fmtTemp, game as automation, prefs, profiles, savePrefs } from '../prefs.svelte';
+  import type { Profile } from '../types';
   import type { BackendStatus, Bound, GameSession, SensorSnapshot } from '../types';
 
   interface Props {
@@ -60,8 +63,47 @@
   const exclusive = $derived(game?.presentMode?.startsWith('Hardware: Legacy') ?? false);
   const running = $derived(game && snap ? Math.max(0, snap.ts - game.started) : null);
   const boundLabel = (b: Bound | null) => (b ? BOUND[b].title : NA);
+
+  // Automatic game profiles (P13).
+  const auto = $derived(automation.state);
+  const nameOf = (p: Profile) => profiles.list.find((x) => x.id === p)?.name ?? p;
+  const pollOf = (p: Profile) => profiles.list.find((x) => x.id === p)?.pollMs ?? 1000;
+  let autoError = $state<string | null>(null);
+  async function act(run: () => Promise<void>): Promise<void> {
+    try {
+      await run();
+      autoError = null;
+    } catch (e) {
+      autoError = String(e);
+    }
+  }
+  // Session replay (P15): opens in place of the tab (its code loads on first use); closing it
+  // returns focus to its row.
+  let replay = $state<number | null>(null);
+  const loadReplay = () => import('./SessionReplay.svelte');
+  let list = $state<HTMLElement | null>(null);
+  async function closeReplay(): Promise<void> {
+    const id = replay;
+    replay = null;
+    await tick();
+    list?.querySelector<HTMLButtonElement>(`[data-replay="${id}"]`)?.focus();
+  }
+
+  function notAGame(exe: string): Promise<void> {
+    const rule = ruleFor(prefs.games, exe) ?? newRule(exe, game?.app ?? exe);
+    return savePrefs({ games: withRule(prefs.games, { ...rule, ignore: true }) });
+  }
 </script>
 
+{#if replay != null}
+  {#await loadReplay()}
+    <p class="note" role="status">Opening the replay…</p>
+  {:then { default: SessionReplay }}
+    <SessionReplay id={replay} {snap} onclose={() => void closeReplay()} />
+  {:catch e}
+    <LoadState what="the replay" error={String(e)} retry={() => (replay = null)} />
+  {/await}
+{:else}
 <section class="panel-wrap">
   {#if !game}
     <div class="empty panel" role="status">
@@ -107,6 +149,26 @@
         <span class="badge" role="status">Starting capture…</span>
       {/if}
     </div>
+
+    {#if auto?.game && (auto.auto || auto.suppressed)}
+      <div class="auto" role="status">
+        {#if auto.suppressed}
+          <p>Your <b>{nameOf(auto.base)}</b> profile stays while {game.app} runs.</p>
+        {:else}
+          <p>
+            <b>{nameOf(auto.profile)} profile</b> while {game.app} runs{auto.fans !== auto.profile
+              ? `, with ${nameOf(auto.fans)}'s fan settings`
+              : ''}{auto.pollMs !== pollOf(auto.profile) ? `, readings every ${pollLabel(auto.pollMs)}` : ''}.
+            {nameOf(auto.base)} comes back when it closes.
+          </p>
+          <div class="auto-actions">
+            <button type="button" onclick={() => void act(keepProfile)}>Keep {nameOf(auto.base)}</button>
+            <button type="button" onclick={() => void act(() => notAGame(auto.game!))}>Not a game</button>
+          </div>
+        {/if}
+        {#if autoError}<p class="error" role="alert">{autoError}</p>{/if}
+      </div>
+    {/if}
 
     {#if exclusive && prefs.overlay.enabled}
       <p class="notice" role="status">
@@ -177,13 +239,17 @@
     </div>
   {/if}
 
+  <div class="profiles">
+    <GameProfiles {sessions} playing={auto?.game ? (game?.app ?? auto.game) : null} />
+  </div>
+
   <h2 class="section">Sessions</h2>
   {#if error || !sessions}
     <LoadState what="game sessions" {error} loading={!sessions} retry={load} />
   {:else if sessions.length === 0}
-    <p class="note">Games you play for at least 30 seconds are listed here with their frame rates and temperatures.</p>
+    <p class="note">Games you play for at least 30 seconds are listed here with their frame rates and temperatures, and a replay of each.</p>
   {:else}
-    <div class="table-wrap panel">
+    <div class="table-wrap panel" bind:this={list}>
       <table>
         <thead>
           <tr>
@@ -195,10 +261,11 @@
             <th scope="col">Limited by</th>
             <th scope="col" class="num">CPU max</th>
             <th scope="col" class="num">GPU max</th>
+            <th scope="col"><span class="sr-only">Replay</span></th>
           </tr>
         </thead>
         <tbody>
-          {#each sessions as s (s.started + s.app)}
+          {#each sessions as s (s.id || s.started + s.app)}
             <tr>
               <td><b>{s.app}</b><small>{s.runtime ?? ''}</small></td>
               <td>{fmtDateTime(s.started)}<small>{fmtDuration(s.secs)}</small></td>
@@ -208,6 +275,19 @@
               <td>{s.bound ? BOUND[s.bound].title : NA}</td>
               <td class="num">{fmtTemp(s.cpuTempMax) ?? NA}</td>
               <td class="num">{fmtTemp(s.gpuTempMax) ?? NA}</td>
+              <td>
+                {#if s.hasTimeline}
+                  <button
+                    type="button"
+                    class="replay"
+                    data-replay={s.id}
+                    aria-label="Replay {s.app}, {fmtDateTime(s.started)}"
+                    onclick={() => (replay = s.id)}>Replay</button
+                  >
+                {:else}
+                  <small>Summary only</small>
+                {/if}
+              </td>
             </tr>
           {/each}
         </tbody>
@@ -215,6 +295,7 @@
     </div>
   {/if}
 </section>
+{/if}
 
 <style>
   .empty {
@@ -249,6 +330,44 @@
     border-radius: 999px;
     color: var(--warn);
     font-size: 0.78rem;
+  }
+  .auto {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    margin: 0 0 0.9rem;
+    padding: 0.55rem 0.85rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 7%, var(--panel));
+    font-size: 0.85rem;
+  }
+  .auto p {
+    margin: 0;
+  }
+  .auto-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .auto button {
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .auto .error {
+    flex-basis: 100%;
+    color: var(--hot);
+  }
+  .profiles {
+    margin-top: 1rem;
   }
   .notice {
     margin: 0 0 0.9rem;
@@ -319,8 +438,20 @@
     text-transform: uppercase;
   }
   .table-wrap {
+    position: relative;
     overflow-x: auto;
     padding: 0.4rem 0.6rem;
+  }
+  .replay {
+    padding: 0.2rem 0.6rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    cursor: pointer;
   }
   table {
     width: 100%;

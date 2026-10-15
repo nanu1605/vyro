@@ -4,7 +4,11 @@
 //! memory and written in one transaction every `flush_interval_secs`, so the disk sees a short
 //! burst every few seconds rather than a write per sample. Each range is served from the
 //! coarsest tier that covers it and downsampled to at most [`MAX_POINTS`] points.
+//!
+//! Game sessions for the replay (P15) live in the same file (see `games`), so one size cap
+//! covers both; when over it, the oldest data goes first, whichever it is.
 
+mod games;
 mod schema;
 
 use std::collections::HashMap;
@@ -13,6 +17,10 @@ use std::path::Path;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
+
+use crate::gaming::markers::GameEvent;
+use crate::gaming::replay::GameSample;
+use crate::gaming::GameSession;
 
 pub use rusqlite::Error;
 pub type Result<T> = rusqlite::Result<T>;
@@ -132,6 +140,17 @@ pub struct HistorySeries {
     pub points: Vec<HistoryPoint>,
 }
 
+/// A metric between two moments (sensor context for a moment of a game session).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct WindowSeries {
+    pub metric: String,
+    /// Bucket width, s; 0 when the moment is older than the history kept.
+    pub step_secs: i64,
+    pub points: Vec<HistoryPoint>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -224,6 +243,10 @@ pub struct History {
     pending_raw: Vec<(i64, i64, f64)>,
     pending_10s: Vec<AggRow>,
     pending_1m: Vec<AggRow>,
+    /// Game samples and markers by session id, and the running session's summary so far.
+    pending_samples: Vec<(i64, GameSample)>,
+    pending_events: Vec<(i64, GameEvent)>,
+    pending_summary: Option<(i64, GameSession)>,
     last_flush: Option<i64>,
     last_prune: Option<i64>,
 }
@@ -239,16 +262,22 @@ impl History {
 
     fn with_connection(conn: Connection, cfg: HistoryConfig) -> Result<Self> {
         schema::init(&conn)?;
-        Ok(Self {
+        let mut h = Self {
             conn,
             cfg,
             metrics: HashMap::new(),
             pending_raw: Vec::new(),
             pending_10s: Vec::new(),
             pending_1m: Vec::new(),
+            pending_samples: Vec::new(),
+            pending_events: Vec::new(),
+            pending_summary: None,
             last_flush: None,
             last_prune: None,
-        })
+        };
+        // Nothing runs yet: a session still open was cut short (a crash, a power loss).
+        h.game_close_open()?;
+        Ok(h)
     }
 
     /// Records one tick of readings taken at `ts` (unix seconds). Flushes and prunes on their
@@ -306,10 +335,20 @@ impl History {
         let raw = std::mem::take(&mut self.pending_raw);
         let agg10 = std::mem::take(&mut self.pending_10s);
         let agg60 = std::mem::take(&mut self.pending_1m);
-        if raw.is_empty() && agg10.is_empty() && agg60.is_empty() {
+        let samples = std::mem::take(&mut self.pending_samples);
+        let events = std::mem::take(&mut self.pending_events);
+        let summary = self.pending_summary.take();
+        if raw.is_empty()
+            && agg10.is_empty()
+            && agg60.is_empty()
+            && samples.is_empty()
+            && events.is_empty()
+            && summary.is_none()
+        {
             return Ok(());
         }
         let tx = self.conn.transaction()?;
+        games::write(&tx, &samples, &events, summary.as_ref())?;
         {
             let mut st =
                 tx.prepare_cached("INSERT OR REPLACE INTO raw(metric, ts, v) VALUES (?1, ?2, ?3)")?;
@@ -385,6 +424,56 @@ impl History {
             step_secs: step,
             points: Vec::new(),
         };
+        series.points = self.points(metric, range.tier(), now - range.secs(), i64::MAX, step)?;
+        Ok(series)
+    }
+
+    /// `metric` from `from` to `to` (unix seconds, both included), from the finest tier that
+    /// still holds `from` at `now`: raw within 30 min, 10 s buckets within a day, 1 min within
+    /// a week. Older moments have no history left (`step_secs` 0, no points).
+    pub fn query_window(
+        &mut self,
+        metric: &str,
+        from: i64,
+        to: i64,
+        now: i64,
+    ) -> Result<WindowSeries> {
+        self.flush()?;
+        let mut series = WindowSeries {
+            metric: metric.to_owned(),
+            step_secs: 0,
+            points: Vec::new(),
+        };
+        let tier = [
+            (Tier::Raw, self.cfg.raw_retention_secs),
+            (Tier::Agg10s, self.cfg.agg10s_retention_secs),
+            (Tier::Agg1m, self.cfg.agg1m_retention_secs),
+        ]
+        .into_iter()
+        .find(|(_, keep)| from > now - keep)
+        .map(|(tier, _)| tier);
+        let Some(tier) = tier else {
+            return Ok(series);
+        };
+        let res = tier.resolution();
+        let needed = (to - from + MAX_POINTS) / MAX_POINTS;
+        let step = (needed.max(res) + res - 1) / res * res;
+        series.step_secs = step;
+        // Buckets start on multiples of `step`; the one holding `from` starts at or before it.
+        let start = from.div_euclid(step) * step - 1;
+        series.points = self.points(metric, tier, start, to, step)?;
+        Ok(series)
+    }
+
+    /// Points of `metric` in `tier` with `after < ts <= until`, bucketed to `step` seconds.
+    fn points(
+        &self,
+        metric: &str,
+        tier: Tier,
+        after: i64,
+        until: i64,
+        step: i64,
+    ) -> Result<Vec<HistoryPoint>> {
         let id: Option<i64> = self
             .conn
             .query_row("SELECT id FROM metric WHERE key = ?1", [metric], |r| {
@@ -392,21 +481,20 @@ impl History {
             })
             .optional()?;
         let Some(id) = id else {
-            return Ok(series);
+            return Ok(Vec::new());
         };
-        let tier = range.tier();
         let sql = match tier {
             Tier::Raw => "SELECT (ts / ?3) * ?3 AS b, AVG(v), MIN(v), MAX(v) FROM raw \
-                          WHERE metric = ?1 AND ts > ?2 GROUP BY b ORDER BY b"
+                          WHERE metric = ?1 AND ts > ?2 AND ts <= ?4 GROUP BY b ORDER BY b"
                 .to_owned(),
             _ => format!(
                 "SELECT (ts / ?3) * ?3 AS b, AVG(avg), MIN(min), MAX(max) FROM {} \
-                 WHERE metric = ?1 AND ts > ?2 GROUP BY b ORDER BY b",
+                 WHERE metric = ?1 AND ts > ?2 AND ts <= ?4 GROUP BY b ORDER BY b",
                 tier.table()
             ),
         };
         let mut st = self.conn.prepare_cached(&sql)?;
-        let rows = st.query_map(params![id, now - range.secs(), step], |r| {
+        let rows = st.query_map(params![id, after, step, until], |r| {
             Ok(HistoryPoint {
                 ts: r.get(0)?,
                 avg: r.get(1)?,
@@ -414,8 +502,7 @@ impl History {
                 max: r.get(3)?,
             })
         })?;
-        series.points = rows.collect::<Result<_>>()?;
-        Ok(series)
+        rows.collect()
     }
 
     /// Drops data past each tier's retention, then enforces the size cap.
@@ -448,6 +535,7 @@ impl History {
              (PARTITION BY kind ORDER BY ts DESC, id DESC) AS n FROM event) WHERE n > ?1)",
             params![MAX_EVENTS_PER_KIND],
         )?;
+        games::prune(&tx)?;
         tx.commit()?;
         self.enforce_size_cap()
     }
@@ -467,33 +555,41 @@ impl History {
     }
 
     fn enforce_size_cap(&mut self) -> Result<()> {
-        // Trim the oldest eighth of the coarsest non-empty tier until under the cap. The coarse
-        // tiers hold the oldest data, so this drops history oldest-first.
+        // Until under the cap, drop the oldest data: a game session's replay when it started
+        // before the oldest history left, else the oldest eighth of the coarsest non-empty tier
+        // (the coarse tiers hold the oldest history).
         let mut trimmed = false;
         for _ in 0..256 {
             if self.used_bytes()? <= self.cfg.max_bytes {
                 break;
             }
-            let mut deleted = false;
+            let mut oldest_tier = None;
             for tier in [Tier::Agg1m, Tier::Agg10s, Tier::Raw] {
-                let table = tier.table();
                 let span: (Option<i64>, Option<i64>) = self.conn.query_row(
-                    &format!("SELECT MIN(ts), MAX(ts) FROM {table}"),
+                    &format!("SELECT MIN(ts), MAX(ts) FROM {}", tier.table()),
                     [],
                     |r| Ok((r.get(0)?, r.get(1)?)),
                 )?;
                 if let (Some(oldest), Some(newest)) = span {
-                    let slice = ((newest - oldest) / 8).max(tier.resolution());
-                    self.conn.execute(
-                        &format!("DELETE FROM {table} WHERE ts < ?1"),
-                        [oldest + slice],
-                    )?;
-                    deleted = true;
+                    oldest_tier = Some((tier, oldest, newest));
                     break;
                 }
             }
-            if !deleted {
-                break;
+            let replay = games::oldest_replay(&self.conn)?;
+            match (replay, oldest_tier) {
+                (Some((id, started)), tier)
+                    if tier.is_none_or(|(_, oldest, _)| started <= oldest) =>
+                {
+                    games::drop_replay(&self.conn, id)?;
+                }
+                (_, Some((tier, oldest, newest))) => {
+                    let slice = ((newest - oldest) / 8).max(tier.resolution());
+                    self.conn.execute(
+                        &format!("DELETE FROM {} WHERE ts < ?1", tier.table()),
+                        [oldest + slice],
+                    )?;
+                }
+                _ => break,
             }
             trimmed = true;
         }
@@ -681,6 +777,72 @@ mod tests {
         let s = h.query("m0", HistoryRange::M30, T0 + 1799).unwrap();
         let newest = s.points.last().unwrap();
         assert!(newest.ts >= T0 + 1797, "newest data survives");
+    }
+
+    #[test]
+    fn a_window_comes_from_the_finest_tier_that_still_holds_it() {
+        let mut h = history();
+        for i in 0..7200 {
+            h.record(T0 + i, [("a", (i % 100) as f64)]).unwrap();
+        }
+        let now = T0 + 7199;
+        // Ten minutes ago: raw, a point a second.
+        let w = h.query_window("a", now - 600, now - 480, now).unwrap();
+        assert_eq!(w.step_secs, 1);
+        assert_eq!(w.points.len(), 121);
+        assert_eq!(w.points[0].ts, now - 600);
+        // An hour ago (raw is kept 30 min): 10 s buckets.
+        let w = h.query_window("a", now - 3600, now - 3480, now).unwrap();
+        assert_eq!(w.step_secs, 10);
+        assert!((12..=13).contains(&w.points.len()), "{}", w.points.len());
+        assert!(w.points[0].ts <= now - 3600);
+        // Two days ago: 1 min buckets (none recorded then); a month ago: gone.
+        assert_eq!(
+            h.query_window("a", now - 2 * 86_400, now - 2 * 86_400 + 120, now)
+                .unwrap()
+                .step_secs,
+            60
+        );
+        let gone = h.query_window("a", now - 30 * 86_400, now - 30 * 86_400 + 120, now);
+        assert_eq!(gone.unwrap().step_secs, 0);
+        // Long windows stay within MAX_POINTS.
+        let w = h.query_window("a", now - 1700, now, now).unwrap();
+        assert_eq!(w.step_secs, 3);
+    }
+
+    #[test]
+    fn a_v1_file_gains_the_game_tables_and_keeps_its_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("history.sqlite");
+        {
+            // As 0.2 left it.
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE metric (id INTEGER PRIMARY KEY, key TEXT NOT NULL UNIQUE);
+                 CREATE TABLE raw (metric INTEGER NOT NULL, ts INTEGER NOT NULL, v REAL NOT NULL,
+                     PRIMARY KEY (metric, ts)) WITHOUT ROWID;
+                 INSERT INTO metric(key) VALUES ('a');
+                 INSERT INTO raw VALUES (1, 1700000000, 42.0);
+                 PRAGMA user_version = 1;",
+            )
+            .unwrap();
+        }
+        let mut h = History::open(&path, HistoryConfig::default()).unwrap();
+        let s = h.query("a", HistoryRange::M5, T0 + 10).unwrap();
+        assert_eq!(s.points[0].avg, 42.0);
+        let version: i32 = h
+            .conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, schema::VERSION);
+        assert!(h.game_sessions(10).unwrap().is_empty());
+        drop(h);
+        // And a newer file than this build knows is refused, not guessed at.
+        Connection::open(&path)
+            .unwrap()
+            .pragma_update(None, "user_version", schema::VERSION + 1)
+            .unwrap();
+        assert!(History::open(&path, HistoryConfig::default()).is_err());
     }
 
     #[test]

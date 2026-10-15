@@ -36,6 +36,9 @@ pub struct Engine {
     visible: Arc<AtomicBool>,
     /// The game overlay shows: the engine keeps the window's poll rate.
     overlay: AtomicBool,
+    /// A game runs: the engine keeps its update rate (the profile's or the game's own) with
+    /// the window hidden too, for the overlay and the session log.
+    game: AtomicBool,
 }
 
 impl Engine {
@@ -93,6 +96,7 @@ impl Engine {
             status,
             visible: shown,
             overlay: AtomicBool::new(false),
+            game: AtomicBool::new(false),
         })
     }
 
@@ -102,14 +106,27 @@ impl Engine {
 
     pub fn set_visible(&self, visible: bool) {
         self.visible.store(visible, Ordering::SeqCst);
-        self.api
-            .set_visible(visible || self.overlay.load(Ordering::SeqCst));
+        self.sync_rate();
     }
 
     pub fn set_overlay(&self, on: bool) {
         self.overlay.store(on, Ordering::SeqCst);
-        self.api
-            .set_visible(on || self.visible.load(Ordering::SeqCst));
+        self.sync_rate();
+    }
+
+    pub fn set_game(&self, on: bool) {
+        if self.game.swap(on, Ordering::SeqCst) != on {
+            self.sync_rate();
+        }
+    }
+
+    /// The window's rate while it, the overlay or a game needs readings; the tray rate otherwise.
+    fn sync_rate(&self) {
+        self.api.set_visible(
+            self.visible.load(Ordering::SeqCst)
+                || self.overlay.load(Ordering::SeqCst)
+                || self.game.load(Ordering::SeqCst),
+        );
     }
 
     pub fn set_poll_interval(&self, millis: u32) {
@@ -143,6 +160,7 @@ fn sink(app: &AppHandle, shown: &Arc<AtomicBool>) -> impl Fn(&SensorSnapshot) + 
                 log::debug!("emit {SENSORS_EVENT}: {e}");
             }
         }
+        crate::gaming::note_snapshot(&app, snap);
         crate::overlay::update(&app, snap);
         for alert in &snap.alerts {
             notify(&app, alert);
