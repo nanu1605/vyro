@@ -1429,7 +1429,7 @@ Budget:
           readings).
       - **Bundle.** The main bundle grows 0.9 kB. The tab is a 27 kB chunk and Three.js with
         the scene a 566 kB chunk (142 kB gzipped), both loaded on first visit.
-- [ ] Field check (MS-7E24):
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
       - The PC view shows your cooler type, RAM sticks, GPU, drives and fans, each where
         expected. Labels match the Sensors tab.
       - The GPU looks like your card, or can be corrected and stays corrected after a restart.
@@ -1438,6 +1438,7 @@ Budget:
       - Task Manager: Vyro's CPU while the tab spins its fans; the WebView's GPU process memory
         before, while and after the tab (it drops back after leaving it).
       - The 3-D toggle off gives the plan. The defaults above are what you want.
+      With P25, P22 and P24 also field-checked, M11 is complete.
 
 ### P26 — Remote companion (M12 → 0.5)
 - [ ] Off by default, LAN-only, token + QR pairing, expiry, revoke; transport decided at start.
