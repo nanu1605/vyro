@@ -430,6 +430,11 @@ fn checks_new_rules() {
         }
     })
     .contains("margin"));
+    // Names count characters, as the editor does, not bytes: 80 accented letters are fine.
+    let mut named = ok.clone();
+    named.name = "é".repeat(80);
+    assert_eq!(validate(&[named]), Ok(()));
+    assert!(bad(&|r| r.name = "é".repeat(81)).contains("1–80 characters"));
     let mut health = default_rules().remove(2);
     health.actions.profile = Some(Profile::Silent);
     assert!(validate(&[health.clone()])
