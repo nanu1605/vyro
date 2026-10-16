@@ -784,10 +784,13 @@ same time, not shown to be the cause".
         drops, a game slower after a driver update). Browser preview: axe clean, no overflow
         at 390 px (the tab bar's screen-reader notes no longer widen the page); the main
         bundle grows 9.5 kB.
-- [ ] Field check (MS-7E24): quiet at normal desktop use; a CPU stress test gives headroom but
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
+      quiet at normal desktop use; a CPU stress test gives headroom but
       no "hotter"; Silent or a lower fan curve under load is explained by the profile or fan
       change; a background job during a game names the program; badges, "Show in History"
       and the tab dot work; footprint within budget.
+      The test build is the top of the stack (`v2-p27-polish`), which holds P16 to P27; one
+      pass of `docs/field-check.md` covered them all.
 
 ### P18 — Smart compound alerts (M9)
 - [ ] AND/OR, rate of change, FOR duration, cooldown; fan action only with control enabled.
