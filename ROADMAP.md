@@ -1959,6 +1959,17 @@ scene stay loaded on first use. Footprint as 1.0, plus what P29 and P30 measure 
         window shares the start bundle (139.1 kB of 200). Each widget is one more WebView2 view in
         the same browser process: its memory goes into `docs/footprint.md` at the field check.
 
+#### P31 — polish and 1.1.0
+- [x] Built (2026-10-16):
+      - Version 1.1.0 (`scripts/set-version.py`).
+      - Accessibility sweep at 1920 px as well as 1440 and 390, every view in all six themes,
+        with the no-sideways-scroll check at each width: 543 checks clean.
+      - README: the status, the new frame (sidebar, Ctrl+K, live rail, motion), the accent's
+        reach, My PC's tower and laptop, a Desktop widgets section; "header" is now the top bar.
+      - `docs/footprint.md`: the 1.1 rows and what to measure; `docs/field-check-1.1.md`: one
+        run sheet for P28–P30 (about two hours), with the defaults to confirm.
+- [ ] Field check (`docs/field-check-1.1.md`), then the owner's go for the release.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

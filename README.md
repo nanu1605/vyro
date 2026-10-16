@@ -7,10 +7,12 @@ app or library).
 - **Build spec:** [`PROJECT_PLAN.md`](PROJECT_PLAN.md) — what to build and why.
 - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — milestones, phase tracker, decision log.
 
-**Status:** 1.0 (milestone M13; V2 complete). Live CPU, GPU, board, fan, voltage, RAM, storage
-and network sensors on Windows (low-level ones through PawnIO, read by the Vyro Sensor Service),
-history, System Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in
-1.0: Insights with a Performance Score, alerts with several conditions and actions, a benchmark,
+**Status:** 1.1. Live CPU, GPU, board, fan, voltage, RAM, storage and network sensors on
+Windows (low-level ones through PawnIO, read by the Vyro Sensor Service), history, System
+Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 1.1: a new look
+(a sidebar, a command palette and the whole width of the window), a livelier 3-D My PC with a
+laptop model, [desktop widgets](#desktop-widgets-11) and a smoother overlay graph. 1.0 added
+Insights with a Performance Score, alerts with several conditions and actions, a benchmark,
 one-click diagnostics and reports, themes, a dashboard builder, a My PC view, a Devices tab and
 a phone companion (the sections marked (1.0) below). 0.3 added automatic game profiles, a
 configurable in-game overlay and a replay of each game session (see [Gaming](#gaming)). 0.2
@@ -48,7 +50,7 @@ in the service, so it keeps going with the app closed. Safeguards:
 - CPU at 95 °C or GPU at 90 °C (both adjustable), or a source sensor without a reading, sends
   every controlled fan to 100 %.
 - The BIOS settings are saved before the first change. They are put back on Return to BIOS
-  (Cooling tab, header chip or tray), when the service stops, before sleep, on uninstall, when
+  (Cooling, the top bar's chip or the tray), when the service stops, before sleep, on uninstall, when
   a write doesn't read back, when another program takes over the fans, and at the next start
   after a crash. If the control loop stalls for 10 s, the BIOS takes over until it recovers.
 
@@ -85,7 +87,7 @@ or actions, 0.3 moves `alerts.json` aside (to `alerts.json.bad`) and uses its de
 
 ## Insights, Performance Score and alerts (1.0)
 
-- **Insights.** A tab after Health that compares the last half hour with this PC's own past
+- **Insights.** A view after Health that compares the last half hour with this PC's own past
   week at the same load, and says what changed:
   - running hotter than usual, or a fan slower than usual;
   - slowed by heat, or close to a temperature limit;
@@ -157,14 +159,22 @@ or actions, 0.3 moves `alerts.json` aside (to `alerts.json.bad`) and uses its de
 
   More in [`docs/diagnostics.md`](docs/diagnostics.md).
 
-## Looks, layouts and your PC (1.0)
+## Looks, layouts and your PC
 
+- **The frame (1.1).** A sidebar groups the views (Overview, Performance, This PC, Vyro) and
+  folds to a rail of icons, by itself on a narrow window. **Ctrl+K** opens a search for any
+  view, setting, sensor or action. On a window 1500 px or wider the Dashboard has a live rail
+  beside it: vitals with their last minute, the running game, network, the top processes and
+  Health (it can be folded away). Cards lift a little under the mouse, views rise in, and the
+  profile's animation level ("calmer" or off) and Windows' reduced-motion setting turn that
+  down.
 - **Themes.** Settings → Appearance offers Midnight, AMOLED, Cyber, Glass, Minimal and
-  Daylight, each with its own accent or one of five more. OK, warning and problem colours keep
-  their meaning in every theme, and every theme meets WCAG AA contrast. A thin rail under the
-  header shows the PC's state: idle, gaming, warning or critical. Critical pulses four times,
-  then holds; it does not pulse with reduced motion. Vyro opens on the Dashboard, or on the
-  last tab if you choose.
+  Daylight, each with its own accent or one of five more; the accent colours the sidebar,
+  buttons, switches and the 3-D model. OK, warning and problem colours keep their meaning in
+  every theme, and every theme meets WCAG AA contrast. A thin line along the top bar shows the
+  PC's state: idle, gaming, warning or critical. Critical pulses four times, then holds; it
+  does not pulse with reduced motion. Vyro opens on the Dashboard, or on the last view if you
+  choose.
 - **Dashboard builder.** "Edit layout" on the Dashboard adds, moves, resizes, duplicates and
   removes widgets, with the mouse or the keyboard. Widgets:
   - gauges, and any of about 35 readings;
@@ -174,15 +184,20 @@ or actions, 0.3 moves `alerts.json` aside (to `alerts.json.bad`) and uses its de
 
   Up to 12 layouts can be saved, with a picker. Seven presets ship: Default, Gaming, Work,
   Streaming, Benchmark, Monitoring and Minimal. A layout can be locked, and a preset reset.
-- **My PC.** A tab after Hardware with three views:
-  - your PC: a stylized tower with your cooler, RAM sticks, GPU, drives and fans;
-  - your GPU;
+- **My PC.** Your PC in 3-D, with three views:
+  - your PC: a tower with glass, lit fans, your cooler, RAM sticks, GPU, drives and cables;
+    or, on a laptop, the laptop with its lid open, heat pipes and blower fans (1.1);
+  - your GPU (on a tower);
   - a thermal map, coloured by how close each part is to its Health limits.
 
-  Fans spin at their reported speed, and clicking a part shows its details. If the GPU does
-  not look like your card, you can correct it. The models are Vyro's own, with no brand
-  logos. The 3-D view uses WebGL only while the tab is shown, and a flat 2-D plan is there
-  instead if you prefer.
+  Fans spin at their reported speed; a fan with no reading turns slowly and says "Speed not
+  reported". Hover a part to name it, click it for its details, double-click to fly to it.
+  "Explode" pulls the parts apart, "Airflow" shows the air moving through the case, and on a
+  laptop "See inside" makes the keyboard see-through. Vyro tells a laptop from a desktop by
+  the firmware's chassis type (Settings → My PC → Model corrects it). If the GPU does not look
+  like your card, you can correct it. The models are Vyro's own, with no brand logos. The 3-D
+  view uses WebGL only while the view is shown, at 60 frames a second (30 with "calmer"
+  animation, still with it off), and a flat 2-D plan is there instead if you prefer.
 - **Devices.** A tab after Displays lists keyboards, mice, controllers, headsets and other
   USB and Bluetooth devices, each once, with how it connects. It shows the battery where the
   device reports one (Bluetooth, Bluetooth LE and Xbox controllers; 2.4 GHz receivers usually
@@ -233,7 +248,7 @@ Nothing on it changes the PC.
     warning on every phone. Use it on a network you trust.
 - **Never sent:** processes, serial numbers, IP or MAC addresses, user or device names, and
   Health notes.
-- **While it is on**, a "Remote" chip in the header shows how many devices are watching, and
+- **While it is on**, a "Remote" chip in the top bar shows how many devices are watching, and
   the tray tooltip says so.
 - **It runs in the app, not the service.** It answers only while Vyro runs (the tray counts),
   and nothing running as LocalSystem listens on the network. Turning it off closes the port
@@ -259,11 +274,12 @@ Nothing on it changes the PC.
 |---|---|
 | [`docs/control-safety.md`](docs/control-safety.md) | Fan and pump control: every safety rule, its code, tests and field result |
 | [`docs/anti-cheat.md`](docs/anti-cheat.md) | What an anti-cheat can see of Vyro, what Vyro never does, and what to turn off |
-| [`docs/footprint.md`](docs/footprint.md) | What each feature costs and when; how 1.0 is measured |
+| [`docs/footprint.md`](docs/footprint.md) | What each feature costs and when; how 1.0 and 1.1 are measured |
 | [`docs/performance-score.md`](docs/performance-score.md) | The Performance Score formula |
 | [`docs/benchmark.md`](docs/benchmark.md) | The benchmark's method |
 | [`docs/diagnostics.md`](docs/diagnostics.md) | The diagnostics checks |
 | [`docs/field-check.md`](docs/field-check.md) | The owner's field check of 1.0 (P16–P27) on the reference PC, in one pass |
+| [`docs/field-check-1.1.md`](docs/field-check-1.1.md) | The field check of 1.1 (P28–P30): the new look, My PC and the laptop, desktop widgets |
 
 `vyro-remote.exe` in the same artifact checks the service from the outside (state, connection,
 sensors; `--capture Game.exe` measures a running game for 15 s). The service logs to `%ProgramData%\Vyro\service.log`.

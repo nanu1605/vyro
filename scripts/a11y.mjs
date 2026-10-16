@@ -1,5 +1,5 @@
-// Accessibility sweep (P27): axe-core on every tab of the app in all six themes at desktop and
-// phone width, the main dialogs, the desktop widgets and the phone companion, plus keyboard focus
+// Accessibility sweep (P27): axe-core on every tab of the app in all six themes at two desktop
+// widths and phone width, the main dialogs, the desktop widgets and the phone companion, plus keyboard focus
 // rings and reduced motion. Runs against the browser preview (sample data) of a finished build:
 //
 //   pnpm build && pnpm a11y
@@ -20,7 +20,7 @@ const PORT = 4180;
 const BASE = `http://localhost:${PORT}`;
 
 const THEMES = ['midnight', 'amoled', 'cyber', 'glass', 'minimal', 'daylight'];
-const WIDTHS = [1440, 390];
+const WIDTHS = [1920, 1440, 390];
 const TABS = [
   'Dashboard', 'Cooling', 'History', 'Health', 'Insights', 'Gaming', 'Benchmark', 'Processes',
   'Hardware', 'My PC', 'Storage', 'Network', 'Displays', 'Devices', 'System', 'Sensors', 'Widgets', 'Settings',

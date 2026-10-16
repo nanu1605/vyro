@@ -6,7 +6,7 @@ budget still holds:
 - under 1.5 % CPU on average with the window visible;
 - under 120 MB with the window visible;
 - under 2 s to first data;
-- an installer under 20 MB.
+- an installer under 20 MB (under 60 MB from 1.1, decision 28).
 
 V2_PLAN's rule for every V2 feature: render on demand, suspend when hidden, and stay off the 1 Hz
 tick.
@@ -42,10 +42,11 @@ The frontend's repeating timers were audited too:
 
 ## What CI now holds (P27)
 
-- **Installer:** under 20 MB (as before).
+- **Installer:** under 20 MB (as before; 60 MB from 1.1).
 - **Page scripts and styles at start** (`scripts/bundle_budget.py`): the app's window under
-  125 kB gzipped (118.2 kB at P27) and the phone companion under 32 kB (29.2 kB). Lazy chunks
-  (the 3-D scene, Benchmark, the dashboard editor, …) are listed but not budgeted.
+  125 kB gzipped (118.2 kB at P27; 200 kB from 1.1) and the phone companion under 32 kB
+  (29.2 kB). Lazy chunks (the 3-D scene, Benchmark, the dashboard editor, …) are listed but not
+  budgeted.
 - **The installed service** on CI's Windows runner (`vyro-probe`): its CPU and memory over 30 s
   go to the run's summary. They are reported, not gated, because a CI virtual machine has few
   sensors.
@@ -64,3 +65,25 @@ Manager to cross-check:
 5. **Gaming.** A game with the overlay in Full mode for 10 minutes.
 
 Each result goes into the README's Performance table under 1.0.
+
+## 1.1 (P28–P30)
+
+Decision 28 raised the installer budget to 60 MB and the window's start bundle to 200 kB
+gzipped; the RAM and CPU budgets above are unchanged.
+
+| Feature | Threads | Per tick | While hidden | Declared budget | Verified |
+|---|---|---|---|---|---|
+| New frame and motion (P28) | None | None; animations run only on a change (a view, a hover, a toast) | Suspended | Start bundle 139.1 of 200 kB | Bundle check, sweep |
+| My PC 3-D (P29) | None (WebGL in the page) | Drawn each frame while shown: 60 fps with full animation, 30 "calmer", on change with animation off | Context freed; nothing runs | GPU process as P23 plus bloom; lazy chunk 162.8 kB | P29 build |
+| Desktop widgets (P30) | One short-lived thread per drag (saves the place once still) | The snapshot is also sent to the widget windows | Widgets keep the profile's rate; the main window stays suspended | One WebView2 view per widget in the shared browser process | P30 build |
+
+## Field measurement for 1.1
+
+As for 1.0, plus:
+
+1. **My PC.** One minute on the tower and on the GPU view with full animation, then "calmer":
+   CPU and the GPU process.
+2. **Widgets.** Three widgets on the desktop with the window closed to the tray for 5 minutes:
+   memory of the WebView2 processes and the app; then with eight.
+
+Each result goes into the README's Performance table under 1.1.0.
