@@ -1415,6 +1415,13 @@ mod tests {
         assert_eq!(lock(&dev.0).log[2], "restore");
         assert_eq!(lock(&dev.0).mode, left.mode);
         assert_eq!(lock(&dev.0).commands, left.commands);
+        // The worker logs the restore before it deletes the file.
+        for _ in 0..100 {
+            if !dir.join(RESTORE_FILE).exists() {
+                break;
+            }
+            settle();
+        }
         assert!(!dir.join(RESTORE_FILE).exists());
         drop(fc);
         std::fs::remove_dir_all(&dir).unwrap();
