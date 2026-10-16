@@ -13,6 +13,7 @@ use super::{read_frame, recv, send, Hello, Reply, Request, Role, Welcome, MAX_ME
 use crate::alerts::{AlertFired, AlertRule};
 use crate::bench::{BenchRun, RunSummary};
 use crate::changes::{HardwareChange, PcInventory};
+use crate::diag::{DiagAppInfo, DiagReport, DiagSummary};
 use crate::engine::EngineApi;
 use crate::fan::{FanConfig, FanEvent, FanStatus};
 use crate::gaming::replay::GameTimeline;
@@ -413,6 +414,22 @@ impl EngineApi for RemoteEngine {
 
     fn delete_benchmark(&self, id: i64) -> Result<bool, String> {
         self.call(&Request::DeleteBenchmark { id })
+    }
+
+    fn run_diagnostics(&self, app: DiagAppInfo) -> Result<DiagReport, String> {
+        self.call(&Request::RunDiagnostics { app })
+    }
+
+    fn diagnostic_runs(&self) -> Result<Vec<DiagSummary>, String> {
+        self.call(&Request::DiagnosticRuns)
+    }
+
+    fn diagnostic_run(&self, id: i64) -> Result<Option<DiagReport>, String> {
+        self.call(&Request::DiagnosticRun { id })
+    }
+
+    fn delete_diagnostic(&self, id: i64) -> Result<bool, String> {
+        self.call(&Request::DeleteDiagnostic { id })
     }
 
     fn fan_status(&self) -> Result<FanStatus, String> {

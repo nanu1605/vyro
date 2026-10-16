@@ -12,6 +12,7 @@ use ts_rs::TS;
 use crate::alerts::{self, AlertEngine, AlertFired, AlertRule};
 use crate::bench::{BenchRun, RunSummary};
 use crate::changes::{HardwareChange, PcInventory, MAX_CHANGES};
+use crate::diag::{self, DiagAppInfo, DiagReport, DiagSummary};
 use crate::fan::controller::{self, FanControl, SimDevice};
 use crate::fan::{FanCapability, FanConfig, FanEvent, FanStatus};
 use crate::gaming::replay::{self, GameTimeline};
@@ -131,6 +132,14 @@ pub trait EngineApi: Send + Sync {
     fn benchmark_run(&self, id: i64) -> Result<Option<BenchRun>, String>;
     /// Forgets a benchmark run; false when there was none.
     fn delete_benchmark(&self, id: i64) -> Result<bool, String>;
+    /// Runs the diagnostics (P21) with what the app knows, keeps the report and returns it.
+    fn run_diagnostics(&self, app: DiagAppInfo) -> Result<DiagReport, String>;
+    /// Kept diagnostics reports, newest first.
+    fn diagnostic_runs(&self) -> Result<Vec<DiagSummary>, String>;
+    /// One kept report in full; `None` once it is gone.
+    fn diagnostic_run(&self, id: i64) -> Result<Option<DiagReport>, String>;
+    /// Forgets a report; false when there was none.
+    fn delete_diagnostic(&self, id: i64) -> Result<bool, String>;
     /// Fan control: capability, configuration and each header's state.
     fn fan_status(&self) -> Result<FanStatus, String>;
     /// Validates, saves and applies a fan configuration.
@@ -523,6 +532,68 @@ impl EngineApi for LocalEngine {
         let history = self.history.as_ref().ok_or("history store unavailable")?;
         lock(history)
             .delete_benchmark(id)
+            .map_err(|e| e.to_string())
+    }
+
+    fn run_diagnostics(&self, app: DiagAppInfo) -> Result<DiagReport, String> {
+        let now = unix_now();
+        let (measures, insights, mut drives) = match self.intel.diagnostics_inputs(now) {
+            Ok((m, i, d)) => (Some(m), i, d),
+            Err(e) => {
+                log::debug!("diagnostics: {e}");
+                (None, None, Vec::new())
+            }
+        };
+        if drives.is_empty() {
+            drives = self.drives().unwrap_or_default();
+        }
+        let snapshot = self.latest();
+        let events = self.health_events().unwrap_or_default();
+        let pawnio = self.pawnio_status().ok();
+        let fans = self.fan_status().ok();
+        let checks = diag::checks::evaluate(&diag::checks::DiagInputs {
+            now,
+            measures: measures.as_ref(),
+            insights: insights.as_ref(),
+            health_events: &events,
+            snapshot: snapshot.as_ref(),
+            drives: &drives,
+            pawnio: pawnio.as_ref(),
+            fans: fans.as_ref(),
+            app: &app,
+        });
+        let mut report = DiagReport {
+            id: 0,
+            ts: now,
+            version: diag::CHECKS_VERSION,
+            app_version: app.app_version.clone(),
+            engine: diag::checks::engine_label(&app),
+            pc: app.pc.clone(),
+            checks,
+        };
+        if let Some(h) = &self.history {
+            match lock(h).add_diagnostic(&report) {
+                Ok(id) => report.id = id,
+                Err(e) => log::warn!("diagnostics: not kept: {e}"),
+            }
+        }
+        Ok(report)
+    }
+
+    fn diagnostic_runs(&self) -> Result<Vec<DiagSummary>, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history).diagnostic_runs().map_err(|e| e.to_string())
+    }
+
+    fn diagnostic_run(&self, id: i64) -> Result<Option<DiagReport>, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history).diagnostic_run(id).map_err(|e| e.to_string())
+    }
+
+    fn delete_diagnostic(&self, id: i64) -> Result<bool, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history)
+            .delete_diagnostic(id)
             .map_err(|e| e.to_string())
     }
 

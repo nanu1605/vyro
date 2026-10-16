@@ -402,7 +402,7 @@
 
     {#if visited.health}
       <div id="panel-health" role="tabpanel" aria-labelledby="tab-health" hidden={tab !== 'health'}>
-        <HealthPanel {snap} active={tab === 'health'} oninsights={() => select('insights')} />
+        <HealthPanel {snap} active={tab === 'health'} oninsights={() => select('insights')} onhistory={openHistory} />
       </div>
     {/if}
 

@@ -4,6 +4,7 @@
 mod bench;
 mod changes;
 mod commands;
+mod diag;
 mod engine;
 mod gaming;
 mod overlay;
@@ -118,6 +119,12 @@ fn main() {
             bench::get_benchmark_runs,
             bench::get_benchmark_run,
             bench::delete_benchmark,
+            diag::run_diagnostics,
+            diag::get_diagnostic_runs,
+            diag::get_diagnostic_run,
+            diag::delete_diagnostic,
+            diag::export_diagnostics,
+            diag::reveal_report,
             updates::get_update_status,
             updates::check_for_updates,
             updates::install_update,

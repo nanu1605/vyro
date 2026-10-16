@@ -6,7 +6,7 @@ import { listen } from '@tauri-apps/api/event';
 import { evaluate } from './curve';
 import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
-import type { AlertFired, AlertRule, BackendStatus, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -195,6 +195,48 @@ export async function getInsights(): Promise<Insights> {
 export async function getPerformanceScore(): Promise<ScoreReport> {
   if (!inTauri) return (await import('./sim-score')).simScore();
   return invoke<ScoreReport>('get_performance_score');
+}
+
+// Diagnostics (P21): the engine works out and keeps reports; the app writes the exports.
+
+/** Runs the diagnostics (about a second) and returns the kept report. */
+export async function runDiagnostics(): Promise<DiagReport> {
+  if (!inTauri) return (await import('./sim-diag')).simRunDiagnostics();
+  return invoke<DiagReport>('run_diagnostics');
+}
+
+export async function getDiagnosticRuns(): Promise<DiagSummary[]> {
+  if (!inTauri) return (await import('./sim-diag')).simDiagnosticRuns();
+  return invoke<DiagSummary[]>('get_diagnostic_runs');
+}
+
+export async function getDiagnosticRun(id: number): Promise<DiagReport | null> {
+  if (!inTauri) return (await import('./sim-diag')).simDiagnosticRun(id);
+  return invoke<DiagReport | null>('get_diagnostic_run', { id });
+}
+
+export async function deleteDiagnostic(id: number): Promise<boolean> {
+  if (!inTauri) return (await import('./sim-diag')).simDeleteDiagnostic(id);
+  return invoke<boolean>('delete_diagnostic', { id });
+}
+
+/** Writes an export to Documents\Vyro Reports; returns its path. */
+export async function exportDiagnostics(
+  id: number,
+  format: 'pdf' | 'html' | 'md' | 'json',
+  serialNumbers: boolean,
+  unit: TempUnit,
+  when: string,
+  stamp: string,
+): Promise<string> {
+  if (!inTauri) return `C:\\Users\\owner\\Documents\\Vyro Reports\\vyro-diagnostics-${stamp}.${format}`;
+  return invoke<string>('export_diagnostics', { id, format, serialNumbers, unit, when, stamp });
+}
+
+/** Shows an exported report in Explorer. */
+export async function revealReport(path: string): Promise<void> {
+  if (!inTauri) return;
+  return invoke('reveal_report', { path });
 }
 
 // Benchmark mode (P20): the run happens in the app; results are kept by the engine.

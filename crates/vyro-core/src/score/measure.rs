@@ -227,6 +227,24 @@ pub fn throttle(digests: &[MinuteDigest], loaded: &BTreeSet<i64>) -> Option<f64>
     (minutes > 0).then(|| f64::from(secs) / (60.0 * f64::from(minutes)))
 }
 
+/// Share of loaded time the CPU and the GPU held their power limit (PPT, power target), each
+/// `None` where nothing reports that flag.
+pub fn power_limit(digests: &[MinuteDigest], loaded: &BTreeSet<i64>) -> (Option<f64>, Option<f64>) {
+    let share = |pick: fn(&MinuteDigest) -> Option<u8>| -> Option<f64> {
+        digests.iter().any(|d| pick(d).is_some()).then_some(())?;
+        let (mut minutes, mut secs) = (0u32, 0u32);
+        for d in digests.iter().filter(|d| loaded.contains(&d.ts)) {
+            secs += u32::from(pick(d).unwrap_or(0)).min(60);
+            minutes += 1;
+        }
+        (minutes > 0).then(|| f64::from(secs) / (60.0 * f64::from(minutes)))
+    };
+    (
+        share(|d| d.throttle.cpu_power),
+        share(|d| d.throttle.gpu_power),
+    )
+}
+
 /// RAM in use, 95th percentile of the minutes, %.
 pub fn memory_p95(m: &MinuteMap) -> Option<f64> {
     let (used, avail) = (series(m, "memory.used")?, series(m, "memory.available")?);
@@ -361,6 +379,7 @@ pub fn gather(
     out.thermals = thermals(m, gpus, &busy, cpu_limit(cpu_brand));
     out.sag = sag(m, gpus);
     out.throttle = throttle(digests, &busy);
+    (out.power_cpu, out.power_gpu) = power_limit(digests, &busy);
     out.memory_p95 = memory_p95(m);
     (out.ping_p95_ms, out.loss_pct) = network(m);
     out

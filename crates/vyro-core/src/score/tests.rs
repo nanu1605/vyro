@@ -52,6 +52,8 @@ fn example() -> Measures {
         stability: Some(StabilityCounts::default()),
         deviation: Some(Vec::new()),
         thin: None,
+        power_cpu: None,
+        power_gpu: None,
     }
 }
 

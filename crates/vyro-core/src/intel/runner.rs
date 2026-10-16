@@ -18,7 +18,7 @@ use crate::history::History;
 use crate::info::DriveInfo;
 use crate::profiles::Profile;
 use crate::registry::{Registry, Unit};
-use crate::score::{self, measure, PerformanceScore, ScoreReport, StabilityCounts};
+use crate::score::{self, measure, Measures, PerformanceScore, ScoreReport, StabilityCounts};
 use crate::snapshot::SensorSnapshot;
 use crate::{lock, HistoryRange};
 
@@ -234,6 +234,24 @@ impl Intel {
         now: i64,
         insights: Option<&Insights>,
     ) -> Result<PerformanceScore, String> {
+        Ok(score::compute(&self.measures(now, insights)?, now))
+    }
+
+    /// What diagnostics read (P21): the week's measures, the findings now and the drives
+    /// (read at most every ten minutes, as for the score).
+    pub fn diagnostics_inputs(
+        &self,
+        now: i64,
+    ) -> Result<(Measures, Option<Insights>, Vec<DriveInfo>), String> {
+        let insights = self.insights(now).ok();
+        let m = self.measures(now, insights.as_ref())?;
+        let (drives, _) = self.slow_inputs(now);
+        Ok((m, insights, drives))
+    }
+
+    /// Formula v1's measures from the week's minutes, the digests, the drives, the event log
+    /// and the findings of `insights`.
+    fn measures(&self, now: i64, insights: Option<&Insights>) -> Result<Measures, String> {
         let history = self.history.as_ref().ok_or("history store unavailable")?;
         let err = |e: rusqlite::Error| e.to_string();
         let tree = lock(&self.registry).tree();
@@ -269,7 +287,7 @@ impl Intel {
             stability,
             insights,
         );
-        Ok(score::compute(&m, now))
+        Ok(m)
     }
 
     /// The drives and the stability counts, read afresh at most every ten minutes.

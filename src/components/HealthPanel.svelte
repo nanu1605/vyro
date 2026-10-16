@@ -9,8 +9,10 @@
     active: boolean;
     /** Opens the Insights tab. */
     oninsights?: () => void;
+    /** Opens a sensor in History (diagnostics citations). */
+    onhistory?: (id: string, at: number | null) => void;
   }
-  let { snap, active, oninsights }: Props = $props();
+  let { snap, active, oninsights, onhistory }: Props = $props();
 
   const worth = $derived(snap?.insights?.attention.length ?? 0);
   const health = $derived(snap?.health ?? null);
@@ -85,6 +87,11 @@
     </span>
     {#if oninsights}<button type="button" class="link" onclick={oninsights}>Open Insights</button>{/if}
   </p>
+
+  <!-- Diagnostics (P21), loaded on first visit. -->
+  {#await import('./DiagnosticsCard.svelte') then { default: DiagnosticsCard }}
+    <DiagnosticsCard {active} {onhistory} />
+  {/await}
 
   <h2 class="events-title">Recent events</h2>
   {#if newest.length}

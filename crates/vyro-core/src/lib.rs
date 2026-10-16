@@ -7,6 +7,7 @@ pub mod amd;
 pub mod autostart;
 pub mod bench;
 pub mod changes;
+pub mod diag;
 pub mod display;
 pub mod engine;
 pub mod fan;
