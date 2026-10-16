@@ -813,7 +813,8 @@ within +1 MB of P16. History schema unchanged; IPC protocol 10.
         past week's fit; anything else its weekly median; nothing until about a day of history,
         the last hour left out). Each condition can have a clearing margin (hysteresis); the
         rule must hold for its hold time, then stays quiet for its cooldown; a missing reading
-        neither trips nor clears a rule, but never keeps its actions going.
+        neither trips nor clears a rule, but never keeps its actions going (they come back with
+        the reading while the rule still holds).
       - Actions: a notification (with or without sound, or none: logged only), the rule's name
         in the tray tooltip, a profile, the fans Vyro drives raised by 5–50 points, and a
         diagnostic record (the rule's readings, key temperatures, loads, power and fan speeds,
