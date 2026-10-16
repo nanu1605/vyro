@@ -2006,7 +2006,10 @@ scene stay loaded on first use. Footprint as 1.0, plus what P29 and P30 measure 
         still narrow and "THIS PC" wrapped onto two lines, so every view below it was measured
         12 px low. Nothing measured it again. Fix: group labels never wrap, and the highlight
         is measured again whenever the list changes size. The accessibility sweep now checks
-        it after the sidebar's Expand and after widening a narrow window (549 checks).
+        it after the sidebar's Expand and after widening a narrow window (549 checks). It
+        also waits for the views' and the sidebar's animations to end before each axe run.
+        In one CI run axe caught a label mid-fade over the moving highlight, below 4.5:1 for a
+        few frames in Midnight; every state at rest passes.
 
 ## Risks
 

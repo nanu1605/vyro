@@ -47,7 +47,27 @@ const problems = [];
 const problem = (where, what) => problems.push(`${where}: ${what}`);
 let checks = 0;
 
+// Views and dialogs come in, and the sidebar's highlight slides, with short animations; axe must
+// see where they end, not a frame on the way. On CI's software GPU, leaving My PC delayed them past
+// a fixed wait, and axe caught a label fading to muted over the moving highlight (4.2:1 for a few
+// frames in Midnight). Readouts easing to a new value (transitions outside the sidebar) restart
+// every second and are not waited for.
+async function settle(page) {
+  await page
+    .waitForFunction(
+      () =>
+        document.getAnimations().every((a) => {
+          if (a.playState !== 'running' || a.effect?.getComputedTiming().endTime === Infinity) return true;
+          return a instanceof CSSTransition && !a.effect?.target?.closest?.('.sidebar');
+        }),
+      null,
+      { timeout: 5000, polling: 100 },
+    )
+    .catch(() => {});
+}
+
 async function axe(page, where) {
+  await settle(page);
   if (!(await page.evaluate(() => 'axe' in window))) await page.addScriptTag({ content: AXE });
   const found = await page.evaluate(async () =>
     (await window.axe.run(document, { resultTypes: ['violations'] })).violations.map(
