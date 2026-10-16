@@ -6,6 +6,7 @@ import { listen } from '@tauri-apps/api/event';
 import { evaluate } from './curve';
 import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
+import { savedLook, type AccentId, type OpenOn, type ThemeId } from './themes';
 import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -239,6 +240,24 @@ export async function revealReport(path: string): Promise<void> {
   return invoke('reveal_report', { path });
 }
 
+/** Saves a share card PNG to `Pictures\Vyro` and returns its path; in a browser, downloads it. */
+export async function saveShareCard(png: Uint8Array, name: string): Promise<string> {
+  if (!inTauri) {
+    const url = URL.createObjectURL(new Blob([png as BlobPart], { type: 'image/png' }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: name });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return name;
+  }
+  return invoke<string>('save_share_card', png, { headers: { 'x-file-name': name } });
+}
+
+/** Shows a saved share card in Explorer. */
+export async function revealCard(path: string): Promise<void> {
+  if (!inTauri) return;
+  return invoke('reveal_card', { path });
+}
+
 // Benchmark mode (P20): the run happens in the app; results are kept by the engine.
 
 /** What a run would use, and what stands in its way now. */
@@ -356,12 +375,17 @@ export interface AppSettings {
   checkUpdates: boolean;
   /** Automatic game profiles and each saved game's own settings. */
   games: GameAutomation;
+  /** Colours (P25). */
+  theme: ThemeId;
+  accent: AccentId;
+  /** Which tab the window opens on, at launch and from the tray. */
+  openOn: OpenOn;
 }
 export { DEFAULT_OVERLAY };
 export type { OverlayCorner, OverlayData, OverlaySettings };
 let browserSettings: AppSettings = {
   closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop', gameCapture: true, overlay: { ...DEFAULT_OVERLAY }, checkUpdates: true,
-  games: { ...DEFAULT_GAMES },
+  games: { ...DEFAULT_GAMES }, ...savedLook(),
 };
 
 /** Overlay readings, at the overlay's update rate while it shows; in a browser, from the
@@ -594,6 +618,12 @@ export async function getHardwareChanges(limit = 1000): Promise<HardwareChange[]
 export async function onHardwareChanged(cb: (found: HardwareChange[]) => void): Promise<() => void> {
   if (!inTauri) return () => {};
   return listen<HardwareChange[]>('hardware-changed', (e) => cb(e.payload));
+}
+
+/** Fires when the window is shown again from the tray. */
+export async function onWindowOpened(cb: () => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen('window-opened', () => cb());
 }
 
 /** Fires after monitors are plugged, unplugged or reconfigured (debounced by the engine). */

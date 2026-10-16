@@ -73,6 +73,7 @@ export type { SecurityInfo } from './bindings/SecurityInfo';
 export type { StartupApp } from './bindings/StartupApp';
 export type { StartupSource } from './bindings/StartupSource';
 export type { SystemInfo } from './bindings/SystemInfo';
+export type { OsInfo } from './bindings/OsInfo';
 export type { DisplayInfo } from './bindings/DisplayInfo';
 export type { EdidInfo } from './bindings/EdidInfo';
 export type { HdrInfo } from './bindings/HdrInfo';

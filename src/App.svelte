@@ -28,10 +28,11 @@
   import { animator } from './anim';
   import { fmt, fmtGB } from './format';
   import { loadUpdates, update } from './updates.svelte';
-  import { getBackendStatus, getHardwareChanges, getPawnIoStatus, inTauri, onBackendStatus, onHardwareChanged, onSensors, restoreFans, setUiVisible } from './ipc';
+  import { getBackendStatus, getHardwareChanges, getPawnIoStatus, inTauri, onBackendStatus, onHardwareChanged, onSensors, onWindowOpened, restoreFans, setUiVisible } from './ipc';
   import { loadSeen, newestId, saveSeen } from './changes';
   import { loadSeenKeys, markSeen, unseen } from './insights';
-  import { loadPrefs, profileSpec, temp, tempOrNull, tempText, tempUnit } from './prefs.svelte';
+  import { loadPrefs, prefs, profileSpec, temp, tempOrNull, tempText, tempUnit } from './prefs.svelte';
+  import { applyLook, savedLook, uiState } from './themes';
   import type { AlertFired, BackendStatus, PawnIoStatus, SensorSnapshot } from './types';
 
   const TABS = [
@@ -53,7 +54,7 @@
   ] as const;
   type Tab = (typeof TABS)[number]['id'];
 
-  function savedTab(): Tab {
+  function lastTab(): Tab {
     try {
       const t = localStorage.getItem('vyro.tab');
       return TABS.some((x) => x.id === t) ? (t as Tab) : 'dashboard';
@@ -62,7 +63,11 @@
     }
   }
 
-  let tab = $state<Tab>(savedTab());
+  // "Open on" (P25): the Dashboard unless the owner chose the last tab. The page's copy of the
+  // choice decides the first paint; the settings file corrects it once loaded.
+  let tab = $state<Tab>(savedLook().openOn === 'last' ? lastTab() : 'dashboard');
+  /** Set by the first tab the owner picks, so loading the settings never moves them. */
+  let navigated = false;
   // Panels mount on first visit and then stay mounted (keeps fetched data and live history).
   let visited = $state<Record<Tab, boolean>>({
     dashboard: true,
@@ -117,6 +122,7 @@
   }
 
   function select(t: Tab): void {
+    navigated = true;
     tab = t;
     visited[t] = true;
     try {
@@ -169,10 +175,20 @@
 
   let uiFps = $state(0);
 
+  // Theme and accent (P25), from the settings; the page state colours the header rail.
+  $effect(() => applyLook({ theme: prefs.theme, accent: prefs.accent, openOn: prefs.openOn }));
+  const pageState = $derived(uiState(snap));
+  $effect(() => {
+    document.documentElement.dataset.state = pageState;
+  });
+
   // Profile: animation level and dashboard density.
   const spec = $derived(profileSpec());
   const compact = $derived(spec.dashboard === 'compact');
-  $effect(() => animator.setMotion(spec.motion));
+  $effect(() => {
+    animator.setMotion(spec.motion);
+    document.documentElement.dataset.motion = spec.motion;
+  });
 
   const cpu = $derived(snap?.cpu ?? null);
   const gpu = $derived(snap?.gpu[0] ?? null);
@@ -201,12 +217,27 @@
   onMount(() => {
     visited[tab] = true;
     loadPawnIo();
-    void loadPrefs().catch(() => {});
+    void loadPrefs()
+      .then(() => {
+        if (!navigated && prefs.openOn === 'last' && tab === 'dashboard') {
+          const t = lastTab();
+          if (t !== 'dashboard') select(t);
+        }
+      })
+      .catch(() => {});
     void loadUpdates().catch(() => {});
     let stop: (() => void) | undefined;
     let stopBackend: (() => void) | undefined;
     let stopChanges: (() => void) | undefined;
+    let stopOpened: (() => void) | undefined;
     let disposed = false;
+    // Opened again from the tray: back to the Dashboard unless "Last tab" is chosen.
+    void onWindowOpened(() => {
+      if (prefs.openOn === 'dashboard') select('dashboard');
+    }).then((fn) => {
+      if (disposed) fn();
+      else stopOpened = fn;
+    });
     getHardwareChanges(1)
       .then((v) => (newestChange = Math.max(newestChange, newestId(v))))
       .catch(() => {});
@@ -244,6 +275,7 @@
       stop?.();
       stopBackend?.();
       stopChanges?.();
+      stopOpened?.();
       document.removeEventListener('visibilitychange', onVisibility);
     };
   });
@@ -292,6 +324,7 @@
       </div>
     {/if}
   </header>
+  <div class="rail" aria-hidden="true"></div>
 
   <main>
     {#if visited.cooling}
@@ -493,7 +526,30 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 0.5rem 0.75rem;
-    margin-bottom: 0.9rem;
+    margin-bottom: 0.55rem;
+  }
+  /* The page state (idle, gaming, warning, critical) as a thin line under the header. */
+  .rail {
+    height: 2px;
+    margin-bottom: 0.85rem;
+    border-radius: 2px;
+    background: linear-gradient(90deg, transparent, var(--state) 20%, var(--state) 80%, transparent);
+    opacity: 0.35;
+  }
+  :global(:root:not([data-state='idle'])) .rail {
+    opacity: 1;
+  }
+  /* Critical pulses four times, then stays lit; not at all with the profile's motion off. */
+  :global(:root[data-state='critical']) .rail {
+    animation: rail-pulse 1.2s ease-in-out 8 alternate;
+  }
+  :global(:root[data-motion='off']) .rail {
+    animation: none;
+  }
+  @keyframes rail-pulse {
+    to {
+      opacity: 0.3;
+    }
   }
   .fan-chip {
     display: flex;
@@ -592,7 +648,7 @@
     border: 1px solid color-mix(in srgb, var(--hot) 50%, var(--line));
     border-radius: 10px;
     background: var(--panel);
-    box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+    box-shadow: var(--shadow);
     color: var(--text);
     font: inherit;
     font-size: 0.82rem;

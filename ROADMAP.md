@@ -1067,7 +1067,105 @@ Budget:
       (the owner's call).
 
 ### P25 — Themes, open on Dashboard, shareable cards (M11 → 0.5; first, small)
-- [ ] "Open on" setting (Dashboard default), themes + accent passing axe-core, share cards.
+On `v2-p25-themes`, stacked on `v2-p21-diag` (it touches the same Settings and Health files).
+
+Defaults chosen at build (2026-10-15). The owner can change them at the field check:
+- **Themes.** Six: Midnight (today's look, the default), AMOLED (pure black, no glow), Cyber
+  (violet night, neon), Glass (translucent cards over a colour wash, no blur), Minimal (flat
+  graphite) and Daylight (light).
+- **Accents.** The theme's own, or Cyan, Blue, Violet, Magenta or Green. No amber or red
+  accents, so an accent never reads as a warning. Each accent has a second colour for the GPU,
+  and its own shades on Daylight.
+- **Warning colours.** OK, warning and problem keep their meaning in every theme; only their
+  shade changes, so they keep contrast.
+- **Contrast.** Every theme and accent pair is unit-tested to WCAG AA: 4.5:1 for text, muted
+  text and the colours used as text, on each surface; and axe-core runs on every tab in every
+  theme.
+- **Dynamic states.** Idle, Gaming (a game is measured), Warning and Critical (Health). A thin
+  rail under the header and the background wash take the state's colour; Critical pulses
+  four times, then stays lit (not at all with the motion off). The words are elsewhere already
+  (the Health strip, the game tile), so colour is never the only sign.
+- **Open on.** Dashboard by default, at launch and when the window is opened from the tray;
+  "Last tab" returns to where you were.
+- **Share cards.** In Hardware, "Share card": 16:9 (1920 × 1080), square (1080 × 1080) or
+  story (1080 × 1920), each Full, Minimal or Transparent. CPU, GPU, RAM, board, storage,
+  Windows and the Performance Score, with "Powered by Vyro". A name you type (default "My
+  PC"); no computer name and no serial numbers. Saved as PNG to `Pictures\Vyro` (Show in
+  folder), or copied to the clipboard. The card uses the current theme and accent.
+
+Budget:
+- **No new thread or polling.** Themes are CSS variables set once per change; canvases redraw
+  only when the theme changes.
+- **Animation.** The Critical pulse is a CSS opacity animation on a 2 px rail, four cycles then
+  still; no backdrop blur anywhere.
+- **Share cards.** Drawn on one canvas only while the card maker is open; the PNG goes to the
+  app as raw bytes (no base64).
+- **Bundle.** The main bundle grows under 6 kB; the card maker loads on first use.
+- **Versions.** Settings gain `theme`, `accent` and `openOn` (old files load with the
+  defaults); IPC protocol stays 13.
+
+- [x] Built (2026-10-15, branch `v2-p25-themes`, stacked on `v2-p21-diag`):
+      - **Themes (`src/themes.ts`).** Six themes as token sets put on the page root before the
+        first paint (the page keeps a copy of the choice; `settings.json` stays the source).
+        - Cards use `--card` / `--card-top`, so only Glass is see-through, and dialogs, toasts
+          and sticky table heads stay opaque.
+        - Canvases (the dials, sparklines) redraw once on a theme change.
+        - The app paints the window in the theme's background with a matching title bar
+          (`src-tauri/src/look.rs`), so Daylight does not open on a dark frame.
+        - Unknown names in `settings.json` fall back to the defaults, keeping the rest of the
+          file.
+      - **Contrast.** A unit test checks all 36 theme and accent pairs to WCAG AA:
+        - text, muted text, both accents, OK, warning and problem on every surface (Glass
+          cards over the bare page and both washes);
+        - text on the tinted strips and buttons at 7:1;
+        - no accent hue near amber or red.
+
+        Getting there darkened Daylight's green and Glass's card top, and lightened Glass's
+        problem red. A second test checks that the window colours in `look.rs` match.
+      - **States.** `data-state` idle / gaming / warning / critical from Health and the game,
+        a 2 px rail under the header, and a wash at the top of the page. Critical pulses
+        8 half-cycles (none with the profile's motion off or Windows' reduced motion).
+      - **Open on.**
+        - Dashboard at launch unless "Last tab" is chosen; the settings file corrects the
+          page's copy without moving you once you have picked a tab.
+        - The app emits `window-opened` when the tray shows a hidden window, and the page goes
+          back to the Dashboard.
+      - **Settings.** An Appearance card: theme tiles with swatches, accent dots (the theme's
+        own or five more), Open on.
+      - **Share cards (`src/card.ts`, `ShareCard.svelte` loaded on first use, in Hardware).**
+        - A pure model from named inventory fields only (CPU and GPU short names, RAM, board,
+          drives in decimal sizes with NVMe/SSD/HDD, Windows, the score), and a pure layout
+          per size; `paint` draws it.
+        - Values shrink to 72 % before they are shortened.
+        - The PNG goes to the app as raw bytes. `save_share_card` writes only
+          `vyro-card-*.png` names, PNG data, under 16 MB, into `Pictures\Vyro`; "Show in
+          folder" uses the reports' Explorer helper.
+        - Copy puts the PNG on the clipboard.
+      - **Checks.**
+        - Rust tests (now run in CI with `cargo test -p vyro`; that also caught a P20 GPU-name
+          match, fixed on `v2-p20-bench`): settings fallback and 0.3 files, card file names.
+        - Vitest: contrast, states, card model (no serials, given a board and drives that
+          have them) and layout inside the picture for every size and style.
+        - Browser preview:
+          - axe clean on all 15 tabs in all 6 themes at 1440 px, and on Dashboard, Settings,
+            Health and History for every accent on Midnight, Cyber, Glass and Daylight;
+          - no overflow at 1440 or 390 px;
+          - all nine cards download at 1920 × 1080, 1080 × 1080 and 1080 × 1920,
+            transparent corners clear;
+          - the theme and Open on survive a reload.
+        - The main bundle grows 9.8 kB (3.5 kB gzipped), over the 6 kB budget: the theme
+          tables and the Appearance card have to be there at first paint. The card maker is an
+          11 kB chunk.
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
+      - Each theme looks right in the app, Daylight opens without a dark flash, and the title
+        bar follows.
+      - The dials change colour with the theme at once.
+      - Vyro opens on the Dashboard from the tray; with "Last tab", where you left it.
+      - A Critical Health problem pulses the rail four times, then holds.
+      - Glass costs no more GPU than Midnight at idle (Task Manager).
+      - A saved card opens in Photos at its size, Show in folder finds it, and Copy pastes into
+        Discord / Paint.
+      - The defaults above are what you want.
 
 ### P22 — Devices & wireless battery (M11)
 - [ ] `devices/` provider, hot add/remove, battery via BLE / PnP / XInput.
