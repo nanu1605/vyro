@@ -1331,7 +1331,7 @@ Budget:
         8 kB budget: the readings table and the widget renderer have to be there at first
         paint. The editor (13.3 kB), the less-used widgets (7.3 kB) and the other presets
         (1.7 kB) load when needed.
-- [ ] Field check (MS-7E24):
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
       - The Dashboard looks as before on Default (the tiles are now four to a row).
       - Build a layout: add, move (drag and keyboard), resize (corner and keys), duplicate,
         remove, change a reading. Press Done, restart Vyro: it is still there.
