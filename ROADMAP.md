@@ -1046,7 +1046,7 @@ Budget:
           count). poppler reads the PDF and its text extracts cleanly.
         - Browser preview: axe clean, no overflow at 1440 and 390 px (°F).
         - The main bundle grows 1.5 kB; the card is an 8 kB chunk.
-- [ ] Field check (MS-7E24):
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
       - A run completes in about a second, and its values match History, Storage and Event Viewer.
       - Unplugging a case fan for a minute turns Fans and pump to Attention after the Health
         event.
@@ -1054,6 +1054,8 @@ Budget:
       - An export without serials contains none; with them it contains the drives' and the
         board's.
       - Running without the service turns Service and Sensors to Attention.
+      The defaults above stay. With P20, M10 is complete; with M9, 0.4 could ship from here
+      (the owner's call).
 
 ### P25 — Themes, open on Dashboard, shareable cards (M11 → 0.5; first, small)
 - [ ] "Open on" setting (Dashboard default), themes + accent passing axe-core, share cards.
