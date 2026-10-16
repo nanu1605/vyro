@@ -2000,6 +2000,13 @@ scene stay loaded on first use. Footprint as 1.0, plus what P29 and P30 measure 
         through the real IPC, the pages' data commands must answer, a widget saved as the
         Widgets page saves it must open and load, and quitting as the tray does must end the
         process. Any hang fails the run.
+      - **Second report (owner, 2026-10-16, test build `vyro-windows-227e896`):** after a small
+        window was made full screen, the sidebar's highlight sat a line below the chosen view.
+        It was measured once, as the sidebar began to unfold. At that moment the column was
+        still narrow and "THIS PC" wrapped onto two lines, so every view below it was measured
+        12 px low. Nothing measured it again. Fix: group labels never wrap, and the highlight
+        is measured again whenever the list changes size. The accessibility sweep now checks
+        it after the sidebar's Expand and after widening a narrow window (549 checks).
 
 ## Risks
 

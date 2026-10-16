@@ -3,7 +3,8 @@
 Status: **first pass (2026-10-16, `vyro-windows-123a938`) found four problems**: widgets did not
 appear, Hardware and Sensors waited forever, Quit did nothing, and scrolling was laggy. All four
 are fixed (ROADMAP → P31). Run sections 1–4 again with the new build. If the old build is still
-stuck, end it in Task Manager first.
+stuck, end it in Task Manager first. Second report (`vyro-windows-227e896`): the sidebar's
+highlight sat off the chosen view after widening a small window; fixed.
 
 P28 to P30 are built on one branch, `claude/blissful-knuth-begnu5`, so one test build holds all
 three:
@@ -32,7 +33,9 @@ pass and the owner says go.
 
 - **Sidebar.** Four groups (Overview, Performance, This PC, Vyro). The highlight slides to the
   chosen view. Folding it to icons is remembered after a restart, and a narrow window
-  (under 1100 px) folds it by itself. Health, Insights and Hardware keep their dots.
+  (under 1100 px) folds it by itself. Health, Insights and Hardware keep their dots. After a
+  small window is made full screen, or the sidebar is expanded, the highlight sits on the
+  chosen view.
 - **Ctrl+K.** It finds a view, a setting (opens the card), a sensor (opens it in History), a
   theme or accent, and "Return fans to BIOS".
 - **Accent.** Change it in Settings → Appearance. The sidebar, buttons, switches, the gauges

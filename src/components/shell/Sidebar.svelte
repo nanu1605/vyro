@@ -74,18 +74,28 @@
     }
   }
 
-  // The highlight slides to the selected view.
+  // The highlight slides to the selected view. It is measured again whenever the list changes
+  // size (the fold's width animation, a window resize), so it ends on the view, not where the
+  // view was when the fold began.
   let list = $state<HTMLDivElement | undefined>();
   let mark = $state({ y: 0, h: 0 });
-  async function place(): Promise<void> {
-    await tick();
+  function measure(): void {
     const b = list?.querySelector<HTMLElement>(`#tab-${tab}`);
-    if (b) mark = { y: b.offsetTop, h: b.offsetHeight };
+    if (!list || !b) return;
+    const r = b.getBoundingClientRect();
+    const y = r.top - list.getBoundingClientRect().top - list.clientTop + list.scrollTop;
+    if (Math.abs(y - mark.y) > 0.1 || Math.abs(r.height - mark.h) > 0.1) mark = { y, h: r.height };
   }
   $effect(() => {
     void tab;
     void rail;
-    void place();
+    void tick().then(measure);
+  });
+  onMount(() => {
+    if (!list || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(list);
+    return () => ro.disconnect();
   });
 
   const groups = GROUPS.map((g) => ({ ...g, views: VIEWS.filter((v) => v.group === g.id) }));
@@ -222,12 +232,15 @@
     scrollbar-width: thin;
   }
   .group {
+    /* One line at every width: the views below keep their place while the sidebar unfolds. */
+    overflow: hidden;
     margin: 0.85rem 0 0.3rem 0.65rem;
     color: var(--muted);
     font-size: 0.66rem;
     font-weight: 600;
     letter-spacing: 0.1em;
     text-transform: uppercase;
+    white-space: nowrap;
   }
   .group:first-of-type {
     margin-top: 0;

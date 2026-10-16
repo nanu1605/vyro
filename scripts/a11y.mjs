@@ -187,8 +187,30 @@ async function sweepShell(browser, theme) {
   await page.waitForTimeout(400);
   await axe(page, at('Sidebar folded'));
   await noSidewaysScroll(page, at('Sidebar folded'));
+  // The highlight ends on the selected view once the sidebar unfolds: by its button, and when a
+  // narrow window (the rail) is widened. Widgets sits below the "This PC" label, which wrapped
+  // mid-unfold in the first 1.1 build.
+  await tab(page, 'Widgets');
   await page.getByRole('button', { name: 'Expand the sidebar' }).click();
+  await page.waitForTimeout(600);
+  await markOnSelected(page, at('Sidebar expanded'));
+  await page.setViewportSize({ width: 1000, height: 900 });
+  await page.waitForTimeout(600);
+  await markOnSelected(page, at('Sidebar narrow'));
+  await page.setViewportSize({ width: 1920, height: 900 });
+  await page.waitForTimeout(600);
+  await markOnSelected(page, at('Sidebar widened'));
   await ctx.close();
+}
+
+async function markOnSelected(page, where) {
+  const off = await page.evaluate(() => {
+    const m = document.querySelector('.sidebar .mark')?.getBoundingClientRect();
+    const b = document.querySelector('.sidebar [role="tab"][aria-selected="true"]')?.getBoundingClientRect();
+    return m && b ? Math.max(Math.abs(m.top - b.top), Math.abs(m.height - b.height)) : Infinity;
+  });
+  checks++;
+  if (off > 1) problem(where, `the sidebar's highlight is ${Math.round(off)} px off the selected view`);
 }
 
 // --- Desktop widget windows (P30): each kind at its window's size, and a widget's menu. -------
