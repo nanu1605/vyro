@@ -406,7 +406,7 @@ pub fn validate(rules: &[AlertRule]) -> Result<(), String> {
                 r.id
             ));
         }
-        if r.name.trim().is_empty() || r.name.len() > 80 {
+        if r.name.trim().is_empty() || r.name.chars().count() > 80 {
             return Err(format!("rule {:?}: name must be 1–80 characters", r.id));
         }
         if r.for_secs > 3600 || r.cooldown_secs > 86_400 {
