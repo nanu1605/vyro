@@ -256,13 +256,19 @@ fn actions_last_while_the_conditions_hold_and_end_after_they_clear() {
 }
 
 #[test]
-fn a_lost_sensor_does_not_keep_actions_going() {
+fn a_lost_sensor_pauses_actions_until_its_reading_is_back() {
     let mut r = hot_cpu_and_gpu(false);
     r.actions.fan_boost = Some(20);
     let mut a = AlertEngine::new(vec![r]);
     run(&mut a, 0, 10, &[("cpu.temp", 90.0), ("gpu.0.temp", 85.0)]);
     assert_eq!(a.brief().fan_boost(), Some((20, "hot")));
     run(&mut a, 11, 41, &[("cpu.temp", 90.0)]);
+    assert_eq!(a.brief().fan_boost(), None);
+    // The reading is back and the rule still holds: its actions too, without a second alert.
+    assert!(run(&mut a, 42, 42, &[("cpu.temp", 90.0), ("gpu.0.temp", 85.0)]).is_empty());
+    assert_eq!(a.brief().fan_boost(), Some((20, "hot")));
+    // Then they end as usual, 30 s after it clears.
+    run(&mut a, 43, 73, &[("cpu.temp", 50.0), ("gpu.0.temp", 50.0)]);
     assert_eq!(a.brief().fan_boost(), None);
 }
 
@@ -274,10 +280,15 @@ fn turning_a_rule_off_ends_its_actions() {
     run(&mut a, 0, 10, &[("cpu.temp", 90.0), ("gpu.0.temp", 85.0)]);
     assert!(a.brief().profile().is_some());
     r.enabled = false;
-    a.set_rules(vec![r]).unwrap();
+    a.set_rules(vec![r.clone()]).unwrap();
     assert!(a.brief().active.is_empty());
     run(&mut a, 11, 11, &[("cpu.temp", 90.0), ("gpu.0.temp", 85.0)]);
     assert!(a.brief().active.is_empty());
+    // On again while it still holds: its actions are back, without a second alert.
+    r.enabled = true;
+    a.set_rules(vec![r]).unwrap();
+    assert!(run(&mut a, 12, 12, &[("cpu.temp", 90.0), ("gpu.0.temp", 85.0)]).is_empty());
+    assert!(a.brief().profile().is_some());
 }
 
 #[test]
