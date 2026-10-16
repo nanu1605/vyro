@@ -843,13 +843,15 @@ within +1 MB of P16. History schema unchanged; IPC protocol 10.
         fan boost on fixed and curve headers, its cap and its gate; the alert profile against
         games and manual picks; the tray tooltip. Browser preview: axe clean, no overflow at
         390 px; the main bundle grows 12.8 kB (the preview's rules and log load separately).
-- [ ] Field check (MS-7E24): a CPU-only stress test leaves an "all of" CPU-and-GPU rule quiet
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
+      a CPU-only stress test leaves an "all of" CPU-and-GPU rule quiet
       and a game with a heavy CPU load fires it; "rises 15 °C within 30 s" fires on starting a
       stress test; with fan control on, a fan action raises only the driven fans (Cooling log
       and readings) and they return 30 s after the rule clears, and with control off nothing
       changes; a profile action switches the profile (tray check mark) and back, and picking
       a profile meanwhile keeps it; two CPU rules firing within a minute notify once (the second
       is logged as a repeat); the diagnostic record names the busy program.
+      The defaults above stay.
 
 ### P17 — Performance Score (M9)
 - [ ] Formula drafted for sign-off (decision 22); versioned, inputs shown.
