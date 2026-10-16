@@ -19,6 +19,10 @@ use crate::lock;
 
 /// How often the runner looks at the readings and reports progress.
 const TICK: Duration = Duration::from_millis(100);
+/// A run is stopped at twice its planned time, but never with less slack than this, s. Real
+/// runs (Quick plans 131 s) never reach it; runs shrunk for tests do, because thread starts,
+/// an uncached file and a whole kernel round per pass do not shrink with their plan.
+const MIN_OVERTIME_SECS: f64 = 30.0;
 const PROGRESS_EVERY: Duration = Duration::from_millis(250);
 
 /// Durations and sizes; tests shrink them.
@@ -284,7 +288,8 @@ impl Monitor<'_> {
     /// Looks at the newest reading; returns it when it is new, with the time since the last.
     fn poll(&mut self) -> Option<(Sample, f64)> {
         let now = Instant::now();
-        if now.duration_since(self.started).as_secs_f64() > 2.0 * self.planned {
+        let limit = (2.0 * self.planned).max(self.planned + MIN_OVERTIME_SECS);
+        if now.duration_since(self.started).as_secs_f64() > limit {
             self.ctl.stop("The run took twice its planned time.");
         }
         let s = self.probe.sample();
