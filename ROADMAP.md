@@ -1707,6 +1707,12 @@ Budget:
         that fails to go back is now kept for every later attempt. Before, the next capture
         could replace it with Vyro's own leftover speeds. An unreadable one sends the
         software-driven allow-listed headers to full speed and says to restart.
+        - Found in a review after the build: if the fan chip also did not answer at start (it
+          gets three tries within about 150 ms), nothing went to full speed and nothing was
+          recorded. The first capture with control on then saved the leftover speeds as the
+          BIOS state. Now nothing is captured or driven until the chip answers, then full
+          speed comes first. The damaged file stays until then, so a restart meanwhile tries
+          again.
       - **CI.**
         - A new Accessibility job (`pnpm a11y`, 362 checks in about 3 minutes):
           - axe-core on all 17 tabs × 6 themes × 1440 and 390 px;

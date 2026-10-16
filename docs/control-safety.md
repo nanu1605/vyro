@@ -50,6 +50,7 @@ section.
 | **Crash.** At the next start the saved state is written back before anything else (the MSI restarts the service). | `controller::recover` | `a_state_left_by_a_crash_is_restored_before_anything_else` | P12b: killing `vyro-service.exe` brought the BIOS curve back |
 | **Crash, then the write-back fails (P27 fix).** The saved state is kept and used for every later attempt. It is never replaced by a capture of the chip as Vyro left it. | `controller::recover` (`Recovery::Failed`), `FanControl::start_with` | `a_failed_restore_at_start_keeps_the_saved_state_for_later_attempts` | **Pending** the P27 field check |
 | **Crash, then the saved state cannot be read (P27 fix).** The allow-listed headers under software control go to 100 %. The file is kept as `fan-restore.bad.json`, and the Cooling log says to restart the PC. | `controller::recover` (`Recovery::Unreadable`), `full_speed_where_driven` | `an_unreadable_saved_state_sets_driven_fans_to_full_speed_once` | **Pending** the P27 field check |
+| **…and the chip does not answer at start (P27 fix).** Nothing captures the chip or drives a fan until it answers; then full speed comes first. The file stays until then, so a restart meanwhile tries again. | `controller::recover` (`Recovery::Unanswered`), `Worker::full_speed_after_crash` | `a_silent_chip_after_an_unreadable_saved_state_gets_full_speed_before_anything_else` | Covered by the tests (a silent chip cannot be forced on hardware) |
 
 ## What the owner sees
 

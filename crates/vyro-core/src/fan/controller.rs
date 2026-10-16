@@ -15,7 +15,8 @@
 //! - a file left by a crash is written back when the next controller starts, before anything
 //!   else (the service restarts itself after a crash). If that write fails, the saved state is
 //!   kept for every later attempt and never replaced by a capture of the chip as Vyro left it;
-//!   if the file cannot be read, the headers under software control go to full speed (P27).
+//!   if the file cannot be read, the headers under software control go to full speed, and if
+//!   the chip does not answer either, nothing is captured or driven until it does (P27).
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -222,12 +223,17 @@ pub enum Recovery {
     /// The file could not be read: what the BIOS had is unknown. The headers listed (those
     /// the chip has under software control) were set to full speed.
     Unreadable(Vec<u16>),
+    /// The file could not be read and the chip did not answer either. The controller sets
+    /// full speed as soon as it does, before anything else; until then nothing captures the
+    /// chip, which still runs at whatever speeds the crashed run left.
+    Unanswered,
 }
 
 /// Writes back a BIOS state a previous run left behind. If its file cannot be read, every
 /// allow-listed header under software control goes to full speed (Vyro may have left it at
 /// any speed, and full speed is always safe), and a damaged file is set aside as
-/// `fan-restore.bad.json` so the next start does not do this again.
+/// `fan-restore.bad.json` so the next start does not do this again. If the chip does not
+/// answer, the file stays, so a start before the controller managed it tries again.
 pub fn recover(dev: &mut dyn FanDevice, restore_path: &Path) -> Recovery {
     match control::load(restore_path) {
         Ok(None) => Recovery::Nothing,
@@ -243,17 +249,41 @@ pub fn recover(dev: &mut dyn FanDevice, restore_path: &Path) -> Recovery {
         },
         Err(e) => {
             log::error!("fans: {} unreadable: {e}", restore_path.display());
-            if e.kind() == std::io::ErrorKind::InvalidData {
-                crate::files::set_aside(restore_path);
-            }
-            Recovery::Unreadable(full_speed_where_driven(dev))
+            let Some(headers) = full_speed_where_driven(dev) else {
+                return Recovery::Unanswered;
+            };
+            set_aside_if_damaged(restore_path);
+            Recovery::Unreadable(headers)
         }
     }
 }
 
+/// A restore file that does not parse is kept as `fan-restore.bad.json`. One that could not be
+/// read for another reason (access, sharing) stays, and the next start tries it again.
+fn set_aside_if_damaged(restore_path: &Path) {
+    if control::load(restore_path).is_err_and(|e| e.kind() == std::io::ErrorKind::InvalidData) {
+        crate::files::set_aside(restore_path);
+    }
+}
+
+/// What the Cooling tab says once fans went to full speed because the saved BIOS state could
+/// not be read.
+fn full_speed_message(board: &Board, headers: &[u16]) -> String {
+    let names: Vec<&str> = headers
+        .iter()
+        .filter_map(|i| board.headers.iter().find(|h| h.index == *i))
+        .map(|h| h.name)
+        .collect();
+    format!(
+        "The BIOS fan settings saved before a crash could not be read: {} set to full speed. \
+         Restart the PC to give the BIOS its settings back",
+        names.join(", ")
+    )
+}
+
 /// Sets every allow-listed header the chip has under software control to full speed; returns
-/// those set.
-fn full_speed_where_driven(dev: &mut dyn FanDevice) -> Vec<u16> {
+/// those set, or `None` when the chip could not be read (nothing was written).
+fn full_speed_where_driven(dev: &mut dyn FanDevice) -> Option<Vec<u16>> {
     let board = dev.board();
     let chip = (0..3).find_map(|_| match dev.read() {
         Ok(c) => Some(c),
@@ -268,9 +298,9 @@ fn full_speed_where_driven(dev: &mut dyn FanDevice) -> Vec<u16> {
     });
     let Some(chip) = chip else {
         log::error!("fans: could not read the chip to set full speed");
-        return Vec::new();
+        return None;
     };
-    board
+    let set = board
         .headers
         .iter()
         .filter(|h| chip.mode & (1 << h.index) != 0)
@@ -281,7 +311,8 @@ fn full_speed_where_driven(dev: &mut dyn FanDevice) -> Vec<u16> {
                 None
             }
         })
-        .collect()
+        .collect();
+    Some(set)
 }
 
 struct Files {
@@ -390,6 +421,7 @@ impl FanControl {
             worker: Mutex::new(None),
         };
         let mut bios = None;
+        let mut owed_full_speed = false;
         {
             let mut inner = lock(&me.shared.inner);
             match recovery {
@@ -408,18 +440,18 @@ impl FanControl {
                 }
                 Recovery::Unreadable(headers) if headers.is_empty() => {}
                 Recovery::Unreadable(headers) => {
-                    let names: Vec<&str> = headers
-                        .iter()
-                        .filter_map(|i| board.headers.iter().find(|h| h.index == *i))
-                        .map(|h| h.name)
-                        .collect();
-                    let why = format!(
-                        "The BIOS fan settings saved before a crash could not be read: {} set \
-                         to full speed. Restart the PC to give the BIOS its settings back",
-                        names.join(", ")
-                    );
+                    let why = full_speed_message(board, &headers);
                     inner.last_error = Some(why.clone());
                     inner.record(FanEventKind::FullSpeed, why);
+                }
+                Recovery::Unanswered => {
+                    let why = "The BIOS fan settings saved before a crash could not be read, and \
+                               the fan chip did not answer: Vyro keeps trying to set the fans it \
+                               drove to full speed. Restart the PC to give the BIOS its settings \
+                               back";
+                    inner.last_error = Some(why.into());
+                    inner.record(FanEventKind::Fault, why.into());
+                    owed_full_speed = true;
                 }
             }
         }
@@ -430,6 +462,7 @@ impl FanControl {
             restore_path,
             watchdog,
             bios,
+            owed_full_speed,
             applied: BTreeMap::new(),
             io_errors: 0,
             loops: 0,
@@ -725,6 +758,10 @@ struct Worker {
     restore_path: Option<PathBuf>,
     watchdog: Duration,
     bios: Option<BiosState>,
+    /// The crashed run's BIOS state could not be read and the chip did not answer at start:
+    /// full speed is still owed to the headers it left under software control (P27). Until
+    /// then nothing is captured or driven.
+    owed_full_speed: bool,
     /// Duty last written per driven header.
     applied: BTreeMap<u16, u8>,
     io_errors: u32,
@@ -745,12 +782,18 @@ enum Step {
 impl Worker {
     fn run(mut self) {
         loop {
-            match self.wait() {
+            let step = self.wait();
+            if self.owed_full_speed && !matches!(step, Step::Stop) {
+                self.full_speed_after_crash();
+            }
+            match step {
                 Step::Stop => {
                     self.restore_all();
                     self.shared.flush_events();
                     return;
                 }
+                // A capture now would save the crashed run's speeds as the BIOS's.
+                _ if self.owed_full_speed => {}
                 Step::Suspend => self.restore_all(),
                 Step::Stale => {
                     if self.bios.is_some() {
@@ -867,6 +910,31 @@ impl Worker {
         }
         let fresh = std::mem::take(&mut inner.fresh);
         Step::Apply(fresh.then(|| inner.decision.clone()).flatten())
+    }
+
+    /// Does what the start could not: the chip did not answer then, so the fans a crashed run
+    /// may have left at any speed go to full speed once it does. Then the damaged file is set
+    /// aside, as at a start that managed it.
+    fn full_speed_after_crash(&mut self) {
+        let Some(headers) = full_speed_where_driven(self.dev.as_mut()) else {
+            return;
+        };
+        self.owed_full_speed = false;
+        if let Some(p) = &self.restore_path {
+            set_aside_if_damaged(p);
+        }
+        let mut inner = lock(&self.shared.inner);
+        if headers.is_empty() {
+            inner.last_error = None;
+            inner.record(
+                FanEventKind::Recovered,
+                "The fan chip answered: no fan was left under Vyro's control".into(),
+            );
+        } else {
+            let why = full_speed_message(self.dev.board(), &headers);
+            inner.last_error = Some(why.clone());
+            inner.record(FanEventKind::FullSpeed, why);
+        }
     }
 
     fn note_error(&self, e: String) {
@@ -1007,6 +1075,8 @@ pub struct SimChip {
     pub fail: Vec<DevError>,
     /// Another fan tool: every software-driven header reads this duty.
     pub fight: Option<u8>,
+    /// The chip does not answer: reads return [`DevError::Busy`].
+    pub silent: bool,
     pub log: Vec<String>,
 }
 
@@ -1102,6 +1172,9 @@ impl FanDevice for SimDevice {
 
     fn read(&mut self) -> Result<ChipState, DevError> {
         let mut c = lock(&self.0);
+        if c.silent {
+            return Err(DevError::Busy);
+        }
         if let Some(v) = c.fight {
             for n in 0..c.outputs.len() {
                 if c.mode & (1 << n) != 0 {
@@ -1376,6 +1449,54 @@ mod tests {
         settle();
         assert!(lock(&dev.0).log.is_empty(), "{:?}", lock(&dev.0).log);
         assert!(fc.status(|_| None).last_error.is_none());
+        drop(fc);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_silent_chip_after_an_unreadable_saved_state_gets_full_speed_before_anything_else() {
+        let dir = tmp_dir("crash-silent");
+        std::fs::write(dir.join(RESTORE_FILE), b"{").unwrap();
+        let dev = SimDevice::new();
+        {
+            // The crashed run left headers 0 and 2 under software control, and the chip does
+            // not answer at first.
+            let mut c = lock(&dev.0);
+            c.mode = 0b101;
+            c.silent = true;
+        }
+        let fc = FanControl::start(Box::new(dev.clone()), Some(&dir), WATCHDOG);
+        let why = fc.status(|_| None).last_error.unwrap();
+        assert!(why.contains("did not answer"), "{why}");
+        // The file stays, so a restart meanwhile tries again.
+        assert!(dir.join(RESTORE_FILE).exists());
+
+        // Control on and ticking: nothing captures the chip as the crash left it, and nothing
+        // is written, while it stays silent.
+        fc.set_config(on(vec![fixed(0, 40.0)])).unwrap();
+        for _ in 0..5 {
+            fc.on_tick(|id| (id == CPU_TEMP).then_some(50.0));
+            settle();
+        }
+        assert!(lock(&dev.0).log.is_empty(), "{:?}", lock(&dev.0).log);
+
+        // It answers: full speed first, then control as usual.
+        lock(&dev.0).silent = false;
+        tick(&fc, &dev, 50.0, 4);
+        assert_eq!(
+            lock(&dev.0).log[..4],
+            ["set 0 255", "set 2 255", "capture", "set 0 102"]
+        );
+        assert!(dir.join("fan-restore.bad.json").exists());
+        let why = fc.status(|_| None).last_error;
+        assert!(
+            why.as_ref().is_none_or(|w| !w.contains("did not answer")),
+            "{why:?}"
+        );
+        assert!(fc
+            .events()
+            .iter()
+            .any(|e| e.kind == FanEventKind::FullSpeed && e.message.contains("CPU Fan")));
         drop(fc);
         std::fs::remove_dir_all(&dir).unwrap();
     }
