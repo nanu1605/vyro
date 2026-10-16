@@ -1,5 +1,6 @@
 <script lang="ts">
   import { getInsights } from '../ipc';
+  import ScoreCard from './ScoreCard.svelte';
   import {
     BASIS,
     BASIS_HINT,
@@ -81,6 +82,7 @@
 {/snippet}
 
 <section class="panel">
+  <ScoreCard {active} />
   <div class="top">
     <p class="summary tone-{warn.length ? 'warn' : data ? 'ok' : 'unknown'}">
       <span class="dot" aria-hidden="true"></span>

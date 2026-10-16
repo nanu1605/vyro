@@ -12,6 +12,7 @@ mod changes;
 mod digest;
 mod games;
 mod schema;
+mod score;
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -473,6 +474,13 @@ impl History {
         Ok(series)
     }
 
+    /// `metric`'s 1-minute averages from `from` to `to` (unix seconds, both included), as far
+    /// back as the 1-minute tier keeps them.
+    pub fn minutes(&mut self, metric: &str, from: i64, to: i64) -> Result<Vec<HistoryPoint>> {
+        self.flush()?;
+        self.points(metric, Tier::Agg1m, from - 1, to, 60)
+    }
+
     /// Points of `metric` in `tier` with `after < ts <= until`, bucketed to `step` seconds.
     fn points(
         &self,
@@ -541,6 +549,10 @@ impl History {
         tx.execute(
             "DELETE FROM digest WHERE ts <= ?1",
             params![now - self.cfg.agg1m_retention_secs],
+        )?;
+        tx.execute(
+            "DELETE FROM score WHERE ts <= ?1",
+            params![now - crate::score::KEEP_SECS],
         )?;
         tx.execute(
             "DELETE FROM event WHERE id IN (SELECT id FROM (SELECT id, ROW_NUMBER() OVER \

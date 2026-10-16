@@ -36,7 +36,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 19 | Remote / web companion | In V2: LAN-only, opt-in, authenticated, built last (M12); timing confirmed at P26 | decided |
 | 20 | Versions | 0.2 / 0.3 / 0.4 / 0.5 at milestone merges; **1.0** at M13 | decided |
 | 21 | Themes | Several themes + accent colour, accessibility preserved | decided |
-| 22 | Performance Score method | Versioned fixed formula on observed conditions, inputs shown | open: formula drafted for sign-off at P17 |
+| 22 | Performance Score method | Formula v1 ([`docs/performance-score.md`](docs/performance-score.md)): nine observed inputs, fixed weights and breakpoints, versioned, inputs shown | decided (signed off 2026-10-15) |
 | 23 | Benchmark positioning | Self-relative (own engine), variance reported | decided |
 | 24 | Fan-control launch boards | **MSI B650M GAMING PLUS WIFI (MS-7E24, NCT6687D) only**; each further board after its own validation | decided |
 | 25 | Tagline | "Know your machine." unless changed | open |
@@ -857,7 +857,49 @@ within +1 MB of P16. History schema unchanged; IPC protocol 10.
       The defaults above stay.
 
 ### P17 — Performance Score (M9)
-- [ ] Formula drafted for sign-off (decision 22); versioned, inputs shown.
+Owner's choices (2026-10-15): formula v1 signed off as drafted; Stability counts WHEA hardware
+errors as well as unexpected shutdowns; the score shows at the top of Insights.
+
+Budget: no new thread; the score is worked out by the intelligence pass once a day (and when
+Insights asks, kept a minute): the week's 1-minute history of about ten metrics, the minute
+digests, the drives (read at most every 10 minutes) and one System-log query; under 300 ms of one
+core on the reference PC. One stored result a day, kept a year (under 400 KB). History schema
+stays v3 (the `score` table is created in place); IPC protocol 11.
+
+- [x] Formula v1 drafted (2026-10-15) and signed off the same day:
+      [`docs/performance-score.md`](docs/performance-score.md).
+- [x] Built (2026-10-15, branch `v2-p17-score`, stacked on `v2-p18-alerts`):
+      - `vyro_core::score`: formula v1 as pure code. Each input's sub-score from the document's
+        breakpoints (straight lines between them), the worst part counting; the weighted average
+        over the inputs with data, none below 60 % of the weight; the band; every input with its
+        parts, weight, basis and, when missing, why.
+      - Measures (`score::measure`): thermal headroom from the median temperature in loaded
+        minutes (the CPU's design limit from its CPUID brand: 100 °C for Intel Core, else
+        95 °C; the GPU against Health's 85 °C), clock sag over full-load stretches of 5 minutes
+        or more, heat and current limiting from the minute digests (missing where nothing
+        reports flags), cooling and the change from usual from the intelligence pass (an
+        explanation of the owner's own choice counts as 100), drive health, SSD life and system
+        drive free space, RAM in use (p95), ping (p95) and lost replies, and unexpected
+        shutdowns (Kernel-Power 41) and WHEA hardware errors (17, 18, 19, 47) from the System
+        log over 30 days. The history inputs wait for about a day of history.
+      - Store: the `score` table (one result a day, the whole result as JSON, kept a year;
+        none kept without a score); `History::minutes` reads the 1-minute tier.
+      - IPC protocol 11 (`PerformanceScore`); the app's `get_performance_score`.
+      - UI: the Performance Score card at the top of Insights (the score, its band, how many
+        inputs it rests on, the formula version, a one-year trend, and every input with its
+        sub-score, weight, Measured / Inferred badge and the values behind it, or why it has no
+        data). Tests: every breakpoint, the coverage rule, the worked example (98), a healthy
+        synthetic week (≥ 90), throttling, a failing drive, crashes and a fatal hardware error
+        moving it through Good, Fair and Needs attention, a first day without a score, the
+        event-log counts, the daily store. Browser preview: axe clean, no overflow at 390 px;
+        the main bundle grows 6.9 kB.
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
+      after a day of use the score appears with all inputs that apply;
+      the thermal headroom matches the History of a gaming evening; a heavy stress test with a
+      lowered fan curve shows in Throttling or Sustained clocks; the stability counts match the
+      System log in Event Viewer (Kernel-Power 41, WHEA-Logger); the daily point appears in the
+      trend the next day.
+      With P16, P18 and P19 also field-checked, M9 is complete.
 
 ### P20 — Benchmark mode (M10 → 0.4)
 - [ ] Own workloads, hard stop, variance; `benchmark_runs` / `benchmark_metrics`.

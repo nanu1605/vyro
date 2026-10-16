@@ -6,7 +6,7 @@ import { listen } from '@tauri-apps/api/event';
 import { evaluate } from './curve';
 import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
-import type { AlertFired, AlertRule, BackendStatus, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -189,6 +189,12 @@ export async function getFanEvents(): Promise<FanEvent[]> {
 export async function getInsights(): Promise<Insights> {
   if (!inTauri) return (await import('./sim-insights')).simInsights();
   return invoke<Insights>('get_insights');
+}
+
+/** The Performance Score now with its inputs, and the daily scores of the past year. */
+export async function getPerformanceScore(): Promise<ScoreReport> {
+  if (!inTauri) return (await import('./sim-score')).simScore();
+  return invoke<ScoreReport>('get_performance_score');
 }
 
 /** Recent health changes, oldest first. */

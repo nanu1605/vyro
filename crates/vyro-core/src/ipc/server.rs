@@ -295,6 +295,7 @@ impl Server {
             Request::SetPingHost { host } => json(e.set_ping_host(&host)),
             Request::BitlockerSystemDrive => json(e.bitlocker_system_drive()),
             Request::Insights => json(e.insights()),
+            Request::PerformanceScore => json(e.performance_score()),
             Request::SetCaptureTarget { target } => {
                 let seq = self.capture_seq.fetch_add(1, Ordering::SeqCst);
                 let mut known = false;

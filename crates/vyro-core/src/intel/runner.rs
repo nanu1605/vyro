@@ -1,7 +1,8 @@
 //! The intelligence engine inside the engine: builds the minute digest from the poller's
 //! ticks, works out the findings on demand (kept a minute) and in the background every ten
 //! minutes on a short-lived thread, and hands the app the keys of the findings worth a look.
-//! The same pass works out the usual readings "above usual" alert rules compare with (P18).
+//! The same pass works out the usual readings "above usual" alert rules compare with (P18) and,
+//! once a day, the Performance Score it keeps (P17).
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
@@ -14,8 +15,10 @@ use crate::changes::MAX_CHANGES;
 use crate::fan::{self, FanEvent};
 use crate::gaming::MAX_SESSIONS;
 use crate::history::History;
+use crate::info::DriveInfo;
 use crate::profiles::Profile;
 use crate::registry::{Registry, Unit};
+use crate::score::{self, measure, PerformanceScore, ScoreReport, StabilityCounts};
 use crate::snapshot::SensorSnapshot;
 use crate::{lock, HistoryRange};
 
@@ -27,6 +30,22 @@ pub const BACKGROUND_SECS: i64 = 600;
 const FIRST_PASS_SECS: i64 = 120;
 /// Game sessions whose markers are read for background load.
 const MARKED_SESSIONS: usize = 5;
+/// The drives and the event log are read at most this often for the score.
+const SLOW_INPUT_SECS: i64 = 600;
+/// A score is kept once a day (a little early, so the 10-minute passes do not drift).
+const KEEP_EVERY_SECS: i64 = 86_400 - 600;
+
+/// When the drives and the stability counts were read, and what they were.
+type SlowInputs = (i64, Vec<DriveInfo>, Option<StabilityCounts>);
+
+/// Where the Performance Score's inputs outside the history come from (set by the engine).
+pub struct ScoreSources {
+    /// CPUID brand string, for the CPU's design limit.
+    pub cpu_brand: Option<String>,
+    pub drives: Box<dyn Fn() -> Vec<DriveInfo> + Send + Sync>,
+    /// Unexpected shutdowns and hardware errors since a moment; `None` when unreadable.
+    pub stability: Box<dyn Fn(i64) -> Option<StabilityCounts> + Send + Sync>,
+}
 
 pub struct Intel {
     registry: Arc<Mutex<Registry>>,
@@ -41,6 +60,13 @@ pub struct Intel {
     /// Sensors alert rules compare with their usual reading, and those readings.
     alert_sensors: Mutex<Vec<String>>,
     usual: Mutex<HashMap<String, Usual>>,
+    score_sources: Mutex<Option<ScoreSources>>,
+    /// The drives and stability counts last read, and when.
+    slow: Mutex<Option<SlowInputs>>,
+    /// The last score worked out (kept a minute).
+    score: Mutex<Option<PerformanceScore>>,
+    /// When the last daily score was kept; read from the store on first use.
+    kept: Mutex<Option<i64>>,
 }
 
 impl Intel {
@@ -60,6 +86,10 @@ impl Intel {
             last_pass: AtomicI64::new(now - BACKGROUND_SECS + FIRST_PASS_SECS),
             alert_sensors: Mutex::new(Vec::new()),
             usual: Mutex::new(HashMap::new()),
+            score_sources: Mutex::new(None),
+            slow: Mutex::new(None),
+            score: Mutex::new(None),
+            kept: Mutex::new(None),
         })
     }
 
@@ -172,6 +202,121 @@ impl Intel {
             .collect())
     }
 
+    pub fn set_score_sources(&self, sources: ScoreSources) {
+        *lock(&self.score_sources) = Some(sources);
+    }
+
+    /// The Performance Score now (kept a minute) and the daily scores of the past year.
+    pub fn score_report(&self, now: i64) -> Result<ScoreReport, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        let cached = lock(&self.score)
+            .clone()
+            .filter(|s| now >= s.ts && now - s.ts < CACHE_SECS);
+        let latest = match cached {
+            Some(s) => s,
+            None => {
+                let insights = self.insights(now).ok();
+                let s = self.compute_score(now, insights.as_ref())?;
+                *lock(&self.score) = Some(s.clone());
+                s
+            }
+        };
+        let history = lock(history)
+            .scores(now - score::KEEP_SECS)
+            .map_err(|e| e.to_string())?;
+        Ok(ScoreReport { latest, history })
+    }
+
+    /// Works out the score from the week's minutes, the digests, the drives, the event log
+    /// and the findings of `insights`.
+    fn compute_score(
+        &self,
+        now: i64,
+        insights: Option<&Insights>,
+    ) -> Result<PerformanceScore, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        let err = |e: rusqlite::Error| e.to_string();
+        let tree = lock(&self.registry).tree();
+        let gpus = measure::gpu_indices(
+            tree.groups
+                .iter()
+                .flat_map(|g| g.sensors.iter())
+                .map(|s| s.id.as_str()),
+        );
+        let from = now - score::WINDOW_SECS;
+        let mut series = HashMap::new();
+        for id in measure::metrics(&gpus) {
+            let pts = lock(history).minutes(&id, from, now).map_err(err)?;
+            series.insert(id, pts);
+        }
+        let minutes = measure::minute_map(series);
+        let span = minutes
+            .get("cpu.usage.total")
+            .and_then(|s| s.keys().next())
+            .map_or(0, |first| now - first);
+        let digests = lock(history).digests(from, now).map_err(err)?;
+        let (drives, stability) = self.slow_inputs(now);
+        let brand = lock(&self.score_sources)
+            .as_ref()
+            .and_then(|s| s.cpu_brand.clone());
+        let m = measure::gather(
+            &minutes,
+            &gpus,
+            &digests,
+            span,
+            brand.as_deref(),
+            &drives,
+            stability,
+            insights,
+        );
+        Ok(score::compute(&m, now))
+    }
+
+    /// The drives and the stability counts, read afresh at most every ten minutes.
+    fn slow_inputs(&self, now: i64) -> (Vec<DriveInfo>, Option<StabilityCounts>) {
+        if let Some((t, d, s)) = lock(&self.slow).as_ref() {
+            if now >= *t && now - t < SLOW_INPUT_SECS {
+                return (d.clone(), *s);
+            }
+        }
+        let (drives, stability) = match lock(&self.score_sources).as_ref() {
+            Some(src) => ((src.drives)(), (src.stability)(now - score::STABILITY_SECS)),
+            None => (Vec::new(), None),
+        };
+        *lock(&self.slow) = Some((now, drives.clone(), stability));
+        (drives, stability)
+    }
+
+    /// Keeps today's score, once a day, after a pass.
+    fn keep_score(&self, i: &Insights) {
+        let Some(history) = &self.history else {
+            return;
+        };
+        let now = i.ts;
+        let mut kept = lock(&self.kept);
+        let last = *kept.get_or_insert_with(|| {
+            lock(history)
+                .last_score_ts()
+                .ok()
+                .flatten()
+                .unwrap_or(i64::MIN / 2)
+        });
+        if now - last < KEEP_EVERY_SECS {
+            return;
+        }
+        match self.compute_score(now, Some(i)) {
+            Ok(s) => {
+                if let Err(e) = lock(history).add_score(&s) {
+                    log::warn!("score: {e}");
+                }
+                // Tried today, kept or not (too little data): next try tomorrow.
+                *kept = Some(now);
+                *lock(&self.score) = Some(s);
+            }
+            Err(e) => log::warn!("score: {e}"),
+        }
+    }
+
     /// The keys of the findings worth a look, as of the last pass.
     pub fn brief(&self) -> InsightBrief {
         lock(&self.brief).clone()
@@ -200,6 +345,7 @@ impl Intel {
             }
         }
         *lock(&self.brief) = i.brief();
+        self.keep_score(&i);
         *lock(&self.latest) = Some(i);
     }
 
