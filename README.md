@@ -52,6 +52,8 @@ in the service, so it keeps going with the app closed. Safeguards:
 
 Only boards that have been checked on real hardware can be controlled: today the MSI B650M
 GAMING PLUS WIFI (MS-7E24, Nuvoton NCT6687D). Every other board shows its fans read-only.
+[`docs/control-safety.md`](docs/control-safety.md) lists every safety rule with the code that
+enforces it, its tests and its result on that board.
 
 ## Gaming
 
@@ -74,6 +76,31 @@ GAMING PLUS WIFI (MS-7E24, Nuvoton NCT6687D). Every other board shows its fans r
 0.3 moves the history database (`%ProgramData%\Vyro\history.sqlite`) to a new format that 0.2
 cannot read: after going back to 0.2 its history stays off until that file is deleted. 0.2's
 session log (`games.json`) is imported once, as summaries without a replay.
+
+## Reliability
+
+- **Upgrades keep your data.** Settings, alert rules, fan settings, the history and game
+  sessions from every release since 0.1 carry over. Tests open files written by each
+  release's own code (`crates/vyro-core/tests/migration.rs`).
+- **A crash or power cut never leaves half a file.** Every state file is written to a temporary
+  file, flushed to disk and then renamed.
+- **A damaged file is set aside, not overwritten.** It is kept as `<name>.bad.<ext>` (for
+  example `settings.bad.json` or `history.bad.sqlite`) and the defaults are used. In
+  `settings.json` a bad value resets only that one setting.
+- **Fan control after a crash.** The saved BIOS settings go back before anything else. If that
+  write fails, Vyro keeps trying with them. If they cannot be read, the fans Vyro may have
+  driven go to full speed until a restart.
+
+## Documentation
+
+| | |
+|---|---|
+| [`docs/control-safety.md`](docs/control-safety.md) | Fan and pump control: every safety rule, its code, tests and field result |
+| [`docs/anti-cheat.md`](docs/anti-cheat.md) | What an anti-cheat can see of Vyro, what Vyro never does, and what to turn off |
+| [`docs/footprint.md`](docs/footprint.md) | What each feature costs and when; how 1.0 is measured |
+| [`docs/performance-score.md`](docs/performance-score.md) | The Performance Score formula |
+| [`docs/benchmark.md`](docs/benchmark.md) | The benchmark's method |
+| [`docs/diagnostics.md`](docs/diagnostics.md) | The diagnostics checks |
 
 `vyro-remote.exe` in the same artifact checks the service from the outside (state, connection,
 sensors; `--capture Game.exe` measures a running game for 15 s). The service logs to `%ProgramData%\Vyro\service.log`.
@@ -125,7 +152,12 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test -p vyro-core   # also regenerates src/bindings — commit any changes
 cargo test -p vyro-service
 pnpm check && pnpm test && pnpm build
+python3 scripts/bundle_budget.py --check   # what each page loads at start, gzipped
+pnpm a11y                 # axe-core on every tab, theme and width (needs a Playwright Chromium)
 ```
+
+On Windows, CI also installs the MSI on its runner, checks the service with `vyro-probe`, and
+uninstalls it again.
 
 The core crate builds and tests on any OS without WebView dependencies
 (`cargo test` at the root targets it by default). Windows-only code can be type-checked from
@@ -135,7 +167,8 @@ Linux with `rustup target add x86_64-pc-windows-gnu` plus mingw-w64:
 **No toolchain?** Every CI run uploads a `vyro-windows-<sha>` artifact (Actions → run →
 Artifacts) with the MSI, `vyro-inventory.exe` (double-click; saves `vyro-inventory.json` beside
 it), `vyro-live.exe` (samples the sensors in-process, as administrator), `vyro-remote.exe`
-(checks the installed service) and the bare `vyro.exe` / `vyro-service.exe`.
+(checks the installed service), `vyro-probe.exe` (asks the installed service for readings and
+history and reports its footprint) and the bare `vyro.exe` / `vyro-service.exe`.
 
 To see exactly what Vyro reads on a machine (e.g. to compare with `msinfo32`):
 

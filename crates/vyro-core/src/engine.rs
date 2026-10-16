@@ -661,11 +661,21 @@ fn usable_dir(dir: &Path) -> Option<&Path> {
     }
 }
 
+/// The history store; a damaged one is set aside and a new one started (P27). One from a
+/// newer Vyro stays untouched, and history is off until that version is back.
 fn open_history(dir: &Path) -> Option<History> {
     let path = dir.join(HISTORY_FILE);
-    match History::open(&path, HistoryConfig::default()) {
-        Ok(history) => {
-            log::info!("history store: {}", path.display());
+    match History::open_or_replace(&path, HistoryConfig::default()) {
+        Ok((history, replaced)) => {
+            log::info!(
+                "history store: {}{}",
+                path.display(),
+                if replaced {
+                    " (new; the damaged one is history.bad.sqlite)"
+                } else {
+                    ""
+                }
+            );
             Some(history)
         }
         Err(e) => {

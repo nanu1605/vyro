@@ -7,7 +7,7 @@ use std::sync::Mutex;
 
 use tauri::{AppHandle, Manager, State};
 use vyro_core::dashboard::{sanitize, Dashboard};
-use vyro_core::lock;
+use vyro_core::{files, lock};
 
 pub struct DashboardStore {
     path: Option<PathBuf>,
@@ -15,17 +15,16 @@ pub struct DashboardStore {
     current: Mutex<Option<Dashboard>>,
 }
 
-/// Reads a layout file; one that does not parse is renamed to `dashboard.bad.json`.
+/// Reads a layout file; one that does not parse is set aside as `dashboard.bad.json` (see
+/// `vyro_core::files`).
 fn read(path: &Path) -> Option<Dashboard> {
-    let text = std::fs::read_to_string(path).ok()?;
-    match serde_json::from_str::<Dashboard>(&text) {
-        Ok(d) => Some(sanitize(d)),
+    match files::read_json::<Dashboard>(path, |_| Ok(())) {
+        Ok(d) => d.map(sanitize),
         Err(e) => {
             log::warn!(
                 "dashboard: {} does not load ({e}); starting from the presets",
                 path.display()
             );
-            let _ = std::fs::rename(path, path.with_file_name("dashboard.bad.json"));
             None
         }
     }
@@ -33,13 +32,7 @@ fn read(path: &Path) -> Option<Dashboard> {
 
 /// Writes through a temporary file, so a crash mid-write never leaves half a layout.
 fn write(path: &Path, d: &Dashboard) -> Result<(), String> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
-    let json = serde_json::to_string_pretty(d).map_err(|e| e.to_string())?;
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, json).map_err(|e| format!("{}: {e}", tmp.display()))?;
-    std::fs::rename(&tmp, path).map_err(|e| format!("{}: {e}", path.display()))
+    files::write_json(path, d).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 impl DashboardStore {

@@ -13,6 +13,7 @@ pub mod diag;
 pub mod display;
 pub mod engine;
 pub mod fan;
+pub mod files;
 pub mod gaming;
 pub mod health;
 pub mod history;

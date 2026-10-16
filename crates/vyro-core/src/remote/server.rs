@@ -144,7 +144,7 @@ impl RemoteServer {
         };
         let s = Arc::clone(&shared);
         let accept = std::thread::Builder::new()
-            .name("vyro-remote".into())
+            .name("vyro-companion".into())
             .stack_size(STACK)
             .spawn(move || accept_loop(&s, &listener))
             .map_err(|e| format!("cannot start the server: {e}"))?;
@@ -260,7 +260,7 @@ fn accept_loop(shared: &Arc<Shared>, listener: &TcpListener) {
         };
         let s = Arc::clone(shared);
         let spawned = std::thread::Builder::new()
-            .name("vyro-remote-conn".into())
+            .name("vyro-companion-conn".into())
             .stack_size(STACK)
             .spawn(move || {
                 handle(&s, stream, id, peer.ip());

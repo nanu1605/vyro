@@ -7,6 +7,7 @@
   import { fmt, fmtDate, fmtDateTime, fmtDuration, NA } from '../format';
   import { getBackendStatus, getSystemInfo } from '../ipc';
   import type { BackendStatus, PowerEvent, StartupSource, SystemInfo } from '../types';
+  import { scrollable } from '../scrollable';
 
   let sys = $state.raw<SystemInfo | null>(null);
   let backend = $state.raw<BackendStatus | null>(null);
@@ -106,7 +107,7 @@
       {#if sys.startupApps.length === 0}
         <p class="muted">No startup entries found.</p>
       {:else}
-        <div class="table-wrap">
+        <div class="table-wrap" use:scrollable role="region" aria-label="Startup apps">
           <table>
             <thead>
               <tr><th>Name</th><th>Status</th><th>Source</th><th>Command</th></tr>

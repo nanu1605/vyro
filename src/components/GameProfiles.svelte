@@ -4,6 +4,7 @@
   import { prefs, profiles, savePrefs } from '../prefs.svelte';
   import { MODES } from '../overlay';
   import type { GameRule, GameSession, OverlayMode, Profile } from '../types';
+  import { scrollable } from '../scrollable';
 
   interface Props {
     sessions: GameSession[] | null;
@@ -49,7 +50,7 @@
   {#if rows.length === 0}
     <p class="note">Games appear here once you play them. Each can have its own profile, fans, overlay and update rate.</p>
   {:else}
-    <div class="table-wrap">
+    <div class="table-wrap" use:scrollable role="region" aria-label="Game profiles">
       <table>
         <thead>
           <tr>

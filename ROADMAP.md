@@ -1590,7 +1590,187 @@ Budget:
         the service.
 
 ### P27 — V2 polish & validation (M13 → 1.0)
-- [ ] Footprint audit, accessibility, V1→V2 migration, clean machine, control-safety matrix.
+On `v2-p27-polish`, stacked on `v2-p26-remote`. V2_PLAN asks for:
+- a footprint audit;
+- an accessibility pass;
+- crash recovery;
+- V1 → V2 migration testing;
+- clean-machine testing;
+- control-safety validation on every writable controller;
+- anti-cheat notes and docs.
+
+The 1.0 gate (V2_PLAN, roadmap §30):
+- control is tested on every writable board, and unsupported hardware is blocked;
+- failures restore safe cooling;
+- migration keeps V1 data;
+- the resource budget holds, and V1 features still work.
+
+Defaults chosen at build (2026-10-16). The owner can change them at the field check:
+- **What an upgrade keeps.** Upgrading from any released version (0.1.x, 0.2.0, 0.3.0) keeps:
+  - settings;
+  - alert rules;
+  - fan settings and the profile in force;
+  - the history: every tier, Health, alert and fan events, and game sessions;
+  - the 0.1/0.2 game log.
+
+  Going back to an older version is not supported for the history: an older Vyro leaves a
+  newer history untouched and runs without one.
+
+  This is checked with files written by each release's own code. Each tag was built in a
+  scratch checkout, and a small generator (kept in `crates/vyro-core/tests/fixtures/gen/`) wrote
+  its files. The tests open those files with today's code.
+- **Damaged files.** Every file Vyro keeps follows one rule:
+  - Writes go to a temporary file that is then renamed, so a crash or power cut never leaves
+    half a file.
+  - A file that cannot be read is set aside as `<name>.bad.<ext>` (only the newest is kept),
+    the log says so, and defaults are used. The file is never silently overwritten.
+  - Settings load one setting at a time, so a bad value resets only that setting.
+- **A damaged history database** is set aside as `history.bad.sqlite` and a new one is
+  started. A database written by a newer Vyro is left as it is, and history stays off (as now).
+- **Fan control after a crash (a fix found in this audit).** At start, a BIOS state left by a
+  crash is written back first, as before. Two cases change:
+  - **The write-back fails.** The saved state is now kept and used for every later attempt.
+    Before, Vyro's next capture could overwrite it with the settings Vyro itself had left on the
+    chip, so "BIOS control" would have meant Vyro's stale speeds.
+  - **The file cannot be read.** The allow-listed headers that the chip has under software
+    control go to full speed, which is always safe. The file is kept as `fan-restore.bad.json`,
+    and the Cooling log says to restart the PC, which gives the BIOS its settings back.
+
+  This is a hardware write, so it ships only after the field check.
+- **Accessibility.** The target is WCAG 2.1 AA as axe-core checks it, on:
+  - every tab in all six themes, at 1440 and 390 px;
+  - the main dialogs;
+  - the companion page.
+
+  Every control is reachable by keyboard and shows a focus ring. Reduced motion stops CSS
+  animation. It runs in CI as its own job.
+- **Footprint.**
+  - CI gates the installer (< 20 MB, as before) and now also what each page loads at start
+    (scripts and styles, gzipped): the app's window under 125 kB (118.2 kB now) and the
+    companion under 32 kB (29.4 kB now).
+  - CI also installs Vyro on its Windows runner and reports the service's memory and CPU. This
+    is not gated, because a CI virtual machine has few sensors.
+  - The real budget is measured on the owner's PC at the field check.
+- **Clean machine.** CI's Windows runner has never had Vyro installed. CI installs the MSI there
+  and checks:
+  - the files;
+  - the service and its restart-on-failure settings;
+  - that the service answers on its pipe and writes history.
+
+  It then uninstalls and checks what is removed and what is kept. The owner repeats this on a
+  clean PC or virtual machine, and upgrades from 0.3.0.
+- **Control safety.** `docs/control-safety.md` lists each rule, the code that enforces it, its
+  tests and the field result on MS-7E24, the only writable board (decision 24).
+- **Anti-cheat.** `docs/anti-cheat.md` says what Vyro does that an anti-cheat can see, and what it
+  never does. Compatibility with a given game is a field result, not a promise.
+- **Version.** It stays 0.3.0 on this branch. 1.0.0 is set when M13 merges into `main`
+  (decision 20).
+
+Budget:
+- **No runtime cost.** No new thread, timer or setting. The IPC protocol stays 13 and the
+  history schema stays 3.
+- **Installer.** Unchanged; the app gains no dependency.
+- **CI.**
+  - One new parallel job (accessibility, about 5 minutes).
+  - About 3 more minutes on the Windows job (install, probe, uninstall).
+  - New dev dependencies, not shipped: Playwright and axe-core.
+
+- [x] Built (2026-10-16, branch `v2-p27-polish`, stacked on `v2-p26-remote`):
+      - **Migration.**
+        - Each released tag (0.1.4, 0.2.0, 0.3.0) was built in a scratch checkout. A generator
+          (`crates/vyro-core/tests/fixtures/gen/`) wrote that release's files with its own
+          code: `settings.json`, `alerts.json`, `fan-control.json`, `fan-profile.json`,
+          `games.json` and `history.sqlite`. It also wrote `expect.json`: what that release
+          itself read back.
+        - `tests/migration.rs` opens each set with today's code:
+          - the History view's series match on every tier (to the last digit of an average);
+          - Health, alert and fan events, game sessions and a replay timeline match;
+          - the engine starts on the old folder: rules unchanged, the 0.1/0.2 game log moved
+            into the history;
+          - the fan controller loads the old settings and the profile in force.
+        - The app's tests read each release's `settings.json`. Every setting carries over,
+          including 0.1's "not detailed" overlay as Minimal mode.
+        - No data loss was found.
+      - **Crash recovery.**
+        - `vyro_core::files`: atomic writes (flushed to disk, then renamed) and damaged files
+          set aside as `<name>.bad.<ext>`. Settings, alert rules, fan settings and profile,
+          the BIOS fan state, the game log, layouts and paired devices all use it.
+        - Before, `settings.json` was written in place and a damaged one silently reset every
+          setting. Now it is read one setting at a time.
+        - A history database that is not a database is set aside and a new one started. A
+          newer one is still left untouched.
+      - **Fan restore fix (hardware write; field check needed).** A crash's saved BIOS state
+        that fails to go back is now kept for every later attempt. Before, the next capture
+        could replace it with Vyro's own leftover speeds. An unreadable one sends the
+        software-driven allow-listed headers to full speed and says to restart.
+      - **CI.**
+        - A new Accessibility job (`pnpm a11y`, 362 checks in about 3 minutes):
+          - axe-core on all 17 tabs × 6 themes × 1440 and 390 px;
+          - the dashboard editor, an alert rule editor, the fan control confirmation, the
+            share card, and the remote card's confirmation and pairing;
+          - the companion's pairing and live pages in every theme (its API answered by the
+            test);
+          - the keyboard: every focusable control shows a focus ring and focus never sticks;
+          - reduced motion: no CSS animation runs.
+        - The size budget (`scripts/bundle_budget.py`).
+        - On the Windows runner: install the MSI, check files, service and recovery actions,
+          ask the service with `vyro-probe` (readings, history, its CPU and memory), uninstall,
+          and check the service and program files are gone and the history kept.
+      - **Found and fixed by the sweep.** The System tab's startup-app table scrolled sideways
+        at phone width with no keyboard access (WCAG 2.1.1). Scrolling tables (System,
+        SMART, game profiles, sessions) now get a tab stop only while they scroll
+        (`src/scrollable.ts`).
+      - **Docs.**
+        - `docs/control-safety.md`: every safety rule → code → tests → MS-7E24 result.
+        - `docs/anti-cheat.md`: what an anti-cheat sees and what Vyro never does. FACEIT's
+          2025 block of PawnIO's old signature was reported fixed in PawnIO 2.1.0; Vyro ships
+          2.2.0.
+        - `docs/footprint.md`: every V2 feature's threads and costs, and the 1.0 measurement
+          procedure.
+        - README and CONTRIBUTING updated.
+      - **Small polish.** The companion server's threads are now `vyro-companion`. They shared
+        the name `vyro-remote` with the app's service-connection thread.
+      - **Checked.** Core tests (614 + 3 migration), the service test, app tests under Wine
+        (20) and frontend tests (132) pass, and `pnpm a11y` is clean.
+- [ ] Field check (MS-7E24; ideally also a clean Windows PC or virtual machine):
+      - **Upgrade.** Install this build over 0.3.0 (or 0.2.0) as you use it: settings, alert
+        rules, fan settings and profile, History (7 days back), Health and alert logs, game
+        sessions and replays are all still there.
+      - **Clean machine.** On a PC or virtual machine that never had Vyro:
+        - install, run, and accept PawnIO;
+        - the app shows readings within 2 s;
+        - uninstall: the service and program files go, and `%ProgramData%\Vyro` stays.
+      - **Damaged files.**
+        - Quit Vyro, put `{` in `%APPDATA%\app.vyro.monitor\settings.json`, start: defaults,
+          and `settings.bad.json` is beside it.
+        - Put `"temperatureUnit": "k"` in a good file: only the unit resets.
+      - **Fan restore after a crash** (fan control on; a hardware write):
+        - `taskkill /F /IM vyro-service.exe`: the BIOS curve comes back after the restart
+          (as in P12).
+        - Then the damaged case. In an administrator prompt, pause the automatic restart
+          (`sc failure VyroService reset= 0 actions= ""`) and kill the service again. Replace
+          `%ProgramData%\Vyro\fan-restore.json` with `{` and run `sc start VyroService`.
+          Expected:
+          - the fans Vyro drove go to full speed;
+          - Cooling says to restart the PC;
+          - `fan-restore.bad.json` exists.
+
+          Restart the PC: the BIOS curve is back. Put the restart actions back with
+          `sc failure VyroService reset= 86400 actions= restart/5000/restart/5000/restart/60000`
+          (reinstalling does it too).
+      - **Control-safety matrix.** Confirm every MS-7E24 row of `docs/control-safety.md`
+        still holds on this build, including the P18 boost row.
+      - **Anti-cheat.** Play the games you have with anti-cheat (at least one each of what you
+        own: Easy Anti-Cheat, BattlEye, Vanguard, FACEIT) with Vyro running, the overlay on
+        and fan control on. Fill in the table in `docs/anti-cheat.md`.
+      - **Footprint.** Follow "Field measurement for 1.0" in `docs/footprint.md`; the results
+        go into the README's Performance table.
+      - **V1 features still work.** One pass through every V1 tab: sensors, history, Health,
+        alerts and a toast, processes, storage SMART, network and ping, displays, system,
+        gaming capture and overlay, tray and updates.
+      - **Keyboard and screen reader.** Narrator on two tabs; Tab through Settings and Cooling.
+      - **Defaults.** Confirm the defaults above, especially the size budgets and the fan
+        full-speed rule.
 
 ## Risks
 

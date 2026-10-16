@@ -482,48 +482,26 @@ fn check_condition(c: &Condition) -> Result<(), String> {
     Ok(())
 }
 
-/// Reads the saved rules; first run (no file) gets [`default_rules`]. An unreadable or invalid
-/// file is moved aside to `alerts.json.bad` and the defaults are used, so a hand edit gone
-/// wrong never leaves the user without alerts.
+/// Reads the saved rules; first run (no file) gets [`default_rules`]. An invalid file is set
+/// aside as `alerts.bad.json` (see [`crate::files`]) and the defaults are used, so a hand edit
+/// gone wrong never leaves the user without alerts.
 pub fn load(path: &std::path::Path) -> Vec<AlertRule> {
-    let text = match std::fs::read_to_string(path) {
-        Ok(t) => t,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return default_rules(),
+    match crate::files::read_json::<Vec<AlertRule>>(path, |rules| validate(rules)) {
+        Ok(Some(rules)) => rules,
+        Ok(None) => default_rules(),
         Err(e) => {
             log::warn!(
-                "alerts: cannot read {}: {e}; using defaults",
+                "alerts: {} not used: {e}; using the default rules",
                 path.display()
             );
-            return default_rules();
-        }
-    };
-    let parsed = serde_json::from_str::<Vec<AlertRule>>(&text)
-        .map_err(|e| e.to_string())
-        .and_then(|rules| validate(&rules).map(|()| rules));
-    match parsed {
-        Ok(rules) => rules,
-        Err(e) => {
-            let bad = path.with_extension("json.bad");
-            log::warn!(
-                "alerts: {} is invalid ({e}); moved to {} and using defaults",
-                path.display(),
-                bad.display()
-            );
-            let _ = std::fs::rename(path, bad);
             default_rules()
         }
     }
 }
 
-/// Writes the rules (to a temporary file first, so a crash never leaves half a file).
+/// Writes the rules (through a temporary file, so a crash never leaves half a file).
 pub fn save(path: &std::path::Path, rules: &[AlertRule]) -> std::io::Result<()> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    let json = serde_json::to_string_pretty(rules).map_err(std::io::Error::other)?;
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, json)?;
-    std::fs::rename(&tmp, path)
+    crate::files::write_json(path, &rules)
 }
 
 /// Lets Windows show toasts for `aumid` without an installer-made Start-menu shortcut: the
@@ -841,7 +819,7 @@ mod tests {
         assert_eq!(load(&path), rules);
         std::fs::write(&path, "{ not json").unwrap();
         assert_eq!(load(&path), default_rules());
-        assert!(dir.join("alerts.json.bad").exists());
+        assert!(dir.join("alerts.bad.json").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
