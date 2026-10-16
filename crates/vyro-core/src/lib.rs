@@ -4,16 +4,22 @@
 
 pub mod alerts;
 pub mod amd;
-pub mod analysis;
 pub mod autostart;
+pub mod bench;
+pub mod changes;
+pub mod dashboard;
+pub mod devices;
+pub mod diag;
 pub mod display;
 pub mod engine;
 pub mod fan;
+pub mod files;
 pub mod gaming;
 pub mod health;
 pub mod history;
 pub mod hwid;
 pub mod info;
+pub mod intel;
 pub mod inventory;
 pub mod ipc;
 #[cfg(windows)]
@@ -26,6 +32,8 @@ pub mod profiles;
 pub mod provider;
 pub mod ram;
 pub mod registry;
+pub mod remote;
+pub mod score;
 pub mod sim;
 pub mod sio;
 pub mod snapshot;

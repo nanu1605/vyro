@@ -1,0 +1,745 @@
+//! Devices and peripherals (P22): what is plugged in or paired, how it connects, and its battery
+//! where the device reports one. Windows gathers raw device containers (one per physical
+//! device), the device nodes in them, audio endpoints and battery readings; [`build`] turns them
+//! into the list the Devices tab shows. Building is pure so every rule is tested here.
+//!
+//! Privacy: Bluetooth addresses and device paths never leave the collector. Ids are short hashes
+//! of the container id, and names stay on this PC (never in reports, cards or history).
+
+#[cfg(windows)]
+mod win;
+
+#[cfg(windows)]
+pub use win::{collect, watch};
+
+use std::collections::{HashMap, HashSet};
+
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
+
+// ---------------------------------------------------------------------------------------------
+// Contracts
+// ---------------------------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum DeviceKind {
+    Keyboard,
+    Mouse,
+    /// Has both a keyboard and a mouse function and nothing tells which it is.
+    Input,
+    Controller,
+    /// A wireless receiver (2.4 GHz dongle, Xbox Wireless Adapter).
+    Receiver,
+    Headset,
+    Headphones,
+    Speakers,
+    Microphone,
+    Camera,
+    Printer,
+    Phone,
+    Storage,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Connection {
+    Usb,
+    Bluetooth,
+    BluetoothLe,
+    Network,
+    Other,
+}
+
+/// Where a battery reading came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum BatterySource {
+    /// Windows' own reading (the Bluetooth battery property Settings shows).
+    Windows,
+    /// The device's Bluetooth LE Battery Service (0x180F).
+    BluetoothLe,
+    /// XInput: four coarse levels.
+    Xinput,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum BatteryLevel {
+    Empty,
+    Low,
+    Medium,
+    Full,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Battery {
+    /// 0–100, when the device reports a percentage.
+    pub percent: Option<u8>,
+    /// XInput's level, when that is all there is.
+    pub level: Option<BatteryLevel>,
+    pub source: BatterySource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DeviceInfo {
+    /// Stable per device: a hash of its container id.
+    pub id: String,
+    pub name: String,
+    pub kind: DeviceKind,
+    pub manufacturer: Option<String>,
+    pub connection: Connection,
+    /// Bluetooth, a wireless receiver, or a wireless controller.
+    pub wireless: bool,
+    /// False for a paired Bluetooth device that is off or out of range. Unplugged wired devices
+    /// are not listed at all.
+    pub connected: bool,
+    /// Only while connected; `None` is shown as "—".
+    pub battery: Option<Battery>,
+    /// Device Manager problem code of a part of it (22 = disabled), while connected.
+    pub problem: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AudioEndpoint {
+    pub id: String,
+    pub name: String,
+    /// Playback (true) or recording.
+    pub output: bool,
+    /// False: an empty jack.
+    pub plugged: bool,
+    /// Windows' default for this direction.
+    pub default: bool,
+    /// The listed device it belongs to; `None` for the PC's own audio.
+    pub device: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Devices {
+    pub devices: Vec<DeviceInfo>,
+    pub audio: Vec<AudioEndpoint>,
+}
+
+// ---------------------------------------------------------------------------------------------
+// Raw input (filled by the Windows collector)
+// ---------------------------------------------------------------------------------------------
+
+/// A device container: one physical device as Windows groups it.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RawContainer {
+    /// Container GUID, any case, braces or not.
+    pub id: String,
+    pub name: Option<String>,
+    pub manufacturer: Option<String>,
+    pub connected: Option<bool>,
+    /// The PC itself.
+    pub local_machine: bool,
+    pub network: bool,
+    /// Windows marks it not interesting for display.
+    pub hidden: bool,
+    /// Canonical categories, e.g. "Input.Mouse", "Audio.Headset".
+    pub categories: Vec<String>,
+}
+
+/// A present device node.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RawNode {
+    pub container: Option<String>,
+    /// Setup class name: "Keyboard", "Mouse", "HIDClass", "AudioEndpoint", ...
+    pub class: Option<String>,
+    /// Enumerator: "USB", "HID", "BTHENUM", "BTHLE", "SWD", ...
+    pub enumerator: Option<String>,
+    pub name: Option<String>,
+    pub hardware_ids: Vec<String>,
+    pub compatible_ids: Vec<String>,
+    pub problem: Option<u32>,
+    /// The Bluetooth battery property, 0–100.
+    pub battery: Option<u8>,
+}
+
+/// `DEVICE_STATE_ACTIVE`.
+pub const AUDIO_ACTIVE: u32 = 1;
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RawEndpoint {
+    /// Core Audio endpoint id.
+    pub id: String,
+    pub name: String,
+    pub output: bool,
+    /// `DEVICE_STATE_*`.
+    pub state: u32,
+    /// `EndpointFormFactor`: 1 speakers, 3 headphones, 4 microphone, 5 headset, 6 handset.
+    pub form_factor: Option<u32>,
+    pub container: Option<String>,
+    pub default: bool,
+}
+
+/// `BATTERY_TYPE_WIRED`.
+pub const PAD_WIRED: u8 = 1;
+/// `BATTERY_TYPE_DISCONNECTED`.
+pub const PAD_DISCONNECTED: u8 = 0;
+
+/// A connected XInput slot.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RawPad {
+    /// 0–3; shown as player 1–4.
+    pub slot: u32,
+    pub wireless: bool,
+    /// `BATTERY_TYPE_*`.
+    pub battery_type: u8,
+    /// `BATTERY_LEVEL_*`: 0 empty … 3 full.
+    pub battery_level: u8,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Raw {
+    pub containers: Vec<RawContainer>,
+    pub nodes: Vec<RawNode>,
+    pub endpoints: Vec<RawEndpoint>,
+    /// Battery Service readings by container id.
+    pub gatt: Vec<(String, u8)>,
+    pub pads: Vec<RawPad>,
+}
+
+// ---------------------------------------------------------------------------------------------
+// Building
+// ---------------------------------------------------------------------------------------------
+
+/// A container GUID in one form: lowercase, no braces.
+pub fn norm_guid(s: &str) -> String {
+    s.trim()
+        .trim_start_matches('{')
+        .trim_end_matches('}')
+        .to_ascii_lowercase()
+}
+
+/// The id the UI sees for a container or endpoint: a short hash, so nothing derived from a
+/// Bluetooth address or device path leaves the collector.
+pub fn key(s: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(norm_guid(s).as_bytes());
+    digest[..6].iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn lower(s: Option<&String>) -> String {
+    s.map(|s| s.to_ascii_lowercase()).unwrap_or_default()
+}
+
+fn enumerator(n: &RawNode) -> String {
+    n.enumerator.as_deref().unwrap_or("").to_ascii_uppercase()
+}
+
+fn class(n: &RawNode) -> String {
+    lower(n.class.as_ref())
+}
+
+/// Bluetooth LE nodes: the device and its GATT services.
+fn is_ble(n: &RawNode) -> bool {
+    matches!(enumerator(n).as_str(), "BTHLE" | "BTHLEDEVICE")
+}
+
+fn is_bluetooth(n: &RawNode) -> bool {
+    is_ble(n) || matches!(enumerator(n).as_str(), "BTHENUM" | "BTHHFENUM")
+}
+
+/// Software-only nodes: a container of nothing else is a virtual device (Print to PDF, Fax).
+fn is_software(n: &RawNode) -> bool {
+    matches!(enumerator(n).as_str(), "ROOT" | "SWD" | "SW" | "HTREE" | "")
+}
+
+/// XInput-capable: an Xbox class node, the Xbox Wireless enumerator, or the "IG_" interface
+/// mark XInput HID devices carry.
+fn is_xinput(n: &RawNode) -> bool {
+    matches!(
+        class(n).as_str(),
+        "xboxcomposite" | "xnacomposite" | "xboxgipdevice"
+    ) || enumerator(n) == "XBOXGIP"
+        || n.hardware_ids
+            .iter()
+            .any(|h| h.to_ascii_uppercase().contains("&IG_"))
+}
+
+fn has_word(name: &str, words: &[&str]) -> bool {
+    words.iter().any(|w| name.contains(w))
+}
+
+/// What the device is. `None`: leave it out (a monitor, a USB hub).
+fn classify(
+    c: &RawContainer,
+    nodes: &[&RawNode],
+    endpoints: &[&RawEndpoint],
+) -> Option<DeviceKind> {
+    use DeviceKind as K;
+    let classes: HashSet<String> = nodes.iter().map(|n| class(n)).collect();
+    let has = |k: &str| classes.contains(k);
+    if has("monitor") || nodes.iter().any(|n| enumerator(n) == "DISPLAY") {
+        return None;
+    }
+    let name = lower(c.name.as_ref());
+
+    if has_word(
+        &name,
+        &[
+            "receiver",
+            "dongle",
+            "unifying",
+            "lightspeed",
+            "hyperspeed",
+            "wireless adapter",
+        ],
+    ) {
+        return Some(K::Receiver);
+    }
+    let game = nodes.iter().any(|n| {
+        is_xinput(n)
+            || n.compatible_ids
+                .iter()
+                .any(|id| id.eq_ignore_ascii_case("HID_DEVICE_SYSTEM_GAME"))
+    });
+    let pad_names = [
+        "gamepad",
+        "joystick",
+        "game controller",
+        "wireless controller",
+        "xbox controller",
+        "pro controller",
+        "dualsense",
+        "dualshock",
+    ];
+    if game || has_word(&name, &pad_names) {
+        return Some(K::Controller);
+    }
+    // The product's own name next: gaming mice expose a keyboard too, and keyboards a mouse.
+    for (words, kind) in [
+        (
+            &["mouse", "trackball", "trackpad", "touchpad"][..],
+            K::Mouse,
+        ),
+        (&["keyboard", "keypad"][..], K::Keyboard),
+        (&["headset"][..], K::Headset),
+        (
+            &["headphone", "earbud", "buds", "airpods"][..],
+            K::Headphones,
+        ),
+        (&["speaker", "soundbar"][..], K::Speakers),
+        (&["microphone"][..], K::Microphone),
+        (&["webcam", "camera"][..], K::Camera),
+        (&["printer"][..], K::Printer),
+    ] {
+        if has_word(&name, words) {
+            return Some(kind);
+        }
+    }
+    for cat in &c.categories {
+        let kind = match cat.to_ascii_lowercase().as_str() {
+            "input.keyboard" => K::Keyboard,
+            "input.mouse" => K::Mouse,
+            "input.gaming" => K::Controller,
+            "audio.headset" => K::Headset,
+            "audio.headphone" => K::Headphones,
+            "audio.speaker" => K::Speakers,
+            "audio.microphone" => K::Microphone,
+            "imaging.webcam" | "multimedia.camera" => K::Camera,
+            "printfax.printer" | "printfax.mfp" => K::Printer,
+            "communication.phone" => K::Phone,
+            _ => continue,
+        };
+        return Some(kind);
+    }
+
+    if !endpoints.is_empty() {
+        let out = endpoints.iter().any(|e| e.output);
+        let rec = endpoints.iter().any(|e| !e.output);
+        let form = |f: u32| endpoints.iter().any(|e| e.form_factor == Some(f));
+        return Some(if form(5) || form(6) || (out && rec) {
+            K::Headset
+        } else if form(3) {
+            K::Headphones
+        } else if out {
+            K::Speakers
+        } else {
+            K::Microphone
+        });
+    }
+    let (kbd, mouse) = (has("keyboard"), has("mouse"));
+    if kbd || mouse {
+        return Some(match (kbd, mouse) {
+            (true, false) => K::Keyboard,
+            (false, true) => K::Mouse,
+            _ => K::Input,
+        });
+    }
+    if has("camera") || has("image") {
+        return Some(K::Camera);
+    }
+    if has("printer") || has("printqueue") {
+        return Some(K::Printer);
+    }
+    if has("wpd") || has("androidusbdeviceclass") {
+        return Some(K::Phone);
+    }
+    if has("diskdrive") || nodes.iter().any(|n| enumerator(n) == "USBSTOR") {
+        return Some(K::Storage);
+    }
+    let hub = |n: &&RawNode| class(n) == "usb" && lower(n.name.as_ref()).contains("hub");
+    if !nodes.is_empty() && nodes.iter().all(hub) {
+        return None;
+    }
+    Some(K::Other)
+}
+
+fn connection(c: &RawContainer, nodes: &[&RawNode]) -> Connection {
+    if nodes.iter().any(|n| is_ble(n)) {
+        Connection::BluetoothLe
+    } else if nodes.iter().any(|n| is_bluetooth(n)) {
+        Connection::Bluetooth
+    } else if nodes
+        .iter()
+        .any(|n| matches!(enumerator(n).as_str(), "USB" | "USBSTOR" | "USBPRINT"))
+    {
+        Connection::Usb
+    } else if c.network {
+        Connection::Network
+    } else {
+        Connection::Other
+    }
+}
+
+/// A manufacturer worth showing: not a placeholder like "(Standard keyboards)".
+fn maker(s: Option<&String>) -> Option<String> {
+    let s = s?.trim();
+    (!s.is_empty() && !s.starts_with('(')).then(|| s.to_owned())
+}
+
+fn node_battery(nodes: &[&RawNode]) -> Option<u8> {
+    nodes.iter().filter_map(|n| n.battery).find(|b| *b <= 100)
+}
+
+/// Bluetooth LE containers worth a Battery Service read: connected, and Windows has no
+/// battery reading of its own for them.
+pub fn gatt_wanted(raw: &Raw) -> Vec<String> {
+    let groups = group(&raw.nodes);
+    raw.containers
+        .iter()
+        .filter(|c| c.connected != Some(false) && !c.local_machine)
+        .filter_map(|c| {
+            let id = norm_guid(&c.id);
+            let nodes = groups.get(&id)?;
+            (nodes.iter().any(|n| is_ble(n)) && node_battery(nodes).is_none()).then_some(id)
+        })
+        .collect()
+}
+
+fn group(nodes: &[RawNode]) -> HashMap<String, Vec<&RawNode>> {
+    let mut groups: HashMap<String, Vec<&RawNode>> = HashMap::new();
+    for n in nodes {
+        if let Some(c) = &n.container {
+            groups.entry(norm_guid(c)).or_default().push(n);
+        }
+    }
+    groups
+}
+
+fn pad_battery(p: &RawPad) -> Option<Battery> {
+    if p.battery_type == PAD_WIRED || p.battery_type == PAD_DISCONNECTED {
+        return None;
+    }
+    let level = match p.battery_level {
+        0 => BatteryLevel::Empty,
+        1 => BatteryLevel::Low,
+        2 => BatteryLevel::Medium,
+        _ => BatteryLevel::Full,
+    };
+    Some(Battery {
+        percent: None,
+        level: Some(level),
+        source: BatterySource::Xinput,
+    })
+}
+
+/// The Devices tab's list.
+pub fn build(raw: &Raw) -> Devices {
+    let groups = group(&raw.nodes);
+    let gatt: HashMap<String, u8> = raw
+        .gatt
+        .iter()
+        .filter(|(_, v)| *v <= 100)
+        .map(|(c, v)| (norm_guid(c), *v))
+        .collect();
+    let mut by_container: HashMap<String, Vec<&RawEndpoint>> = HashMap::new();
+    for e in &raw.endpoints {
+        if let Some(c) = &e.container {
+            by_container.entry(norm_guid(c)).or_default().push(e);
+        }
+    }
+
+    let mut devices = Vec::new();
+    let mut xinput = Vec::new();
+    let mut listed = HashSet::new();
+    let mut seen = HashSet::new();
+    for c in &raw.containers {
+        let id = norm_guid(&c.id);
+        if c.local_machine || c.hidden || !seen.insert(id.clone()) {
+            continue;
+        }
+        let Some(nodes) = groups.get(&id) else {
+            continue;
+        };
+        if nodes.iter().all(|n| is_software(n)) {
+            continue;
+        }
+        let endpoints = by_container.get(&id).map_or(&[][..], Vec::as_slice);
+        let Some(kind) = classify(c, nodes, endpoints) else {
+            continue;
+        };
+        let conn = connection(c, nodes);
+        let bluetooth = matches!(conn, Connection::Bluetooth | Connection::BluetoothLe);
+        let connected = !bluetooth || c.connected != Some(false);
+        let name = c
+            .name
+            .clone()
+            .filter(|n| !n.trim().is_empty())
+            .or_else(|| nodes.iter().find_map(|n| n.name.clone()))
+            .unwrap_or_else(|| "Unknown device".into());
+        let battery = connected
+            .then(|| {
+                node_battery(nodes)
+                    .map(|p| (p, BatterySource::Windows))
+                    .or_else(|| gatt.get(&id).map(|p| (*p, BatterySource::BluetoothLe)))
+            })
+            .flatten()
+            .map(|(p, source)| Battery {
+                percent: Some(p),
+                level: None,
+                source,
+            });
+        if connected && nodes.iter().any(|n| is_xinput(n)) {
+            xinput.push(devices.len());
+        }
+        let problem = connected
+            .then(|| nodes.iter().filter_map(|n| n.problem).find(|p| *p != 0))
+            .flatten();
+        let lname = name.to_ascii_lowercase();
+        devices.push(DeviceInfo {
+            id: key(&id),
+            wireless: bluetooth || kind == DeviceKind::Receiver || lname.contains("wireless"),
+            name,
+            kind,
+            manufacturer: maker(c.manufacturer.as_ref()),
+            connection: conn,
+            connected,
+            battery,
+            problem,
+        });
+        listed.insert(id);
+    }
+
+    // XInput says nothing about which device a slot is: one controller and one slot match;
+    // otherwise each slot is listed on its own.
+    let pads: Vec<&RawPad> = raw
+        .pads
+        .iter()
+        .filter(|p| p.battery_type != PAD_DISCONNECTED)
+        .collect();
+    if let ([i], [p]) = (xinput.as_slice(), pads.as_slice()) {
+        if devices[*i].battery.is_none() {
+            devices[*i].battery = pad_battery(p);
+        }
+    } else {
+        for p in pads {
+            devices.push(DeviceInfo {
+                id: format!("xinput-{}", p.slot),
+                name: format!("Controller · player {}", p.slot + 1),
+                kind: DeviceKind::Controller,
+                manufacturer: None,
+                connection: if p.wireless {
+                    Connection::Other
+                } else {
+                    Connection::Usb
+                },
+                wireless: p.wireless,
+                connected: true,
+                battery: pad_battery(p),
+                problem: None,
+            });
+        }
+    }
+
+    devices.sort_by(|a, b| {
+        b.connected
+            .cmp(&a.connected)
+            .then(a.kind.cmp(&b.kind))
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+
+    let mut audio: Vec<AudioEndpoint> = raw
+        .endpoints
+        .iter()
+        .map(|e| AudioEndpoint {
+            id: key(&e.id),
+            name: e.name.clone(),
+            output: e.output,
+            plugged: e.state == AUDIO_ACTIVE,
+            default: e.default && e.state == AUDIO_ACTIVE,
+            device: e
+                .container
+                .as_deref()
+                .map(norm_guid)
+                .filter(|c| listed.contains(c))
+                .map(|c| key(&c)),
+        })
+        .collect();
+    audio.sort_by(|a, b| {
+        b.output
+            .cmp(&a.output)
+            .then(b.default.cmp(&a.default))
+            .then(b.plugged.cmp(&a.plugged))
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+
+    Devices { devices, audio }
+}
+
+/// What the browser preview and non-Windows builds show.
+pub fn sample() -> Devices {
+    build(&sample_raw())
+}
+
+fn sample_raw() -> Raw {
+    let c = |id: &str, name: &str, maker: &str, connected: Option<bool>| RawContainer {
+        id: id.into(),
+        name: Some(name.into()),
+        manufacturer: Some(maker.into()),
+        connected,
+        ..RawContainer::default()
+    };
+    let n = |container: &str, class: &str, en: &str| RawNode {
+        container: Some(container.into()),
+        class: Some(class.into()),
+        enumerator: Some(en.into()),
+        ..RawNode::default()
+    };
+    let e =
+        |id: &str, name: &str, output: bool, container: Option<&str>, state: u32, default: bool| {
+            RawEndpoint {
+                id: id.into(),
+                name: name.into(),
+                output,
+                state,
+                form_factor: None,
+                container: container.map(Into::into),
+                default,
+            }
+        };
+    let mut buds = n("c4", "Bluetooth", "BTHENUM");
+    buds.battery = Some(64);
+    let mut pad = n("c5", "HIDClass", "HID");
+    pad.hardware_ids =
+        vec!["HID\\{00001812-0000-1000-8000-00805f9b34fb}_VID&02045e_PID&0b13&IG_00".into()];
+    let mut keys = c("c6", "MX Keys", "Logitech", Some(false));
+    keys.categories = vec!["Input.Keyboard".into()];
+    Raw {
+        containers: vec![
+            c("c1", "G502 HERO Gaming Mouse", "Logitech", Some(true)),
+            c("c2", "BlackWidow V3", "Razer", Some(true)),
+            c("c3", "Arctis Nova 7", "SteelSeries", Some(true)),
+            c("c4", "Galaxy Buds2 Pro", "Samsung", Some(true)),
+            c("c5", "Xbox Wireless Controller", "Microsoft", Some(true)),
+            keys,
+            c("c7", "USB Receiver", "Logitech", Some(true)),
+            c("c8", "MX Master 3S", "Logitech", Some(true)),
+            c(
+                "c9",
+                "AURA LED Controller",
+                "(Standard USB Host Controller)",
+                Some(true),
+            ),
+        ],
+        nodes: vec![
+            n("c1", "Mouse", "HID"),
+            n("c1", "Keyboard", "HID"),
+            n("c1", "USB", "USB"),
+            n("c2", "Keyboard", "HID"),
+            n("c2", "USB", "USB"),
+            n("c3", "AudioEndpoint", "SWD"),
+            n("c3", "USB", "USB"),
+            buds,
+            n("c4", "AudioEndpoint", "SWD"),
+            pad,
+            n("c5", "Bluetooth", "BTHLE"),
+            n("c6", "Bluetooth", "BTHLE"),
+            n("c7", "USB", "USB"),
+            n("c7", "Keyboard", "HID"),
+            n("c7", "Mouse", "HID"),
+            n("c8", "Mouse", "HID"),
+            n("c8", "Bluetooth", "BTHLE"),
+            n("c9", "HIDClass", "HID"),
+            n("c9", "USB", "USB"),
+        ],
+        endpoints: vec![
+            e(
+                "e1",
+                "Headphones (Arctis Nova 7)",
+                true,
+                Some("c3"),
+                AUDIO_ACTIVE,
+                true,
+            ),
+            e(
+                "e2",
+                "Microphone (Arctis Nova 7)",
+                false,
+                Some("c3"),
+                AUDIO_ACTIVE,
+                true,
+            ),
+            e(
+                "e3",
+                "Headphones (Galaxy Buds2 Pro)",
+                true,
+                Some("c4"),
+                AUDIO_ACTIVE,
+                false,
+            ),
+            e(
+                "e4",
+                "Speakers (Realtek(R) Audio)",
+                true,
+                None,
+                AUDIO_ACTIVE,
+                false,
+            ),
+            e(
+                "e5",
+                "Front headphones (Realtek(R) Audio)",
+                true,
+                None,
+                8,
+                false,
+            ),
+        ],
+        gatt: vec![("c8".into(), 17)],
+        pads: vec![RawPad {
+            slot: 0,
+            wireless: true,
+            battery_type: 3,
+            battery_level: 2,
+        }],
+    }
+}
+
+#[cfg(test)]
+mod tests;

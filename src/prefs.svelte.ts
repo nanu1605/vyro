@@ -3,13 +3,14 @@
 
 import { fmt, fmtUnit, NA } from './format';
 import { DEFAULT_GAMES } from './games';
-import { DEFAULT_OVERLAY, getGameState, getProfiles, getSettings, onGameState, onSettingsChanged, setSettings, type AppSettings } from './ipc';
+import { DEFAULT_MY_PC, DEFAULT_OVERLAY, getGameState, getProfiles, getSettings, onGameState, onSettingsChanged, setSettings, type AppSettings } from './ipc';
 import type { Effective, ProfileSpec } from './types';
+import { savedLook } from './themes';
 import { fromUnit, tempSymbol, tempsIn, toUnit } from './units';
 
 export const prefs = $state<AppSettings>({
   closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop', gameCapture: true, overlay: { ...DEFAULT_OVERLAY }, checkUpdates: true,
-  games: { ...DEFAULT_GAMES },
+  games: { ...DEFAULT_GAMES }, ...savedLook(), myPc: { ...DEFAULT_MY_PC },
 });
 
 /** The profile in force: the owner's, or a running game's (P13). */

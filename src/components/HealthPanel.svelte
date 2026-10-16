@@ -1,33 +1,20 @@
 <script lang="ts">
   import AlertsPanel from './AlertsPanel.svelte';
-  import { getHealthEvents, getInsights } from '../ipc';
+  import { getHealthEvents } from '../ipc';
   import { fmtTemp, tempText } from '../prefs.svelte';
-  import type { HealthEvent, Insight, SensorSnapshot, Status } from '../types';
+  import type { HealthEvent, SensorSnapshot, Status } from '../types';
 
   interface Props {
     snap: SensorSnapshot | null;
     active: boolean;
-    /** Opens a sensor in History. */
-    onhistory?: (id: string) => void;
+    /** Opens the Insights tab. */
+    oninsights?: () => void;
+    /** Opens a sensor in History (diagnostics citations). */
+    onhistory?: (id: string, at: number | null) => void;
   }
-  let { snap, active, onhistory }: Props = $props();
+  let { snap, active, oninsights, onhistory }: Props = $props();
 
-  // Insights compare the past week with the last hours; once a minute is plenty.
-  let insights = $state.raw<Insight[] | null>(null);
-  let insightError = $state<string | null>(null);
-  $effect(() => {
-    if (!active) return;
-    const load = () =>
-      getInsights()
-        .then((i) => {
-          insights = i;
-          insightError = null;
-        })
-        .catch((e: unknown) => (insightError = String(e)));
-    void load();
-    const t = setInterval(load, 60_000);
-    return () => clearInterval(t);
-  });
+  const worth = $derived(snap?.insights?.attention.length ?? 0);
   const health = $derived(snap?.health ?? null);
   const ts = $derived(snap?.ts ?? 0);
 
@@ -91,33 +78,20 @@
     {/each}
   </div>
 
-  <h2 class="events-title">Insights</h2>
-  {#if insightError}
-    <p class="fine">Insights unavailable: {insightError}</p>
-  {:else if insights == null}
-    <p class="fine">Looking through the history…</p>
-  {:else if insights.length === 0}
-    <p class="fine">
-      Nothing unusual: temperatures, clocks and fans match how this PC usually behaves. Insights compare the last
-      hours with the past week, so they need a few days of history to work well.
-    </p>
-  {:else}
-    <ul class="insights">
-      {#each insights as ins, i (i)}
-        <li class="tone-{ins.status}">
-          <span class="dot" aria-hidden="true"></span>
-          <div>
-            <span class="sr-only">{LABEL[ins.status]}:</span>
-            <b>{tempText(ins.title)}</b>{#if ins.ts != null}<time>{when(ins.ts)}</time>{/if}
-            <p>{tempText(ins.detail)}</p>
-            {#if onhistory && ins.metrics[0]}
-              <button type="button" class="link" onclick={() => onhistory(ins.metrics[0]!)}>Show in History</button>
-            {/if}
-          </div>
-        </li>
-      {/each}
-    </ul>
-  {/if}
+  <p class="insights-line">
+    <span class="dot tone-{worth ? 'warn' : 'ok'}" aria-hidden="true"></span>
+    <span>
+      {worth
+        ? `Insights: ${worth} ${worth === 1 ? 'finding' : 'findings'} worth a look.`
+        : 'Insights: nothing unusual in how this PC behaves compared with its own history.'}
+    </span>
+    {#if oninsights}<button type="button" class="link" onclick={oninsights}>Open Insights</button>{/if}
+  </p>
+
+  <!-- Diagnostics (P21), loaded on first visit. -->
+  {#await import('./DiagnosticsCard.svelte') then { default: DiagnosticsCard }}
+    <DiagnosticsCard {active} {onhistory} />
+  {/await}
 
   <h2 class="events-title">Recent events</h2>
   {#if newest.length}
@@ -210,36 +184,17 @@
     color: var(--muted);
     font-size: 0.8rem;
   }
-  .insights {
-    margin: 0;
-    padding: 0;
-    list-style: none;
+  .insights-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 1.1rem 0 0;
+    padding: 0.55rem 0.8rem;
     border: 1px solid var(--line);
     border-radius: 10px;
     background: var(--panel);
-  }
-  .insights li {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.6rem;
-    margin: 0;
-    padding: 0.55rem 0.8rem;
     font-size: 0.82rem;
-  }
-  .insights li + li {
-    border-top: 1px solid var(--line);
-  }
-  .insights .dot {
-    margin-top: 0.35rem;
-  }
-  .insights time {
-    min-width: 0;
-    margin-left: 0.6rem;
-    font-size: 0.75rem;
-  }
-  .insights p {
-    margin: 0.2rem 0 0.25rem;
-    color: var(--muted);
   }
   .link {
     padding: 0;

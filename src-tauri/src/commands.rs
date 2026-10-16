@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use tauri::State;
 use vyro_core::alerts::{AlertFired, AlertRule};
+use vyro_core::devices::Devices;
 use vyro_core::engine::{BackendStatus, EngineApi};
 use vyro_core::health::HealthEvent;
 use vyro_core::info::{
@@ -104,7 +105,7 @@ pub async fn get_displays() -> Result<Vec<DisplayInfo>, String> {
 }
 
 #[cfg(windows)]
-fn collect_displays() -> Vec<DisplayInfo> {
+pub(crate) fn collect_displays() -> Vec<DisplayInfo> {
     if std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1") {
         return vyro_core::display::sample();
     }
@@ -112,8 +113,32 @@ fn collect_displays() -> Vec<DisplayInfo> {
 }
 
 #[cfg(not(windows))]
-fn collect_displays() -> Vec<DisplayInfo> {
+pub(crate) fn collect_displays() -> Vec<DisplayInfo> {
     vyro_core::display::sample()
+}
+
+/// Peripherals, wireless battery and sound devices (P22), read fresh on every call: when the
+/// Devices tab opens, after each `devices-changed` event and once a minute while it shows. The
+/// first call starts the hot-plug watch, so nothing watches until the tab is used.
+#[tauri::command]
+pub async fn get_devices(app: tauri::AppHandle) -> Result<Devices, String> {
+    crate::engine::watch_devices(&app);
+    tauri::async_runtime::spawn_blocking(collect_devices)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(windows)]
+fn collect_devices() -> Devices {
+    if std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1") {
+        return vyro_core::devices::sample();
+    }
+    vyro_core::devices::collect()
+}
+
+#[cfg(not(windows))]
+fn collect_devices() -> Devices {
+    vyro_core::devices::sample()
 }
 
 /// Drives with full health data, read fresh by the engine (SMART needs the service or
@@ -132,7 +157,7 @@ pub async fn get_network() -> Result<Vec<NetAdapterInfo>, String> {
 }
 
 #[cfg(windows)]
-fn collect_network() -> Vec<NetAdapterInfo> {
+pub(crate) fn collect_network() -> Vec<NetAdapterInfo> {
     if std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1") {
         return vyro_core::network::sample();
     }
@@ -140,7 +165,7 @@ fn collect_network() -> Vec<NetAdapterInfo> {
 }
 
 #[cfg(not(windows))]
-fn collect_network() -> Vec<NetAdapterInfo> {
+pub(crate) fn collect_network() -> Vec<NetAdapterInfo> {
     vyro_core::network::sample()
 }
 
@@ -176,18 +201,28 @@ pub async fn get_alert_log(engine: State<'_, Engine>) -> Result<Vec<AlertFired>,
     with_engine(&engine, |e| e.alert_log()).await
 }
 
+/// A sensor's usual reading now, for "above usual" alert conditions (`None` until there is
+/// about a day of history).
+#[tauri::command]
+pub async fn get_alert_usual(
+    engine: State<'_, Engine>,
+    sensor: String,
+) -> Result<Option<f64>, String> {
+    with_engine(&engine, move |e| e.alert_usual(&sensor)).await
+}
+
 /// Sends a sample notification so the user can check Windows lets Vyro notify.
 #[tauri::command]
 pub fn test_alert(app: tauri::AppHandle, sound: bool) {
     crate::engine::show_notification(
         &app,
-        &AlertFired {
-            ts: unix_now(),
-            rule_id: "test".into(),
-            title: "Vyro test alert".into(),
-            message: "Alerts will look like this.".into(),
+        &AlertFired::new(
+            unix_now(),
+            "test",
+            "Vyro test alert".into(),
+            "Alerts will look like this.".into(),
             sound,
-        },
+        ),
         true,
     );
 }
@@ -198,12 +233,18 @@ pub async fn get_health_events(engine: State<'_, Engine>) -> Result<Vec<HealthEv
     with_engine(&engine, |e| e.health_events()).await
 }
 
-/// Findings from history: unusual temperatures, throttling, slow fans, power changes.
+/// The intelligence engine's findings and vital signs (P16).
 #[tauri::command]
-pub async fn get_insights(
-    engine: State<'_, Engine>,
-) -> Result<Vec<vyro_core::analysis::Insight>, String> {
+pub async fn get_insights(engine: State<'_, Engine>) -> Result<vyro_core::intel::Insights, String> {
     with_engine(&engine, |e| e.insights()).await
+}
+
+/// The Performance Score now with its inputs, and the daily scores of the past year (P17).
+#[tauri::command]
+pub async fn get_performance_score(
+    engine: State<'_, Engine>,
+) -> Result<vyro_core::score::ScoreReport, String> {
+    with_engine(&engine, |e| e.performance_score()).await
 }
 
 /// Whether the engine can use PawnIO (low-level sensors: CPU temperature and power, board

@@ -4,6 +4,7 @@
   import { Tween, animator } from '../anim';
   import { Ring, drawSparkline } from '../sparkline';
   import { fmt } from '../format';
+  import { onTheme } from '../themes';
 
   interface Props {
     label: string;
@@ -58,9 +59,17 @@
     ro.observe(dial);
     ro.observe(spark);
     const off = animator.add(frame);
+    // The dial caches its colours; a new theme rebuilds it.
+    const offTheme = onTheme(() => {
+      gauge?.resize();
+      frame(0);
+      redrawSpark();
+      animator.wake();
+    });
     return () => {
       ro.disconnect();
       off();
+      offTheme();
     };
   });
 

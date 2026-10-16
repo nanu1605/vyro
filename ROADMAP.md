@@ -33,10 +33,10 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 16 | Devices battery sources | BLE GATT 0x180F + PnP battery devnode property + XInput; vendor HID++ later | decided |
 | 17 | Open on Dashboard | Default on, with an "Open on: Dashboard / Last tab" setting | decided |
 | 18 | Fan / pump control | **Yes, the V2 flagship**, safety-gated (V2_PLAN "Hardware-control safety"); read-only by default; per-board allow-list | decided |
-| 19 | Remote / web companion | In V2: LAN-only, opt-in, authenticated, built last (M12); timing confirmed at P26 | decided |
-| 20 | Versions | 0.2 / 0.3 / 0.4 / 0.5 at milestone merges; **1.0** at M13 | decided |
+| 19 | Remote / web companion | In V2 (P26): served by the desktop app (not the service) over plain HTTP on the LAN, off by default, QR + code pairing, hashed session tokens that expire, sign-out at once | default |
+| 20 | Versions | 0.2 / 0.3 at milestone merges; **1.0** at M13, with M9–M12 in it (the owner, 2026-10-16: no 0.4 or 0.5) | decided |
 | 21 | Themes | Several themes + accent colour, accessibility preserved | decided |
-| 22 | Performance Score method | Versioned fixed formula on observed conditions, inputs shown | open: formula drafted for sign-off at P17 |
+| 22 | Performance Score method | Formula v1 ([`docs/performance-score.md`](docs/performance-score.md)): nine observed inputs, fixed weights and breakpoints, versioned, inputs shown | decided (signed off 2026-10-15) |
 | 23 | Benchmark positioning | Self-relative (own engine), variance reported | decided |
 | 24 | Fan-control launch boards | **MSI B650M GAMING PLUS WIFI (MS-7E24, NCT6687D) only**; each further board after its own validation | decided |
 | 25 | Tagline | "Know your machine." unless changed | open |
@@ -57,10 +57,10 @@ the §4.3 animation spec in Phase 0.
 | **M6** Gaming | P10 | PresentMon FPS + companion overlay (deferrable) | – | – |
 | **M7** Control → 0.2 | P12 | Fan and pump control with failsafe, watchdog and restore | PawnIO (writes) | – |
 | **M8** Gaming automation → 0.3 | P13 – P15 | Auto game profiles, Overlay 2.0, session replay | – | – |
-| **M9** Intelligence → 0.4 | P16 – P19 | Intelligence engine, Performance Score, compound alerts, hardware changes | – | – |
-| **M10** Benchmark & diagnostics → 0.4 | P20, P21 | Benchmark, one-click diagnostics, reports | – | – |
-| **M11** Visualization & UX → 0.5 | P22 – P25 | Devices + battery, 3-D / My PC / thermal map, dashboard builder, themes | – | – |
-| **M12** Remote → 0.5 | P26 | LAN-only companion, off by default | – | – |
+| **M9** Intelligence → 1.0 | P16 – P19 | Intelligence engine, Performance Score, compound alerts, hardware changes | – | – |
+| **M10** Benchmark & diagnostics → 1.0 | P20, P21 | Benchmark, one-click diagnostics, reports | – | – |
+| **M11** Visualization & UX → 1.0 | P22 – P25 | Devices + battery, 3-D / My PC / thermal map, dashboard builder, themes | – | – |
+| **M12** Remote → 1.0 | P26 | LAN-only companion, off by default | – | – |
 | **M13** V2 polish → 1.0 | P27 | Footprint, accessibility, migration, control-safety validation | – | – |
 
 P7 has no hard dependency on P6 (it operates on whatever sensors are registered) and can be
@@ -451,6 +451,10 @@ Built in this order (V2_PLAN.md has each phase's scope and acceptance). Every ph
 a thin Windows layer, CI green, then merge into `v2`. Hardware writes never ship without the
 owner's field check on the reference PC.
 
+P16 to P27 are stacked, so one test build holds them all. [`docs/field-check.md`](docs/field-check.md)
+orders their field checks into sittings for that build. Results are recorded in each
+phase's entry below.
+
 ### P12 — Fan & pump control (M7 → 0.2)
 All control runs in the service; the app only asks over the pipe. Writes go through PawnIO
 `LpcIO` port I/O on the NCT6687 EC (same page/index/data transaction as the reads), only on
@@ -686,40 +690,1130 @@ a newer schema.
       figures on the reference PC were not re-measured for the README.
 
 ### P19 — Hardware change detection (M9 → 0.4; first, P16 cites it)
-- [ ] Inventory diffs into `hardware_changes` and a PC change history.
+Owner's choices (2026-10-15): a detected change goes into the list with a dot on the Hardware
+tab, no notification; every Windows update counts, monthly builds included. Budget: no new
+process or thread and nothing in the 1 Hz tick; the app builds a fingerprint of the PC
+(identity and version fields only) after its inventory warm-up and when monitors or drives
+change, under 50 ms on top of the warm-up it already does; the engine compares it with the last
+one and keeps the list in the history database (under 50 KB); footprint within ±1 MB of 0.3.0.
+Serial numbers are never stored: where one tells two identical devices apart, a salted hash of
+it is part of the key. The history database moves to schema v3 (two new tables, added in place),
+so going back to 0.3 turns its history off; IPC protocol 8.
+
+- [x] Built (2026-10-15, branch `v2-p19-changes`):
+      - `vyro_core::changes`: `fingerprint` (CPU; board and BIOS; each memory module by slot
+        with its configured speed and voltage; GPUs with driver and VBIOS; internal drives
+        with firmware; Windows edition and build; UEFI, Secure Boot, TPM, virtualization,
+        hypervisor; and as hot-plug classes monitors by EDID, USB drives and physical network
+        adapters) and `record`, which compares with what is known: added, removed, replaced
+        (another device in the same slot, or one out and one in), a field changed with before →
+        after, a hot-plug device seen for the first time (with that kind's devices before and
+        now), and a monitor or adapter not seen for 30 days. What could not be read is not a
+        change: missing fields keep their last value and a kind that came back empty is left
+        as it was. Identities use raw numbers, so a change in how sizes are written never reads
+        as another part.
+      - Store (schema v3): `pc_inventory` (what is known, one row) and `hardware_change` (the
+        newest 1000, never pruned by age or the size cap; about 200 bytes a change). Serials
+        cross the local pipe but only a salted hash inside the key is kept; a test checks no
+        serial or MAC reaches the database.
+      - IPC protocol 8 (`RecordInventory`, `HardwareChanges`). The app checks after its
+        inventory warm-up, when the set of monitors changes (not on a resolution or HDR
+        switch) and when a drive comes or goes, on a short-lived thread; drives are compared
+        only when the service reads them, since the app's own engine reads serials and firmware
+        another way.
+      - UI: "PC changes" card at the top of the Hardware tab (newest five, "Show all", category
+        filters, day groups, "New" on entries not seen yet; the same change on several memory
+        modules at once is one entry) and a dot on the Hardware tab until new changes are
+        shown. Browser preview: axe clean, no overflow at 390 px; the main bundle grows 7.9 kB.
+- [x] Field check (MS-7E24, 2026-10-15, test build `vyro-windows-d590d8c`): all five checks
+      passed: "Tracking started" on the first start; a GPU driver update (or rollback) with
+      before → after; a monitor unplugged and plugged back logs nothing, a different one logs
+      "connected for the first time"; an EXPO / RAM setting changed in the BIOS logs a Settings
+      change; the list survives a service restart.
 
 ### P16 — Intelligence engine (M9)
-- [ ] Derived metrics → baselines → events → cause chains; measured vs inferred, confidence.
+Owner's choices (2026-10-15): findings get their own Insights tab (Health keeps its limits and
+events, with a link); a new finding worth a look puts a dot on that tab, from a check the engine
+runs every 10 minutes, with no notification; to spot background interference the engine keeps
+the names of the busiest programs of each minute (at most five, names only) in the history
+database for 7 days, like the sensor history.
+
+Budget: no new long-lived thread; the only per-tick work is the minute digest (one pass over
+the top processes and the throttle flags, well under 0.1 ms). The analysis runs on a
+short-lived thread at most every 10 minutes in the background and on demand while Insights is
+open (cached 60 s), under 250 ms of one core on the reference PC. The digest table stays under
+3 MB over 7 days; footprint within +2 MB of 0.3.0. History schema stays v3 (the new table is
+created in place); IPC protocol 9.
+
+Rules that keep a weak correlation from reading as a cause: a cause is "likely" only when a
+fixed table says it can produce that effect, it came just before the effect began, the effect
+lasted, and it is the only such candidate; timing alone is never high confidence. Several
+candidates are each "possible"; anything else in the window is listed apart as "around the
+same time, not shown to be the cause".
+
+- [x] Built (2026-10-15, branch `v2-p16-intelligence`):
+      - `vyro_core::intel` replaces P9d's `analysis`. Derived metrics: thermal headroom against
+        the Health problem limits, temperature for the load, CPU fan speed for the CPU
+        temperature, frames per watt per game session (sessions now log CPU + GPU power), and
+        clock steadiness under full load. Baselines: the last half hour against the past week
+        at the same load, on the profile in force when there is enough of it (else every
+        profile, one step less sure), the same game's earlier sessions, and the time before a
+        lasting shift: a change-point search over the week (hourly, 6 h each side) or the last
+        day (3 h before, 30 min after) dates when it began, and a shift must hold from that
+        date, so a recent one is not dated hours too early.
+      - Findings: hotter than usual, a fan slower than usual, slowed by heat (measured from
+        the CPU's and GPU's own limit flags where they report them, else inferred from clocks),
+        close to the temperature limit, power steps, what set a game's frame rate, background
+        load during a game (with frame drops tied to it only at 5 or more drops and 3 times
+        the rate of the other minutes) and a game slower than its earlier sessions. Each has
+        evidence (value against usual over a window, opening History at that moment), a basis
+        and a confidence; under three days of history confidence drops a step.
+      - Causes follow the rules above, from P19 changes, profile switches, fan control events
+        and busy programs, with chains up to three deep (slowed by heat ← hotter ← fan slower ←
+        BIOS update). A likely cause the owner chose (a profile, turning fan control on)
+        makes the finding an explanation rather than a warning.
+      - The poller builds a minute digest each tick (busiest programs, names only; seconds of
+        heat, power and current limiting; profile; game and what bound it), kept 7 days in
+        the new `digest` table. The analysis runs on a "vyro-intel" thread every 10 minutes
+        and on demand (cached 60 s); `SensorSnapshot::insights` carries the keys of the
+        findings worth a look. IPC protocol 9.
+      - UI: Insights tab after Health (vital signs, then findings with Measured (solid) and
+        Inferred (dashed, italic) badges that say which in words, confidence in words,
+        evidence with "Show in History", "Why" chains and a separate "Around the same time
+        (not shown to be the cause)" list) and a dot on the tab until new warnings are shown;
+        Health keeps a one-line summary with a link. Tests: the five P9d cases and the
+        acceptance scenarios (load alone, a dated shift with one able change and a coincident
+        monitor, two changes at once, a change after the onset, thin history, fan control and
+        the Silent profile as the owner's choice, background load with and without matching
+        drops, a game slower after a driver update). Browser preview: axe clean, no overflow
+        at 390 px (the tab bar's screen-reader notes no longer widen the page); the main
+        bundle grows 9.5 kB.
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
+      quiet at normal desktop use; a CPU stress test gives headroom but
+      no "hotter"; Silent or a lower fan curve under load is explained by the profile or fan
+      change; a background job during a game names the program; badges, "Show in History"
+      and the tab dot work; footprint within budget.
+      The test build is the top of the stack (`v2-p27-polish`), which holds P16 to P27; one
+      pass of `docs/field-check.md` covered them all.
 
 ### P18 — Smart compound alerts (M9)
-- [ ] AND/OR, rate of change, FOR duration, cooldown; fan action only with control enabled.
+Started while P16 waits for its field check, on `v2-p18-alerts` stacked on
+`v2-p16-intelligence` (it merges after P16). Defaults chosen without the owner, open to change
+at the field check: an alert's profile and fan actions last while its conditions hold and end
+30 s after they clear; a profile the owner picks meanwhile wins until that alert clears; fans
+are only ever raised (5–50 points on top of what Vyro already drives, never a header left to
+the BIOS) and only while fan control is on; two alerts about the same part within a minute
+notify once (a hardware problem always notifies); the diagnostic record keeps readings and the
+five busiest program names, nothing else.
+
+Budget: no new thread; per tick, the rules' conditions plus a short buffer for each sensor a
+rate condition watches (at most 10 minutes of readings); the usual values for "above usual"
+come from the 10-minute intelligence pass (one week query per sensor a rule watches). A
+diagnostic record adds about 1.5 KB to its fired alert in the existing event log. Footprint
+within +1 MB of P16. History schema unchanged; IPC protocol 10.
+
+- [x] Built (2026-10-15, branch `v2-p18-alerts`):
+      - Rules (`vyro_core::alerts`): besides one sensor against a limit and System Health, a
+        rule can hold up to five sensor conditions, all of them or any one: above or below a
+        limit, rising or falling by an amount within 5–600 s, or an amount above or below the
+        sensor's usual reading (a CPU or GPU temperature for the load of the moment, from the
+        past week's fit; anything else its weekly median; nothing until about a day of history,
+        the last hour left out). Each condition can have a clearing margin (hysteresis); the
+        rule must hold for its hold time, then stays quiet for its cooldown; a missing reading
+        neither trips nor clears a rule, but never keeps its actions going (they come back with
+        the reading while the rule still holds).
+      - Actions: a notification (with or without sound, or none: logged only), the rule's name
+        in the tray tooltip, a profile, the fans Vyro drives raised by 5–50 points, and a
+        diagnostic record (the rule's readings, key temperatures, loads, power and fan speeds,
+        and the five busiest program names) kept with the fired alert. Tray, profile and fans
+        last while the conditions hold and end 30 s after they clear; the first active rule's
+        profile and the largest boost apply. Two alerts about the same part (CPU, GPU, fans,
+        memory, storage) within a minute notify once and the second is logged as a repeat; a
+        hardware problem always notifies.
+      - Fan boost (service): added to each driven header's curve (ramped like any change) or
+        fixed speed, capped at 100 %; safety full speed still wins; nothing with control off,
+        and never a header left to the BIOS. The fan log records when an alert raised the
+        fans and when they went back; Cooling says so while it lasts.
+      - Profile (app): an alert's profile wins over a game's; a profile the owner picks while
+        it holds wins until that alert clears. Settings and the Gaming strip say which alert
+        put it in force.
+      - IPC protocol 10 (`AlertUsual`, `SensorSnapshot::alert_state`, `FanStatus::boost`, rule
+        conditions and actions). Rules saved before load unchanged; a single plain limit is
+        still saved the old way, so going back to 0.3 only drops rules that use the new kinds
+        (`alerts.json` is then moved aside and the defaults used).
+      - UI: the rule editor (Health tab) with condition rows, all/any, the usual reading for
+        "above usual", and the actions; "Active" on rules that hold; the log shows actions,
+        repeats and the diagnostic record. Tests: compound and any-of rules, a missing reading,
+        hysteresis on a hovering reading, a fast rise against a slow climb, above usual with
+        and without history, actions ending 30 s after clearing, a lost sensor, a rule turned
+        off, repeats within a minute, the diagnostic record, validation, old rule files; the
+        fan boost on fixed and curve headers, its cap and its gate; the alert profile against
+        games and manual picks; the tray tooltip. Browser preview: axe clean, no overflow at
+        390 px; the main bundle grows 12.8 kB (the preview's rules and log load separately).
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
+      a CPU-only stress test leaves an "all of" CPU-and-GPU rule quiet
+      and a game with a heavy CPU load fires it; "rises 15 °C within 30 s" fires on starting a
+      stress test; with fan control on, a fan action raises only the driven fans (Cooling log
+      and readings) and they return 30 s after the rule clears, and with control off nothing
+      changes; a profile action switches the profile (tray check mark) and back, and picking
+      a profile meanwhile keeps it; two CPU rules firing within a minute notify once (the second
+      is logged as a repeat); the diagnostic record names the busy program.
+      The defaults above stay.
 
 ### P17 — Performance Score (M9)
-- [ ] Formula drafted for sign-off (decision 22); versioned, inputs shown.
+Owner's choices (2026-10-15): formula v1 signed off as drafted; Stability counts WHEA hardware
+errors as well as unexpected shutdowns; the score shows at the top of Insights.
+
+Budget: no new thread; the score is worked out by the intelligence pass once a day (and when
+Insights asks, kept a minute): the week's 1-minute history of about ten metrics, the minute
+digests, the drives (read at most every 10 minutes) and one System-log query; under 300 ms of one
+core on the reference PC. One stored result a day, kept a year (under 400 KB). History schema
+stays v3 (the `score` table is created in place); IPC protocol 11.
+
+- [x] Formula v1 drafted (2026-10-15) and signed off the same day:
+      [`docs/performance-score.md`](docs/performance-score.md).
+- [x] Built (2026-10-15, branch `v2-p17-score`, stacked on `v2-p18-alerts`):
+      - `vyro_core::score`: formula v1 as pure code. Each input's sub-score from the document's
+        breakpoints (straight lines between them), the worst part counting; the weighted average
+        over the inputs with data, none below 60 % of the weight; the band; every input with its
+        parts, weight, basis and, when missing, why.
+      - Measures (`score::measure`): thermal headroom from the median temperature in loaded
+        minutes (the CPU's design limit from its CPUID brand: 100 °C for Intel Core, else
+        95 °C; the GPU against Health's 85 °C), clock sag over full-load stretches of 5 minutes
+        or more, heat and current limiting from the minute digests (missing where nothing
+        reports flags), cooling and the change from usual from the intelligence pass (an
+        explanation of the owner's own choice counts as 100), drive health, SSD life and system
+        drive free space, RAM in use (p95), ping (p95) and lost replies, and unexpected
+        shutdowns (Kernel-Power 41) and WHEA hardware errors (17, 18, 19, 47) from the System
+        log over 30 days. The history inputs wait for about a day of history.
+      - Store: the `score` table (one result a day, the whole result as JSON, kept a year;
+        none kept without a score); `History::minutes` reads the 1-minute tier.
+      - IPC protocol 11 (`PerformanceScore`); the app's `get_performance_score`.
+      - UI: the Performance Score card at the top of Insights (the score, its band, how many
+        inputs it rests on, the formula version, a one-year trend, and every input with its
+        sub-score, weight, Measured / Inferred badge and the values behind it, or why it has no
+        data). Tests: every breakpoint, the coverage rule, the worked example (98), a healthy
+        synthetic week (≥ 90), throttling, a failing drive, crashes and a fatal hardware error
+        moving it through Good, Fair and Needs attention, a first day without a score, the
+        event-log counts, the daily store. Browser preview: axe clean, no overflow at 390 px;
+        the main bundle grows 6.9 kB.
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
+      after a day of use the score appears with all inputs that apply;
+      the thermal headroom matches the History of a gaming evening; a heavy stress test with a
+      lowered fan curve shows in Throttling or Sustained clocks; the stability counts match the
+      System log in Event Viewer (Kernel-Power 41, WHEA-Logger); the daily point appears in the
+      trend the next day.
+      With P16, P18 and P19 also field-checked, M9 is complete.
 
 ### P20 — Benchmark mode (M10 → 0.4)
-- [ ] Own workloads, hard stop, variance; `benchmark_runs` / `benchmark_metrics`.
+On `v2-p20-bench`, stacked on `v2-p17-score`. Method v1 is in
+[`docs/benchmark.md`](docs/benchmark.md).
+
+Defaults chosen at build (2026-10-15). The owner can change them at the field check:
+- **Modes.** Quick (about 3 min) covers CPU single/multi, memory, storage, GPU compute and
+  graphics. Full (about 13 min) adds 10 one-minute loops of CPU and GPU load together.
+- **Passes.** A warm-up, then 3 measured passes per area. The result is the median and the spread.
+- **What runs where.**
+  - The load runs in the app, so quitting Vyro always ends it.
+  - The GPU work is Direct3D 11 on the high-performance GPU.
+  - Storage uses a 1 GiB uncached temporary file in the Windows temporary folder.
+  - The Benchmark profile is in force during a run.
+- **Stops.** Stop, closing or quitting the window, Health's problem limits (CPU 99 °C, GPU 92 °C),
+  a new Health problem, readings missing for 10 s, or twice the planned time. All load ends
+  within a second.
+- **Comparison.** The newest earlier completed run of the same method that was not busy. A change counts beyond the
+  larger of 3 % and either run's spread, and setup differences are listed.
+
+Budget:
+- **Idle.** Nothing: no thread, no polling.
+- **During a run.**
+  - Threads: a runner thread plus one worker per logical processor (4 for storage, 1 for the GPU),
+    all joined at the end.
+  - Memory: up to 512 MiB of RAM for the memory area and about 320 MiB of video memory, freed
+    after each area.
+  - Disk: a 1 GiB temporary file, about 3 GiB written per run.
+- **Stored.** One `benchmark_runs` row (about 8 KB) and about 25 `benchmark_metrics` rows per run,
+  newest 100 runs kept (under 1 MB).
+- **Versions.** History schema stays v3 (the tables are created in place); IPC protocol 12.
+- **Bundle.** The main bundle grows under 15 kB.
+
+- [x] Method v1 written (2026-10-15): [`docs/benchmark.md`](docs/benchmark.md).
+- [x] Built (2026-10-15, branch `v2-p20-bench`, stacked on `v2-p17-score`):
+      - **Workloads (`vyro_core::bench`):**
+        - CPU rounds of four fixed kernels (hash, LZ match search, matrix product, sort), each
+          round checked against a reference checksum.
+        - Memory: read and copy over two 256 MiB buffers, with known sums, and latency along a
+          Sattolo cycle over 256 MiB.
+        - Storage: a 1 GiB uncached file, written whole first, then 3 capped passes each of
+          sequential write and read (4 threads, 1 MiB blocks) and random 4K reads at QD1.
+          Every sector carries its own offset, so data read back is checked. The file is
+          deleted on drop, and stale files at the next run.
+        - Direct3D 11 on the high-performance adapter: FP32 multiply-add chains, a 128 MiB
+          video memory copy, an integer hash checked on the CPU, and an offscreen 2560 × 1440
+          scene (400 instanced draws a frame, two frames in flight). GPU work goes out in
+          batches of about 20 ms; a reset counts as a GPU driver reset.
+      - **Runner.**
+        - Settles for 3 s first (marks a busy PC), then runs each area on its own thread while
+          watching the readings: peaks, average power and clocks over the measured passes,
+          throttled seconds, and fans at full speed.
+        - Stops on Health's problem limits (2 readings in a row), a new Health problem, a game
+          starting, 10 s without readings, or twice the planned time. A test asserts every
+          worker stops within a second.
+        - Works out scaling, efficiency (points per W, frames per joule) and stability (wrong
+          checksums, read-back errors, WHEA errors during the run, GPU resets).
+        - Full adds 10 one-minute loops of CPU and graphics together: stability is the worst
+          loop ÷ the best, plus clock sag.
+        - EcoQoS is off for the process during a run.
+      - **Store.** `benchmark_runs` (the run as JSON, plus mode, status, busy and errors) and
+        `benchmark_metrics` (value and spread per metric), newest 100 kept. IPC protocol 12
+        (`AddBenchmark`, `BenchmarkRuns`, `BenchmarkRun`, `DeleteBenchmark`).
+      - **App.**
+        - The run thread lives in the app.
+        - Readings come from the snapshot sink; the engine keeps the window's rate while a
+          run goes on.
+        - The Switcher's benchmark layer puts the Benchmark profile in force: owner's pick >
+          benchmark > alert > game > base.
+        - A run stops on Stop, on the window closing or hiding to the tray, and on quit
+          (waits up to 3 s so the stopped run is kept and the file deleted).
+        - Each run records its setup, including the active power plan (`sysinfo::power_plan`).
+      - **UI: the Benchmark tab, loaded on first visit.**
+        - Quick or Full, start checks, live progress with Stop and the areas finished.
+        - The result per area: median, ± spread, change against the baseline, and the readings.
+        - The comparison with the newest earlier completed, non-busy run (or any run picked),
+          what changed in between (setup differences and P19 hardware changes), and the Setup.
+        - The list of runs with two-click delete.
+        - Browser preview with past runs and a compressed live run.
+      - **Checks.**
+        - Rust tests: workloads, store, Switcher layer, IPC wire shapes. The Windows CI job also
+          runs every GPU workload on WARP and checks the shader's hashes against the CPU's.
+        - Browser preview: axe clean and no overflow at 1440 and 390 px.
+        - The main bundle grows 3.1 kB; the tab is a 19 kB chunk.
+- [x] Field check (MS-7E24, RTX 5060 Ti, 2026-10-16, test build `vyro-windows-bab8a30`),
+      all passed:
+      - A Quick run completes in about 3 minutes, then a second scores within noise of the first.
+      - The CPU multi-thread peak temperature and power match HWMonitor.
+      - The GPU areas name the RTX 5060 Ti (not the iGPU), and Graphics holds it at full load.
+      - Stop, closing the window and quitting each end all load within a second (Task Manager)
+        and leave no `vyro-bench-*.tmp` in `%TEMP%`.
+      - A Full run's Sustained loops read steady.
+      - A run after a GPU driver update lists the change.
+      The defaults above stay.
 
 ### P21 — One-click diagnostics + reports (M10)
-- [ ] Checks with telemetry evidence; HTML / JSON / Markdown / PDF, serials redacted.
+On `v2-p21-diag`, stacked on `v2-p20-bench`. Checks v1 are in
+[`docs/diagnostics.md`](docs/diagnostics.md).
+
+Defaults chosen at build (2026-10-15). The owner can change them at the field check:
+- **Passive.** No load (the Benchmark does that). 13 checks read the week's history and digests,
+  the Health log, SMART, the System event log and the readings now; the limits follow
+  Performance Score formula v1 where they overlap.
+- **Status.** Pass / Attention / Info / Unavailable; every Attention cites its telemetry.
+- **Where it shows.** A Diagnostics card in Health, below each part's status.
+- **Exports.** HTML, JSON, Markdown and PDF, written to `Documents\Vyro Reports` and shown in
+  Explorer. Serial numbers are never stored, and are added to an export only when asked.
+
+Budget:
+- **No new thread.** The checks run on a blocking task of the app's async runtime, and the engine
+  works the report out in one request (about a second: the week's minutes are already read for
+  the score).
+- **Stored.** The newest 50 reports, each about 10 KB of JSON plus 13 finding rows (under 1 MB).
+- **Versions.** History schema stays v3 (tables created in place); IPC protocol 13.
+- **Bundle.** The card loads on first visit, so the main bundle grows under 3 kB.
+
+- [x] Checks v1 written (2026-10-15): [`docs/diagnostics.md`](docs/diagnostics.md).
+- [x] Built (2026-10-15, branch `v2-p21-diag`, stacked on `v2-p20-bench`):
+      - **Checks (`vyro_core::diag::checks`).** Pure, over formula v1's measures plus each
+        drive, the Health log, the readings now, PawnIO, fan control and what the app sends
+        (how it reaches the engine, the PC summary, the GPU drivers).
+        - Thermals, clock stability, power limits (Info), throttling, fans and pump (the owner's
+          own choice does not count), memory, storage, network, hardware errors, changes from
+          usual (P16 warnings with their evidence), drivers (Info), sensors, service.
+        - Each is Pass, Attention, Info or Unavailable (saying why), with citations: value,
+          unit, source, sensor and how long ago. Summaries carry no temperatures, so the
+          citations follow the chosen unit.
+        - The score's measures now also count the power-limit shares, which formula v1 does
+          not use.
+      - **Store.** `diagnostic_runs` (the report as JSON) and `diagnostic_findings` (one row per
+        check), newest 50 kept. IPC protocol 13 (`RunDiagnostics`, `DiagnosticRuns`,
+        `DiagnosticRun`, `DeleteDiagnostic`).
+      - **Exports from one report.**
+        - HTML (self-contained, prints well), JSON, Markdown, and a PDF that Vyro writes
+          itself: A4, standard Helvetica, WinAnsi, wrapped with Helvetica's widths, page
+          numbers.
+        - Citations format the same in Rust and TypeScript (halves round away from zero, as
+          `toFixed` does), in °C or °F.
+        - Serial numbers (board, drives) are read only for an export that asks for them, and
+          never kept.
+        - Saved to `Documents\Vyro Reports\vyro-diagnostics-<date>-<time>.<ext>`; "Show in
+          folder" opens Explorer on it (files in that folder only).
+      - **UI.** The Diagnostics card in Health (loaded on first visit).
+        - Run diagnostics.
+        - Counts and earlier reports.
+        - Attention first, open: what to do, and the citations with links into History.
+        - Export buttons and "Include serial numbers"; delete a report.
+        - Browser preview with a report that has a stopped fan.
+      - **Checks.**
+        - Rust tests: every problem turns Attention and cites its telemetry, the owner's choice
+          and missing data, the formatting, all four exports showing the same values in °C and
+          °F, serials only when asked, and the PDF's structure (cross-reference offsets, page
+          count). poppler reads the PDF and its text extracts cleanly.
+        - Browser preview: axe clean, no overflow at 1440 and 390 px (°F).
+        - The main bundle grows 1.5 kB; the card is an 8 kB chunk.
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
+      - A run completes in about a second, and its values match History, Storage and Event Viewer.
+      - Unplugging a case fan for a minute turns Fans and pump to Attention after the Health
+        event.
+      - Each of the four exports opens (the PDF in Edge) and shows the on-screen values.
+      - An export without serials contains none; with them it contains the drives' and the
+        board's.
+      - Running without the service turns Service and Sensors to Attention.
+      The defaults above stay. With P20, M10 is complete; with M9, 0.4 could ship from here
+      (the owner's call).
 
 ### P25 — Themes, open on Dashboard, shareable cards (M11 → 0.5; first, small)
-- [ ] "Open on" setting (Dashboard default), themes + accent passing axe-core, share cards.
+On `v2-p25-themes`, stacked on `v2-p21-diag` (it touches the same Settings and Health files).
+
+Defaults chosen at build (2026-10-15). The owner can change them at the field check:
+- **Themes.** Six: Midnight (today's look, the default), AMOLED (pure black, no glow), Cyber
+  (violet night, neon), Glass (translucent cards over a colour wash, no blur), Minimal (flat
+  graphite) and Daylight (light).
+- **Accents.** The theme's own, or Cyan, Blue, Violet, Magenta or Green. No amber or red
+  accents, so an accent never reads as a warning. Each accent has a second colour for the GPU,
+  and its own shades on Daylight.
+- **Warning colours.** OK, warning and problem keep their meaning in every theme; only their
+  shade changes, so they keep contrast.
+- **Contrast.** Every theme and accent pair is unit-tested to WCAG AA: 4.5:1 for text, muted
+  text and the colours used as text, on each surface; and axe-core runs on every tab in every
+  theme.
+- **Dynamic states.** Idle, Gaming (a game is measured), Warning and Critical (Health). A thin
+  rail under the header and the background wash take the state's colour; Critical pulses
+  four times, then stays lit (not at all with the motion off). The words are elsewhere already
+  (the Health strip, the game tile), so colour is never the only sign.
+- **Open on.** Dashboard by default, at launch and when the window is opened from the tray;
+  "Last tab" returns to where you were.
+- **Share cards.** In Hardware, "Share card": 16:9 (1920 × 1080), square (1080 × 1080) or
+  story (1080 × 1920), each Full, Minimal or Transparent. CPU, GPU, RAM, board, storage,
+  Windows and the Performance Score, with "Powered by Vyro". A name you type (default "My
+  PC"); no computer name and no serial numbers. Saved as PNG to `Pictures\Vyro` (Show in
+  folder), or copied to the clipboard. The card uses the current theme and accent.
+
+Budget:
+- **No new thread or polling.** Themes are CSS variables set once per change; canvases redraw
+  only when the theme changes.
+- **Animation.** The Critical pulse is a CSS opacity animation on a 2 px rail, four cycles then
+  still; no backdrop blur anywhere.
+- **Share cards.** Drawn on one canvas only while the card maker is open; the PNG goes to the
+  app as raw bytes (no base64).
+- **Bundle.** The main bundle grows under 6 kB; the card maker loads on first use.
+- **Versions.** Settings gain `theme`, `accent` and `openOn` (old files load with the
+  defaults); IPC protocol stays 13.
+
+- [x] Built (2026-10-15, branch `v2-p25-themes`, stacked on `v2-p21-diag`):
+      - **Themes (`src/themes.ts`).** Six themes as token sets put on the page root before the
+        first paint (the page keeps a copy of the choice; `settings.json` stays the source).
+        - Cards use `--card` / `--card-top`, so only Glass is see-through, and dialogs, toasts
+          and sticky table heads stay opaque.
+        - Canvases (the dials, sparklines) redraw once on a theme change.
+        - The app paints the window in the theme's background with a matching title bar
+          (`src-tauri/src/look.rs`), so Daylight does not open on a dark frame.
+        - Unknown names in `settings.json` fall back to the defaults, keeping the rest of the
+          file.
+      - **Contrast.** A unit test checks all 36 theme and accent pairs to WCAG AA:
+        - text, muted text, both accents, OK, warning and problem on every surface (Glass
+          cards over the bare page and both washes);
+        - text on the tinted strips and buttons at 7:1;
+        - no accent hue near amber or red.
+
+        Getting there darkened Daylight's green and Glass's card top, and lightened Glass's
+        problem red. A second test checks that the window colours in `look.rs` match.
+      - **States.** `data-state` idle / gaming / warning / critical from Health and the game,
+        a 2 px rail under the header, and a wash at the top of the page. Critical pulses
+        8 half-cycles (none with the profile's motion off or Windows' reduced motion).
+      - **Open on.**
+        - Dashboard at launch unless "Last tab" is chosen; the settings file corrects the
+          page's copy without moving you once you have picked a tab.
+        - The app emits `window-opened` when the tray shows a hidden window, and the page goes
+          back to the Dashboard.
+      - **Settings.** An Appearance card: theme tiles with swatches, accent dots (the theme's
+        own or five more), Open on.
+      - **Share cards (`src/card.ts`, `ShareCard.svelte` loaded on first use, in Hardware).**
+        - A pure model from named inventory fields only (CPU and GPU short names, RAM, board,
+          drives in decimal sizes with NVMe/SSD/HDD, Windows, the score), and a pure layout
+          per size; `paint` draws it.
+        - Values shrink to 72 % before they are shortened.
+        - The PNG goes to the app as raw bytes. `save_share_card` writes only
+          `vyro-card-*.png` names, PNG data, under 16 MB, into `Pictures\Vyro`; "Show in
+          folder" uses the reports' Explorer helper.
+        - Copy puts the PNG on the clipboard.
+      - **Checks.**
+        - Rust tests (now run in CI with `cargo test -p vyro`; that also caught a P20 GPU-name
+          match, fixed on `v2-p20-bench`): settings fallback and 0.3 files, card file names.
+        - Vitest: contrast, states, card model (no serials, given a board and drives that
+          have them) and layout inside the picture for every size and style.
+        - Browser preview:
+          - axe clean on all 15 tabs in all 6 themes at 1440 px, and on Dashboard, Settings,
+            Health and History for every accent on Midnight, Cyber, Glass and Daylight;
+          - no overflow at 1440 or 390 px;
+          - all nine cards download at 1920 × 1080, 1080 × 1080 and 1080 × 1920,
+            transparent corners clear;
+          - the theme and Open on survive a reload.
+        - The main bundle grows 9.8 kB (3.5 kB gzipped), over the 6 kB budget: the theme
+          tables and the Appearance card have to be there at first paint. The card maker is an
+          11 kB chunk.
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
+      - Each theme looks right in the app, Daylight opens without a dark flash, and the title
+        bar follows.
+      - The dials change colour with the theme at once.
+      - Vyro opens on the Dashboard from the tray; with "Last tab", where you left it.
+      - A Critical Health problem pulses the rail four times, then holds.
+      - Glass costs no more GPU than Midnight at idle (Task Manager).
+      - A saved card opens in Photos at its size, Show in folder finds it, and Copy pastes into
+        Discord / Paint.
+      - The defaults above are what you want.
 
 ### P22 — Devices & wireless battery (M11)
-- [ ] `devices/` provider, hot add/remove, battery via BLE / PnP / XInput.
+On `v2-p22-devices`, stacked on `v2-p25-themes` (it adds a tab next to P25's changes).
+
+Defaults chosen at build (2026-10-15). The owner can change them at the field check:
+- **Where.** A Devices tab after Displays: input (keyboards, mice, controllers, receivers),
+  audio (headsets, headphones, speakers, microphones), then the rest (cameras, printers,
+  phones, USB storage, other USB devices). Below them, the sound outputs and inputs, with
+  Windows' default and empty jacks.
+- **What is listed.** Each physical device once, as Windows groups it (its device
+  container). The PC's own parts, monitors (Displays has them), USB hubs and virtual devices
+  (Print to PDF) are left out. A paired Bluetooth device that is off shows "Not connected";
+  an unplugged USB device disappears.
+- **Kind.** The device's own name first (a gaming mouse also has a keyboard function), then
+  Windows' category, then what it does (audio endpoints, keyboard/mouse, camera, printer).
+  Keyboard-and-mouse devices with no other clue show as "Keyboard / mouse".
+- **Battery.** Windows' own Bluetooth battery reading (what Settings shows) first; the
+  Bluetooth LE Battery Service (0x180F, Windows' cached value) where Windows has none;
+  XInput's four levels for an Xbox controller. "—" where the device reports nothing (2.4 GHz
+  receivers need vendor protocols, later). Battery is shown only while connected; under 20 %
+  it is amber, under 10 % red, always with the number.
+- **Refresh.** On opening the tab, within a second of a device arriving, leaving, connecting
+  or disconnecting, and every 60 s while the tab is open (battery).
+- **Privacy.** No Bluetooth addresses, device paths or serial numbers leave the collector; ids
+  are hashes. Device names stay on this PC: not in reports, cards or history.
+- **No low-battery notification yet.** It fits P18's alerts later.
+
+Budget:
+- **No service change.** Devices are read by the app (no administrator rights, no driver);
+  IPC protocol stays 13.
+- **No polling while the tab is closed.** One Windows device-change registration and one
+  device-container query, both on Windows' own threads, and one parked thread that waits a
+  short quiet moment before telling the window.
+- **A read** is three device queries, Core Audio and XInput, under 100 ms, off the UI thread.
+  Battery Service reads are cached by Windows; each device is read at most once a minute.
+- **Bundle.** The tab loads on first visit; the main bundle grows under 2 kB.
+
+- [x] Built (2026-10-15, branch `v2-p22-devices`, stacked on `v2-p25-themes`):
+      - **Collector (`crates/vyro-core/src/devices/`).**
+        - Device containers and present device nodes come from the device query API
+          (`DevGetObjects`, with a present-only filter and a fallback without it), plus
+          Windows' Bluetooth battery property on each node.
+        - The Battery Service is read through `bluetoothapis.dll` and XInput 1.4; both are loaded
+          at run time. Battery Service readings are cached for 55 s, with a 3 s budget per read.
+        - Core Audio endpoints come with their state, form factor, container and the defaults.
+        - `build` is pure and unit-tested: kinds, what is left out, connection, battery
+          precedence, XInput matching, audio links, and hashed ids with nothing identifying in
+          the output.
+      - **Hot-plug.**
+        - `CM_Register_Notification` covers every interface class, and a container query covers
+          "connected".
+        - A parked thread waits for 0.6 s of quiet (at most 3 s), then the app emits
+          `devices-changed`. Both start with the tab's first read.
+      - **App.**
+        - `get_devices` runs off the UI thread; non-Windows builds and `VYRO_SIM` get the
+          sample.
+        - The inventory example prints the list too, and a Windows-only test reads the CI
+          machine.
+      - **Tab.**
+        - Devices sits after Displays and loads on first visit.
+        - It shows the groups, each device's state, and a battery bar and number (amber under
+          20 %, red under 10 %), with a low-battery line above.
+        - Sound shows playback and recording, the defaults, empty jacks, and which device each
+          belongs to.
+        - It refreshes on opening, on a change while shown, and every 60 s while shown.
+      - **Checked:**
+        - core tests (560), frontend tests (100) and app tests under Wine (13) pass;
+        - axe is clean on Devices in all six themes at 1440 and 390 px, with no overflow;
+        - all 16 tabs are reachable with the arrow keys.
+      - **Bundle.** The main bundle grows 0.9 kB (0.2 kB gzipped). The tab is a 7.4 kB chunk
+        (3.1 kB gzipped) plus 3 kB of CSS.
+      - **Wine.** Wine has no device query API, so CI's Windows runner is the first real read,
+        and the field check the second.
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
+      - Every keyboard, mouse, headset and controller in use is listed once, with the right
+        kind and connection. Monitors, hubs and the PC's own parts are not listed.
+      - Plug a USB device in and out: it appears and goes within a couple of seconds. Turn a
+        Bluetooth device off and on: "Not connected" and "Connected" follow.
+      - Battery matches Windows Settings › Bluetooth & devices for Bluetooth devices. An Xbox
+        controller shows a level; a 2.4 GHz receiver shows "—".
+      - Sound lists the outputs and inputs and marks the defaults. An empty front jack says
+        "nothing plugged in".
+      - With the tab closed, Vyro's CPU in Task Manager is unchanged; the tab opens at once.
+      - The defaults above are what you want.
 
 ### P24 — Custom dashboard builder (M11)
-- [ ] Depth decided at start; `dashboard_layouts` with presets.
+On `v2-p24-dashboard`, stacked on `v2-p22-devices` (it replaces the Dashboard markup both
+touch).
+
+Depth decided at start (2026-10-15; the owner can change it at the field check):
+- **A flow grid, not free placement.** Widgets sit in order on a 12-column grid. Each is 3,
+  4, 6, 8 or 12 columns wide and 1 to 4 rows tall. Cards with more to show grow past their
+  rows instead of scrolling. Under 900 px the grid has 6 columns, and under 560 px each widget
+  takes the full width. Order instead of x/y keeps every layout tidy at any window size, and
+  every edit works from the keyboard.
+- **Editing.** "Edit layout" on the Dashboard shows each widget's bar:
+  - drag to move it, or move it earlier or later;
+  - wider, narrower, taller or shorter, or drag its corner;
+  - its settings (which reading, which GPU);
+  - duplicate and remove.
+  A palette adds widgets. "Done" saves; "Cancel" drops the changes.
+- **Lock and reset.** A layout can be locked (no editing until it is unlocked). "Reset"
+  puts a layout back to the preset it came from.
+- **Layouts.** A picker on the Dashboard switches between saved layouts. You can make a new
+  one (a copy of the current), rename it, or delete it (not the last). Up to 12 layouts of
+  up to 40 widgets each.
+- **Presets.** Seven ship as layouts: Default (today's Dashboard, widget for widget),
+  Gaming, Work, Streaming, Benchmark, Monitoring and Minimal.
+- **Widgets.**
+  - Gauge: CPU or a GPU.
+  - Reading: any of about 35 live values. CPU usage, clock, temperature and power; GPU usage,
+    clock, temperature, hotspot, power, VRAM and fan, for each GPU; memory; system power;
+    each fan and pump; download, upload and ping; disk read, write and the hottest drive; the
+    game's FPS, 1 % low and frame time.
+  - Graph: the last minute of a reading.
+  - History: the last hour of a recorded sensor, from the history store.
+  - Game: FPS, 1 % low and the frame-time graph.
+  - Health: the grade and the top findings.
+  - Events: the latest health events.
+  - Today's cards: CPU cores, CPU sensors, GPUs, memory, power, board and fans, and Vyro
+    itself.
+- **Profiles.** The compact profiles (Battery saver) still hide the detail cards (cores,
+  memory, power, board, Vyro itself) in every layout, and say so.
+- **Storage.** `dashboard_layouts` is kept as `dashboard.json` in the app's config folder,
+  next to `settings.json` but apart from it, so a damaged layout file can never reset the
+  other settings. It is checked on load: sizes clamped, counts capped, ids made unique.
+
+Budget:
+- **No new polling.** Widgets draw from the snapshot the Dashboard already gets each tick.
+  A History widget reads the store when shown and then once a minute; Events reads once a
+  minute while shown.
+- **Edits.** Edits stay in memory until "Done": one small file write per save, none while
+  dragging.
+- **Memory.** The Default layout renders the same components as today. Each Graph widget
+  keeps 60 points. Within +1 MB with 40 widgets.
+- **Bundle.** The editor (palette, bars, settings) loads on first "Edit layout"; the main
+  bundle grows under 8 kB.
+- **Versions.** IPC protocol stays 13; the settings file is unchanged.
+
+- [x] Built (2026-10-15, branch `v2-p24-dashboard`, stacked on `v2-p22-devices`):
+      - **Model.** `vyro-core/src/dashboard.rs` checks what is stored: widths snap to the grid,
+        rows are clamped, counts capped, ids made valid and unique, and kinds from a later
+        version kept.
+      - **Store.** `src-tauri/src/dashboard.rs` keeps `dashboard.json`: written through a
+        temporary file, and a file that does not load is renamed `dashboard.bad.json`.
+        `get_dashboard` and `set_dashboard` are its commands.
+      - **UI.** `src/dashboard.ts` holds the readings, the Default preset and what to show.
+        `dashboard-presets.ts` holds the other six presets; `dashboard-edit.ts` the palette,
+        sources and edits. All are unit-tested:
+        - every preset resolves on this PC;
+        - Default matches the old Dashboard tile for tile;
+        - each reading reads the snapshot;
+        - move, resize, duplicate, remove, add, reset, new and delete behave.
+      - **Components.**
+        - `DashboardGrid` is the picker, Lock and the grid.
+        - `DashWidget` draws gauges, readings and cards.
+        - `DashExtra` (Graph, History, Game, Health, Events) loads with the first one shown.
+        - `DashboardEditor` loads on the first "Edit layout". It has the bars, a menu per
+          widget, the palette, drag by the bar, the corner (pointer, or arrow keys) and
+          spoken results.
+        - "Save as new layout" takes the edits; the original stays as it was.
+      - **Fixed along the way:** the History widget read the store every tick (it now reads
+        once a minute), and dragging a corner started a move (now only the bar moves a
+        widget).
+      - **Checked:**
+        - frontend tests (111), core tests (567) and app tests under Wine (14) pass;
+        - axe is clean on the Dashboard and the editor in all six themes, and on all seven
+          presets;
+        - no overflow at 1440, 800 or 390 px;
+        - moving by the menu and by dragging works, and so does resizing by keys and by the
+          corner;
+        - a new layout survives a reload, and the lock survives a reload.
+      - **Bundle: over budget.** The main bundle grows 11.9 kB (5.7 kB gzipped), over the
+        8 kB budget: the readings table and the widget renderer have to be there at first
+        paint. The editor (13.3 kB), the less-used widgets (7.3 kB) and the other presets
+        (1.7 kB) load when needed.
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
+      - The Dashboard looks as before on Default (the tiles are now four to a row).
+      - Build a layout: add, move (drag and keyboard), resize (corner and keys), duplicate,
+        remove, change a reading. Press Done, restart Vyro: it is still there.
+      - Switch between the presets while a game runs (Gaming shows the frame times).
+      - Lock a layout: Edit is off until unlocked. Reset puts a preset back.
+      - With 40 widgets on a layout, Vyro's memory and CPU in Task Manager stay near today's.
+      - The depth chosen above (flow grid, layout-level lock) is what you want.
 
 ### P23 — 3-D GPU / My PC / thermal map (M11)
-- [ ] Three.js on demand (≤ 30 fps, 2-D fallback), within the installer and memory budgets.
+On `v2-p23-visual`, stacked on `v2-p24-dashboard` (it adds a tab next to the ones P22 and P24
+touch).
+
+Defaults chosen at build (2026-10-15). The owner can change them at the field check:
+- **Where.** A "My PC" tab after Hardware with three views: PC (the default), GPU and Thermal
+  map. Each can be drawn in 3-D or as a flat 2-D plan; the choice is remembered.
+- **Stylized, our own models only.** No exact-board renders and no brand logos. The PC is a
+  generic ATX tower with its side off. It holds:
+  - the board, the CPU with a tower cooler (or an AIO block and radiator when a pump is
+    reported) and the RAM sticks in the populated slots;
+  - each discrete GPU in a PCIe slot;
+  - M.2 drives on the board and SATA drives in the cage;
+  - the case fans Vyro reads, and a PSU.
+  Monitors are listed beside it (they have no temperatures).
+- **GPU model.** Built from a bundled table:
+  - The reference designs are keyed by PCI device id: NVIDIA Founders Edition (RTX 20 to
+    50), AMD reference (RX 6000, 7000 and 9000) and Intel Arc Limited Edition.
+  - Partner cards (another subsystem vendor) get a shape from the GPU's tier: fans, length,
+    thickness and power connectors.
+  - Anything else gets a generic two-fan card.
+  - "Does this look like your card?" lets the owner set fans, length, thickness, power
+    connectors and colour. That is kept in the settings per card.
+  - Integrated graphics are noted on the CPU, not drawn as a card.
+- **Live.** Fans spin at their reported RPM (scaled, so it reads as speed, not a blur). Parts
+  carry their temperature on a label, and clicking a part or its label shows its details
+  with a link to its tab.
+- **Thermal map.** Each part is coloured by how close it is to its limits: blue when cool,
+  green at normal, amber at the warning limit, red at the problem limit. The limits are the
+  ones Health uses. Modes CPU, GPU, Board, Storage and Full colour only those parts (the
+  rest grey).
+- **Motion.** Fans spin at up to 30 fps with the profile's full motion and up to 10 fps with
+  reduced motion; with motion off nothing spins. Without spinning or dragging, a frame is
+  drawn only when a reading changes.
+
+Budget:
+- **On demand only.** Three.js (0.186.1, MIT) loads with the tab's first visit, in its own
+  chunk; the main bundle grows under 2 kB.
+- **Nothing when hidden.** One WebGL context, only while the tab shows. Leaving the tab, hiding
+  the window or switching to 2-D stops the loop and frees the context (renderer disposed,
+  context lost), so there is no GPU work or GPU memory while hidden.
+- **Shown.** At most 30 fps, under 5 % of one CPU core while spinning (field check), and the
+  WebView's GPU process within +40 MB.
+- **Installer.** Grows under 0.3 MB.
+- **Versions.** The settings gain `myPc` (2-D or 3-D, and the owner's GPU shapes); old files
+  load with the defaults. IPC protocol stays 13.
+
+- [x] Built (2026-10-15, branch `v2-p23-visual`, stacked on `v2-p24-dashboard`):
+      - **Models.**
+        - `src/gpuspecs.ts` holds the reference designs by device id and the partner names by
+          subsystem vendor. A partner card's shape follows its tier, parsed from the model
+          number (NVIDIA, AMD with RDNA 4's naming, and Intel Arc). Shapes read back from the
+          settings are checked.
+        - `src/pcmodel.ts` lays out the tower from the hardware list and the snapshot, reads
+          each part's temperature against Health's limits, and holds the heat ramp. Both are
+          unit-tested: every part fits the case, an AIO or a tower cooler, RAM by slot name,
+          a second GPU below the first, integrated graphics left out, and heat and colours
+          rising with the temperature.
+      - **3-D (`src/scene3d.ts`, loaded with the tab).**
+        - Stylized meshes: fins, fans with blades, the card with its fans, plugs and bracket.
+        - Orbit and zoom, and a click picks a part.
+        - Frames are drawn only while something spins or moves, or once per reading, at most
+          30, 10 or 0 a second by the profile's motion.
+        - `dispose` frees everything and loses the context. Each scene gets a fresh canvas,
+          because a canvas whose context was freed cannot have another.
+      - **Tab (`MyPcPanel`, `PcPlan`).**
+        - PC, GPU and Thermal map views; label chips and a readings list; details with a link
+          to the part's tab; the displays; "Does this look like your card?".
+        - The 2-D plan is used when chosen or when WebGL is missing.
+        - The settings gain `myPc` (a damaged section falls back to its defaults without
+          touching the rest).
+        - Three.js joins `THIRD_PARTY_NOTICES.md`.
+      - **Checked:**
+        - frontend tests (125), core tests (567) and app tests under Wine (15) pass;
+        - axe is clean on PC, Thermal map and GPU in all six themes, and on the 2-D plan;
+        - no overflow at 1440, 800 or 390 px;
+        - spinning fans draw 10 to 11 frames a second under reduced motion;
+        - with the fans still, it draws one frame per reading (4 in 4 s);
+        - leaving the tab or hiding the window removes the canvas and loses its context;
+        - correcting the card to two fans redraws it.
+      - **Fixed along the way:**
+        - thermal colours were lost (Three.js wants `rgb()` with commas);
+        - switching views reused a freed canvas;
+        - the card form overflowed;
+        - the plan drew edge-on fans as discs;
+        - the label chips crowd narrow views (they hide under 520 px; the list has the same
+          readings).
+      - **Bundle.** The main bundle grows 0.9 kB. The tab is a 27 kB chunk and Three.js with
+        the scene a 566 kB chunk (142 kB gzipped), both loaded on first visit.
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
+      - The PC view shows your cooler type, RAM sticks, GPU, drives and fans, each where
+        expected. Labels match the Sensors tab.
+      - The GPU looks like your card, or can be corrected and stays corrected after a restart.
+      - Fans spin faster under load. The thermal map turns amber or red near the Health limits
+        (a stress test or a benchmark).
+      - Task Manager: Vyro's CPU while the tab spins its fans; the WebView's GPU process memory
+        before, while and after the tab (it drops back after leaving it).
+      - The 3-D toggle off gives the plan. The defaults above are what you want.
+      With P25, P22 and P24 also field-checked, M11 is complete.
 
 ### P26 — Remote companion (M12 → 0.5)
-- [ ] Off by default, LAN-only, token + QR pairing, expiry, revoke; transport decided at start.
+On `v2-p26-remote`, stacked on `v2-p23-visual` (it adds a Settings card and a header chip next
+to the earlier phases' changes).
+
+Defaults chosen at build (2026-10-15). The owner can change them at the field check:
+- **Where it runs: the desktop app, not the service.** V2_PLAN put the server in
+  `VyroService`; it is in the app instead. Reasons:
+  - The code that reads from the network runs as the signed-in user, never as LocalSystem.
+  - Windows' own firewall prompt asks the owner the first time.
+  - It works with the in-process engine too.
+  - The page is the app's own bundled build.
+
+  The cost: the companion answers only while Vyro runs. Running in the tray counts.
+- **Off by default.** Settings → Remote turns it on, after saying what that means:
+  - local network only;
+  - not encrypted;
+  - Windows will ask about the firewall (allow Private networks only).
+
+  It stays on across restarts until turned off. Turning it off closes the port and every
+  connection at once. Paired devices are kept until they expire, so turning it back on needs
+  no new pairing. "Sign out all devices" removes them all.
+- **Transport: plain HTTP on the local network.** It uses IPv4 on port 8976, which can be
+  changed. HTTPS was ruled out because a self-signed certificate puts a warning on every
+  phone that the owner would have to click through. The page says "Local network · not
+  encrypted". It is read-only: nothing on it changes the PC.
+- **Who may connect:**
+  - Peers in private ranges (10/8, 172.16/12, 192.168/16, 169.254/16) and this PC (127/8).
+    Anyone else is dropped before a byte is read.
+  - The Host header must be an IP address, `localhost` or this PC's name. A web page cannot
+    reach the companion through DNS rebinding.
+  - Sign-ins must come from the page itself (same Origin, JSON body). No CORS.
+- **Pairing.** "Pair a device" shows a QR code and an 8-character code (`K7QM-4XPA`, 40
+  bits).
+  - The code is valid for 5 minutes and for one device. Five wrong tries spend it.
+  - The QR code opens `http://<PC address>:8976/#pair=<code>`. The code travels in the URL
+    fragment, which the browser does not send with the page request; the page posts it once
+    and removes it from the address bar.
+  - The device names itself. The name is guessed from its browser and can be edited.
+- **Sessions:**
+  - A paired device gets a random 256-bit token in an HttpOnly, SameSite=Strict cookie.
+    Vyro keeps only the token's SHA-256 hash, in `remote.json` in the app's local data
+    folder (not roamed).
+  - Sessions end 30 days after pairing (choices: 1, 7, 30 or 90 days). At most 8 devices.
+  - Settings lists each device: its name, when it was paired, when it expires, when it was
+    last seen and from which address.
+  - "Sign out" ends a session at once and closes its live view within a second.
+  - A damaged `remote.json` turns the companion off and is kept as `remote.bad.json`.
+- **What it shows:**
+  - CPU, GPUs, memory, drives, fans, temperatures and power;
+  - FPS while a game is measured;
+  - network rates and ping;
+  - Health and active alerts.
+
+  It is refreshed every second while open, in the app's theme and temperature unit. Never
+  sent: processes, serial numbers, IP or MAC addresses, user or device names, Health notes.
+- **Remote alerts.** Active alerts and Health problems head the page and its title. Push
+  notifications to a phone are not offered: they need HTTPS and an internet push service.
+- **Indicators while on:**
+  - a "Remote" chip in the app's header, with the number of devices watching;
+  - the tray tooltip says so;
+  - Settings shows the address and the Windows firewall's state for Vyro.
+
+Budget:
+- **Off.** No socket and no thread.
+- **On, nobody watching.** One thread waiting on the port, using under 1 MB.
+- **Watching:**
+  - One short-lived thread per connection: at most 32 connections, 8 per address (a browser
+    opens up to six at once for the page's files) and 6 live views.
+  - Each reading is turned into the page's view once (about 3 kB) and shared by all viewers.
+  - While anyone watches, the engine keeps its 1 Hz rate with the window hidden, as the
+    overlay does.
+- **No service change.** IPC protocol stays 13, and the history is unchanged.
+- **Bundle.** The companion is its own page (`remote.html`), under 30 kB gzipped beyond what
+  it shares with the app. The Settings card loads on first view, and the main bundle grows
+  under 3 kB.
+- **Installer.** Grows under 0.3 MB. `httparse` is already in the tree; `qrcodegen` is new.
+
+- [x] Built (2026-10-15, branch `v2-p26-remote`, stacked on `v2-p23-visual`):
+      - **Core (`crates/vyro-core/src/remote/`):**
+        - `view` builds the page's view from each snapshot. A test checks that process names,
+          drive ids, adapter names, Health notes and drive letters never reach it.
+        - `auth` handles pairing codes (5 bits per character from an alphabet without
+          look-alikes, compared in constant time) and sessions. It keeps only SHA-256 hashes,
+          saves "last seen" at most once a minute, and drops expired devices.
+        - `http` reads one request per connection through `httparse`:
+          - head at most 8 kB and 32 headers;
+          - body at most 4 kB, no chunked uploads;
+          - 10 s to send the whole request;
+          - every answer carries `nosniff`, `no-referrer` and `DENY`, and CR/LF are stripped
+            from header values.
+        - `net` checks peers and the Host header and orders this PC's addresses (the default
+          route first, link-local last). `firewall` reads Windows Defender Firewall's rules
+          for the app; it never writes one.
+        - `qr` draws the pairing QR code as an SVG path.
+        - `server` routes the page, its files and the API. The live view uses server-sent
+          events, and signing a device out ends its live view at once. `stop` closes the
+          port and every connection.
+        - `examples/companion.rs` serves a built page with simulated readings, for working
+          on the page; `pnpm dev` proxies `/api` to it.
+      - **App (`src-tauri/src/remote.rs`):**
+        - `remote.json` lives in the local app data folder. A damaged one turns the
+          companion off and is kept as `remote.bad.json`.
+        - Start, stop, port and length changes, pairing and sign-out run off the UI thread.
+        - The page comes from the bundled build, never Tauri's `index.html` fallback.
+        - A phone watching keeps the 1 Hz rate.
+        - The tray tooltip says "remote on".
+      - **UI:**
+        - `remote.html` is its own Vite entry (`src/remote/`). It covers pairing (the code
+          from the QR link, the device's name from its browser), live tiles, temperatures,
+          fans, drives, alerts, sign-out, and stale and reconnect states.
+        - Settings has a Remote card (loaded on first view): confirm before turning on, the
+          addresses, the firewall state, the QR code with a countdown, devices with sign-out,
+          and options.
+        - A header chip shows while the companion is on and opens the card.
+        - Health's limits moved to `src/limits.ts`, so the page does not load the 3-D model's
+          code.
+      - **Checked:**
+        - core tests (607), app tests under Wine (17) and
+          frontend tests (132) pass. The companion's server tests also pass under Wine;
+          Windows' firewall and address read is checked on CI's Windows runner.
+        - End to end in Chromium against the example server: a wrong code is refused with
+          the tries left; the QR link fills the code and leaves the address bar clean;
+          pairing survives a reload; a spent code is refused; signing out answers 401 after.
+        - axe is clean on the pairing and live pages in all six themes at 390 and 1440 px,
+          and on the Settings card (midnight 1440, daylight 390), with no overflow.
+        - In the browser preview of the Settings card: a bad port is refused, a new port
+          changes the addresses, the chip opens the card, and turning off removes the chip.
+      - **Fixed along the way:**
+        - 4 connections per address was too few: a browser opens six at once for a page's
+          files, and the page never started. Now 8 per address and 32 in all.
+        - A pairing link opened while the page already showed was ignored.
+        - A live view whose device was signed out stayed open until its next heartbeat.
+      - **Bundle.** The main bundle grows 1.4 kB gzipped (the second entry moved Svelte's
+        runtime into a shared chunk). The phone loads 29 kB gzipped in all; the Settings
+        card is a 3.6 kB chunk.
+- [x] Field check (MS-7E24 and a phone on the same Wi-Fi, 2026-10-16, test build
+      `vyro-windows-bab8a30`), all passed:
+      - Settings → Remote → Turn on: Windows asks about the firewall; allow Private. The card
+        then says the firewall allows Vyro, and the header chip shows.
+      - Pair a device: scan the QR code with the phone and pair. The tiles update every
+        second, in Vyro's theme and unit, and the chip says "1 watching".
+      - Type the code by hand from a second device. Five wrong codes spend it.
+      - Sign the phone out in Vyro: its page goes back to pairing within seconds.
+      - Close the window to the tray: the phone keeps updating every second. Turn the
+        companion off: the phone shows "Can't reach Vyro". Turn it back on: the phone
+        reconnects without pairing again.
+      - From a phone on mobile data (not the Wi-Fi), the address does not answer.
+      - Task Manager: Vyro's memory and CPU with the companion off, on, and with a phone
+        watching.
+      - The defaults above are what you want: port, 30 days, plain HTTP, the app rather than
+        the service.
+      M12 is complete; with M11, 0.5 could ship from here (the owner's call).
 
 ### P27 — V2 polish & validation (M13 → 1.0)
-- [ ] Footprint audit, accessibility, V1→V2 migration, clean machine, control-safety matrix.
+On `v2-p27-polish`, stacked on `v2-p26-remote`. V2_PLAN asks for:
+- a footprint audit;
+- an accessibility pass;
+- crash recovery;
+- V1 → V2 migration testing;
+- clean-machine testing;
+- control-safety validation on every writable controller;
+- anti-cheat notes and docs.
+
+The 1.0 gate (V2_PLAN, roadmap §30):
+- control is tested on every writable board, and unsupported hardware is blocked;
+- failures restore safe cooling;
+- migration keeps V1 data;
+- the resource budget holds, and V1 features still work.
+
+Defaults chosen at build (2026-10-16). The owner can change them at the field check:
+- **What an upgrade keeps.** Upgrading from any released version (0.1.x, 0.2.0, 0.3.0) keeps:
+  - settings;
+  - alert rules;
+  - fan settings and the profile in force;
+  - the history: every tier, Health, alert and fan events, and game sessions;
+  - the 0.1/0.2 game log.
+
+  Going back to an older version is not supported for the history: an older Vyro leaves a
+  newer history untouched and runs without one.
+
+  This is checked with files written by each release's own code. Each tag was built in a
+  scratch checkout, and a small generator (kept in `crates/vyro-core/tests/fixtures/gen/`) wrote
+  its files. The tests open those files with today's code.
+- **Damaged files.** Every file Vyro keeps follows one rule:
+  - Writes go to a temporary file that is then renamed, so a crash or power cut never leaves
+    half a file.
+  - A file that cannot be read is set aside as `<name>.bad.<ext>` (only the newest is kept),
+    the log says so, and defaults are used. The file is never silently overwritten.
+  - Settings load one setting at a time, so a bad value resets only that setting.
+- **A damaged history database** is set aside as `history.bad.sqlite` and a new one is
+  started. A database written by a newer Vyro is left as it is, and history stays off (as now).
+- **Fan control after a crash (a fix found in this audit).** At start, a BIOS state left by a
+  crash is written back first, as before. Two cases change:
+  - **The write-back fails.** The saved state is now kept and used for every later attempt.
+    Before, Vyro's next capture could overwrite it with the settings Vyro itself had left on the
+    chip, so "BIOS control" would have meant Vyro's stale speeds.
+  - **The file cannot be read.** The allow-listed headers that the chip has under software
+    control go to full speed, which is always safe. The file is kept as `fan-restore.bad.json`,
+    and the Cooling log says to restart the PC, which gives the BIOS its settings back.
+
+  This is a hardware write, so it ships only after the field check.
+- **Accessibility.** The target is WCAG 2.1 AA as axe-core checks it, on:
+  - every tab in all six themes, at 1440 and 390 px;
+  - the main dialogs;
+  - the companion page.
+
+  Every control is reachable by keyboard and shows a focus ring. Reduced motion stops CSS
+  animation. It runs in CI as its own job.
+- **Footprint.**
+  - CI gates the installer (< 20 MB, as before) and now also what each page loads at start
+    (scripts and styles, gzipped): the app's window under 125 kB (118.2 kB now) and the
+    companion under 32 kB (29.4 kB now).
+  - CI also installs Vyro on its Windows runner and reports the service's memory and CPU. This
+    is not gated, because a CI virtual machine has few sensors.
+  - The real budget is measured on the owner's PC at the field check.
+- **Clean machine.** CI's Windows runner has never had Vyro installed. CI installs the MSI there
+  and checks:
+  - the files;
+  - the service and its restart-on-failure settings;
+  - that the service answers on its pipe and writes history.
+
+  It then uninstalls and checks what is removed and what is kept. The owner repeats this on a
+  clean PC or virtual machine, and upgrades from 0.3.0.
+- **Control safety.** `docs/control-safety.md` lists each rule, the code that enforces it, its
+  tests and the field result on MS-7E24, the only writable board (decision 24).
+- **Anti-cheat.** `docs/anti-cheat.md` says what Vyro does that an anti-cheat can see, and what it
+  never does. Compatibility with a given game is a field result, not a promise.
+- **Version.** It stays 0.3.0 on this branch. 1.0.0 is set when M13 merges into `main`
+  (decision 20; set on `v2-prep-1.0.0`, 2026-10-16).
+
+Budget:
+- **No runtime cost.** No new thread, timer or setting. The IPC protocol stays 13 and the
+  history schema stays 3.
+- **Installer.** Unchanged; the app gains no dependency.
+- **CI.**
+  - One new parallel job (accessibility, about 5 minutes).
+  - About 3 more minutes on the Windows job (install, probe, uninstall).
+  - New dev dependencies, not shipped: Playwright and axe-core.
+
+- [x] Built (2026-10-16, branch `v2-p27-polish`, stacked on `v2-p26-remote`):
+      - **Migration.**
+        - Each released tag (0.1.4, 0.2.0, 0.3.0) was built in a scratch checkout. A generator
+          (`crates/vyro-core/tests/fixtures/gen/`) wrote that release's files with its own
+          code: `settings.json`, `alerts.json`, `fan-control.json`, `fan-profile.json`,
+          `games.json` and `history.sqlite`. It also wrote `expect.json`: what that release
+          itself read back.
+        - `tests/migration.rs` opens each set with today's code:
+          - the History view's series match on every tier (to the last digit of an average);
+          - Health, alert and fan events, game sessions and a replay timeline match;
+          - the engine starts on the old folder: rules unchanged, the 0.1/0.2 game log moved
+            into the history;
+          - the fan controller loads the old settings and the profile in force.
+        - The app's tests read each release's `settings.json`. Every setting carries over,
+          including 0.1's "not detailed" overlay as Minimal mode.
+        - No data loss was found.
+      - **Crash recovery.**
+        - `vyro_core::files`: atomic writes (flushed to disk, then renamed) and damaged files
+          set aside as `<name>.bad.<ext>`. Settings, alert rules, fan settings and profile,
+          the BIOS fan state, the game log, layouts and paired devices all use it.
+        - Before, `settings.json` was written in place and a damaged one silently reset every
+          setting. Now it is read one setting at a time.
+        - A history database that is not a database is set aside and a new one started. A
+          newer one is still left untouched.
+      - **Fan restore fix (hardware write; field check needed).** A crash's saved BIOS state
+        that fails to go back is now kept for every later attempt. Before, the next capture
+        could replace it with Vyro's own leftover speeds. An unreadable one sends the
+        software-driven allow-listed headers to full speed and says to restart.
+        - Found in a review after the build: if the fan chip also did not answer at start (it
+          gets three tries within about 150 ms), nothing went to full speed and nothing was
+          recorded. The first capture with control on then saved the leftover speeds as the
+          BIOS state. Now nothing is captured or driven until the chip answers, then full
+          speed comes first. The damaged file stays until then, so a restart meanwhile tries
+          again.
+      - **CI.**
+        - A new Accessibility job (`pnpm a11y`, 362 checks in about 3 minutes):
+          - axe-core on all 17 tabs × 6 themes × 1440 and 390 px;
+          - the dashboard editor, an alert rule editor, the fan control confirmation, the
+            share card, and the remote card's confirmation and pairing;
+          - the companion's pairing and live pages in every theme (its API answered by the
+            test);
+          - the keyboard: every focusable control shows a focus ring and focus never sticks;
+          - reduced motion: no CSS animation runs.
+        - The size budget (`scripts/bundle_budget.py`).
+        - On the Windows runner: install the MSI, check files, service and recovery actions,
+          ask the service with `vyro-probe` (readings, history, its CPU and memory), uninstall,
+          and check the service and program files are gone and the history kept.
+      - **Found and fixed by the sweep.** The System tab's startup-app table scrolled sideways
+        at phone width with no keyboard access (WCAG 2.1.1). Scrolling tables (System,
+        SMART, game profiles, sessions) now get a tab stop only while they scroll
+        (`src/scrollable.ts`).
+      - **Found and fixed by the sweep on CI.** In the Sensors tab, a row with no reading or
+        a hidden sensor was dimmed with 50 % opacity, which put its numbers below 4.5:1 in
+        every theme (WCAG 1.4.3). The sweep only caught it on CI, where a reading happened to
+        be missing. Dimmed rows now use the muted colour. The sweep hides a sensor first, so
+        a dimmed row is always checked.
+      - **Docs.**
+        - `docs/control-safety.md`: every safety rule → code → tests → MS-7E24 result.
+        - `docs/anti-cheat.md`: what an anti-cheat sees and what Vyro never does. FACEIT's
+          2025 block of PawnIO's old signature was reported fixed in PawnIO 2.1.0; Vyro ships
+          2.2.0.
+        - `docs/footprint.md`: every V2 feature's threads and costs, and the 1.0 measurement
+          procedure.
+        - `docs/field-check.md`: the field checks of P16 to P27, ordered into sittings for the
+          one build that holds them all.
+        - README: what 0.4 and 0.5 add, for users (Insights, the score, alerts, Benchmark,
+          Diagnostics, themes, the dashboard builder, My PC, Devices, cards, and the phone
+          companion with its security model). CONTRIBUTING updated.
+        - `docs/anti-cheat.md` now records the owner's Valorant run from P6. The Risks entry
+          now has the FACEIT certificate fix reported for PawnIO 2.1.0.
+      - **Small polish.** The companion server's threads are now `vyro-companion`. They shared
+        the name `vyro-remote` with the app's service-connection thread.
+      - **Checked.** Core tests (614 + 3 migration), the service test, app tests under Wine
+        (20) and frontend tests (132) pass, and `pnpm a11y` is clean. On CI, the Windows
+        clean install (install, probe the service, uninstall) passes.
+- [x] Field check (MS-7E24; ideally also a clean Windows PC or virtual machine; 2026-10-16,
+      test build `vyro-windows-bab8a30`), all passed on MS-7E24; the clean machine was not done:
+      - **Upgrade.** Install this build over 0.3.0 (or 0.2.0) as you use it: settings, alert
+        rules, fan settings and profile, History (7 days back), Health and alert logs, game
+        sessions and replays are all still there.
+      - **Clean machine.** On a PC or virtual machine that never had Vyro:
+        - install, run, and accept PawnIO;
+        - the app shows readings within 2 s;
+        - uninstall: the service and program files go, and `%ProgramData%\Vyro` stays.
+      - **Damaged files.**
+        - Quit Vyro, put `{` in `%APPDATA%\app.vyro.monitor\settings.json`, start: defaults,
+          and `settings.bad.json` is beside it.
+        - Put `"temperatureUnit": "k"` in a good file: only the unit resets.
+      - **Fan restore after a crash** (fan control on; a hardware write):
+        - `taskkill /F /IM vyro-service.exe`: the BIOS curve comes back after the restart
+          (as in P12).
+        - Then the damaged case. In an administrator prompt, pause the automatic restart
+          (`sc failure VyroService reset= 0 actions= ""`) and kill the service again. Replace
+          `%ProgramData%\Vyro\fan-restore.json` with `{` and run `sc start VyroService`.
+          Expected:
+          - the fans Vyro drove go to full speed;
+          - Cooling says to restart the PC;
+          - `fan-restore.bad.json` exists.
+
+          Restart the PC: the BIOS curve is back. Put the restart actions back with
+          `sc failure VyroService reset= 86400 actions= restart/5000/restart/5000/restart/60000`
+          (reinstalling does it too).
+      - **Control-safety matrix.** Confirm every MS-7E24 row of `docs/control-safety.md`
+        still holds on this build, including the P18 boost row.
+      - **Anti-cheat.** Play the games you have with anti-cheat (at least one each of what you
+        own: Easy Anti-Cheat, BattlEye, Vanguard, FACEIT) with Vyro running, the overlay on
+        and fan control on. Fill in the table in `docs/anti-cheat.md`.
+      - **Footprint.** Follow "Field measurement for 1.0" in `docs/footprint.md`; the results
+        go into the README's Performance table.
+      - **V1 features still work.** One pass through every V1 tab: sensors, history, Health,
+        alerts and a toast, processes, storage SMART, network and ping, displays, system,
+        gaming capture and overlay, tray and updates.
+      - **Keyboard and screen reader.** Narrator on two tabs; Tab through Settings and Cooling.
+      - **Defaults.** Confirm the defaults above, especially the size budgets and the fan
+        full-speed rule.
+      The clean-machine install and uninstall are covered by CI's Windows runner on every run,
+      without a person watching or a real board. Still to write down from the owner's notes:
+      the games in `docs/anti-cheat.md` and the 1.0 footprint figures in the README's
+      Performance table. M13 is complete, and with it V2. The release (0.4 and 0.5 first, or
+      straight to 1.0) is the owner's call.
 
 ## Risks
 
@@ -727,9 +1821,12 @@ a newer schema.
   Windows as soon as P0 runs there.
 - Hardware acceptance criteria require real machines from the §9 test matrix; CI can only prove
   compilation and unit tests.
-- Anti-cheat: FACEIT refuses to run with PawnIO loaded; Valorant (Vanguard) runs with it.
-  PawnIO has its own entry in Installed apps, so FACEIT players can remove it; Vyro then runs
-  without the low-level sensors and says so.
+- Anti-cheat: FACEIT refused to run with PawnIO loaded over its old signing certificate;
+  PawnIO's author reports that fixed in 2.1.0 (Vyro ships 2.2.0), and FACEIT has not been seen
+  confirming it. Valorant (Vanguard) runs with it. PawnIO has its own entry in Installed apps,
+  so anyone whose game refuses it can remove it; Vyro then runs without the low-level sensors
+  and says so. [`docs/anti-cheat.md`](docs/anti-cheat.md) has the details and the P27 field
+  table.
 - PawnIO has a single upstream maintainer; module ABI or signing changes need a Vyro update.
 - SignPath / Certum OSS require a public repo with an OSI license and a verifiable build.
 - Fan control (P12): some boards' fans are owned by the embedded controller and cannot be

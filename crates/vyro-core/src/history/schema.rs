@@ -9,10 +9,19 @@
 //! empty while it runs; `timeline` 0 once its samples are gone), `game_sample` (one row per
 //! tick, readings as scaled integers, see `gaming::replay::COLUMNS`) and `game_event` (its
 //! markers). A v1 file gains the tables in place.
+//!
+//! v3 (P19) adds the PC change history: `pc_inventory` (the last inventory seen, as JSON; one
+//! row) and `hardware_change` (one row per change, kept by count rather than age). Later 0.4
+//! tables join v3 the same way, since `init` creates missing tables on every open: `digest`
+//! (P16) keeps a week of minute digests for the intelligence engine (see `intel::digest`), and
+//! `score` (P17) one Performance Score a day for a year (see `score`), and `benchmark_runs` /
+//! `benchmark_metrics` (P20) the newest 100 benchmark runs, whole and metric by metric (see
+//! `bench`), and `diagnostic_runs` / `diagnostic_findings` (P21) the newest 50 diagnostics
+//! reports, whole and check by check (see `diag`).
 
 use rusqlite::Connection;
 
-pub const VERSION: i32 = 2;
+pub const VERSION: i32 = 3;
 
 const CREATE: &str = "
 CREATE TABLE IF NOT EXISTS metric (
@@ -78,6 +87,59 @@ CREATE TABLE IF NOT EXISTS game_event (
     json    TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS game_event_session ON game_event(session, t);
+CREATE TABLE IF NOT EXISTS pc_inventory (
+    id   INTEGER PRIMARY KEY,
+    ts   INTEGER NOT NULL,
+    json TEXT    NOT NULL
+);
+CREATE TABLE IF NOT EXISTS hardware_change (
+    id       INTEGER PRIMARY KEY,
+    ts       INTEGER NOT NULL,
+    category TEXT    NOT NULL,
+    json     TEXT    NOT NULL
+);
+CREATE TABLE IF NOT EXISTS digest (
+    ts   INTEGER PRIMARY KEY,
+    json TEXT    NOT NULL
+);
+CREATE TABLE IF NOT EXISTS score (
+    ts      INTEGER PRIMARY KEY,
+    score   INTEGER NOT NULL,
+    formula INTEGER NOT NULL,
+    json    TEXT    NOT NULL
+);
+CREATE TABLE IF NOT EXISTS benchmark_runs (
+    id     INTEGER PRIMARY KEY,
+    ts     INTEGER NOT NULL,
+    method INTEGER NOT NULL,
+    mode   TEXT    NOT NULL,
+    status TEXT    NOT NULL,
+    busy   INTEGER NOT NULL,
+    errors INTEGER NOT NULL,
+    json   TEXT    NOT NULL
+);
+CREATE TABLE IF NOT EXISTS diagnostic_runs (
+    id          INTEGER PRIMARY KEY,
+    ts          INTEGER NOT NULL,
+    version     INTEGER NOT NULL,
+    attention   INTEGER NOT NULL,
+    unavailable INTEGER NOT NULL,
+    json        TEXT    NOT NULL
+);
+CREATE TABLE IF NOT EXISTS diagnostic_findings (
+    run_id   INTEGER NOT NULL,
+    check_id TEXT    NOT NULL,
+    status   TEXT    NOT NULL,
+    summary  TEXT    NOT NULL,
+    PRIMARY KEY (run_id, check_id)
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS benchmark_metrics (
+    run_id INTEGER NOT NULL,
+    key    TEXT    NOT NULL,
+    value  REAL    NOT NULL,
+    spread REAL,
+    PRIMARY KEY (run_id, key)
+) WITHOUT ROWID;
 ";
 
 /// Applies pragmas and creates tables. A database written by a newer schema is refused

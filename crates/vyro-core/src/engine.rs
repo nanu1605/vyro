@@ -10,7 +10,9 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::alerts::{self, AlertEngine, AlertFired, AlertRule};
-use crate::analysis::{self, Insight, SeriesMap};
+use crate::bench::{BenchRun, RunSummary};
+use crate::changes::{HardwareChange, PcInventory, MAX_CHANGES};
+use crate::diag::{self, DiagAppInfo, DiagReport, DiagSummary};
 use crate::fan::controller::{self, FanControl, SimDevice};
 use crate::fan::{FanCapability, FanConfig, FanEvent, FanStatus};
 use crate::gaming::replay::{self, GameTimeline};
@@ -18,6 +20,7 @@ use crate::gaming::{CaptureTarget, GameContext, GameProvider, GameSession, Gamin
 use crate::health::{self, HealthEvent};
 use crate::history::WindowSeries;
 use crate::info::{DriveInfo, PawnIoStatus};
+use crate::intel::{Insights, Intel};
 use crate::poller::{EVENT_ALERT, EVENT_HEALTH};
 use crate::profiles::Profile;
 use crate::sio::control;
@@ -82,6 +85,9 @@ pub trait EngineApi: Send + Sync {
     fn set_alert_rules(&self, rules: Vec<AlertRule>) -> Result<(), String>;
     /// Fired alerts, oldest first.
     fn alert_log(&self) -> Result<Vec<AlertFired>, String>;
+    /// `sensor`'s usual reading now, for "above usual" conditions (P18): `None` until there
+    /// is about a day of history.
+    fn alert_usual(&self, sensor: &str) -> Result<Option<f64>, String>;
     /// Drives with full health data, read fresh (SMART needs administrator rights).
     fn drives(&self) -> Result<Vec<DriveInfo>, String>;
     /// Whether the engine can use PawnIO (CPU temperature and power, board and RAM sensors).
@@ -90,9 +96,12 @@ pub trait EngineApi: Send + Sync {
     fn set_ping_host(&self, host: &str) -> Result<(), String>;
     /// BitLocker protection of the system drive (needs administrator rights).
     fn bitlocker_system_drive(&self) -> Result<Option<bool>, String>;
-    /// Findings from the history store: unusual temperatures, throttling, slow fans, power
-    /// changes.
-    fn insights(&self) -> Result<Vec<Insight>, String>;
+    /// The intelligence engine's findings (P16), with their evidence and causes, and the
+    /// vital signs. Worked out from the history store; kept a minute.
+    fn insights(&self) -> Result<Insights, String>;
+    /// The Performance Score (P17) now, with every input, and the daily scores of the past
+    /// year.
+    fn performance_score(&self) -> Result<crate::score::ScoreReport, String>;
     /// Captures frames of this process (the fullscreen app in the foreground), or stops.
     fn set_capture_target(&self, target: Option<CaptureTarget>) -> Result<(), String>;
     /// The app's view of the captured game: in front, profile, overlay (`None`: no game).
@@ -110,6 +119,27 @@ pub trait EngineApi: Send + Sync {
         from: i64,
         to: i64,
     ) -> Result<Vec<WindowSeries>, String>;
+    /// Compares the PC as the app sees it with the last inventory and keeps the changes (P19).
+    /// Returns the new ones.
+    fn record_inventory(&self, inventory: PcInventory) -> Result<Vec<HardwareChange>, String>;
+    /// The PC change history, newest first (at most `limit`).
+    fn hardware_changes(&self, limit: u32) -> Result<Vec<HardwareChange>, String>;
+    /// Keeps a benchmark run (P20; the app runs it); returns its id.
+    fn add_benchmark(&self, run: BenchRun) -> Result<i64, String>;
+    /// Kept benchmark runs, newest first, with their metrics.
+    fn benchmark_runs(&self) -> Result<Vec<RunSummary>, String>;
+    /// One kept benchmark run in full; `None` once it is gone.
+    fn benchmark_run(&self, id: i64) -> Result<Option<BenchRun>, String>;
+    /// Forgets a benchmark run; false when there was none.
+    fn delete_benchmark(&self, id: i64) -> Result<bool, String>;
+    /// Runs the diagnostics (P21) with what the app knows, keeps the report and returns it.
+    fn run_diagnostics(&self, app: DiagAppInfo) -> Result<DiagReport, String>;
+    /// Kept diagnostics reports, newest first.
+    fn diagnostic_runs(&self) -> Result<Vec<DiagSummary>, String>;
+    /// One kept report in full; `None` once it is gone.
+    fn diagnostic_run(&self, id: i64) -> Result<Option<DiagReport>, String>;
+    /// Forgets a report; false when there was none.
+    fn delete_diagnostic(&self, id: i64) -> Result<bool, String>;
     /// Fan control: capability, configuration and each header's state.
     fn fan_status(&self) -> Result<FanStatus, String>;
     /// Validates, saves and applies a fan configuration.
@@ -144,6 +174,7 @@ pub struct LocalEngine {
     clients: ClientPids,
     gaming: Arc<Gaming>,
     fans: Arc<FanControl>,
+    intel: Arc<Intel>,
 }
 
 impl LocalEngine {
@@ -167,6 +198,9 @@ impl LocalEngine {
         let alerts = Arc::new(Mutex::new(AlertEngine::new(rules)));
         let gaming = Gaming::new(Gaming::default_launch(), dir, history.clone());
         let fans = Arc::new(Self::start_fans(cfg.fan_control, dir, history.clone()));
+        let intel = Intel::new(Arc::clone(&registry), history.clone(), unix_now());
+        intel.set_alert_sensors(lock(&alerts).usual_sensors(), unix_now());
+        intel.set_score_sources(Self::score_sources());
 
         // The game provider runs last: its session summary reads this tick's temperatures.
         let game: Box<dyn Provider> = Box::new(GameProvider::new(Arc::clone(&gaming)));
@@ -178,7 +212,8 @@ impl LocalEngine {
                 Poller::with_boxed,
             )
             .with_alerts(Arc::clone(&alerts))
-            .with_fans(Arc::clone(&fans));
+            .with_fans(Arc::clone(&fans))
+            .with_intel(Arc::clone(&intel));
         if let Some(history) = &history {
             poller = poller.with_history(Arc::clone(history));
         }
@@ -192,6 +227,7 @@ impl LocalEngine {
             clients,
             gaming,
             fans,
+            intel,
         })
     }
 
@@ -259,6 +295,33 @@ impl LocalEngine {
         self.fans.set_suspended(on);
     }
 
+    /// The score's inputs outside the history: the CPU's brand, the drives and the event log
+    /// (sample drives and a clean log in simulation).
+    fn score_sources() -> crate::intel::runner::ScoreSources {
+        #[cfg(target_arch = "x86_64")]
+        let cpu_brand = crate::hwid::cpuid::read_live().brand;
+        #[cfg(not(target_arch = "x86_64"))]
+        let cpu_brand = None;
+        let sim = Self::simulated();
+        crate::intel::runner::ScoreSources {
+            cpu_brand,
+            drives: Box::new(move || {
+                #[cfg(windows)]
+                if !sim {
+                    return crate::storage::collect();
+                }
+                crate::storage::sample()
+            }),
+            stability: Box::new(move |since| {
+                if sim {
+                    Some(crate::score::StabilityCounts::default())
+                } else {
+                    crate::sysinfo::stability_counts(since)
+                }
+            }),
+        }
+    }
+
     fn simulated() -> bool {
         !cfg!(windows) || std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1")
     }
@@ -323,7 +386,12 @@ impl EngineApi for LocalEngine {
     }
 
     fn set_alert_rules(&self, rules: Vec<AlertRule>) -> Result<(), String> {
-        lock(&self.alerts).set_rules(rules.clone())?;
+        let usual = {
+            let mut alerts = lock(&self.alerts);
+            alerts.set_rules(rules.clone())?;
+            alerts.usual_sensors()
+        };
+        self.intel.set_alert_sensors(usual, unix_now());
         match &self.alerts_path {
             Some(path) => alerts::save(path, &rules)
                 .map_err(|e| format!("rules applied but not saved ({}): {e}", path.display())),
@@ -343,6 +411,10 @@ impl EngineApi for LocalEngine {
                     .ok()
             })
             .unwrap_or_else(|| lock(&self.alerts).log()))
+    }
+
+    fn alert_usual(&self, sensor: &str) -> Result<Option<f64>, String> {
+        self.intel.usual_for(sensor, unix_now())
     }
 
     fn drives(&self) -> Result<Vec<DriveInfo>, String> {
@@ -378,36 +450,12 @@ impl EngineApi for LocalEngine {
         })
     }
 
-    fn insights(&self) -> Result<Vec<Insight>, String> {
-        let history = self.history.as_ref().ok_or("history store unavailable")?;
-        let tree = lock(&self.registry).tree();
-        let ids = analysis::wanted(&tree);
-        let names = tree
-            .groups
-            .iter()
-            .flat_map(|g| g.sensors.iter())
-            .map(|s| (s.id.clone(), s.name.clone()))
-            .collect();
-        let now = unix_now();
-        let mut windows: [SeriesMap; 3] = Default::default();
-        {
-            let mut h = lock(history);
-            let ranges = [HistoryRange::D7, HistoryRange::H24, HistoryRange::H1];
-            for (map, range) in windows.iter_mut().zip(ranges) {
-                for id in &ids {
-                    let s = h.query(id, range, now).map_err(|e| e.to_string())?;
-                    map.insert(id.clone(), s.points);
-                }
-            }
-        }
-        let [week, day, hour] = &windows;
-        Ok(analysis::analyze(&analysis::Inputs {
-            now,
-            week,
-            day,
-            hour,
-            names: &names,
-        }))
+    fn insights(&self) -> Result<Insights, String> {
+        self.intel.insights(unix_now())
+    }
+
+    fn performance_score(&self) -> Result<crate::score::ScoreReport, String> {
+        self.intel.score_report(unix_now())
     }
 
     fn set_capture_target(&self, target: Option<CaptureTarget>) -> Result<(), String> {
@@ -451,6 +499,104 @@ impl EngineApi for LocalEngine {
             .collect()
     }
 
+    fn record_inventory(&self, inventory: PcInventory) -> Result<Vec<HardwareChange>, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history)
+            .record_inventory(inventory, unix_now())
+            .map_err(|e| e.to_string())
+    }
+
+    fn hardware_changes(&self, limit: u32) -> Result<Vec<HardwareChange>, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history)
+            .hardware_changes(i64::from(limit).min(MAX_CHANGES))
+            .map_err(|e| e.to_string())
+    }
+
+    fn add_benchmark(&self, run: BenchRun) -> Result<i64, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history).add_benchmark(&run).map_err(|e| e.to_string())
+    }
+
+    fn benchmark_runs(&self) -> Result<Vec<RunSummary>, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history).benchmark_runs().map_err(|e| e.to_string())
+    }
+
+    fn benchmark_run(&self, id: i64) -> Result<Option<BenchRun>, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history).benchmark_run(id).map_err(|e| e.to_string())
+    }
+
+    fn delete_benchmark(&self, id: i64) -> Result<bool, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history)
+            .delete_benchmark(id)
+            .map_err(|e| e.to_string())
+    }
+
+    fn run_diagnostics(&self, app: DiagAppInfo) -> Result<DiagReport, String> {
+        let now = unix_now();
+        let (measures, insights, mut drives) = match self.intel.diagnostics_inputs(now) {
+            Ok((m, i, d)) => (Some(m), i, d),
+            Err(e) => {
+                log::debug!("diagnostics: {e}");
+                (None, None, Vec::new())
+            }
+        };
+        if drives.is_empty() {
+            drives = self.drives().unwrap_or_default();
+        }
+        let snapshot = self.latest();
+        let events = self.health_events().unwrap_or_default();
+        let pawnio = self.pawnio_status().ok();
+        let fans = self.fan_status().ok();
+        let checks = diag::checks::evaluate(&diag::checks::DiagInputs {
+            now,
+            measures: measures.as_ref(),
+            insights: insights.as_ref(),
+            health_events: &events,
+            snapshot: snapshot.as_ref(),
+            drives: &drives,
+            pawnio: pawnio.as_ref(),
+            fans: fans.as_ref(),
+            app: &app,
+        });
+        let mut report = DiagReport {
+            id: 0,
+            ts: now,
+            version: diag::CHECKS_VERSION,
+            app_version: app.app_version.clone(),
+            engine: diag::checks::engine_label(&app),
+            pc: app.pc.clone(),
+            checks,
+        };
+        if let Some(h) = &self.history {
+            match lock(h).add_diagnostic(&report) {
+                Ok(id) => report.id = id,
+                Err(e) => log::warn!("diagnostics: not kept: {e}"),
+            }
+        }
+        Ok(report)
+    }
+
+    fn diagnostic_runs(&self) -> Result<Vec<DiagSummary>, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history).diagnostic_runs().map_err(|e| e.to_string())
+    }
+
+    fn diagnostic_run(&self, id: i64) -> Result<Option<DiagReport>, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history).diagnostic_run(id).map_err(|e| e.to_string())
+    }
+
+    fn delete_diagnostic(&self, id: i64) -> Result<bool, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        lock(history)
+            .delete_diagnostic(id)
+            .map_err(|e| e.to_string())
+    }
+
     fn fan_status(&self) -> Result<FanStatus, String> {
         // Registry first and released before the controller's lock (the poller takes them in
         // that order).
@@ -485,6 +631,7 @@ impl EngineApi for LocalEngine {
     }
 
     fn set_fan_profile(&self, profile: Profile) -> Result<(), String> {
+        self.intel.set_profile(profile);
         self.fans.set_profile(profile)
     }
 
@@ -514,11 +661,21 @@ fn usable_dir(dir: &Path) -> Option<&Path> {
     }
 }
 
+/// The history store; a damaged one is set aside and a new one started (P27). One from a
+/// newer Vyro stays untouched, and history is off until that version is back.
 fn open_history(dir: &Path) -> Option<History> {
     let path = dir.join(HISTORY_FILE);
-    match History::open(&path, HistoryConfig::default()) {
-        Ok(history) => {
-            log::info!("history store: {}", path.display());
+    match History::open_or_replace(&path, HistoryConfig::default()) {
+        Ok((history, replaced)) => {
+            log::info!(
+                "history store: {}{}",
+                path.display(),
+                if replaced {
+                    " (new; the damaged one is history.bad.sqlite)"
+                } else {
+                    ""
+                }
+            );
             Some(history)
         }
         Err(e) => {
@@ -570,7 +727,27 @@ mod tests {
         assert_eq!(engine.alert_rules().unwrap(), rules);
         assert!(engine.set_ping_host("not a host!").is_err());
         // A few seconds of history: no baselines yet, so nothing to report.
-        assert_eq!(engine.insights(), Ok(Vec::new()));
+        let insights = engine.insights().unwrap();
+        assert!(insights.findings.is_empty(), "{insights:?}");
+        assert_eq!(insights.vitals.len(), 6);
+        // The Performance Score: drives and the (simulated) event log, but no score before
+        // about a day of history; nothing kept.
+        let report = engine.performance_score().unwrap();
+        assert_eq!(report.latest.score, None);
+        assert!(report.history.is_empty());
+        let has = |id: crate::score::ScoreInputId| {
+            report
+                .latest
+                .inputs
+                .iter()
+                .any(|i| i.id == id && i.score.is_some())
+        };
+        assert!(has(crate::score::ScoreInputId::Storage));
+        assert!(has(crate::score::ScoreInputId::Stability));
+        assert!(!has(crate::score::ScoreInputId::Thermals));
+        // The PC change history starts with the first inventory.
+        let first = engine.record_inventory(PcInventory::default()).unwrap();
+        assert_eq!(engine.hardware_changes(10).unwrap(), first);
         engine.shutdown();
         engine.shutdown();
 

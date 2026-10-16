@@ -2,11 +2,12 @@
 //! monitoring and alerts continue until Quit. Settings are saved in `settings.json` (app config
 //! folder); the tray menu also switches profiles.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, Window, WindowEvent, Wry};
@@ -15,9 +16,10 @@ use vyro_core::fan::FanBrief;
 use vyro_core::gaming::auto::GameAutomation;
 use vyro_core::profiles::Profile;
 use vyro_core::units::TempUnit;
-use vyro_core::{lock, unix_now};
+use vyro_core::{files, lock, unix_now};
 
 use crate::engine::{notify, Engine};
+use crate::look::{Accent, MyPc, OpenOn, Theme};
 use crate::overlay::OverlaySettings;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,6 +41,14 @@ pub struct Settings {
     pub check_updates: bool,
     /// Automatic game profiles and each saved game's own settings.
     pub games: GameAutomation,
+    /// Colours (P25).
+    pub theme: Theme,
+    pub accent: Accent,
+    /// Which tab the window opens on.
+    pub open_on: OpenOn,
+    /// My PC (P23).
+    #[serde(deserialize_with = "crate::look::lenient")]
+    pub my_pc: MyPc,
 }
 
 /// Emitted with the new [`Settings`] after any change (window or tray menu).
@@ -55,6 +65,10 @@ impl Default for Settings {
             overlay: OverlaySettings::default(),
             check_updates: true,
             games: GameAutomation::default(),
+            theme: Theme::default(),
+            accent: Accent::default(),
+            open_on: OpenOn::default(),
+            my_pc: MyPc::default(),
         }
     }
 }
@@ -66,6 +80,74 @@ pub struct SettingsStore {
     hinted: AtomicBool,
 }
 
+/// Reads `settings.json` one setting at a time: a value this version cannot read (damaged, or
+/// written by a newer Vyro) falls back to its default and the others are kept. Returns the
+/// settings and the names of those reset; an error when the text is not a settings object.
+fn parse(text: &str) -> Result<(Settings, Vec<String>), String> {
+    let file = match serde_json::from_str::<Value>(text) {
+        Ok(Value::Object(m)) => m,
+        Ok(_) => return Err("not a settings object".into()),
+        Err(e) => return Err(e.to_string()),
+    };
+    let Value::Object(mut merged) =
+        serde_json::to_value(Settings::default()).map_err(|e| e.to_string())?
+    else {
+        return Err("defaults are not an object".into());
+    };
+    let mut reset = Vec::new();
+    for (key, value) in file {
+        let before = merged.insert(key.clone(), value);
+        if serde_json::from_value::<Settings>(Value::Object(merged.clone())).is_err() {
+            match before {
+                Some(v) => merged.insert(key.clone(), v),
+                None => merged.remove(&key),
+            };
+            reset.push(key);
+        }
+    }
+    let settings = serde_json::from_value(Value::Object(merged)).map_err(|e| e.to_string())?;
+    Ok((settings, reset))
+}
+
+/// The saved settings; defaults on first run. A file that is not settings at all is set aside
+/// as `settings.bad.json` (see `vyro_core::files`), never overwritten by the next save.
+fn read_settings(path: &Path) -> Settings {
+    let text = match std::fs::read(path) {
+        Ok(b) => String::from_utf8(b).map_err(|e| e.to_string()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Settings::default(),
+        Err(e) => {
+            log::warn!(
+                "settings: cannot read {}: {e}; using the defaults",
+                path.display()
+            );
+            return Settings::default();
+        }
+    };
+    match text.and_then(|t| parse(&t)) {
+        Ok((settings, reset)) => {
+            if !reset.is_empty() {
+                log::warn!(
+                    "settings: {} could not be read and went back to the default",
+                    reset.join(", ")
+                );
+            }
+            settings
+        }
+        Err(e) => {
+            let aside = files::set_aside(path);
+            log::warn!(
+                "settings: {} does not load ({e}); using the defaults{}",
+                path.display(),
+                aside.map_or(String::new(), |p| format!(
+                    ", the file is kept as {}",
+                    p.display()
+                ))
+            );
+            Settings::default()
+        }
+    }
+}
+
 impl SettingsStore {
     pub fn load(app: &AppHandle) -> Self {
         let path = app
@@ -73,11 +155,7 @@ impl SettingsStore {
             .app_config_dir()
             .ok()
             .map(|d| d.join("settings.json"));
-        let current = path
-            .as_deref()
-            .and_then(|p| std::fs::read_to_string(p).ok())
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or_default();
+        let current = path.as_deref().map(read_settings).unwrap_or_default();
         Self {
             path,
             current: Mutex::new(current),
@@ -89,14 +167,15 @@ impl SettingsStore {
         lock(&self.current).clone()
     }
 
+    /// The temperature unit alone, without copying the rest (read every second).
+    pub fn unit(&self) -> TempUnit {
+        lock(&self.current).temperature_unit
+    }
+
     pub fn set(&self, s: Settings) -> Result<(), String> {
         *lock(&self.current) = s.clone();
         let path = self.path.as_ref().ok_or("no config folder")?;
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-        }
-        let json = serde_json::to_string_pretty(&s).map_err(|e| e.to_string())?;
-        std::fs::write(path, json).map_err(|e| format!("{}: {e}", path.display()))
+        files::write_json(path, &s).map_err(|e| format!("{}: {e}", path.display()))
     }
 }
 
@@ -105,6 +184,12 @@ pub fn show_main(app: &AppHandle) {
         engine.set_visible(true);
     }
     if let Some(w) = app.get_webview_window("main") {
+        // Opened from the tray: the page may go back to the Dashboard ("Open on").
+        if !w.is_visible().unwrap_or(true) {
+            if let Err(e) = app.emit(crate::look::OPENED_EVENT, ()) {
+                log::debug!("emit {}: {e}", crate::look::OPENED_EVENT);
+            }
+        }
         set_webview_active(&w, true);
         let _ = w.unminimize();
         let _ = w.show();
@@ -202,22 +287,42 @@ pub struct OverlayItem(CheckMenuItem<Wry>);
 /// "Return fans to BIOS", enabled while Vyro drives fans.
 pub struct FanItem(MenuItem<Wry>);
 
-/// Shows fan control in the tray: the tooltip says so and the menu offers the way back to the
-/// BIOS. False until the tray exists (the caller tries again with the next snapshot).
-pub fn set_fan_state(app: &AppHandle, fans: FanBrief) -> bool {
+/// Shows fan control, the remote companion (P26) and the alerts that ask to be named (P18) in
+/// the tray: the tooltip says so and the menu offers the way back to the BIOS. False until the
+/// tray exists (the caller tries again with the next snapshot).
+pub fn set_tray_state(app: &AppHandle, fans: FanBrief, remote: bool, alerts: &[String]) -> bool {
     let Some(tray) = app.tray_by_id("main") else {
         return false;
     };
-    let tip = match (fans.active, fans.full_speed) {
-        (true, true) => "Vyro · fans at full speed",
-        (true, false) => "Vyro · fan control on",
-        (false, _) => "Vyro",
-    };
-    let _ = tray.set_tooltip(Some(tip));
+    let _ = tray.set_tooltip(Some(tooltip(fans, remote, alerts)));
     if let Some(item) = app.try_state::<FanItem>() {
         let _ = item.0.set_enabled(fans.active);
     }
     true
+}
+
+/// "Vyro · fan control on · remote on · alert: Hot under load" (Windows keeps 127 characters).
+fn tooltip(fans: FanBrief, remote: bool, alerts: &[String]) -> String {
+    let mut tip = String::from(match (fans.active, fans.full_speed) {
+        (true, true) => "Vyro · fans at full speed",
+        (true, false) => "Vyro · fan control on",
+        (false, _) => "Vyro",
+    });
+    if remote {
+        tip.push_str(" · remote on");
+    }
+    if !alerts.is_empty() {
+        tip.push_str(if alerts.len() == 1 {
+            " · alert: "
+        } else {
+            " · alerts: "
+        });
+        tip.push_str(&alerts.join(", "));
+    }
+    if tip.chars().count() > 127 {
+        tip = tip.chars().take(126).collect::<String>() + "…";
+    }
+    tip
 }
 
 /// Saves `settings` and applies them: the profile in force (the owner's, or a game's), the
@@ -238,6 +343,7 @@ pub fn apply(app: &AppHandle, mut settings: Settings) -> Result<(), String> {
         None => Ok(()),
     };
     crate::gaming::apply_effective(app);
+    crate::look::paint(app, settings.theme);
     if let Some(item) = app.try_state::<OverlayItem>() {
         let _ = item.0.set_checked(settings.overlay.enabled);
     }
@@ -374,6 +480,8 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
         return;
     };
     let app = window.app_handle();
+    // A benchmark never runs on unseen (P20).
+    crate::bench::stop(app, "The Vyro window was closed.");
     let Some(store) = app.try_state::<SettingsStore>() else {
         return;
     };
@@ -385,15 +493,13 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
     if !store.hinted.swap(true, Ordering::Relaxed) {
         notify(
             app,
-            &AlertFired {
-                ts: unix_now(),
-                rule_id: "tray".into(),
-                title: "Vyro is still running".into(),
-                message:
-                    "Monitoring and alerts continue in the tray. Right-click the icon to quit."
-                        .into(),
-                sound: false,
-            },
+            &AlertFired::new(
+                unix_now(),
+                "tray",
+                "Vyro is still running".into(),
+                "Monitoring and alerts continue in the tray. Right-click the icon to quit.".into(),
+                false,
+            ),
         );
     }
 }
@@ -401,6 +507,24 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_tooltip_names_fan_control_and_alerts() {
+        let on = FanBrief {
+            active: true,
+            full_speed: false,
+        };
+        assert_eq!(tooltip(FanBrief::default(), false, &[]), "Vyro");
+        assert_eq!(
+            tooltip(on, false, &["Hot under load".into()]),
+            "Vyro · fan control on · alert: Hot under load"
+        );
+        assert_eq!(tooltip(FanBrief::default(), true, &[]), "Vyro · remote on");
+        let many: Vec<String> = (0..20).map(|i| format!("Alert number {i}")).collect();
+        let tip = tooltip(FanBrief::default(), false, &many);
+        assert!(tip.starts_with("Vyro · alerts: Alert number 0, "));
+        assert_eq!(tip.chars().count(), 127);
+    }
 
     #[test]
     fn settings_from_0_2_get_automatic_game_profiles() {
@@ -412,5 +536,145 @@ mod tests {
         assert!(s.games.enabled);
         assert_eq!(s.games.default_profile, Some(Profile::Gaming));
         assert!(s.games.rules.is_empty());
+    }
+
+    #[test]
+    fn settings_from_0_3_open_on_the_dashboard_in_midnight() {
+        let s: Settings =
+            serde_json::from_str(r#"{"profile":"gaming","temperatureUnit":"f"}"#).unwrap();
+        assert_eq!(s.profile, Profile::Gaming);
+        assert_eq!(s.theme, Theme::Midnight);
+        assert_eq!(s.accent, Accent::Theme);
+        assert_eq!(s.open_on, OpenOn::Dashboard);
+        // A theme from a newer version keeps the rest of the file.
+        let s: Settings = serde_json::from_str(
+            r#"{"profile":"work","theme":"aurora","accent":"blue","openOn":"last"}"#,
+        )
+        .unwrap();
+        assert_eq!(s.profile, Profile::Work);
+        assert_eq!(s.theme, Theme::Midnight);
+        assert_eq!(s.accent, Accent::Blue);
+        assert_eq!(s.open_on, OpenOn::Last);
+    }
+
+    fn release(version: &str) -> Settings {
+        let text = match version {
+            "0.1.4" => {
+                include_str!("../../crates/vyro-core/tests/fixtures/v0.1.4/config/settings.json")
+            }
+            "0.2.0" => {
+                include_str!("../../crates/vyro-core/tests/fixtures/v0.2.0/config/settings.json")
+            }
+            _ => include_str!("../../crates/vyro-core/tests/fixtures/v0.3.0/config/settings.json"),
+        };
+        let (s, reset) = parse(text).unwrap();
+        assert!(reset.is_empty(), "{version}: {reset:?}");
+        s
+    }
+
+    #[test]
+    fn every_release_s_settings_carry_over() {
+        // Written by 0.1.4 and 0.2.0 themselves (crates/vyro-core/tests/fixtures/gen).
+        for version in ["0.1.4", "0.2.0"] {
+            let s = release(version);
+            assert!(!s.close_to_tray);
+            assert_eq!(s.temperature_unit, TempUnit::F);
+            assert_eq!(s.hidden_sensors, ["fan.4", "cpu.voltage.soc"]);
+            assert_eq!(s.profile, Profile::Gaming);
+            assert!(!s.game_capture);
+            assert!(!s.check_updates);
+            assert!(s.overlay.enabled);
+            assert_eq!(s.overlay.corner, crate::overlay::Corner::BottomRight);
+            // "Not detailed" became the Minimal mode in 0.3.
+            assert_eq!(
+                s.overlay.mode,
+                vyro_core::gaming::overlay::OverlayMode::Minimal
+            );
+            assert_eq!(s.games, GameAutomation::default());
+            assert_eq!(s.theme, Theme::Midnight);
+            assert_eq!(s.open_on, OpenOn::Dashboard);
+        }
+        let s = release("0.3.0");
+        assert_eq!(s.profile, Profile::Gaming);
+        assert_eq!(s.temperature_unit, TempUnit::F);
+        assert_eq!(
+            s.overlay.mode,
+            vyro_core::gaming::overlay::OverlayMode::Full
+        );
+        assert_eq!(s.overlay.corner, crate::overlay::Corner::TopRight);
+        assert_eq!((s.overlay.offset_x, s.overlay.offset_y), (24, 40));
+        assert_eq!((s.overlay.scale, s.overlay.opacity), (125, 60));
+        assert_eq!(s.overlay.metrics.len(), 3);
+        assert!(!s.overlay.graph && s.overlay.compact);
+        assert_eq!(s.overlay.update_ms, 500);
+        assert_eq!(s.overlay.accent, crate::overlay::Accent::Cyan);
+        assert_eq!(s.games.default_profile, Some(Profile::Benchmark));
+        assert!(s.games.enabled && s.games.load_trigger);
+        assert_eq!(s.games.rules.len(), 2);
+        let cp = &s.games.rules[0];
+        assert_eq!(cp.exe, "cyberpunk2077.exe");
+        assert_eq!(cp.profile, Some(Profile::Gaming));
+        assert_eq!(cp.fans, Some(Profile::Silent));
+        assert_eq!(cp.poll_ms, Some(500));
+        assert!(s.games.rules[1].ignore);
+    }
+
+    #[test]
+    fn one_bad_setting_resets_only_itself() {
+        let (s, reset) = parse(
+            r#"{"profile":"work","temperatureUnit":"kelvin","closeToTray":false,"future":1}"#,
+        )
+        .unwrap();
+        assert_eq!(s.profile, Profile::Work);
+        assert!(!s.close_to_tray);
+        assert_eq!(s.temperature_unit, TempUnit::C);
+        assert_eq!(reset, ["temperatureUnit"]);
+        assert!(parse("{\"profile\":").is_err());
+        assert!(parse("[]").is_err());
+        assert_eq!(parse("{}").unwrap(), (Settings::default(), Vec::new()));
+    }
+
+    #[test]
+    fn a_damaged_settings_file_is_set_aside_and_saves_are_whole() {
+        let dir = std::env::temp_dir().join(format!("vyro-settings-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.json");
+        assert_eq!(read_settings(&path), Settings::default());
+        std::fs::write(&path, b"{\"profile\":\"work\",\"clo").unwrap();
+        assert_eq!(read_settings(&path), Settings::default());
+        assert!(!path.exists());
+        assert!(dir.join("settings.bad.json").exists());
+
+        let store = SettingsStore {
+            path: Some(path.clone()),
+            current: Mutex::new(Settings::default()),
+            hinted: AtomicBool::new(false),
+        };
+        let s = Settings {
+            profile: Profile::Silent,
+            ..Settings::default()
+        };
+        store.set(s.clone()).unwrap();
+        assert_eq!(read_settings(&path), s);
+        assert!(!dir.join("settings.json.tmp").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_damaged_my_pc_section_keeps_the_rest() {
+        let s: Settings = serde_json::from_str(r#"{"profile":"work"}"#).unwrap();
+        assert!(s.my_pc.three_d);
+        let s: Settings =
+            serde_json::from_str(r#"{"profile":"work","myPc":{"threeD":"yes","gpuShapes":7}}"#)
+                .unwrap();
+        assert_eq!(s.profile, Profile::Work);
+        assert_eq!(s.my_pc, MyPc::default());
+        let s: Settings = serde_json::from_str(
+            r#"{"myPc":{"threeD":false,"gpuShapes":{"10de:2786:51411458":{"fans":3,"glow":true}}}}"#,
+        )
+        .unwrap();
+        assert!(!s.my_pc.three_d);
+        assert_eq!(s.my_pc.gpu_shapes["10de:2786:51411458"]["glow"], true);
     }
 }

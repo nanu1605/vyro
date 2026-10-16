@@ -1,14 +1,22 @@
 <script lang="ts">
   import Card from './Card.svelte';
+  import ChangesCard from './ChangesCard.svelte';
   import KV from './KV.svelte';
   import LoadState from './LoadState.svelte';
   import { fmt, fmtKB, fmtMB, hex4, NA } from '../format';
   import { getHardwareId } from '../ipc';
   import type { CacheInfo, HardwareId } from '../types';
 
+  interface Props {
+    /** PC changes above this id are marked new. */
+    newSince?: number;
+  }
+  let { newSince }: Props = $props();
+
   let hw = $state.raw<HardwareId | null>(null);
   let error = $state<string | null>(null);
   let showSerial = $state(false);
+  let sharing = $state(false);
 
   function load(): void {
     error = null;
@@ -46,6 +54,18 @@
   <LoadState what="hardware information" {error} loading={!hw} retry={load} />
 {:else}
   <div class="grid">
+    {#if sharing}
+      <!-- Loaded on first use: most sessions never make a card. -->
+      {#await import('./ShareCard.svelte') then { default: ShareCard }}
+        <ShareCard {hw} onclose={() => (sharing = false)} />
+      {/await}
+    {:else}
+      <div class="share-bar">
+        <span>A picture of this PC's parts and Performance Score, for posts and streams.</span>
+        <button type="button" onclick={() => (sharing = true)}>Make a share card</button>
+      </div>
+    {/if}
+    <ChangesCard {newSince} />
     <Card title="Processor" subtitle={cpu?.brand ?? 'Unknown CPU'} wide>
       <div class="split">
         <KV
@@ -180,6 +200,29 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
     gap: 1rem;
+  }
+  .share-bar {
+    display: flex;
+    flex-wrap: wrap;
+    grid-column: 1 / -1;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    padding: 0.55rem 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 6%, var(--panel));
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+  .share-bar button {
+    padding: 0.32rem 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--accent) 16%, var(--bg));
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
   }
   .split {
     display: grid;

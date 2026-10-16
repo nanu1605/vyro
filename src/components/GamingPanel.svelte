@@ -12,6 +12,7 @@
   import { fmtTemp, game as automation, prefs, profiles, savePrefs } from '../prefs.svelte';
   import type { Profile } from '../types';
   import type { BackendStatus, Bound, GameSession, SensorSnapshot } from '../types';
+  import { scrollable } from '../scrollable';
 
   interface Props {
     snap: SensorSnapshot | null;
@@ -150,9 +151,11 @@
       {/if}
     </div>
 
-    {#if auto?.game && (auto.auto || auto.suppressed)}
+    {#if auto?.game && (auto.auto || auto.suppressed || auto.alert)}
       <div class="auto" role="status">
-        {#if auto.suppressed}
+        {#if auto.alert}
+          <p><b>{nameOf(auto.profile)} profile</b> while the alert “{auto.alert}” holds.</p>
+        {:else if auto.suppressed}
           <p>Your <b>{nameOf(auto.base)}</b> profile stays while {game.app} runs.</p>
         {:else}
           <p>
@@ -249,7 +252,7 @@
   {:else if sessions.length === 0}
     <p class="note">Games you play for at least 30 seconds are listed here with their frame rates and temperatures, and a replay of each.</p>
   {:else}
-    <div class="table-wrap panel" bind:this={list}>
+    <div class="table-wrap panel" bind:this={list} use:scrollable role="region" aria-label="Game sessions">
       <table>
         <thead>
           <tr>

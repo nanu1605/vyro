@@ -47,10 +47,31 @@ jobs:
       - run: pnpm check
       - run: pnpm test
       - run: pnpm build
+      - name: Front-end size budget (what each page loads at start)
+        run: python3 scripts/bundle_budget.py --check
       - name: Third-party notices match Cargo.lock
         run: python3 scripts/third_party.py --check
       - name: Version is the same in every manifest
         run: python3 scripts/set-version.py --check
+
+  accessibility:
+    name: Accessibility (every tab and theme)
+    # Pinned: Playwright installs its browser's system packages per Ubuntu release, and
+    # ubuntu-latest moves to a release this Playwright version does not know (2026-10-19).
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Browser for the sweep
+        run: pnpm exec playwright install --with-deps chromium
+      - name: axe-core on every tab, theme and width; dialogs; companion; keyboard; reduced motion
+        run: pnpm a11y
 
   tauri-windows:
     name: Tauri app (Windows)
@@ -73,6 +94,8 @@ jobs:
       - name: Test core (includes the named-pipe IPC tests)
         run: cargo test -p vyro-core
       - run: cargo test -p vyro-service
+      - name: Test the app's own logic
+        run: cargo test -p vyro
       - name: Inventory on a real Windows machine (for eyeballing)
         run: cargo run -p vyro-core --example inventory -- --no-wait
       - name: Live sensors on a real Windows machine (for eyeballing)
@@ -95,6 +118,57 @@ jobs:
             Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
           if ($msi.Length -ge 20MB) { throw "installer is $mb MB, over the 20 MB budget" }
 
+      # P27: the runner has never had Vyro. Install the MSI as a user would (silently here),
+      # check what it put where, ask the service over its pipe, then uninstall and check what
+      # went and what stayed.
+      - name: Build the service probe
+        run: cargo build -p vyro-core --example probe
+      - name: Clean install, probe the service, uninstall
+        shell: pwsh
+        run: |
+          $msi = (Get-Item target\release\bundle\msi\*.msi | Select-Object -First 1).FullName
+          function Msi($verb, $log) {
+            $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList "$verb `"$msi`" /qn /norestart /l*v `"$log`""
+            if ($p.ExitCode -ne 0) { Get-Content $log -Tail 60; throw "msiexec $verb failed: $($p.ExitCode)" }
+          }
+          Msi '/i' "$env:RUNNER_TEMP\install.log"
+
+          $dir = Join-Path $env:ProgramFiles 'Vyro'
+          foreach ($f in 'vyro.exe', 'vyro-service.exe', 'PresentMon.exe', 'pawnio\PawnIO_setup.exe',
+                         'THIRD_PARTY_NOTICES.md', 'LICENSE-MIT', 'LICENSE-APACHE') {
+            if (-not (Test-Path (Join-Path $dir $f))) { throw "not installed: $f" }
+          }
+          $svc = Get-CimInstance Win32_Service -Filter "Name='VyroService'"
+          if (-not $svc) { throw 'VyroService is not registered' }
+          if ($svc.StartMode -ne 'Auto' -or $svc.StartName -ne 'LocalSystem') {
+            throw "VyroService starts $($svc.StartMode) as $($svc.StartName)"
+          }
+          $recovery = sc.exe qfailure VyroService | Out-String
+          if ($recovery -notmatch 'RESTART') { $recovery; throw 'VyroService does not restart after a failure' }
+          $pawnio = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO' -ErrorAction SilentlyContinue
+
+          # Started by the installer without waiting; the probe waits for it to answer.
+          .\target\debug\examples\probe.exe --wait 120 --watch 30 | Tee-Object -FilePath probe.md
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content "$env:ProgramData\Vyro\*.log" -Tail 60 -ErrorAction SilentlyContinue
+            throw 'the installed service did not answer'
+          }
+          $data = Join-Path $env:ProgramData 'Vyro'
+          if (-not (Test-Path "$data\history.sqlite")) { throw "no history in $data" }
+
+          Msi '/x' "$env:RUNNER_TEMP\uninstall.log"
+          if (Get-Service VyroService -ErrorAction SilentlyContinue) { throw 'VyroService is still registered' }
+          if (Test-Path (Join-Path $dir 'vyro-service.exe')) { throw 'program files left behind' }
+          # User data stays, as for any uninstall (the WiX notes in src-tauri/wix/vyro.wxs).
+          if (-not (Test-Path "$data\history.sqlite")) { throw 'the history was removed' }
+
+          @(
+            (Get-Content probe.md -Raw).TrimEnd(),
+            "| Installed | $dir; VyroService automatic, LocalSystem, restarts on failure |",
+            "| PawnIO | $(if ($pawnio) { "installed ($($pawnio.DisplayVersion))" } else { 'not installed (the app then asks for it)' }) |",
+            '| Uninstalled | service and program files removed; history kept in %ProgramData%\Vyro |'
+          ) -join "`n" | Add-Content $env:GITHUB_STEP_SUMMARY
+
       # Ready-to-run downloads for checking on a real PC without a toolchain.
       - name: Collect Windows binaries
         shell: pwsh
@@ -106,6 +180,7 @@ jobs:
           Copy-Item target\debug\examples\remote.exe dist-win\vyro-remote.exe
           cargo build -p vyro-core --example fans
           Copy-Item target\debug\examples\fans.exe dist-win\vyro-fans.exe
+          Copy-Item target\debug\examples\probe.exe dist-win\vyro-probe.exe
           Copy-Item target\release\vyro-service.exe dist-win\vyro-service.exe
           Copy-Item target\release\vyro.exe dist-win\vyro.exe
           Copy-Item target\release\bundle\msi\*.msi dist-win\

@@ -8,8 +8,13 @@
 //! Game sessions for the replay (P15) live in the same file (see `games`), so one size cap
 //! covers both; when over it, the oldest data goes first, whichever it is.
 
+mod bench;
+mod changes;
+mod diag;
+mod digest;
 mod games;
 mod schema;
+mod score;
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -21,6 +26,7 @@ use ts_rs::TS;
 use crate::gaming::markers::GameEvent;
 use crate::gaming::replay::GameSample;
 use crate::gaming::GameSession;
+use crate::intel::digest::MinuteDigest;
 
 pub use rusqlite::Error;
 pub type Result<T> = rusqlite::Result<T>;
@@ -247,13 +253,62 @@ pub struct History {
     pending_samples: Vec<(i64, GameSample)>,
     pending_events: Vec<(i64, GameEvent)>,
     pending_summary: Option<(i64, GameSession)>,
+    pending_digests: Vec<MinuteDigest>,
     last_flush: Option<i64>,
     last_prune: Option<i64>,
+}
+
+/// Whether `e` says the file is not a usable database (rather than locked, full or newer).
+pub fn is_damaged(e: &rusqlite::Error) -> bool {
+    matches!(
+        e,
+        rusqlite::Error::SqliteFailure(f, _)
+            if matches!(f.code, rusqlite::ErrorCode::NotADatabase | rusqlite::ErrorCode::DatabaseCorrupt)
+    )
+}
+
+/// Moves the database and its journal files to [`crate::files::bad_path`], replacing an older
+/// set.
+fn set_aside_db(path: &Path) {
+    let bad = crate::files::bad_path(path);
+    for suffix in ["", "-wal", "-shm"] {
+        let with = |p: &Path| {
+            let mut name = p.as_os_str().to_owned();
+            name.push(suffix);
+            std::path::PathBuf::from(name)
+        };
+        let (from, to) = (with(path), with(&bad));
+        let _ = std::fs::remove_file(&to);
+        if from.exists() {
+            if let Err(e) = std::fs::rename(&from, &to) {
+                log::warn!("history: cannot set {} aside: {e}", from.display());
+            }
+        }
+    }
 }
 
 impl History {
     pub fn open(path: &Path, cfg: HistoryConfig) -> Result<Self> {
         Self::with_connection(Connection::open(path)?, cfg)
+    }
+
+    /// [`Self::open`], except that a file that is not a usable database (damaged, or not a
+    /// database at all) is set aside as `history.bad.sqlite`, with its journal, and a new store
+    /// started; the flag says so. Anything else (a file from a newer Vyro, a locked or full
+    /// disk) is an error and the file is left alone.
+    pub fn open_or_replace(path: &Path, cfg: HistoryConfig) -> Result<(Self, bool)> {
+        match Self::open(path, cfg.clone()) {
+            Ok(h) => Ok((h, false)),
+            Err(e) if is_damaged(&e) => {
+                log::error!(
+                    "history: {} unusable ({e}); set aside, starting a new one",
+                    path.display()
+                );
+                set_aside_db(path);
+                Self::open(path, cfg).map(|h| (h, true))
+            }
+            Err(e) => Err(e),
+        }
     }
 
     pub fn open_in_memory(cfg: HistoryConfig) -> Result<Self> {
@@ -272,6 +327,7 @@ impl History {
             pending_samples: Vec::new(),
             pending_events: Vec::new(),
             pending_summary: None,
+            pending_digests: Vec::new(),
             last_flush: None,
             last_prune: None,
         };
@@ -338,17 +394,20 @@ impl History {
         let samples = std::mem::take(&mut self.pending_samples);
         let events = std::mem::take(&mut self.pending_events);
         let summary = self.pending_summary.take();
+        let digests = std::mem::take(&mut self.pending_digests);
         if raw.is_empty()
             && agg10.is_empty()
             && agg60.is_empty()
             && samples.is_empty()
             && events.is_empty()
             && summary.is_none()
+            && digests.is_empty()
         {
             return Ok(());
         }
         let tx = self.conn.transaction()?;
         games::write(&tx, &samples, &events, summary.as_ref())?;
+        digest::write(&tx, &digests)?;
         {
             let mut st =
                 tx.prepare_cached("INSERT OR REPLACE INTO raw(metric, ts, v) VALUES (?1, ?2, ?3)")?;
@@ -465,6 +524,13 @@ impl History {
         Ok(series)
     }
 
+    /// `metric`'s 1-minute averages from `from` to `to` (unix seconds, both included), as far
+    /// back as the 1-minute tier keeps them.
+    pub fn minutes(&mut self, metric: &str, from: i64, to: i64) -> Result<Vec<HistoryPoint>> {
+        self.flush()?;
+        self.points(metric, Tier::Agg1m, from - 1, to, 60)
+    }
+
     /// Points of `metric` in `tier` with `after < ts <= until`, bucketed to `step` seconds.
     fn points(
         &self,
@@ -525,10 +591,18 @@ impl History {
                 st.execute(params![id, now - retention])?;
             }
         }
-        // Events: same 7-day window as the longest tier, and a cap per kind.
+        // Events and minute digests: same 7-day window as the longest tier, and a cap per kind.
         tx.execute(
             "DELETE FROM event WHERE ts <= ?1",
             params![now - self.cfg.agg1m_retention_secs],
+        )?;
+        tx.execute(
+            "DELETE FROM digest WHERE ts <= ?1",
+            params![now - self.cfg.agg1m_retention_secs],
+        )?;
+        tx.execute(
+            "DELETE FROM score WHERE ts <= ?1",
+            params![now - crate::score::KEEP_SECS],
         )?;
         tx.execute(
             "DELETE FROM event WHERE id IN (SELECT id FROM (SELECT id, ROW_NUMBER() OVER \
@@ -588,6 +662,9 @@ impl History {
                         &format!("DELETE FROM {} WHERE ts < ?1", tier.table()),
                         [oldest + slice],
                     )?;
+                    // The digests of minutes whose history is gone go with it.
+                    self.conn
+                        .execute("DELETE FROM digest WHERE ts < ?1", [oldest + slice])?;
                 }
                 _ => break,
             }
@@ -811,6 +888,37 @@ mod tests {
     }
 
     #[test]
+    fn a_v2_file_gains_the_change_tables_and_keeps_its_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("history.sqlite");
+        {
+            // As 0.3 left it: a v2 file with a game session.
+            let mut h = History::open(&path, HistoryConfig::default()).unwrap();
+            h.record(T0, [("a", 7.0)]).unwrap();
+            h.conn
+                .execute_batch(
+                    "DROP TABLE pc_inventory; DROP TABLE hardware_change; PRAGMA user_version = 2;",
+                )
+                .unwrap();
+        }
+        let mut h = History::open(&path, HistoryConfig::default()).unwrap();
+        assert_eq!(
+            h.query("a", HistoryRange::M5, T0 + 1).unwrap().points[0].avg,
+            7.0
+        );
+        assert!(h.hardware_changes(10).unwrap().is_empty());
+        let first = h
+            .record_inventory(crate::changes::PcInventory::default(), T0)
+            .unwrap();
+        assert_eq!(first[0].kind, crate::changes::ChangeKind::Tracking);
+        let version: i32 = h
+            .conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, 3);
+    }
+
+    #[test]
     fn a_v1_file_gains_the_game_tables_and_keeps_its_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("history.sqlite");
@@ -843,6 +951,37 @@ mod tests {
             .pragma_update(None, "user_version", schema::VERSION + 1)
             .unwrap();
         assert!(History::open(&path, HistoryConfig::default()).is_err());
+    }
+
+    #[test]
+    fn a_damaged_file_is_set_aside_and_a_newer_one_left_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("history.sqlite");
+        let junk = vec![0x5A_u8; 8192];
+        std::fs::write(&path, &junk).unwrap();
+        let (mut h, replaced) = History::open_or_replace(&path, HistoryConfig::default()).unwrap();
+        assert!(replaced);
+        assert_eq!(
+            std::fs::read(dir.path().join("history.bad.sqlite")).unwrap(),
+            junk
+        );
+        h.record(T0, [("a", 1.0)]).unwrap();
+        assert_eq!(h.query("a", HistoryRange::M5, T0).unwrap().points.len(), 1);
+        drop(h);
+        let (_, replaced) = History::open_or_replace(&path, HistoryConfig::default()).unwrap();
+        assert!(!replaced, "a good file is opened as it is");
+
+        // From a newer Vyro: refused, and kept as it is for that version.
+        Connection::open(&path)
+            .unwrap()
+            .pragma_update(None, "user_version", schema::VERSION + 1)
+            .unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let e = History::open_or_replace(&path, HistoryConfig::default())
+            .err()
+            .unwrap();
+        assert!(!is_damaged(&e), "{e}");
+        assert_eq!(std::fs::read(&path).unwrap(), before);
     }
 
     #[test]

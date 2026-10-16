@@ -5,12 +5,14 @@
     title: string;
     subtitle?: string | null;
     wide?: boolean;
+    /** To link to the card (the header's Remote chip). */
+    id?: string;
     children: Snippet;
   }
-  let { title, subtitle = null, wide = false, children }: Props = $props();
+  let { title, subtitle = null, wide = false, id, children }: Props = $props();
 </script>
 
-<section class="panel card" class:wide>
+<section class="panel card" class:wide {id}>
   <header>
     <h2>{title}</h2>
     {#if subtitle}<p>{subtitle}</p>{/if}

@@ -69,7 +69,7 @@ pub struct GameContext {
 }
 
 /// What limits the frame rate.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum Bound {
@@ -171,6 +171,10 @@ pub struct GameSession {
     /// Its replay is kept (since 0.3; the oldest go when the history store is full).
     #[serde(default)]
     pub has_timeline: bool,
+    /// Average CPU package + GPU board power while frames came, W (since 0.4), for frames
+    /// per watt.
+    #[serde(default)]
+    pub power_avg: Option<f64>,
 }
 
 /// Running mean and maximum of a reading over the session.
@@ -212,6 +216,7 @@ struct Session {
     gpu_temp: Track,
     cpu_usage: Track,
     gpu_usage: Track,
+    power: Track,
     profile: Option<Profile>,
     /// In the history store.
     id: Option<i64>,
@@ -245,6 +250,7 @@ impl Session {
             gpu_temp: Track::default(),
             cpu_usage: Track::default(),
             gpu_usage: Track::default(),
+            power: Track::default(),
             profile: context.map(|c| c.profile),
             id: None,
             begun: Instant::now(),
@@ -279,6 +285,7 @@ impl Session {
             profile: self.profile,
             ended: None,
             has_timeline: self.id.is_some(),
+            power_avg: self.power.avg(),
         }
     }
 }
@@ -563,6 +570,10 @@ impl Gaming {
                 s.gpu_temp.add(g.temp_edge);
                 s.gpu_usage.add(g.usage);
             }
+            // CPU and GPU together, only when both are read (or there is no GPU power).
+            let gpu_w = snap.gpu.first().map_or(Some(0.0), |g| g.power_w);
+            s.power
+                .add(snap.cpu.power_pkg_w.zip(gpu_w).map(|(c, g)| c + g));
         }
         let state = if s.failed.is_some() {
             CaptureState::Unavailable
@@ -627,10 +638,14 @@ impl Gaming {
 
 /// Moves the sessions of a `games.json` (0.2) into the history store and renames the file.
 fn import(store: &Mutex<History>, json: &std::path::Path) {
-    if !json.exists() {
-        return;
-    }
-    let sessions = load(json);
+    let sessions = match crate::files::read_json::<Vec<GameSession>>(json, |_| Ok(())) {
+        Ok(Some(sessions)) => sessions,
+        Ok(None) => return,
+        Err(e) => {
+            log::warn!("gaming: {} not imported: {e}", json.display());
+            return;
+        }
+    };
     match lock(store).game_import(&sessions) {
         Ok(()) => {
             log::info!(
@@ -649,24 +664,23 @@ fn import(store: &Mutex<History>, json: &std::path::Path) {
     }
 }
 
+/// The log kept without a history store; a damaged one is set aside (see [`crate::files`]),
+/// so the next save starts a new log beside it.
 fn load(path: &std::path::Path) -> Vec<GameSession> {
-    match std::fs::read_to_string(path) {
-        Ok(text) => serde_json::from_str(&text).unwrap_or_else(|e| {
+    crate::files::read_json(path, |_| Ok(()))
+        .unwrap_or_else(|e| {
             log::warn!(
-                "gaming: {} unreadable ({e}); starting a new log",
+                "gaming: {} not used: {e}; starting a new log",
                 path.display()
             );
-            Vec::new()
-        }),
-        Err(_) => Vec::new(),
-    }
+            None
+        })
+        .unwrap_or_default()
 }
 
 fn save(path: &std::path::Path, sessions: &[GameSession]) -> std::io::Result<()> {
-    let json = serde_json::to_string(sessions).map_err(std::io::Error::other)?;
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, json)?;
-    std::fs::rename(&tmp, path)
+    let json = serde_json::to_vec(sessions).map_err(std::io::Error::other)?;
+    crate::files::write_atomic(path, &json)
 }
 
 /// Fills `snapshot.game` and the `game.*` sensors. Runs last, so the summary can use this
@@ -763,6 +777,19 @@ mod tests {
         s.cpu_temp.add(Some(70.0));
         s.cpu_temp.add(Some(80.0));
         s
+    }
+
+    #[test]
+    fn a_damaged_game_log_is_set_aside_not_imported() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(SESSIONS_FILE), br#"[{"app":"#).unwrap();
+        let store = Arc::new(Mutex::new(
+            History::open_in_memory(crate::HistoryConfig::default()).unwrap(),
+        ));
+        let gaming = Gaming::new(capture::simulated("x"), Some(dir.path()), Some(store));
+        assert!(gaming.sessions().is_empty());
+        assert!(!dir.path().join(SESSIONS_FILE).exists());
+        assert!(dir.path().join("games.bad.json").exists());
     }
 
     #[test]

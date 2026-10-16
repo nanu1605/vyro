@@ -351,8 +351,11 @@
     color: var(--muted);
     font-size: 0.75rem;
   }
-  .off {
-    opacity: 0.5;
+  /* Dimmed with the muted colour, not opacity, so the text keeps its contrast in every theme. */
+  .off td,
+  .off .val {
+    color: var(--muted);
+    font-weight: 400;
   }
   .empty {
     color: var(--muted);

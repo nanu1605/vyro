@@ -9,11 +9,13 @@
   interface Props {
     snap: SensorSnapshot | null;
     active: boolean;
-    /** Sensor opened from the explorer; charted on its own at the top. */
+    /** Sensor opened from the explorer or Insights; charted on its own at the top. */
     focus: string | null;
+    /** The moment it was opened for (Insights evidence): marked, with a range that holds it. */
+    focusAt?: number | null;
     onclearfocus: () => void;
   }
-  let { snap, active, focus, onclearfocus }: Props = $props();
+  let { snap, active, focus, focusAt = null, onclearfocus }: Props = $props();
 
   const RANGES: Array<{ id: HistoryRange; label: string; secs: number }> = [
     { id: '5m', label: '5 min', secs: 300 },
@@ -49,6 +51,15 @@
       /* not remembered */
     }
   }
+
+  // Opened for a moment: the shortest range that still holds it (not remembered as a choice).
+  $effect(() => {
+    const at = focusAt;
+    if (at == null) return;
+    const ago = Math.floor(Date.now() / 1000) - at;
+    range = (RANGES.find((r) => r.secs >= ago * 1.1 + 60) ?? RANGES[RANGES.length - 1]!).id;
+  });
+  const focusMarks = $derived(focusAt == null ? undefined : [{ ts: focusAt, color: 'var(--accent)' }]);
 
   const charts = $derived.by<ChartDef[]>(() => {
     // Sensors hidden in the explorer stay out of the preset charts (a focused one still shows).
@@ -159,6 +170,7 @@
           {end}
           {step}
           onclose={c.key.startsWith('focus:') ? onclearfocus : undefined}
+          markers={c.key.startsWith('focus:') ? focusMarks : undefined}
         />
       </div>
     {/each}

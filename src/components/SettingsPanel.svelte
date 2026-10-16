@@ -10,6 +10,7 @@
   import type { GameAutomation, OverlayMetric, Profile } from '../types';
   import { checkNow, install, update } from '../updates.svelte';
   import { fmtDateTime } from '../format';
+  import { ACCENTS as ACCENT_LIST, THEMES, accentPair, theme as themeOf } from '../themes';
   import type { BackendStatus, SensorSnapshot, SensorTree, TempUnit } from '../types';
 
   interface Props {
@@ -20,6 +21,7 @@
   let { snap, backend, active }: Props = $props();
 
   let autostart = $state<boolean | null>(null);
+  const look = $derived(themeOf(prefs.theme));
   let tree = $state.raw<SensorTree | null>(null);
   let error = $state<string | null>(null);
 
@@ -109,7 +111,12 @@
         </label>
       {/each}
     </fieldset>
-    {#if game.state?.game && game.state.auto}
+    {#if game.state?.alert}
+      <p class="note" role="status">
+        {nameOf(game.state.profile)} is in use while the alert “{game.state.alert}” holds; it ends 30 s after the alert
+        clears. Picking a profile here keeps it instead.
+      </p>
+    {:else if game.state?.game && game.state.auto}
       <p class="note" role="status">
         {nameOf(game.state.profile)} is in use while {snap?.game?.app ?? game.state.game} runs; {nameOf(game.state.base)} comes
         back when it closes. Picking a profile here keeps it for the rest of the game.
@@ -137,6 +144,53 @@
       />
       <span>Start with Windows<small>Opens in the tray when you sign in.</small></span>
     </label>
+  </Card>
+
+  <Card title="Appearance" subtitle={look.name}>
+    <fieldset>
+      <legend>Theme</legend>
+      <div class="themes">
+        {#each THEMES as t (t.id)}
+          {@const [main, second] = accentPair(t, prefs.accent)}
+          <label class="check theme">
+            <input type="radio" name="theme" checked={prefs.theme === t.id} onchange={() => void save('Theme', () => savePrefs({ theme: t.id }))} />
+            <span class="swatch" aria-hidden="true" style:background={t.palette.bg} style:border-color={t.palette.line}>
+              <i style:background={t.palette.panelEdge}></i><i style:background={main}></i><i style:background={second}></i>
+            </span>
+            <span>{t.name}<small>{t.description}</small></span>
+          </label>
+        {/each}
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Accent</legend>
+      <div class="accents">
+        <label class="check">
+          <input type="radio" name="accent" checked={prefs.accent === 'theme'} onchange={() => void save('Accent', () => savePrefs({ accent: 'theme' }))} />
+          <span class="dot" aria-hidden="true" style:background={look.accent[0]}></span>
+          <span>{look.name}'s own</span>
+        </label>
+        {#each ACCENT_LIST as a (a.id)}
+          <label class="check">
+            <input type="radio" name="accent" checked={prefs.accent === a.id} onchange={() => void save('Accent', () => savePrefs({ accent: a.id }))} />
+            <span class="dot" aria-hidden="true" style:background={look.light ? a.light[0] : a.dark[0]}></span>
+            <span>{a.name}</span>
+          </label>
+        {/each}
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Open on</legend>
+      <label class="check">
+        <input type="radio" name="open-on" checked={prefs.openOn === 'dashboard'} onchange={() => void save('Open on', () => savePrefs({ openOn: 'dashboard' }))} />
+        <span>Dashboard<small>When Vyro starts and when you open it from the tray.</small></span>
+      </label>
+      <label class="check">
+        <input type="radio" name="open-on" checked={prefs.openOn === 'last'} onchange={() => void save('Open on', () => savePrefs({ openOn: 'last' }))} />
+        <span>Last tab<small>Where you left off.</small></span>
+      </label>
+    </fieldset>
+    <p class="note">OK, warning and problem colours keep their meaning in every theme.</p>
   </Card>
 
   <Card title="Gaming">
@@ -361,6 +415,10 @@
       </ul>
     {/if}
   </Card>
+
+  {#await import('./RemoteCard.svelte') then { default: RemoteCard }}
+    <RemoteCard {active} />
+  {/await}
 
   <Card title="Sensor service">
     {#if !backend}
@@ -597,6 +655,51 @@
     margin: 0;
     padding: 0;
     border: 0;
+  }
+  fieldset + fieldset {
+    margin-top: 0.6rem;
+  }
+  .themes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    column-gap: 0.75rem;
+  }
+  .swatch {
+    display: inline-flex;
+    flex: none;
+    gap: 3px;
+    align-items: flex-end;
+    width: 2.6rem;
+    height: 1.7rem;
+    padding: 4px;
+    border: 1px solid;
+    border-radius: 6px;
+  }
+  .swatch i {
+    flex: 1;
+    height: 100%;
+    border-radius: 2px;
+  }
+  .swatch i + i {
+    height: 45%;
+  }
+  .accents {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 1rem;
+  }
+  .accents .check {
+    align-items: center;
+  }
+  .accents .check input {
+    margin-top: 0;
+  }
+  .dot {
+    flex: none;
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 25%);
   }
   legend {
     margin-bottom: 0.4rem;

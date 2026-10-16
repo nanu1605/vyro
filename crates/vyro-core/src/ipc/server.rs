@@ -289,11 +289,13 @@ impl Server {
             Request::AlertRules => json(e.alert_rules()),
             Request::SetAlertRules { rules } => json(e.set_alert_rules(rules)),
             Request::AlertLog => json(e.alert_log()),
+            Request::AlertUsual { sensor } => json(e.alert_usual(&sensor)),
             Request::Drives => json(e.drives()),
             Request::PawnIoStatus => json(e.pawnio_status()),
             Request::SetPingHost { host } => json(e.set_ping_host(&host)),
             Request::BitlockerSystemDrive => json(e.bitlocker_system_drive()),
             Request::Insights => json(e.insights()),
+            Request::PerformanceScore => json(e.performance_score()),
             Request::SetCaptureTarget { target } => {
                 let seq = self.capture_seq.fetch_add(1, Ordering::SeqCst);
                 let mut known = false;
@@ -315,6 +317,16 @@ impl Server {
             Request::HistoryWindow { metrics, from, to } => {
                 json(e.history_window(&metrics, from, to))
             }
+            Request::RecordInventory { inventory } => json(e.record_inventory(inventory)),
+            Request::HardwareChanges { limit } => json(e.hardware_changes(limit)),
+            Request::AddBenchmark { run } => json(e.add_benchmark(*run)),
+            Request::BenchmarkRuns => json(e.benchmark_runs()),
+            Request::BenchmarkRun { id } => json(e.benchmark_run(id)),
+            Request::DeleteBenchmark { id } => json(e.delete_benchmark(id)),
+            Request::RunDiagnostics { app } => json(e.run_diagnostics(app)),
+            Request::DiagnosticRuns => json(e.diagnostic_runs()),
+            Request::DiagnosticRun { id } => json(e.diagnostic_run(id)),
+            Request::DeleteDiagnostic { id } => json(e.delete_diagnostic(id)),
             Request::FanStatus => json(e.fan_status()),
             Request::SetFanConfig { config } => json(e.set_fan_config(config)),
             Request::RestoreFans => json(e.restore_fans()),

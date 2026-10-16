@@ -25,4 +25,9 @@ ended: number | null,
 /**
  * Its replay is kept (since 0.3; the oldest go when the history store is full).
  */
-hasTimeline: boolean, };
+hasTimeline: boolean, 
+/**
+ * Average CPU package + GPU board power while frames came, W (since 0.4), for frames
+ * per watt.
+ */
+powerAvg: number | null, };

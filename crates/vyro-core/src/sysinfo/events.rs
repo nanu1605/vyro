@@ -84,6 +84,64 @@ pub fn classify(provider: &str, id: u32) -> Option<PowerEventKind> {
     })
 }
 
+/// What the Performance Score's Stability input counts (P17).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StabilityKind {
+    /// Kernel-Power 41: the PC stopped without shutting down.
+    Shutdown,
+    /// WHEA-Logger 17, 19, 47: a hardware error the CPU or chipset corrected.
+    Corrected,
+    /// WHEA-Logger 18: a fatal hardware error.
+    Fatal,
+}
+
+/// XPath for [`StabilityKind`] events of the last `secs` seconds.
+pub fn stability_query(secs: i64) -> String {
+    format!(
+        "*[System[((Provider[@Name='Microsoft-Windows-Kernel-Power'] and EventID=41) or \
+         (Provider[@Name='Microsoft-Windows-WHEA-Logger'] and (EventID=17 or EventID=18 or \
+         EventID=19 or EventID=47))) and TimeCreated[timediff(@SystemTime) <= {}]]]",
+        secs.max(0) * 1000
+    )
+}
+
+pub fn stability_kind(provider: &str, id: u32) -> Option<StabilityKind> {
+    let p = provider
+        .strip_prefix("Microsoft-Windows-")
+        .unwrap_or(provider);
+    Some(match (p, id) {
+        ("Kernel-Power", 41) => StabilityKind::Shutdown,
+        ("WHEA-Logger", 17 | 19 | 47) => StabilityKind::Corrected,
+        ("WHEA-Logger", 18) => StabilityKind::Fatal,
+        _ => return None,
+    })
+}
+
+/// Decodes one rendered event for the Stability input: when, and what.
+pub fn parse_stability(xml: &str) -> Option<(i64, StabilityKind)> {
+    let provider = attr(xml, "Provider", "Name")?;
+    let id: u32 = text(xml, "EventID")?.parse().ok()?;
+    let ts = parse_utc(attr(xml, "TimeCreated", "SystemTime")?)?;
+    Some((ts, stability_kind(provider, id)?))
+}
+
+/// Counts the events newer than `since`.
+pub fn count_stability(
+    events: impl IntoIterator<Item = (i64, StabilityKind)>,
+    since: i64,
+) -> crate::score::StabilityCounts {
+    let mut c = crate::score::StabilityCounts::default();
+    for (_, kind) in events.into_iter().filter(|(ts, _)| *ts >= since) {
+        let n = match kind {
+            StabilityKind::Shutdown => &mut c.shutdowns,
+            StabilityKind::Corrected => &mut c.corrected,
+            StabilityKind::Fatal => &mut c.fatal,
+        };
+        *n = n.saturating_add(1);
+    }
+    c
+}
+
 /// Decodes one rendered event.
 pub fn parse_event(xml: &str) -> Option<PowerEvent> {
     let provider = attr(xml, "Provider", "Name")?;
@@ -115,6 +173,35 @@ mod tests {
 
     const UNEXPECTED: &str = "<Event><System><Provider Name=\"Microsoft-Windows-Kernel-Power\" Guid=\"{x}\"/>\
         <EventID Qualifiers=\"0\">41</EventID><TimeCreated SystemTime=\"2024-02-29T12:00:00.0Z\"/></System></Event>";
+
+    #[test]
+    fn stability_events_are_counted_by_kind() {
+        let whea = |id: u32, at: &str| {
+            format!(
+                "<Event><System><Provider Name='Microsoft-Windows-WHEA-Logger' Guid='{{x}}'/>\
+                 <EventID>{id}</EventID><TimeCreated SystemTime='{at}'/></System></Event>"
+            )
+        };
+        let events: Vec<(i64, StabilityKind)> = [
+            UNEXPECTED.to_owned(),
+            whea(19, "2024-03-01T08:00:00.0Z"),
+            whea(47, "2024-03-02T08:00:00.0Z"),
+            whea(18, "2024-03-03T08:00:00.0Z"),
+            whea(20, "2024-03-03T09:00:00.0Z"),
+            WAKE.to_owned(),
+        ]
+        .iter()
+        .filter_map(|x| parse_stability(x))
+        .collect();
+        assert_eq!(events.len(), 4, "a WHEA 20 and a wake are not counted");
+        let c = count_stability(events.clone(), 0);
+        assert_eq!((c.shutdowns, c.corrected, c.fatal), (1, 2, 1));
+        // Older than the window: left out.
+        let since = parse_utc("2024-03-02T00:00:00Z").unwrap();
+        let c = count_stability(events, since);
+        assert_eq!((c.shutdowns, c.corrected, c.fatal), (0, 1, 1));
+        assert!(stability_query(30 * 86_400).contains("timediff(@SystemTime) <= 2592000000"));
+    }
 
     #[test]
     fn iso_utc_to_unix() {

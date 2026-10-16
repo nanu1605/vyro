@@ -1,11 +1,15 @@
-/* Dark instrument theme. Components read these tokens; the gauges read them from canvas
-   computed style, so per-panel overrides such as --accent cascade into the dials. */
+/* Midnight, the default theme. src/themes.ts sets these tokens on the root for the chosen theme
+   and accent (P25). Components read the tokens; the gauges read them from canvas computed style,
+   so per-panel overrides such as --accent cascade into the dials. */
 :root {
   color-scheme: dark;
 
   --bg: #0a0d12;
   --panel: #10161e;
   --panel-edge: #1a2330;
+  /* Card surfaces (.panel); translucent on Glass. */
+  --card: var(--panel);
+  --card-top: var(--panel-edge);
   --line: #243040;
   --text: #e6edf3;
   --muted: #8593a5;
@@ -27,6 +31,13 @@
 
   --gauge-track: #18212c;
   --gauge-tick: #334155;
+
+  /* The background wash, and the page state's colour (idle, gaming, warning, critical). */
+  --glow-1: #122033;
+  --glow-2: #0f2419;
+  --state: var(--accent);
+  --state-wash: transparent;
+  --shadow: 0 8px 24px rgb(0 0 0 / 45%);
 
   --font-ui: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-num: 'Segoe UI Variable Display', 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -51,14 +62,30 @@ body {
 
 body {
   background:
-    radial-gradient(60rem 30rem at 20% -10%, #122033 0%, transparent 60%),
-    radial-gradient(50rem 30rem at 90% 0%, #0f2419 0%, transparent 55%),
+    radial-gradient(70rem 22rem at 50% -12rem, var(--state-wash) 0%, transparent 70%),
+    radial-gradient(60rem 30rem at 20% -10%, var(--glow-1) 0%, transparent 60%),
+    radial-gradient(50rem 30rem at 90% 0%, var(--glow-2) 0%, transparent 55%),
     var(--bg);
   background-attachment: fixed;
 }
 
+/* Page states (App.svelte sets data-state). Health's words are on the Dashboard strip and the
+   tab dot; the colour only echoes them. */
+:root[data-state='gaming'] {
+  --state: var(--accent-gpu);
+  --state-wash: color-mix(in srgb, var(--accent-gpu) 10%, transparent);
+}
+:root[data-state='warning'] {
+  --state: var(--warn);
+  --state-wash: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+:root[data-state='critical'] {
+  --state: var(--hot);
+  --state-wash: color-mix(in srgb, var(--hot) 18%, transparent);
+}
+
 .panel {
-  background: linear-gradient(180deg, var(--panel-edge) 0%, var(--panel) 18%);
+  background: linear-gradient(180deg, var(--card-top) 0%, var(--card) 18%);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 1rem;
@@ -93,4 +120,40 @@ body {
 :root.overlay body {
   overflow: hidden;
   background: transparent;
+}
+
+/* Dashboard grid (P24): widgets in order on 12 columns, 6 on narrower windows, 1 on phones.
+   Cells set --w (of 12), --wn (of 6) and --h (rows); rows grow when a card has more to show. */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: minmax(5rem, auto);
+  gap: 0.75rem;
+}
+.dash-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  grid-column: span var(--w, 3);
+  grid-row: span var(--h, 1);
+}
+.dash-cell > :not(.dash-chrome) {
+  flex: 1 1 auto;
+}
+@media (max-width: 900px) {
+  .dash-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .dash-cell {
+    grid-column: span var(--wn, 3);
+  }
+}
+@media (max-width: 560px) {
+  .dash-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dash-cell {
+    grid-column: span 1;
+  }
 }

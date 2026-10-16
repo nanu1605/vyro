@@ -6,7 +6,8 @@ import { listen } from '@tauri-apps/api/event';
 import { evaluate } from './curve';
 import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
-import type { AlertFired, AlertRule, BackendStatus, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insight, Profile, ProfileSpec, TempUnit, HealthEvent, DisplayInfo, DriveInfo, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import { savedLook, type AccentId, type OpenOn, type ThemeId } from './themes';
+import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Dashboard, Devices, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -14,10 +15,19 @@ export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in
 export async function onSensors(cb: (s: SensorSnapshot) => void): Promise<() => void> {
   if (!inTauri) {
     const { startSim } = await import('./sim');
-    // The simulated board's fan control, as the service reports it in each snapshot.
+    const { SIM_ATTENTION } = await import('./sim-insights');
+    const { simAlertState } = await import('./sim-alerts');
+    const rules = await simRules();
+    // The simulated board's fan control, the preview's findings and the alert rules that hold,
+    // as the service reports them in each snapshot.
     return startSim((s) => {
-      const f = simFanStatus(s);
-      cb({ ...s, fanControl: { active: f.active, fullSpeed: f.active && f.overrideReason != null } });
+      const withAlerts = { ...s, alertState: simAlertState(rules(), s.ts) };
+      const f = simFanStatus(withAlerts);
+      cb({
+        ...withAlerts,
+        fanControl: { active: f.active, fullSpeed: f.active && f.overrideReason != null },
+        insights: { attention: SIM_ATTENTION },
+      });
     });
   }
   const unlisten = await listen<SensorSnapshot>('sensors', (e) => cb(e.payload));
@@ -96,6 +106,10 @@ const SIM_HEADERS = [
 
 function simFanStatus(snap: SensorSnapshot | null): FanStatus {
   const cpu = snap?.cpu.tempPackage ?? null;
+  // An alert's fan boost (P18): the largest any rule that holds asks for.
+  const boost = (snap?.alertState?.active ?? [])
+    .filter((a) => a.fanBoost != null)
+    .reduce<{ pct: number; rule: string } | null>((b, a) => (b && b.pct >= a.fanBoost! ? b : { pct: a.fanBoost!, rule: a.name }), null);
   const hot = cpu != null && cpu >= browserFans.emergencyCpuC;
   const headers: HeaderStatus[] = SIM_HEADERS.map((h) => {
     const list = browserFans.profiles[browserSettings.profile] ?? browserFans.headers;
@@ -107,10 +121,10 @@ function simFanStatus(snap: SensorSnapshot | null): FanStatus {
     let source: number | null = null;
     if (driven) {
       if (hot) target = 100;
-      else if (mode.mode === 'fixed') target = mode.pct;
+      else if (mode.mode === 'fixed') target = Math.min(100, mode.pct + (boost?.pct ?? 0));
       else if (mode.mode === 'curve') {
         source = mode.curve.source === 'cpu.temp.package' ? cpu : 45;
-        target = source == null ? 100 : evaluate(mode.curve.points, source);
+        target = source == null ? 100 : Math.min(100, evaluate(mode.curve.points, source) + (boost?.pct ?? 0));
       }
       if (target != null) target = Math.max(pump ? Math.max(h.minPct, SIM_PUMP_MIN) : h.minPct, target);
     }
@@ -130,6 +144,7 @@ function simFanStatus(snap: SensorSnapshot | null): FanStatus {
     headers,
     pumpMinPct: SIM_PUMP_MIN,
     profile: browserSettings.profile,
+    boost: headers.some((h) => h.software) ? boost : null,
   };
 }
 
@@ -171,24 +186,128 @@ export async function getFanEvents(): Promise<FanEvent[]> {
   return invoke<FanEvent[]>('get_fan_events');
 }
 
-/** Findings from history (unusual temperatures, throttling, slow fans, power changes). */
-export async function getInsights(): Promise<Insight[]> {
+/** The intelligence engine's findings and vital signs (P16). */
+export async function getInsights(): Promise<Insights> {
+  if (!inTauri) return (await import('./sim-insights')).simInsights();
+  return invoke<Insights>('get_insights');
+}
+
+/** The Performance Score now with its inputs, and the daily scores of the past year. */
+export async function getPerformanceScore(): Promise<ScoreReport> {
+  if (!inTauri) return (await import('./sim-score')).simScore();
+  return invoke<ScoreReport>('get_performance_score');
+}
+
+// Diagnostics (P21): the engine works out and keeps reports; the app writes the exports.
+
+/** Runs the diagnostics (about a second) and returns the kept report. */
+export async function runDiagnostics(): Promise<DiagReport> {
+  if (!inTauri) return (await import('./sim-diag')).simRunDiagnostics();
+  return invoke<DiagReport>('run_diagnostics');
+}
+
+export async function getDiagnosticRuns(): Promise<DiagSummary[]> {
+  if (!inTauri) return (await import('./sim-diag')).simDiagnosticRuns();
+  return invoke<DiagSummary[]>('get_diagnostic_runs');
+}
+
+export async function getDiagnosticRun(id: number): Promise<DiagReport | null> {
+  if (!inTauri) return (await import('./sim-diag')).simDiagnosticRun(id);
+  return invoke<DiagReport | null>('get_diagnostic_run', { id });
+}
+
+export async function deleteDiagnostic(id: number): Promise<boolean> {
+  if (!inTauri) return (await import('./sim-diag')).simDeleteDiagnostic(id);
+  return invoke<boolean>('delete_diagnostic', { id });
+}
+
+/** Writes an export to Documents\Vyro Reports; returns its path. */
+export async function exportDiagnostics(
+  id: number,
+  format: 'pdf' | 'html' | 'md' | 'json',
+  serialNumbers: boolean,
+  unit: TempUnit,
+  when: string,
+  stamp: string,
+): Promise<string> {
+  if (!inTauri) return `C:\\Users\\owner\\Documents\\Vyro Reports\\vyro-diagnostics-${stamp}.${format}`;
+  return invoke<string>('export_diagnostics', { id, format, serialNumbers, unit, when, stamp });
+}
+
+/** Shows an exported report in Explorer. */
+export async function revealReport(path: string): Promise<void> {
+  if (!inTauri) return;
+  return invoke('reveal_report', { path });
+}
+
+/** Saves a share card PNG to `Pictures\Vyro` and returns its path; in a browser, downloads it. */
+export async function saveShareCard(png: Uint8Array, name: string): Promise<string> {
   if (!inTauri) {
-    const now = Math.floor(Date.now() / 1000);
-    return [
-      {
-        kind: 'unusualTemp', status: 'warn', title: 'CPU running hotter than usual', ts: null,
-        detail: 'Over the last 30 minutes: 68 °C at 22 % load. At that load it usually runs near 58 °C (past week). Dust, a changed fan curve, a warmer room or a cooler problem can cause this.',
-        metrics: ['cpu.temp.package', 'cpu.usage.total'],
-      },
-      {
-        kind: 'powerChange', status: 'ok', title: 'Power rose to 188 W', ts: now - 5400,
-        detail: 'CPU + GPU power went from 45 W to 188 W: GPU #0 +135 W (load 3 % → 97 %), CPU +8 W (load 5 % → 12 %).',
-        metrics: ['cpu.power.package', 'gpu.0.power'],
-      },
-    ];
+    const url = URL.createObjectURL(new Blob([png as BlobPart], { type: 'image/png' }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: name });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return name;
   }
-  return invoke<Insight[]>('get_insights');
+  return invoke<string>('save_share_card', png, { headers: { 'x-file-name': name } });
+}
+
+/** Shows a saved share card in Explorer. */
+export async function revealCard(path: string): Promise<void> {
+  if (!inTauri) return;
+  return invoke('reveal_card', { path });
+}
+
+// Benchmark mode (P20): the run happens in the app; results are kept by the engine.
+
+/** What a run would use, and what stands in its way now. */
+export async function getBenchmarkPreflight(): Promise<Preflight> {
+  if (!inTauri) return (await import('./sim-bench')).simPreflight();
+  return invoke<Preflight>('benchmark_preflight');
+}
+
+export async function startBenchmark(mode: BenchMode): Promise<void> {
+  if (!inTauri) return (await import('./sim-bench')).simStart(mode);
+  return invoke('start_benchmark', { mode });
+}
+
+export async function stopBenchmark(): Promise<void> {
+  if (!inTauri) return (await import('./sim-bench')).simStop();
+  return invoke('stop_benchmark');
+}
+
+/** Where the run is, while one goes on. */
+export async function getBenchmarkProgress(): Promise<BenchProgress | null> {
+  if (!inTauri) return (await import('./sim-bench')).simProgress();
+  return invoke<BenchProgress | null>('get_benchmark_progress');
+}
+
+/** Kept runs, newest first. */
+export async function getBenchmarkRuns(): Promise<RunSummary[]> {
+  if (!inTauri) return (await import('./sim-bench')).simRuns();
+  return invoke<RunSummary[]>('get_benchmark_runs');
+}
+
+export async function getBenchmarkRun(id: number): Promise<BenchRun | null> {
+  if (!inTauri) return (await import('./sim-bench')).simRun(id);
+  return invoke<BenchRun | null>('get_benchmark_run', { id });
+}
+
+export async function deleteBenchmark(id: number): Promise<boolean> {
+  if (!inTauri) return (await import('./sim-bench')).simDelete(id);
+  return invoke<boolean>('delete_benchmark', { id });
+}
+
+/** About four times a second while a run goes on (and the window shows). */
+export async function onBenchProgress(cb: (p: BenchProgress) => void): Promise<() => void> {
+  if (!inTauri) return (await import('./sim-bench')).onSimProgress(cb);
+  return listen<BenchProgress>('bench-progress', (e) => cb(e.payload));
+}
+
+/** The finished or stopped run, once kept. */
+export async function onBenchDone(cb: (r: BenchRun) => void): Promise<() => void> {
+  if (!inTauri) return (await import('./sim-bench')).onSimDone(cb);
+  return listen<BenchRun>('bench-done', (e) => cb(e.payload));
 }
 
 /** Recent health changes, oldest first. */
@@ -206,16 +325,15 @@ export async function getHealthEvents(): Promise<HealthEvent[]> {
   return invoke<HealthEvent[]>('get_health_events');
 }
 
-// Browser preview only: rules live in memory, mirroring the engine's first-run defaults.
-let browserRules: AlertRule[] = [
-  { id: 'cpu-temp', name: 'CPU temperature', enabled: true, kind: { type: 'threshold', sensor: 'cpu.temp.package', above: true, value: 95 }, forSecs: 30, cooldownSecs: 600, sound: true },
-  { id: 'gpu-temp', name: 'GPU temperature', enabled: true, kind: { type: 'threshold', sensor: 'gpu.0.temp.edge', above: true, value: 90 }, forSecs: 30, cooldownSecs: 600, sound: true },
-  { id: 'health-problems', name: 'Hardware problems', enabled: true, kind: { type: 'health', problems: true }, forSecs: 0, cooldownSecs: 600, sound: true },
-  { id: 'health-warnings', name: 'Health warnings', enabled: false, kind: { type: 'health', problems: false }, forSecs: 0, cooldownSecs: 1800, sound: false },
-];
+// Browser preview only: rules live in memory, starting from the preview's (`sim-alerts.ts`).
+let browserRules: AlertRule[] | null = null;
+async function simRules(): Promise<() => AlertRule[]> {
+  if (!browserRules) browserRules = JSON.parse(JSON.stringify((await import('./sim-alerts')).SIM_RULES)) as AlertRule[];
+  return () => browserRules ?? [];
+}
 
 export async function getAlertRules(): Promise<AlertRule[]> {
-  if (!inTauri) return JSON.parse(JSON.stringify(browserRules)) as AlertRule[];
+  if (!inTauri) return JSON.parse(JSON.stringify((await simRules())())) as AlertRule[];
   return invoke<AlertRule[]>('get_alert_rules');
 }
 
@@ -229,11 +347,15 @@ export async function setAlertRules(rules: AlertRule[]): Promise<void> {
 }
 
 export async function getAlertLog(): Promise<AlertFired[]> {
-  if (!inTauri) {
-    const now = Math.floor(Date.now() / 1000);
-    return [{ ts: now - 3890, ruleId: 'cpu-temp', title: 'CPU temperature', message: 'CPU (Tdie) at 95.4 °C (above 95.0 °C for 10 s)', sound: true }];
-  }
+  if (!inTauri) return (await import('./sim-alerts')).simAlertLog(Math.floor(Date.now() / 1000));
   return invoke<AlertFired[]>('get_alert_log');
+}
+
+/** A sensor's usual reading now, for "above usual" conditions; `null` until there is about a
+ * day of history. */
+export async function getAlertUsual(sensor: string): Promise<number | null> {
+  if (!inTauri) return (await import('./sim-alerts')).simUsual(sensor);
+  return invoke<number | null>('get_alert_usual', { sensor });
 }
 
 export interface AppSettings {
@@ -253,12 +375,25 @@ export interface AppSettings {
   checkUpdates: boolean;
   /** Automatic game profiles and each saved game's own settings. */
   games: GameAutomation;
+  /** Colours (P25). */
+  theme: ThemeId;
+  accent: AccentId;
+  /** Which tab the window opens on, at launch and from the tray. */
+  openOn: OpenOn;
+  /** My PC (P23): 3-D or the flat plan, and the owner's GPU shapes by card key. */
+  myPc: MyPcSettings;
 }
+export interface MyPcSettings {
+  threeD: boolean;
+  /** Checked with `validShape` when read; kept as written. */
+  gpuShapes: Record<string, unknown>;
+}
+export const DEFAULT_MY_PC: MyPcSettings = { threeD: true, gpuShapes: {} };
 export { DEFAULT_OVERLAY };
 export type { OverlayCorner, OverlayData, OverlaySettings };
 let browserSettings: AppSettings = {
   closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop', gameCapture: true, overlay: { ...DEFAULT_OVERLAY }, checkUpdates: true,
-  games: { ...DEFAULT_GAMES },
+  games: { ...DEFAULT_GAMES }, ...savedLook(), myPc: { ...DEFAULT_MY_PC },
 };
 
 /** Overlay readings, at the overlay's update rate while it shows; in a browser, from the
@@ -481,6 +616,64 @@ export async function getDisplays(): Promise<DisplayInfo[]> {
   return invoke<DisplayInfo[]>('get_displays');
 }
 
+/** Peripherals, wireless battery and sound devices (P22), read fresh. */
+export async function getDevices(): Promise<Devices> {
+  if (!inTauri) return (await import('./sample-devices')).sampleDevices;
+  return invoke<Devices>('get_devices');
+}
+
+/** Fires once things settle after a device arrives, leaves, connects or disconnects. Starts
+ * after the first `getDevices`. */
+export async function onDevicesChanged(cb: () => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen('devices-changed', () => cb());
+}
+
+/** Saved Dashboard layouts (P24); null before the first save (the Dashboard then starts from
+ * the presets). The browser preview keeps them in this page's storage. */
+export async function getDashboard(): Promise<Dashboard | null> {
+  if (!inTauri) {
+    try {
+      const t = localStorage.getItem('vyro.dashboard');
+      return t ? (JSON.parse(t) as Dashboard) : null;
+    } catch {
+      return null;
+    }
+  }
+  return invoke<Dashboard | null>('get_dashboard');
+}
+
+/** Saves the layouts; returns them as stored (checked and tidied by the app). */
+export async function setDashboard(dashboard: Dashboard): Promise<Dashboard> {
+  if (!inTauri) {
+    try {
+      localStorage.setItem('vyro.dashboard', JSON.stringify(dashboard));
+    } catch {
+      /* storage unavailable: kept for this page only */
+    }
+    return dashboard;
+  }
+  return invoke<Dashboard>('set_dashboard', { dashboard });
+}
+
+/** The PC change history (P19), newest first. */
+export async function getHardwareChanges(limit = 1000): Promise<HardwareChange[]> {
+  if (!inTauri) return (await import('./sim-changes')).SAMPLE_CHANGES.slice(0, limit);
+  return invoke<HardwareChange[]>('get_hardware_changes', { limit });
+}
+
+/** Fires with the new changes when a check finds any (at start, or when a monitor or drive comes). */
+export async function onHardwareChanged(cb: (found: HardwareChange[]) => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<HardwareChange[]>('hardware-changed', (e) => cb(e.payload));
+}
+
+/** Fires when the window is shown again from the tray. */
+export async function onWindowOpened(cb: () => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen('window-opened', () => cb());
+}
+
 /** Fires after monitors are plugged, unplugged or reconfigured (debounced by the engine). */
 export async function onDisplaysChanged(cb: () => void): Promise<() => void> {
   if (!inTauri) return () => {};
@@ -512,4 +705,52 @@ export async function setPingHost(host: string): Promise<void> {
 export async function getPawnIoStatus(): Promise<PawnIoStatus> {
   if (!inTauri) return { state: 'ready', version: '2.0.0 (simulated)', detail: null };
   return invoke<PawnIoStatus>('get_pawnio_status');
+}
+
+// Remote companion (P26). The browser preview keeps a pretend companion in memory.
+
+/** Settings → Remote: on or off, addresses, paired devices, the open pairing code. */
+export async function getRemoteStatus(): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simRemoteStatus();
+  return invoke<RemoteStatus>('get_remote_status');
+}
+
+/** On, and how many live views are open (the header chip). */
+export async function getRemoteBrief(): Promise<RemoteBrief> {
+  if (!inTauri) return (await import('./sim-remote')).simRemoteBrief();
+  return invoke<RemoteBrief>('get_remote_brief');
+}
+
+/** Fires when the companion starts or stops, a phone opens or closes its view, or a device is
+ * paired or signed out. */
+export async function onRemote(cb: (b: RemoteBrief) => void): Promise<() => void> {
+  if (!inTauri) return (await import('./sim-remote')).onSimRemote(cb);
+  return listen<RemoteBrief>('remote-status', (e) => cb(e.payload));
+}
+
+export async function setRemoteEnabled(enabled: boolean): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simSetEnabled(enabled);
+  return invoke<RemoteStatus>('set_remote_enabled', { enabled });
+}
+
+export async function setRemoteOptions(port: number, sessionDays: number): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simSetOptions(port, sessionDays);
+  return invoke<RemoteStatus>('set_remote_options', { port, sessionDays });
+}
+
+/** Opens a pairing code (5 minutes, one device). */
+export async function startRemotePairing(): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simStartPairing();
+  return invoke<RemoteStatus>('start_remote_pairing');
+}
+
+export async function cancelRemotePairing(): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simCancelPairing();
+  return invoke<RemoteStatus>('cancel_remote_pairing');
+}
+
+/** Signs one device out, or every device with `null`; their live views close at once. */
+export async function signOutRemote(id: string | null): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simSignOut(id);
+  return invoke<RemoteStatus>('sign_out_remote', { id });
 }

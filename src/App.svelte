@@ -1,54 +1,53 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import GaugePanel from './components/GaugePanel.svelte';
-  import StatTile from './components/StatTile.svelte';
   import AppStatus from './components/AppStatus.svelte';
   import HardwarePanel from './components/HardwarePanel.svelte';
   import SystemPanel from './components/SystemPanel.svelte';
   import SettingsPanel from './components/SettingsPanel.svelte';
   import DisplaysPanel from './components/DisplaysPanel.svelte';
+  import DashboardGrid from './components/DashboardGrid.svelte';
   import StoragePanel from './components/StoragePanel.svelte';
-  import MemoryCard from './components/MemoryCard.svelte';
   import NetworkPanel from './components/NetworkPanel.svelte';
-  import PowerCard from './components/PowerCard.svelte';
-  import SelfCard from './components/SelfCard.svelte';
-  import CoresCard from './components/CoresCard.svelte';
-  import CpuSensorsCard from './components/CpuSensorsCard.svelte';
-  import BoardCard from './components/BoardCard.svelte';
   import PawnIoBanner from './components/PawnIoBanner.svelte';
   import ServiceBanner from './components/ServiceBanner.svelte';
-  import GpuCard from './components/GpuCard.svelte';
   import ProcessesPanel from './components/ProcessesPanel.svelte';
   import SensorsPanel from './components/SensorsPanel.svelte';
   import HistoryPanel from './components/HistoryPanel.svelte';
   import HealthPanel from './components/HealthPanel.svelte';
+  import InsightsPanel from './components/InsightsPanel.svelte';
   import GamingPanel from './components/GamingPanel.svelte';
   import CoolingPanel from './components/CoolingPanel.svelte';
   import { animator } from './anim';
-  import { fmt, fmtGB } from './format';
   import { loadUpdates, update } from './updates.svelte';
-  import { getBackendStatus, getPawnIoStatus, inTauri, onBackendStatus, onSensors, restoreFans, setUiVisible } from './ipc';
-  import { loadPrefs, profileSpec, temp, tempOrNull, tempText, tempUnit } from './prefs.svelte';
-  import type { AlertFired, BackendStatus, PawnIoStatus, SensorSnapshot } from './types';
+  import { getBackendStatus, getHardwareChanges, getPawnIoStatus, getRemoteBrief, inTauri, onBackendStatus, onHardwareChanged, onRemote, onSensors, onWindowOpened, restoreFans, setUiVisible } from './ipc';
+  import { loadSeen, newestId, saveSeen } from './changes';
+  import { loadSeenKeys, markSeen, unseen } from './insights';
+  import { loadPrefs, prefs, profileSpec, tempText } from './prefs.svelte';
+  import { applyLook, savedLook, uiState } from './themes';
+  import type { AlertFired, BackendStatus, PawnIoStatus, RemoteBrief, SensorSnapshot } from './types';
 
   const TABS = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'cooling', label: 'Cooling' },
     { id: 'history', label: 'History' },
     { id: 'health', label: 'Health' },
+    { id: 'insights', label: 'Insights' },
     { id: 'gaming', label: 'Gaming' },
+    { id: 'benchmark', label: 'Benchmark' },
     { id: 'processes', label: 'Processes' },
     { id: 'hardware', label: 'Hardware' },
+    { id: 'mypc', label: 'My PC' },
     { id: 'storage', label: 'Storage' },
     { id: 'network', label: 'Network' },
     { id: 'displays', label: 'Displays' },
+    { id: 'devices', label: 'Devices' },
     { id: 'system', label: 'System' },
     { id: 'sensors', label: 'Sensors' },
     { id: 'settings', label: 'Settings' },
   ] as const;
   type Tab = (typeof TABS)[number]['id'];
 
-  function savedTab(): Tab {
+  function lastTab(): Tab {
     try {
       const t = localStorage.getItem('vyro.tab');
       return TABS.some((x) => x.id === t) ? (t as Tab) : 'dashboard';
@@ -57,19 +56,27 @@
     }
   }
 
-  let tab = $state<Tab>(savedTab());
+  // "Open on" (P25): the Dashboard unless the owner chose the last tab. The page's copy of the
+  // choice decides the first paint; the settings file corrects it once loaded.
+  let tab = $state<Tab>(savedLook().openOn === 'last' ? lastTab() : 'dashboard');
+  /** Set by the first tab the owner picks, so loading the settings never moves them. */
+  let navigated = false;
   // Panels mount on first visit and then stay mounted (keeps fetched data and live history).
   let visited = $state<Record<Tab, boolean>>({
     dashboard: true,
     cooling: false,
     history: false,
     health: false,
+    insights: false,
     gaming: false,
+    benchmark: false,
     processes: false,
     hardware: false,
+    mypc: false,
     storage: false,
     network: false,
     displays: false,
+    devices: false,
     system: false,
     sensors: false,
     settings: false,
@@ -87,14 +94,30 @@
     setTimeout(() => (toasts = toasts.filter((t) => t.key !== key)), 10_000);
   }
 
-  /** Sensor opened from the explorer, charted alone at the top of History. */
+  // PC change history (P19): a dot on Hardware until its new changes have been shown.
+  let newestChange = $state(0);
+  let changesSeen = $state(loadSeen());
+  let changesNewSince = $state(Number.POSITIVE_INFINITY);
+  $effect(() => {
+    if (tab === 'hardware' && newestChange > changesSeen) {
+      changesNewSince = changesSeen;
+      changesSeen = newestChange;
+      saveSeen(newestChange);
+    }
+  });
+
+  /** Sensor opened from the explorer or Insights, charted alone at the top of History, with
+   * the moment it was opened for. */
   let historyFocus = $state<string | null>(null);
-  function openHistory(id: string): void {
+  let historyAt = $state<number | null>(null);
+  function openHistory(id: string, at: number | null = null): void {
     historyFocus = id;
+    historyAt = at;
     select('history');
   }
 
   function select(t: Tab): void {
+    navigated = true;
     tab = t;
     visited[t] = true;
     try {
@@ -125,6 +148,17 @@
 
   // Replaced wholesale every tick; no deep reactivity needed.
   let snap = $state.raw<SensorSnapshot | null>(null);
+
+  // Insights (P16): a dot on the tab until the findings worth a look have been shown.
+  let insightsSeen = $state(loadSeenKeys());
+  let insightsFresh = $state<string[]>([]);
+  const insightsNew = $derived(unseen(snap?.insights?.attention ?? [], insightsSeen));
+  $effect(() => {
+    if (tab === 'insights' && insightsNew.length) {
+      insightsFresh = insightsNew;
+      insightsSeen = markSeen(insightsSeen, insightsNew);
+    }
+  });
   const overall = $derived(snap?.health.overall ?? 'unknown');
   /** Warnings and problems for the dashboard strip, worst first. */
   const attention = $derived(
@@ -135,15 +169,24 @@
   );
 
   let uiFps = $state(0);
+  /** The window is hidden (tray): views that draw continuously stop and free their resources. */
+  let pageHidden = $state(typeof document !== 'undefined' && document.hidden);
+
+  // Theme and accent (P25), from the settings; the page state colours the header rail.
+  $effect(() => applyLook({ theme: prefs.theme, accent: prefs.accent, openOn: prefs.openOn }));
+  const pageState = $derived(uiState(snap));
+  $effect(() => {
+    document.documentElement.dataset.state = pageState;
+  });
 
   // Profile: animation level and dashboard density.
   const spec = $derived(profileSpec());
   const compact = $derived(spec.dashboard === 'compact');
-  $effect(() => animator.setMotion(spec.motion));
+  $effect(() => {
+    animator.setMotion(spec.motion);
+    document.documentElement.dataset.motion = spec.motion;
+  });
 
-  const cpu = $derived(snap?.cpu ?? null);
-  const gpu = $derived(snap?.gpu[0] ?? null);
-  const mem = $derived(snap?.memory ?? null);
   // CPU temperature / power and board fans come through PawnIO (Phase 6).
   let pawnio = $state.raw<PawnIoStatus | null>(null);
   // Sensor service connection (P8); without it the app reads unprivileged sensors itself.
@@ -155,8 +198,6 @@
       .then((s) => (pawnio = s))
       .catch(() => {});
   const NEEDS_DRIVER = $derived(pawnio?.state === 'ready' ? 'not reported' : 'needs PawnIO');
-  const game = $derived(snap?.game ?? null);
-  const cpuFan = $derived(snap?.fans.find((f) => f.kind === 'fan') ?? null);
 
   // Fan control (P12): the header shows whenever Vyro drives fans, from any tab. Each snapshot
   // says so; nothing is polled.
@@ -165,17 +206,56 @@
     await restoreFans().catch(() => {});
   }
 
+  // Remote companion (P26): the header says so while it is on, from any tab.
+  let remote = $state.raw<RemoteBrief | null>(null);
+  function openRemote(): void {
+    select('settings');
+    // The card loads with the panel.
+    setTimeout(() => document.getElementById('remote')?.scrollIntoView({ block: 'start' }), 150);
+  }
+
   onMount(() => {
     visited[tab] = true;
     loadPawnIo();
-    void loadPrefs().catch(() => {});
+    void loadPrefs()
+      .then(() => {
+        if (!navigated && prefs.openOn === 'last' && tab === 'dashboard') {
+          const t = lastTab();
+          if (t !== 'dashboard') select(t);
+        }
+      })
+      .catch(() => {});
     void loadUpdates().catch(() => {});
     let stop: (() => void) | undefined;
     let stopBackend: (() => void) | undefined;
+    let stopChanges: (() => void) | undefined;
+    let stopOpened: (() => void) | undefined;
+    let stopRemote: (() => void) | undefined;
     let disposed = false;
+    // Opened again from the tray: back to the Dashboard unless "Last tab" is chosen.
+    void onWindowOpened(() => {
+      if (prefs.openOn === 'dashboard') select('dashboard');
+    }).then((fn) => {
+      if (disposed) fn();
+      else stopOpened = fn;
+    });
+    getHardwareChanges(1)
+      .then((v) => (newestChange = Math.max(newestChange, newestId(v))))
+      .catch(() => {});
+    void onHardwareChanged((found) => (newestChange = Math.max(newestChange, newestId(found)))).then((fn) => {
+      if (disposed) fn();
+      else stopChanges = fn;
+    });
     getBackendStatus()
       .then((s) => (backend = s))
       .catch(() => {});
+    getRemoteBrief()
+      .then((b) => (remote = b))
+      .catch(() => {});
+    void onRemote((b) => (remote = b)).then((fn) => {
+      if (disposed) fn();
+      else stopRemote = fn;
+    });
     void onBackendStatus((s) => {
       backend = s;
       // A restarted service may see PawnIO differently.
@@ -194,6 +274,7 @@
     });
 
     const onVisibility = () => {
+      pageHidden = document.hidden;
       animator.setHidden(document.hidden);
       setUiVisible(!document.hidden);
     };
@@ -202,6 +283,9 @@
       disposed = true;
       stop?.();
       stopBackend?.();
+      stopChanges?.();
+      stopOpened?.();
+      stopRemote?.();
       document.removeEventListener('visibilitychange', onVisibility);
     };
   });
@@ -227,9 +311,29 @@
             <span class="alert-dot {overall}" aria-hidden="true"></span>
             <span class="sr-only">({overall === 'fail' ? 'problem' : 'warning'})</span>
           {/if}
+          {#if t.id === 'hardware' && newestChange > changesSeen}
+            <span class="alert-dot new" aria-hidden="true"></span>
+            <span class="sr-only">(new PC changes)</span>
+          {/if}
+          {#if t.id === 'insights' && insightsNew.length}
+            <span class="alert-dot new" aria-hidden="true"></span>
+            <span class="sr-only">(new findings)</span>
+          {/if}
         </button>
       {/each}
     </div>
+    {#if remote?.running}
+      <button
+        type="button"
+        class="remote-chip"
+        onclick={openRemote}
+        title="Open Settings → Remote"
+        aria-label="Remote companion on{remote.watching ? `, ${remote.watching} watching` : ''}. Open its settings."
+      >
+        <span class="remote-dot" class:live={remote.watching > 0} aria-hidden="true"></span>
+        Remote{remote.watching ? ` · ${remote.watching} watching` : ''}
+      </button>
+    {/if}
     {#if fans?.active}
       <div class="fan-chip" role="status">
         <button type="button" class="chip-open" onclick={() => select('cooling')}>
@@ -242,6 +346,7 @@
       </div>
     {/if}
   </header>
+  <div class="rail" aria-hidden="true"></div>
 
   <main>
     {#if visited.cooling}
@@ -270,89 +375,53 @@
           <span class="go">Health →</span>
         </button>
       {/if}
-      <div class="gauges">
-        <GaugePanel
-          label="CPU"
-          ts={snap?.ts ?? 0}
-          usage={cpu?.usageTotal ?? null}
-          mhz={cpu?.mhzCurrent ?? null}
-          detail={cpu?.mhzBoost != null ? `base ${fmt(cpu.mhzBase)} · boost ${fmt(cpu.mhzBoost)} MHz` : null}
-        />
-        <div class="gpu">
-          <GaugePanel
-            label="GPU"
-            ts={snap?.ts ?? 0}
-            usage={gpu?.usage ?? null}
-            mhz={gpu?.mhzCore ?? null}
-            detail={gpu?.name ?? 'No GPU detected'}
-          />
-        </div>
-      </div>
-
-      <div class="tiles">
-        {#if game && game.state !== 'unavailable'}
-          <button type="button" class="tile-link" onclick={() => select('gaming')} aria-label="Game: {game.app}, open Gaming">
-            <StatTile label="Game FPS" value={game.fps} unit="FPS" sub={game.low1Fps != null ? `1% low ${fmt(game.low1Fps)} · ${game.app}` : game.app} />
-          </button>
-        {/if}
-        <StatTile label="CPU package" value={tempOrNull(cpu?.tempPackage)} unit={tempUnit()} warn={temp(80)} hot={temp(95)} sub={cpu?.tempPackage == null ? NEEDS_DRIVER : null} />
-        <StatTile label="CPU power" value={cpu?.powerPkgW} unit="W" digits={1} sub={cpu?.powerPkgW == null ? NEEDS_DRIVER : null} />
-        <StatTile label="GPU temp" value={tempOrNull(gpu?.tempEdge)} unit={tempUnit()} warn={temp(80)} hot={temp(90)} />
-        <StatTile label="GPU hotspot" value={tempOrNull(gpu?.tempHotspot)} unit={tempUnit()} warn={temp(90)} hot={temp(105)} />
-        <StatTile
-          label="VRAM"
-          value={gpu?.vramUsedMB != null ? gpu.vramUsedMB / 1024 : null}
-          unit="GB"
-          digits={1}
-          sub={gpu?.vramTotalMB != null ? `of ${fmtGB(gpu.vramTotalMB)} GB` : null}
-        />
-        <StatTile
-          label="Memory"
-          value={mem?.usedMB != null ? mem.usedMB / 1024 : null}
-          unit="GB"
-          digits={1}
-          sub={mem?.totalMB != null ? `of ${fmtGB(mem.totalMB)} GB` : null}
-        />
-        <StatTile label="System power" value={snap?.power.estTotalW} unit="W" sub={snap?.power.estTotalW == null ? NEEDS_DRIVER : 'estimated'} />
-        <StatTile label={cpuFan?.name ?? 'CPU fan'} value={cpuFan?.rpm} unit="RPM" sub={cpuFan?.rpm == null ? NEEDS_DRIVER : null} />
-      </div>
-
-      <div class="cards">
-        {#if !compact}<CoresCard {cpu} />{/if}
-        <CpuSensorsCard {cpu} />
-        {#each snap?.gpu ?? [] as g, i (i)}
-          <GpuCard gpu={g} />
-        {/each}
-        {#if !compact}
-          <MemoryCard {mem} />
-          <PowerCard power={snap?.power ?? null} gpus={snap?.gpu ?? []} />
-          <BoardCard board={snap?.board ?? null} fans={snap?.fans ?? []} voltages={snap?.voltages ?? []} pending={NEEDS_DRIVER} />
-          <SelfCard app={snap?.app ?? null} {uiFps} />
-        {/if}
-      </div>
-      {#if compact}
-        <p class="compact-note">
-          {spec.name} profile: compact dashboard.
-          <button type="button" class="link" onclick={() => select('settings')}>Change profile</button>
-        </p>
-      {/if}
+      <DashboardGrid
+        {snap}
+        active={tab === 'dashboard'}
+        needs={NEEDS_DRIVER}
+        {uiFps}
+        {compact}
+        profileName={spec.name}
+        onselect={select}
+      />
     </div>
 
     {#if visited.history}
       <div id="panel-history" role="tabpanel" aria-labelledby="tab-history" hidden={tab !== 'history'}>
-        <HistoryPanel {snap} active={tab === 'history'} focus={historyFocus} onclearfocus={() => (historyFocus = null)} />
+        <HistoryPanel
+          {snap}
+          active={tab === 'history'}
+          focus={historyFocus}
+          focusAt={historyAt}
+          onclearfocus={() => ((historyFocus = null), (historyAt = null))}
+        />
       </div>
     {/if}
 
     {#if visited.health}
       <div id="panel-health" role="tabpanel" aria-labelledby="tab-health" hidden={tab !== 'health'}>
-        <HealthPanel {snap} active={tab === 'health'} onhistory={openHistory} />
+        <HealthPanel {snap} active={tab === 'health'} oninsights={() => select('insights')} onhistory={openHistory} />
+      </div>
+    {/if}
+
+    {#if visited.insights}
+      <div id="panel-insights" role="tabpanel" aria-labelledby="tab-insights" hidden={tab !== 'insights'}>
+        <InsightsPanel active={tab === 'insights'} fresh={insightsFresh} onhistory={openHistory} />
       </div>
     {/if}
 
     {#if visited.gaming}
       <div id="panel-gaming" role="tabpanel" aria-labelledby="tab-gaming" hidden={tab !== 'gaming'}>
         <GamingPanel {snap} {backend} active={tab === 'gaming'} onsettings={() => select('settings')} />
+      </div>
+    {/if}
+
+    {#if visited.benchmark}
+      <div id="panel-benchmark" role="tabpanel" aria-labelledby="tab-benchmark" hidden={tab !== 'benchmark'}>
+        <!-- Loaded on first visit: most sessions never open it. -->
+        {#await import('./components/BenchmarkPanel.svelte') then { default: BenchmarkPanel }}
+          <BenchmarkPanel active={tab === 'benchmark'} />
+        {/await}
       </div>
     {/if}
 
@@ -364,7 +433,15 @@
 
     {#if visited.hardware}
       <div id="panel-hardware" role="tabpanel" aria-labelledby="tab-hardware" hidden={tab !== 'hardware'}>
-        <HardwarePanel />
+        <HardwarePanel newSince={changesNewSince} />
+      </div>
+    {/if}
+    {#if visited.mypc}
+      <div id="panel-mypc" role="tabpanel" aria-labelledby="tab-mypc" hidden={tab !== 'mypc'}>
+        <!-- Loaded on first visit; its 3-D view (Three.js) exists only while the tab shows. -->
+        {#await import('./components/MyPcPanel.svelte') then { default: MyPcPanel }}
+          <MyPcPanel {snap} active={tab === 'mypc' && !pageHidden} onselect={select} />
+        {/await}
       </div>
     {/if}
     {#if visited.storage}
@@ -380,6 +457,14 @@
     {#if visited.displays}
       <div id="panel-displays" role="tabpanel" aria-labelledby="tab-displays" hidden={tab !== 'displays'}>
         <DisplaysPanel />
+      </div>
+    {/if}
+    {#if visited.devices}
+      <div id="panel-devices" role="tabpanel" aria-labelledby="tab-devices" hidden={tab !== 'devices'}>
+        <!-- Loaded on first visit, like Benchmark. -->
+        {#await import('./components/DevicesPanel.svelte') then { default: DevicesPanel }}
+          <DevicesPanel active={tab === 'devices'} />
+        {/await}
       </div>
     {/if}
     {#if visited.system}
@@ -422,7 +507,52 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 0.5rem 0.75rem;
-    margin-bottom: 0.9rem;
+    margin-bottom: 0.55rem;
+  }
+  /* The page state (idle, gaming, warning, critical) as a thin line under the header. */
+  .rail {
+    height: 2px;
+    margin-bottom: 0.85rem;
+    border-radius: 2px;
+    background: linear-gradient(90deg, transparent, var(--state) 20%, var(--state) 80%, transparent);
+    opacity: 0.35;
+  }
+  :global(:root:not([data-state='idle'])) .rail {
+    opacity: 1;
+  }
+  /* Critical pulses four times, then stays lit; not at all with the profile's motion off. */
+  :global(:root[data-state='critical']) .rail {
+    animation: rail-pulse 1.2s ease-in-out 8 alternate;
+  }
+  :global(:root[data-motion='off']) .rail {
+    animation: none;
+  }
+  @keyframes rail-pulse {
+    to {
+      opacity: 0.3;
+    }
+  }
+  .remote-chip {
+    display: flex;
+    align-items: center;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+    border-radius: 999px;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  .remote-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-right: 0.4rem;
+    border: 1.5px solid var(--accent);
+    border-radius: 50%;
+  }
+  .remote-dot.live {
+    background: var(--accent);
   }
   .fan-chip {
     display: flex;
@@ -469,6 +599,8 @@
     background: var(--panel);
   }
   .tabs button {
+    /* Holds the tab's screen-reader note, so it scrolls with the tab instead of widening the page. */
+    position: relative;
     padding: 0.35rem 0.85rem;
     border: 0;
     border-radius: 7px;
@@ -498,6 +630,9 @@
   .alert-dot.fail {
     background: var(--hot);
   }
+  .alert-dot.new {
+    background: var(--accent);
+  }
   .toasts {
     position: fixed;
     right: 1rem;
@@ -516,7 +651,7 @@
     border: 1px solid color-mix(in srgb, var(--hot) 50%, var(--line));
     border-radius: 10px;
     background: var(--panel);
-    box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+    box-shadow: var(--shadow);
     color: var(--text);
     font: inherit;
     font-size: 0.82rem;
@@ -576,64 +711,9 @@
     color: var(--muted);
     font-size: 0.8rem;
   }
-  .gauges {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-  }
-  .gpu {
-    --accent: var(--accent-gpu);
-    display: contents;
-  }
-  .tiles {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
-    gap: 0.75rem;
-    margin-top: 1rem;
-  }
-  .tile-link {
-    display: grid;
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius);
-    background: none;
-    color: inherit;
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-  }
-  .tile-link:hover :global(.tile) {
-    border-color: var(--accent-gpu);
-  }
-  .cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
-    gap: 0.75rem;
-    margin-top: 1rem;
-  }
   .waiting {
     margin: 0 0 0.9rem;
     color: var(--muted);
     font-size: 0.85rem;
-  }
-  .compact-note {
-    margin: 0.75rem 0 0;
-    color: var(--muted);
-    font-size: 0.8rem;
-  }
-  .compact-note .link {
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--text);
-    font: inherit;
-    text-decoration: underline dotted var(--muted);
-    text-underline-offset: 3px;
-    cursor: pointer;
-  }
-  @media (max-width: 720px) {
-    .gauges {
-      grid-template-columns: 1fr;
-    }
   }
 </style>

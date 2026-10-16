@@ -11,6 +11,9 @@ use super::transport::{connect, Conn};
 use super::PROTOCOL_VERSION;
 use super::{read_frame, recv, send, Hello, Reply, Request, Role, Welcome, MAX_MESSAGE};
 use crate::alerts::{AlertFired, AlertRule};
+use crate::bench::{BenchRun, RunSummary};
+use crate::changes::{HardwareChange, PcInventory};
+use crate::diag::{DiagAppInfo, DiagReport, DiagSummary};
 use crate::engine::EngineApi;
 use crate::fan::{FanConfig, FanEvent, FanStatus};
 use crate::gaming::replay::GameTimeline;
@@ -324,6 +327,12 @@ impl EngineApi for RemoteEngine {
         self.call(&Request::AlertLog)
     }
 
+    fn alert_usual(&self, sensor: &str) -> Result<Option<f64>, String> {
+        self.call(&Request::AlertUsual {
+            sensor: sensor.to_owned(),
+        })
+    }
+
     fn drives(&self) -> Result<Vec<DriveInfo>, String> {
         self.call(&Request::Drives)
     }
@@ -342,8 +351,12 @@ impl EngineApi for RemoteEngine {
         self.call(&Request::BitlockerSystemDrive)
     }
 
-    fn insights(&self) -> Result<Vec<crate::analysis::Insight>, String> {
+    fn insights(&self) -> Result<crate::intel::Insights, String> {
         self.call(&Request::Insights)
+    }
+
+    fn performance_score(&self) -> Result<crate::score::ScoreReport, String> {
+        self.call(&Request::PerformanceScore)
     }
 
     /// Remembered for reconnects.
@@ -377,6 +390,46 @@ impl EngineApi for RemoteEngine {
             from,
             to,
         })
+    }
+
+    fn record_inventory(&self, inventory: PcInventory) -> Result<Vec<HardwareChange>, String> {
+        self.call(&Request::RecordInventory { inventory })
+    }
+
+    fn hardware_changes(&self, limit: u32) -> Result<Vec<HardwareChange>, String> {
+        self.call(&Request::HardwareChanges { limit })
+    }
+
+    fn add_benchmark(&self, run: BenchRun) -> Result<i64, String> {
+        self.call(&Request::AddBenchmark { run: Box::new(run) })
+    }
+
+    fn benchmark_runs(&self) -> Result<Vec<RunSummary>, String> {
+        self.call(&Request::BenchmarkRuns)
+    }
+
+    fn benchmark_run(&self, id: i64) -> Result<Option<BenchRun>, String> {
+        self.call(&Request::BenchmarkRun { id })
+    }
+
+    fn delete_benchmark(&self, id: i64) -> Result<bool, String> {
+        self.call(&Request::DeleteBenchmark { id })
+    }
+
+    fn run_diagnostics(&self, app: DiagAppInfo) -> Result<DiagReport, String> {
+        self.call(&Request::RunDiagnostics { app })
+    }
+
+    fn diagnostic_runs(&self) -> Result<Vec<DiagSummary>, String> {
+        self.call(&Request::DiagnosticRuns)
+    }
+
+    fn diagnostic_run(&self, id: i64) -> Result<Option<DiagReport>, String> {
+        self.call(&Request::DiagnosticRun { id })
+    }
+
+    fn delete_diagnostic(&self, id: i64) -> Result<bool, String> {
+        self.call(&Request::DeleteDiagnostic { id })
     }
 
     fn fan_status(&self) -> Result<FanStatus, String> {
@@ -528,6 +581,14 @@ mod tests {
         assert!(remote.set_ping_host("bad host!").is_err());
         assert_eq!(remote.insights().unwrap_err(), "history store unavailable");
         assert_eq!(
+            remote.performance_score().unwrap_err(),
+            "history store unavailable"
+        );
+        assert_eq!(
+            remote.alert_usual("cpu.temp.package").unwrap_err(),
+            "history store unavailable"
+        );
+        assert_eq!(
             remote.game_timeline(1).unwrap_err(),
             "history store unavailable"
         );
@@ -535,6 +596,16 @@ mod tests {
             .history_window(&["cpu.usage.total".into()], 100, 10_000)
             .unwrap_err()
             .starts_with("at most"));
+        assert_eq!(
+            remote
+                .record_inventory(crate::changes::PcInventory::default())
+                .unwrap_err(),
+            "history store unavailable"
+        );
+        assert_eq!(
+            remote.hardware_changes(10).unwrap_err(),
+            "history store unavailable"
+        );
         assert!(!remote.drives().unwrap().is_empty());
         // A real answer on an elevated Windows runner, `None` elsewhere: either way it arrives.
         assert!(remote.bitlocker_system_drive().is_ok());

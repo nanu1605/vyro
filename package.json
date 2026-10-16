@@ -1,7 +1,7 @@
 {
   "name": "vyro",
   "private": true,
-  "version": "0.3.0",
+  "version": "1.0.0",
   "license": "MIT OR Apache-2.0",
   "type": "module",
   "scripts": {
@@ -10,15 +10,20 @@
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "test": "vitest run",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "a11y": "node scripts/a11y.mjs"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.11.1"
+    "@tauri-apps/api": "^2.11.1",
+    "three": "0.186.1"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tauri-apps/cli": "^2.11.5",
     "@tsconfig/svelte": "^5.0.8",
+    "@types/three": "0.186.0",
+    "axe-core": "4.13.0",
+    "playwright": "1.56.1",
     "svelte": "^5.57.1",
     "svelte-check": "^4.7.6",
     "typescript": "~6.0.3",

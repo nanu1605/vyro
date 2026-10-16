@@ -12,6 +12,27 @@ use crate::info::SystemInfo;
 /// How many power events to keep.
 pub const POWER_EVENT_LIMIT: usize = 30;
 
+/// Unexpected shutdowns and hardware errors since `since` from the System event log (the
+/// Performance Score's Stability); `None` where it cannot be read.
+pub fn stability_counts(since: i64) -> Option<crate::score::StabilityCounts> {
+    #[cfg(windows)]
+    return win::stability_counts(since);
+    #[cfg(not(windows))]
+    {
+        let _ = since;
+        None
+    }
+}
+
+/// The active power plan's name, e.g. "Balanced" (a benchmark run's setup); `None` where it
+/// cannot be read.
+pub fn power_plan() -> Option<String> {
+    #[cfg(windows)]
+    return win::power_plan();
+    #[cfg(not(windows))]
+    None
+}
+
 /// Collects system information. Slow-ish (event log, Task Scheduler, WMI): call once, off the
 /// UI thread. `hypervisor_present` comes from CPUID (see `hwid`).
 pub fn collect(hypervisor_present: Option<bool>) -> SystemInfo {

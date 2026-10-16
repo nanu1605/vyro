@@ -1,7 +1,7 @@
 //! Connects the app to the sensor engine: the Vyro service when it runs (the app itself stays
 //! unelevated), else an in-process engine without the privileged sensors.
 
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -11,6 +11,7 @@ use vyro_core::alerts::AlertFired;
 use vyro_core::engine::{
     BackendMode, BackendStatus, ClientPids, EngineApi, EngineConfig, LocalEngine,
 };
+use vyro_core::fan::FanBrief;
 use vyro_core::ipc::{RemoteEngine, RemoteStatus};
 use vyro_core::{lock, Inventory, PollerConfig, SensorSnapshot};
 
@@ -19,8 +20,30 @@ pub const SENSORS_EVENT: &str = "sensors";
 /// Emitted (no payload) when the display configuration changes.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub const DISPLAYS_EVENT: &str = "displays-changed";
+/// Emitted (no payload) when a device arrives, leaves, connects or disconnects (P22).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub const DEVICES_EVENT: &str = "devices-changed";
 /// Emitted with a [`BackendStatus`] when the service connection changes.
 pub const BACKEND_EVENT: &str = "backend-status";
+
+/// Starts the device hot-plug watch on first use (the Devices tab's first read); later calls
+/// do nothing.
+pub fn watch_devices(app: &AppHandle) {
+    #[cfg(windows)]
+    {
+        static STARTED: std::sync::Once = std::sync::Once::new();
+        STARTED.call_once(|| {
+            let app = app.clone();
+            vyro_core::devices::watch(move || {
+                if let Err(e) = app.emit(DEVICES_EVENT, ()) {
+                    log::debug!("emit {DEVICES_EVENT}: {e}");
+                }
+            });
+        });
+    }
+    #[cfg(not(windows))]
+    let _ = app;
+}
 
 /// How long to wait for a service that is starting (sign-in right after boot).
 const SERVICE_WAIT: Duration = Duration::from_secs(5);
@@ -39,6 +62,10 @@ pub struct Engine {
     /// A game runs: the engine keeps its update rate (the profile's or the game's own) with
     /// the window hidden too, for the overlay and the session log.
     game: AtomicBool,
+    /// A benchmark runs (P20): it watches the readings with the window hidden too.
+    bench: AtomicBool,
+    /// A phone watches the remote companion (P26).
+    remote: AtomicBool,
 }
 
 impl Engine {
@@ -87,6 +114,7 @@ impl Engine {
                 if let Err(e) = app.emit(DISPLAYS_EVENT, ()) {
                     log::debug!("emit {DISPLAYS_EVENT}: {e}");
                 }
+                crate::changes::check(&app, crate::changes::Reason::Displays);
             });
         }
 
@@ -97,6 +125,8 @@ impl Engine {
             visible: shown,
             overlay: AtomicBool::new(false),
             game: AtomicBool::new(false),
+            bench: AtomicBool::new(false),
+            remote: AtomicBool::new(false),
         })
     }
 
@@ -120,12 +150,27 @@ impl Engine {
         }
     }
 
-    /// The window's rate while it, the overlay or a game needs readings; the tray rate otherwise.
+    pub fn set_bench(&self, on: bool) {
+        if self.bench.swap(on, Ordering::SeqCst) != on {
+            self.sync_rate();
+        }
+    }
+
+    pub fn set_remote(&self, on: bool) {
+        if self.remote.swap(on, Ordering::SeqCst) != on {
+            self.sync_rate();
+        }
+    }
+
+    /// The window's rate while it, the overlay, a game, a benchmark or a remote viewer needs
+    /// readings; the tray rate otherwise.
     fn sync_rate(&self) {
         self.api.set_visible(
             self.visible.load(Ordering::SeqCst)
                 || self.overlay.load(Ordering::SeqCst)
-                || self.game.load(Ordering::SeqCst),
+                || self.game.load(Ordering::SeqCst)
+                || self.bench.load(Ordering::SeqCst)
+                || self.remote.load(Ordering::SeqCst),
         );
     }
 
@@ -147,13 +192,43 @@ impl Engine {
 fn sink(app: &AppHandle, shown: &Arc<AtomicBool>) -> impl Fn(&SensorSnapshot) + Send + 'static {
     let app = app.clone();
     let shown = Arc::clone(shown);
-    // Fan state last shown in the tray (bit 0 active, bit 1 full speed); none yet.
-    let tray_fans = AtomicU8::new(u8::MAX);
+    // Fan state, the remote companion and alerts last shown in the tray; none yet.
+    let tray_state: Mutex<Option<(FanBrief, bool, Vec<String>)>> = Mutex::new(None);
+    // The drives last seen, to check the PC change history when one comes or goes.
+    let drives: Mutex<Option<Vec<String>>> = Mutex::new(None);
     move |snap: &SensorSnapshot| {
-        let fans = snap.fan_control;
-        let bits = u8::from(fans.active) | u8::from(fans.full_speed) << 1;
-        if tray_fans.load(Ordering::Relaxed) != bits && crate::tray::set_fan_state(&app, fans) {
-            tray_fans.store(bits, Ordering::Relaxed);
+        let ids: Vec<&str> = snap.storage.iter().map(|d| d.id.as_str()).collect();
+        {
+            let mut last = lock(&drives);
+            let same = last
+                .as_ref()
+                .is_some_and(|l| l.iter().map(String::as_str).eq(ids.iter().copied()));
+            if !same {
+                if last.is_some() {
+                    crate::changes::check(&app, crate::changes::Reason::Drives);
+                }
+                *last = Some(ids.into_iter().map(String::from).collect());
+            }
+        }
+        let remote = app
+            .try_state::<crate::remote::Remote>()
+            .is_some_and(|r| r.running());
+        let tray = (
+            snap.fan_control,
+            remote,
+            snap.alert_state
+                .tray()
+                .into_iter()
+                .map(String::from)
+                .collect::<Vec<_>>(),
+        );
+        {
+            let mut shown = lock(&tray_state);
+            if shown.as_ref() != Some(&tray)
+                && crate::tray::set_tray_state(&app, tray.0, tray.1, &tray.2)
+            {
+                *shown = Some(tray);
+            }
         }
         if shown.load(Ordering::SeqCst) {
             if let Err(e) = app.emit(SENSORS_EVENT, snap) {
@@ -161,7 +236,10 @@ fn sink(app: &AppHandle, shown: &Arc<AtomicBool>) -> impl Fn(&SensorSnapshot) + 
             }
         }
         crate::gaming::note_snapshot(&app, snap);
+        crate::bench::note_snapshot(&app, snap);
+        crate::gaming::note_alerts(&app, &snap.alert_state);
         crate::overlay::update(&app, snap);
+        crate::remote::publish(&app, snap);
         for alert in &snap.alerts {
             notify(&app, alert);
         }
@@ -301,6 +379,11 @@ fn migrate_alert_rules(app: &AppHandle, api: &Arc<dyn EngineApi>) {
 /// Shows a fired alert as a Windows notification, if the profile lets it through (silent
 /// unless the rule and the profile ask for sound).
 pub fn notify(app: &AppHandle, alert: &AlertFired) {
+    if !alert.notify {
+        // Logged only, or it repeats an alert just shown about the same part.
+        log::info!("alert (not shown): {}: {}", alert.title, alert.message);
+        return;
+    }
     show_notification(app, alert, false);
 }
 

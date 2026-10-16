@@ -22,6 +22,9 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::alerts::AlertRule;
+use crate::bench::BenchRun;
+use crate::changes::PcInventory;
+use crate::diag::DiagAppInfo;
 use crate::fan::FanConfig;
 use crate::gaming::{CaptureTarget, GameContext};
 use crate::profiles::Profile;
@@ -34,8 +37,14 @@ pub use transport::{connect, default_endpoint, Conn, Listener};
 /// 2: `AppSnapshot::parts`. 3: `SensorSnapshot::game`, capture target and game sessions.
 /// 4: `GameSnapshot::timeline` replaces the raw frame times. 5: fan control (0.2).
 /// 6: `SetGameContext` (P13). 7: game session replay (P15): `GameTimeline`, `HistoryWindow`,
-/// session ids.
-pub const PROTOCOL_VERSION: u32 = 7;
+/// session ids. 8: PC change history (P19): `RecordInventory`, `HardwareChanges`. 9: the
+/// intelligence engine (P16): `Insights` answers with findings and vital signs, and
+/// `SensorSnapshot::insights`. 10: compound alerts (P18): rule conditions and actions,
+/// `AlertUsual`, `SensorSnapshot::alert_state`, `FanStatus::boost`. 11: Performance Score
+/// (P17): `PerformanceScore`. 12: benchmark runs (P20): `AddBenchmark`, `BenchmarkRuns`,
+/// `BenchmarkRun`, `DeleteBenchmark`. 13: diagnostics (P21): `RunDiagnostics`, `DiagnosticRuns`,
+/// `DiagnosticRun`, `DeleteDiagnostic`.
+pub const PROTOCOL_VERSION: u32 = 13;
 /// Windows service name (installed by the MSI).
 pub const SERVICE_NAME: &str = "VyroService";
 /// Largest request the server accepts (alert rules are the biggest, a few KB).
@@ -100,6 +109,10 @@ pub enum Request {
         rules: Vec<AlertRule>,
     },
     AlertLog,
+    #[serde(rename_all = "camelCase")]
+    AlertUsual {
+        sensor: String,
+    },
     Drives,
     PawnIoStatus,
     #[serde(rename_all = "camelCase")]
@@ -108,6 +121,7 @@ pub enum Request {
     },
     BitlockerSystemDrive,
     Insights,
+    PerformanceScore,
     /// The process whose frames to capture (per client session; ends with the session).
     #[serde(rename_all = "camelCase")]
     SetCaptureTarget {
@@ -128,6 +142,43 @@ pub enum Request {
         metrics: Vec<String>,
         from: i64,
         to: i64,
+    },
+    /// The PC as the app sees it (P19); serials cross the pipe but are never stored.
+    #[serde(rename_all = "camelCase")]
+    RecordInventory {
+        inventory: PcInventory,
+    },
+    #[serde(rename_all = "camelCase")]
+    HardwareChanges {
+        limit: u32,
+    },
+    /// A finished benchmark run to keep (P20).
+    #[serde(rename_all = "camelCase")]
+    AddBenchmark {
+        run: Box<BenchRun>,
+    },
+    BenchmarkRuns,
+    #[serde(rename_all = "camelCase")]
+    BenchmarkRun {
+        id: i64,
+    },
+    #[serde(rename_all = "camelCase")]
+    DeleteBenchmark {
+        id: i64,
+    },
+    /// Runs the diagnostics with what the app knows (P21).
+    #[serde(rename_all = "camelCase")]
+    RunDiagnostics {
+        app: DiagAppInfo,
+    },
+    DiagnosticRuns,
+    #[serde(rename_all = "camelCase")]
+    DiagnosticRun {
+        id: i64,
+    },
+    #[serde(rename_all = "camelCase")]
+    DeleteDiagnostic {
+        id: i64,
     },
     FanStatus,
     #[serde(rename_all = "camelCase")]
@@ -255,6 +306,16 @@ mod tests {
         );
         assert_eq!(json(&Request::RestoreFans), r#"{"method":"restoreFans"}"#);
         assert_eq!(
+            json(&Request::PerformanceScore),
+            r#"{"method":"performanceScore"}"#
+        );
+        assert_eq!(
+            json(&Request::AlertUsual {
+                sensor: "cpu.temp.package".into()
+            }),
+            r#"{"method":"alertUsual","params":{"sensor":"cpu.temp.package"}}"#
+        );
+        assert_eq!(
             json(&Request::GameTimeline { id: 12 }),
             r#"{"method":"gameTimeline","params":{"id":12}}"#
         );
@@ -266,6 +327,32 @@ mod tests {
             }),
             r#"{"method":"historyWindow","params":{"metrics":["cpu.usage.total"],"from":100,"to":220}}"#
         );
+        assert_eq!(
+            json(&Request::RecordInventory {
+                inventory: PcInventory::default()
+            }),
+            r#"{"method":"recordInventory","params":{"inventory":{"items":[]}}}"#
+        );
+        assert_eq!(
+            json(&Request::HardwareChanges { limit: 50 }),
+            r#"{"method":"hardwareChanges","params":{"limit":50}}"#
+        );
+        assert_eq!(
+            json(&Request::BenchmarkRuns),
+            r#"{"method":"benchmarkRuns"}"#
+        );
+        assert_eq!(
+            json(&Request::DeleteBenchmark { id: 3 }),
+            r#"{"method":"deleteBenchmark","params":{"id":3}}"#
+        );
+        assert_eq!(
+            json(&Request::DiagnosticRun { id: 4 }),
+            r#"{"method":"diagnosticRun","params":{"id":4}}"#
+        );
+        assert!(json(&Request::RunDiagnostics {
+            app: DiagAppInfo::default()
+        })
+        .starts_with(r#"{"method":"runDiagnostics","params":{"app":{"appVersion":"#));
         assert_eq!(
             json(&Request::SetFanProfile {
                 profile: Profile::Gaming
@@ -285,7 +372,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&hello).unwrap(),
-            r#"{"protocol":7,"role":"snapshots","session":7,"pid":42,"visible":false}"#
+            r#"{"protocol":13,"role":"snapshots","session":7,"pid":42,"visible":false}"#
         );
         let reply: Reply = Err("nope".into());
         assert_eq!(serde_json::to_string(&reply).unwrap(), r#"{"Err":"nope"}"#);

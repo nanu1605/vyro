@@ -6,6 +6,9 @@
 //! The owner's chosen profile (the base) is never changed by a game, so going back on exit is
 //! simply returning to it. A profile picked while a game runs becomes the new base and keeps
 //! the game's settings out until that game closes: a manual choice always wins.
+//!
+//! An alert rule can put a profile in force while its conditions hold (P18). It wins over a
+//! game's, and a profile the owner picks meanwhile wins over it until that alert clears.
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -164,6 +167,11 @@ pub struct Effective {
     pub auto: bool,
     /// The owner kept their own profile for this game.
     pub suppressed: bool,
+    /// The alert rule whose profile is in force (P18), if any.
+    pub alert: Option<String>,
+    /// A benchmark run has the Benchmark profile in force (P20).
+    #[serde(default)]
+    pub benchmark: bool,
 }
 
 /// Follows the game being played and the owner's picks.
@@ -171,6 +179,13 @@ pub struct Effective {
 pub struct Switcher {
     game: Option<String>,
     suppressed: bool,
+    /// The profile an alert asks for and that alert's name.
+    alert: Option<(Profile, String)>,
+    /// The owner picked a profile while that alert held.
+    alert_kept: bool,
+    /// A benchmark runs (P20), and whether the owner picked a profile during it.
+    bench: bool,
+    bench_kept: bool,
 }
 
 impl Switcher {
@@ -190,14 +205,71 @@ impl Switcher {
     }
 
     /// The owner picked a profile (tray, Settings, "Keep …"): while a game runs, its own
-    /// settings stay out until it closes.
+    /// settings stay out until it closes; while an alert's profile is in force, it stays out
+    /// until that alert clears.
     pub fn manual(&mut self) {
         if self.game.is_some() {
             self.suppressed = true;
         }
+        if self.alert.is_some() {
+            self.alert_kept = true;
+        }
+        if self.bench {
+            self.bench_kept = true;
+        }
+    }
+
+    /// A benchmark run starts or ends: while it runs, the Benchmark profile is in force over a
+    /// game's and an alert's, unless the owner picks another. Returns whether it changed.
+    pub fn set_benchmark(&mut self, on: bool) -> bool {
+        if self.bench == on {
+            return false;
+        }
+        self.bench = on;
+        self.bench_kept = false;
+        true
+    }
+
+    /// The profile an alert puts in force while it holds, with the alert's name (`None` once
+    /// none does). Returns whether it changed; another alert starts without the owner's pick
+    /// against the previous one.
+    pub fn set_alert(&mut self, alert: Option<(Profile, &str)>) -> bool {
+        let next = alert.map(|(p, name)| (p, name.to_owned()));
+        if self.alert == next {
+            return false;
+        }
+        if self.alert.as_ref().map(|a| &a.1) != next.as_ref().map(|a| &a.1) {
+            self.alert_kept = false;
+        }
+        self.alert = next;
+        true
     }
 
     pub fn effective(&self, base: Profile, auto: &GameAutomation) -> Effective {
+        let e = self.for_game(base, auto);
+        if self.bench && !self.bench_kept {
+            let p = Profile::Benchmark;
+            return Effective {
+                profile: p,
+                fans: p,
+                poll_ms: p.spec().poll_ms,
+                benchmark: true,
+                ..e
+            };
+        }
+        match &self.alert {
+            Some((profile, name)) if !self.alert_kept => Effective {
+                profile: *profile,
+                fans: *profile,
+                poll_ms: profile.spec().poll_ms,
+                alert: Some(name.clone()),
+                ..e
+            },
+            _ => e,
+        }
+    }
+
+    fn for_game(&self, base: Profile, auto: &GameAutomation) -> Effective {
         let plain = Effective {
             base,
             profile: base,
@@ -208,6 +280,8 @@ impl Switcher {
             game: None,
             auto: false,
             suppressed: false,
+            alert: None,
+            benchmark: false,
         };
         let Some(game) = self.game.as_deref() else {
             return plain;
@@ -410,6 +484,62 @@ mod tests {
         // The next game switches again.
         s.set_game(Some("game.exe"));
         assert_eq!(s.effective(Profile::Work, &auto).profile, Profile::Gaming);
+    }
+
+    #[test]
+    fn a_benchmark_run_has_its_profile_until_the_owner_picks_another() {
+        let auto = GameAutomation::default();
+        let mut s = Switcher::default();
+        s.set_alert(Some((Profile::Silent, "Too loud")));
+        assert!(s.set_benchmark(true));
+        assert!(!s.set_benchmark(true));
+        let e = s.effective(Profile::Desktop, &auto);
+        assert_eq!(
+            (e.profile, e.fans, e.poll_ms, e.benchmark),
+            (Profile::Benchmark, Profile::Benchmark, 500, true)
+        );
+        // The owner picks: their profile wins (here the alert's, still holding).
+        s.manual();
+        let e = s.effective(Profile::Desktop, &auto);
+        assert_eq!((e.profile, e.benchmark), (Profile::Desktop, false));
+        // The next run starts without that pick.
+        s.set_benchmark(false);
+        s.set_benchmark(true);
+        assert!(s.effective(Profile::Work, &auto).benchmark);
+        s.set_benchmark(false);
+        assert_eq!(s.effective(Profile::Work, &auto).profile, Profile::Work);
+    }
+
+    #[test]
+    fn an_alert_profile_wins_over_a_game_and_a_manual_pick_over_the_alert() {
+        let auto = GameAutomation::default();
+        let mut s = Switcher::default();
+        s.set_game(Some("game.exe"));
+        assert!(s.set_alert(Some((Profile::Silent, "Too loud"))));
+        assert!(
+            !s.set_alert(Some((Profile::Silent, "Too loud"))),
+            "no change"
+        );
+        let e = s.effective(Profile::Desktop, &auto);
+        assert_eq!(
+            (e.profile, e.fans, e.poll_ms, e.alert.as_deref()),
+            (Profile::Silent, Profile::Silent, 5000, Some("Too loud"))
+        );
+        assert_eq!(e.game.as_deref(), Some("game.exe"));
+        // The owner picks Work: it wins over the alert and over the game.
+        s.manual();
+        let e = s.effective(Profile::Work, &auto);
+        assert_eq!((e.profile, e.alert), (Profile::Work, None));
+        // Another alert applies again.
+        s.set_alert(Some((Profile::Gaming, "Hot")));
+        assert_eq!(s.effective(Profile::Work, &auto).profile, Profile::Gaming);
+        // Cleared: back to the base (the game stays kept out by the pick).
+        s.set_alert(None);
+        let e = s.effective(Profile::Work, &auto);
+        assert_eq!(
+            (e.profile, e.alert, e.suppressed),
+            (Profile::Work, None, true)
+        );
     }
 
     #[test]
