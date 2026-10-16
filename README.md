@@ -7,15 +7,15 @@ app or library).
 - **Build spec:** [`PROJECT_PLAN.md`](PROJECT_PLAN.md) — what to build and why.
 - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — milestones, phase tracker, decision log.
 
-**Status:** 0.3 (milestone M8). Live CPU, GPU, board, fan, voltage, RAM, storage and network
-sensors on Windows (low-level ones through PawnIO, read by the Vyro Sensor Service), history,
-System Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 0.3:
-games switch Vyro's profile, fan settings, overlay and update rate on their own, a configurable
-in-game overlay, and a replay of each game session showing what happened when (see
-[Gaming](#gaming)). 0.2 added fan and pump control, so far only on the MSI B650M GAMING PLUS
-WIFI (MS-7E24). What 0.4, 0.5 and 1.0 add is built and in field testing on the reference PC;
-the sections marked (0.4) and (0.5) below describe it. See [`ROADMAP.md`](ROADMAP.md) for what
-is verified on which hardware.
+**Status:** 1.0 (milestone M13; V2 complete). Live CPU, GPU, board, fan, voltage, RAM, storage
+and network sensors on Windows (low-level ones through PawnIO, read by the Vyro Sensor Service),
+history, System Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in
+1.0: Insights with a Performance Score, alerts with several conditions and actions, a benchmark,
+one-click diagnostics and reports, themes, a dashboard builder, a My PC view, a Devices tab and
+a phone companion (the sections marked (1.0) below). 0.3 added automatic game profiles, a
+configurable in-game overlay and a replay of each game session (see [Gaming](#gaming)). 0.2
+added fan and pump control, so far only on the MSI B650M GAMING PLUS WIFI (MS-7E24). See
+[`ROADMAP.md`](ROADMAP.md) for what is verified on which hardware.
 Contributions: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Install
@@ -79,7 +79,11 @@ enforces it, its tests and its result on that board.
 cannot read: after going back to 0.2 its history stays off until that file is deleted. 0.2's
 session log (`games.json`) is imported once, as summaries without a replay.
 
-## Insights, Performance Score and alerts (0.4)
+1.0 adds tables to the history database (schema v3), which 0.3 cannot read: after going back to
+0.3 its history stays off until that file is deleted. If any alert rule uses 1.0's conditions
+or actions, 0.3 moves `alerts.json` aside (to `alerts.json.bad`) and uses its default rules.
+
+## Insights, Performance Score and alerts (1.0)
 
 - **Insights.** A tab after Health that compares the last half hour with this PC's own past
   week at the same load, and says what changed:
@@ -125,7 +129,7 @@ session log (`games.json`) is imported once, as summaries without a replay.
   to the BIOS, and the safety full-speed rules still come first. Two alerts about the same
   part within a minute notify once; a hardware problem always notifies.
 
-## Benchmark and diagnostics (0.4)
+## Benchmark and diagnostics (1.0)
 
 - **Benchmark.** A tab that measures this PC against itself. It covers:
   - CPU single- and multi-thread;
@@ -153,7 +157,7 @@ session log (`games.json`) is imported once, as summaries without a replay.
 
   More in [`docs/diagnostics.md`](docs/diagnostics.md).
 
-## Looks, layouts and your PC (0.5)
+## Looks, layouts and your PC (1.0)
 
 - **Themes.** Settings → Appearance offers Midnight, AMOLED, Cyber, Glass, Minimal and
   Daylight, each with its own accent or one of five more. OK, warning and problem colours keep
@@ -189,7 +193,7 @@ session log (`games.json`) is imported once, as summaries without a replay.
   square or story size. It is saved to `Pictures\Vyro` or copied to the clipboard, and never
   shows the computer's name or serial numbers.
 
-## Phone companion (0.5)
+## Phone companion (1.0)
 
 **Off by default.** Settings → Remote turns on a read-only page that a phone or another
 computer on your local network can open. It shows CPU, GPU, memory, drives, fans,
@@ -238,7 +242,7 @@ Nothing on it changes the PC.
 | [`docs/performance-score.md`](docs/performance-score.md) | The Performance Score formula |
 | [`docs/benchmark.md`](docs/benchmark.md) | The benchmark's method |
 | [`docs/diagnostics.md`](docs/diagnostics.md) | The diagnostics checks |
-| [`docs/field-check.md`](docs/field-check.md) | The owner's field check of 0.4–1.0 on the reference PC, in one pass |
+| [`docs/field-check.md`](docs/field-check.md) | The owner's field check of 1.0 (P16–P27) on the reference PC, in one pass |
 
 `vyro-remote.exe` in the same artifact checks the service from the outside (state, connection,
 sensors; `--capture Game.exe` measures a running game for 15 s). The service logs to `%ProgramData%\Vyro\service.log`.
@@ -334,19 +338,19 @@ Measured against the spec §8 budget with the built-in "Vyro itself" card (Dashb
 which counts the sensor service, the app and its WebView2 processes. Reference PC: Ryzen 7
 9700X, RTX 5060 Ti, Windows 11, 144 Hz display; Desktop profile (1 s polling).
 
-| Metric | Target | 0.1.4 | 0.2.0 | 0.3.0 |
-|---|---|---|---|---|
-| CPU (average, window visible) | < 1.5 % | 0.68 % | 0.46 % | not re-measured |
-| RAM (private working set, window visible) | < 120 MB | 120 MB | 125 MB | not re-measured |
-| RAM peak | — | 132 MB after visiting every tab | 125–150 MB with History open | not re-measured |
-| RAM (closed to the tray) | — | ≈ 40 MB (service 33 MB, app 7 MB, WebView2 suspended) | not re-measured | not re-measured |
-| Startup to first data | < 2 s | 0.76 s | 1.02 s | not re-measured |
-| Installer | < 20 MB | 9.5 MB | 9.7 MB | 9.9 MB |
+| Metric | Target | 0.1.4 | 0.2.0 | 0.3.0 | 1.0.0 |
+|---|---|---|---|---|---|
+| CPU (average, window visible) | < 1.5 % | 0.68 % | 0.46 % | not re-measured | within target, not written down |
+| RAM (private working set, window visible) | < 120 MB | 120 MB | 125 MB | not re-measured | within budget, not written down |
+| RAM peak | — | 132 MB after visiting every tab | 125–150 MB with History open | not re-measured | not written down |
+| RAM (closed to the tray) | — | ≈ 40 MB (service 33 MB, app 7 MB, WebView2 suspended) | not re-measured | not re-measured | not written down |
+| Startup to first data | < 2 s | 0.76 s | 1.02 s | not re-measured | within target, not written down |
+| Installer | < 20 MB | 9.5 MB | 9.7 MB | 9.9 MB | measured at release |
 
 In 0.2.0, of the visible figure, WebView2 takes 85 MB (five processes), the service 33 MB and
 the app 7 MB. Animation runs at most 60 fps and only while values move. For 0.3.0 the field
 checks of automatic game profiles and the overlay re-measured the footprint within their
 budgets (within 2 MB of 0.2.0; the overlay window only while it is shown), but the figures
-were not written down. 1.0 is measured at its field check by the procedure in
-[`docs/footprint.md`](docs/footprint.md), which also lists what each 0.4–1.0 feature costs
-and when.
+were not written down. 1.0.0 was measured at its field check (2026-10-16) by the procedure in
+[`docs/footprint.md`](docs/footprint.md), which also lists what each V2 feature costs and when.
+It was within the budgets there; the figures go into the table when they are written down.

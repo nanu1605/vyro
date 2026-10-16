@@ -34,7 +34,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 17 | Open on Dashboard | Default on, with an "Open on: Dashboard / Last tab" setting | decided |
 | 18 | Fan / pump control | **Yes, the V2 flagship**, safety-gated (V2_PLAN "Hardware-control safety"); read-only by default; per-board allow-list | decided |
 | 19 | Remote / web companion | In V2 (P26): served by the desktop app (not the service) over plain HTTP on the LAN, off by default, QR + code pairing, hashed session tokens that expire, sign-out at once | default |
-| 20 | Versions | 0.2 / 0.3 / 0.4 / 0.5 at milestone merges; **1.0** at M13 | decided |
+| 20 | Versions | 0.2 / 0.3 at milestone merges; **1.0** at M13, with M9–M12 in it (the owner, 2026-10-16: no 0.4 or 0.5) | decided |
 | 21 | Themes | Several themes + accent colour, accessibility preserved | decided |
 | 22 | Performance Score method | Formula v1 ([`docs/performance-score.md`](docs/performance-score.md)): nine observed inputs, fixed weights and breakpoints, versioned, inputs shown | decided (signed off 2026-10-15) |
 | 23 | Benchmark positioning | Self-relative (own engine), variance reported | decided |
@@ -57,10 +57,10 @@ the §4.3 animation spec in Phase 0.
 | **M6** Gaming | P10 | PresentMon FPS + companion overlay (deferrable) | – | – |
 | **M7** Control → 0.2 | P12 | Fan and pump control with failsafe, watchdog and restore | PawnIO (writes) | – |
 | **M8** Gaming automation → 0.3 | P13 – P15 | Auto game profiles, Overlay 2.0, session replay | – | – |
-| **M9** Intelligence → 0.4 | P16 – P19 | Intelligence engine, Performance Score, compound alerts, hardware changes | – | – |
-| **M10** Benchmark & diagnostics → 0.4 | P20, P21 | Benchmark, one-click diagnostics, reports | – | – |
-| **M11** Visualization & UX → 0.5 | P22 – P25 | Devices + battery, 3-D / My PC / thermal map, dashboard builder, themes | – | – |
-| **M12** Remote → 0.5 | P26 | LAN-only companion, off by default | – | – |
+| **M9** Intelligence → 1.0 | P16 – P19 | Intelligence engine, Performance Score, compound alerts, hardware changes | – | – |
+| **M10** Benchmark & diagnostics → 1.0 | P20, P21 | Benchmark, one-click diagnostics, reports | – | – |
+| **M11** Visualization & UX → 1.0 | P22 – P25 | Devices + battery, 3-D / My PC / thermal map, dashboard builder, themes | – | – |
+| **M12** Remote → 1.0 | P26 | LAN-only companion, off by default | – | – |
 | **M13** V2 polish → 1.0 | P27 | Footprint, accessibility, migration, control-safety validation | – | – |
 
 P7 has no hard dependency on P6 (it operates on whatever sensors are registered) and can be
@@ -1683,7 +1683,7 @@ Defaults chosen at build (2026-10-16). The owner can change them at the field ch
 - **Anti-cheat.** `docs/anti-cheat.md` says what Vyro does that an anti-cheat can see, and what it
   never does. Compatibility with a given game is a field result, not a promise.
 - **Version.** It stays 0.3.0 on this branch. 1.0.0 is set when M13 merges into `main`
-  (decision 20).
+  (decision 20; set on `v2-prep-1.0.0`, 2026-10-16).
 
 Budget:
 - **No runtime cost.** No new thread, timer or setting. The IPC protocol stays 13 and the
