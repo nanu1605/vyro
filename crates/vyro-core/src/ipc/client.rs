@@ -11,6 +11,7 @@ use super::transport::{connect, Conn};
 use super::PROTOCOL_VERSION;
 use super::{read_frame, recv, send, Hello, Reply, Request, Role, Welcome, MAX_MESSAGE};
 use crate::alerts::{AlertFired, AlertRule};
+use crate::bench::{BenchRun, RunSummary};
 use crate::changes::{HardwareChange, PcInventory};
 use crate::engine::EngineApi;
 use crate::fan::{FanConfig, FanEvent, FanStatus};
@@ -396,6 +397,22 @@ impl EngineApi for RemoteEngine {
 
     fn hardware_changes(&self, limit: u32) -> Result<Vec<HardwareChange>, String> {
         self.call(&Request::HardwareChanges { limit })
+    }
+
+    fn add_benchmark(&self, run: BenchRun) -> Result<i64, String> {
+        self.call(&Request::AddBenchmark { run: Box::new(run) })
+    }
+
+    fn benchmark_runs(&self) -> Result<Vec<RunSummary>, String> {
+        self.call(&Request::BenchmarkRuns)
+    }
+
+    fn benchmark_run(&self, id: i64) -> Result<Option<BenchRun>, String> {
+        self.call(&Request::BenchmarkRun { id })
+    }
+
+    fn delete_benchmark(&self, id: i64) -> Result<bool, String> {
+        self.call(&Request::DeleteBenchmark { id })
     }
 
     fn fan_status(&self) -> Result<FanStatus, String> {

@@ -8,6 +8,7 @@
 //! Game sessions for the replay (P15) live in the same file (see `games`), so one size cap
 //! covers both; when over it, the oldest data goes first, whichever it is.
 
+mod bench;
 mod changes;
 mod digest;
 mod games;

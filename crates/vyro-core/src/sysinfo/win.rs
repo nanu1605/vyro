@@ -394,6 +394,45 @@ pub fn power_events(limit: usize) -> Vec<PowerEvent> {
     out
 }
 
+/// The active power plan's friendly name.
+pub fn power_plan() -> Option<String> {
+    use windows::Win32::Foundation::{LocalFree, HLOCAL};
+    use windows::Win32::System::Power::{PowerGetActiveScheme, PowerReadFriendlyName};
+    let mut guid: *mut windows::core::GUID = std::ptr::null_mut();
+    // SAFETY: `guid` receives a LocalAlloc'd GUID, freed below.
+    if unsafe { PowerGetActiveScheme(None, &mut guid) }.is_err() || guid.is_null() {
+        return None;
+    }
+    let mut size = 0u32;
+    // SAFETY: the first call asks for the size; the second fills a buffer of that size.
+    let name = unsafe {
+        let _ = PowerReadFriendlyName(None, Some(guid), None, None, None, &mut size);
+        let mut buf = vec![0u8; size as usize];
+        let ok = size > 0
+            && PowerReadFriendlyName(
+                None,
+                Some(guid),
+                None,
+                None,
+                Some(buf.as_mut_ptr()),
+                &mut size,
+            )
+            .is_ok();
+        LocalFree(Some(HLOCAL(guid.cast())));
+        ok.then(|| {
+            let wide: Vec<u16> = buf
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|c| u16::from_le_bytes(*c))
+                .take_while(|c| *c != 0)
+                .collect();
+            String::from_utf16_lossy(&wide)
+        })
+    };
+    name.filter(|n| !n.trim().is_empty())
+}
+
 /// Unexpected shutdowns and hardware errors since `since` (the Performance Score's
 /// Stability); `None` when the System log cannot be read.
 pub fn stability_counts(since: i64) -> Option<crate::score::StabilityCounts> {

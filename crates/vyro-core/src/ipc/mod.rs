@@ -22,6 +22,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::alerts::AlertRule;
+use crate::bench::BenchRun;
 use crate::changes::PcInventory;
 use crate::fan::FanConfig;
 use crate::gaming::{CaptureTarget, GameContext};
@@ -39,8 +40,9 @@ pub use transport::{connect, default_endpoint, Conn, Listener};
 /// intelligence engine (P16): `Insights` answers with findings and vital signs, and
 /// `SensorSnapshot::insights`. 10: compound alerts (P18): rule conditions and actions,
 /// `AlertUsual`, `SensorSnapshot::alert_state`, `FanStatus::boost`. 11: Performance Score
-/// (P17): `PerformanceScore`.
-pub const PROTOCOL_VERSION: u32 = 11;
+/// (P17): `PerformanceScore`. 12: benchmark runs (P20): `AddBenchmark`, `BenchmarkRuns`,
+/// `BenchmarkRun`, `DeleteBenchmark`.
+pub const PROTOCOL_VERSION: u32 = 12;
 /// Windows service name (installed by the MSI).
 pub const SERVICE_NAME: &str = "VyroService";
 /// Largest request the server accepts (alert rules are the biggest, a few KB).
@@ -147,6 +149,20 @@ pub enum Request {
     #[serde(rename_all = "camelCase")]
     HardwareChanges {
         limit: u32,
+    },
+    /// A finished benchmark run to keep (P20).
+    #[serde(rename_all = "camelCase")]
+    AddBenchmark {
+        run: Box<BenchRun>,
+    },
+    BenchmarkRuns,
+    #[serde(rename_all = "camelCase")]
+    BenchmarkRun {
+        id: i64,
+    },
+    #[serde(rename_all = "camelCase")]
+    DeleteBenchmark {
+        id: i64,
     },
     FanStatus,
     #[serde(rename_all = "camelCase")]
@@ -306,6 +322,14 @@ mod tests {
             r#"{"method":"hardwareChanges","params":{"limit":50}}"#
         );
         assert_eq!(
+            json(&Request::BenchmarkRuns),
+            r#"{"method":"benchmarkRuns"}"#
+        );
+        assert_eq!(
+            json(&Request::DeleteBenchmark { id: 3 }),
+            r#"{"method":"deleteBenchmark","params":{"id":3}}"#
+        );
+        assert_eq!(
             json(&Request::SetFanProfile {
                 profile: Profile::Gaming
             }),
@@ -324,7 +348,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&hello).unwrap(),
-            r#"{"protocol":11,"role":"snapshots","session":7,"pid":42,"visible":false}"#
+            r#"{"protocol":12,"role":"snapshots","session":7,"pid":42,"visible":false}"#
         );
         let reply: Reply = Err("nope".into());
         assert_eq!(serde_json::to_string(&reply).unwrap(), r#"{"Err":"nope"}"#);

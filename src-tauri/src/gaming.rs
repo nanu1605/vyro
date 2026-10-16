@@ -69,6 +69,17 @@ pub fn note_alerts(app: &AppHandle, alerts: &AlertBrief) {
     }
 }
 
+/// A benchmark run starts or ends (P20): the Benchmark profile is in force while it runs.
+pub fn set_benchmark(app: &AppHandle, on: bool) {
+    let Some(state) = app.try_state::<GameState>() else {
+        return;
+    };
+    let changed = lock(&state.switcher).set_benchmark(on);
+    if changed {
+        apply_effective(app);
+    }
+}
+
 /// The owner picked a profile: while a game runs, its own settings stay out until it closes.
 pub fn manual_pick(app: &AppHandle) {
     if let Some(state) = app.try_state::<GameState>() {
@@ -113,6 +124,7 @@ pub fn apply_effective(app: &AppHandle) {
     }
     if prev.as_ref().map(|p| (p.profile, p.auto)) != Some((next.profile, next.auto)) {
         match (&next.alert, &next.game, next.auto) {
+            _ if next.benchmark => log::info!("benchmark: {:?} profile", next.profile),
             (Some(rule), _, _) => log::info!("alerts: {:?} profile for “{rule}”", next.profile),
             (None, Some(game), true) => {
                 log::info!("gaming: {:?} profile for {game}", next.profile);

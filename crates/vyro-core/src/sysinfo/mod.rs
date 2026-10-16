@@ -24,6 +24,15 @@ pub fn stability_counts(since: i64) -> Option<crate::score::StabilityCounts> {
     }
 }
 
+/// The active power plan's name, e.g. "Balanced" (a benchmark run's setup); `None` where it
+/// cannot be read.
+pub fn power_plan() -> Option<String> {
+    #[cfg(windows)]
+    return win::power_plan();
+    #[cfg(not(windows))]
+    None
+}
+
 /// Collects system information. Slow-ish (event log, Task Scheduler, WMI): call once, off the
 /// UI thread. `hypervisor_present` comes from CPUID (see `hwid`).
 pub fn collect(hypervisor_present: Option<bool>) -> SystemInfo {
