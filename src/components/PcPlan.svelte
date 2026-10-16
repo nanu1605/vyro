@@ -1,7 +1,8 @@
 <script lang="ts">
-  // My PC as a flat plan (P23): the parts seen from the open side, for machines without WebGL
-  // or when 2-D is chosen. Same parts and colours as the 3-D view.
-  import { CASE, type Part } from '../pcmodel';
+  // My PC as a flat plan (P23): the parts seen from the open side (a laptop: from above, through
+  // the deck), for machines without WebGL or when 2-D is chosen. Same parts and colours as the
+  // 3-D view.
+  import { CASE, LAPTOP, type Part } from '../pcmodel';
 
   interface Props {
     parts: Part[];
@@ -9,9 +10,11 @@
     tint: Map<string, string | 'dim'>;
     labels: Map<string, string>;
     selected: string | null;
+    /** A laptop, drawn from above. */
+    laptop?: boolean;
     onpick: (id: string) => void;
   }
-  let { parts, tint, labels, selected, onpick }: Props = $props();
+  let { parts, tint, labels, selected, laptop = false, onpick }: Props = $props();
 
   const OWN: Partial<Record<Part['kind'], string>> = {
     board: 'var(--panel-edge)',
@@ -28,6 +31,10 @@
     drive: '#5b6573',
     fan: '#20262f',
     psu: '#14181f',
+    die: '#2b2f36',
+    blower: '#20262f',
+    sodimm: '#1f5c3a',
+    battery: '#23272e',
   };
   const fill = (p: Part) => {
     const t = tint.get(p.id);
@@ -36,7 +43,42 @@
   // Back to front by depth, so the cooler sits over the CPU and the card over the board.
   const ordered = $derived([...parts].sort((a, b) => a.pos[2] + a.size[2] / 2 - (b.pos[2] + b.size[2] / 2)));
   const y = (v: number) => CASE[1] - v;
+  // Laptop: from above, bottom up, without the deck and the lid.
+  const flat = $derived(
+    [...parts].filter((p) => p.kind !== 'deck' && p.kind !== 'lid').sort((a, b) => a.pos[1] + a.size[1] / 2 - (b.pos[1] + b.size[1] / 2)),
+  );
 </script>
+
+{#if laptop}
+<svg class="plan" viewBox="-10 -10 {LAPTOP[0] + 20} {LAPTOP[2] + 20}" role="group" aria-label="This laptop, seen from above through the keyboard">
+  <rect class="case" x="0" y="0" width={LAPTOP[0]} height={LAPTOP[2]} rx="12" />
+  {#each flat as p (p.id)}
+    {@const [cx, , cz] = p.pos}
+    {@const [w, , d] = p.size}
+    {#if p.kind === 'heatpipe' && p.path}
+      <polyline class="pipe" points={p.path.map((v) => `${v[0]},${v[2]}`).join(' ')} stroke={tint.get(p.id) === 'dim' ? '#3a4250' : (tint.get(p.id) ?? '#c8763e')} />
+    {:else if p.kind === 'blower'}
+      <circle class="fan" cx={cx} cy={cz} r={w / 2 - 2} fill={fill(p)} />
+    {:else}
+      <rect class="part" class:sel={selected === p.id} x={cx - w / 2} y={cz - d / 2} width={w} height={d} rx="2" fill={fill(p)} />
+    {/if}
+  {/each}
+  {#each parts.filter((p) => p.labelled && p.group != null) as p (p.id)}
+    {@const [ax, , az] = p.anchor}
+    <g
+      class="label"
+      class:sel={selected === p.id}
+      role="button"
+      tabindex="0"
+      aria-label={labels.get(p.id) ?? p.label}
+      onclick={() => onpick(p.id)}
+      onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onpick(p.id))}
+    >
+      <text x={ax} y={az - 8}>{labels.get(p.id) ?? p.label}</text>
+    </g>
+  {/each}
+</svg>
+{:else}
 
 <svg class="plan" viewBox="-10 -10 {CASE[0] + 20} {CASE[1] + 20}" role="group" aria-label="My PC, seen from the open side">
   <rect class="case" x="0" y="0" width={CASE[0]} height={CASE[1]} rx="6" />
@@ -74,6 +116,7 @@
     </g>
   {/each}
 </svg>
+{/if}
 
 <style>
   .plan {
@@ -100,6 +143,12 @@
   .fan {
     stroke: var(--muted);
     stroke-width: 1.5;
+  }
+  .pipe {
+    fill: none;
+    stroke-width: 5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
   .label {
     cursor: pointer;

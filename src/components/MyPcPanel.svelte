@@ -19,7 +19,7 @@
     validShape,
     type GpuShape,
   } from '../gpuspecs';
-  import { buildPc, fanSpeedText, heat, heatColor, inMode, MODES, partTemp, spinRate, type Part, type ThermalMode } from '../pcmodel';
+  import { buildLaptop, buildPc, fanSpeedText, formOf, heat, heatColor, inMode, MODES, partTemp, spinRate, type Part, type ThermalMode } from '../pcmodel';
   import { fmt } from '../format';
   import { DEFAULT_MY_PC, getDisplays, getDrives, getHardwareId } from '../ipc';
   import { fmtTemp, prefs, profileSpec, savePrefs } from '../prefs.svelte';
@@ -49,12 +49,12 @@
       return 'pc';
     }
   }
-  let view = $state<View>(remembered());
+  let picked = $state<View>(remembered());
   let mode = $state<ThermalMode>('full');
   let selected = $state<string | null>(null);
   let gpuPick = $state(0);
   function setView(v: View): void {
-    view = v;
+    picked = v;
     selected = null;
     try {
       localStorage.setItem('vyro.mypc.view', v);
@@ -89,7 +89,13 @@
     ) as Record<string, GpuShape>,
   );
 
-  const parts = $derived(hw ? buildPc({ hw, snap, drives, shapes, cardKey }) : []);
+  // Tower or laptop (P29): what the firmware says, or the owner's pick.
+  const form = $derived(formOf(hw, prefs.myPc?.form ?? 'auto'));
+  const laptop = $derived(form === 'laptop');
+  const views = $derived(laptop ? VIEWS.filter((v) => v.id !== 'gpu') : VIEWS);
+  // A laptop has no card to show on its own.
+  const view = $derived<View>(laptop && picked === 'gpu' ? 'pc' : picked);
+  const parts = $derived(hw ? (laptop ? buildLaptop : buildPc)({ hw, snap, drives, shapes, cardKey }) : []);
   const gpus = $derived(parts.filter((p) => p.kind === 'gpu'));
   const gpuPart = $derived(gpus[Math.min(gpuPick, gpus.length - 1)] ?? null);
   const shown = $derived(view === 'gpu' ? (gpuPart ? [gpuPart] : []) : parts);
@@ -121,7 +127,42 @@
     new Map(parts.flatMap((p) => (p.fan && snap ? [[p.id, spinRate(p.fan.rpm(snap))] as [string, number]] : []))),
   );
   const motion = $derived(profileSpec().motion);
-  const maxFps = $derived(motion === 'off' ? 0 : motion === 'reduced' ? 10 : 30);
+  const maxFps = $derived(motion === 'off' ? 0 : motion === 'reduced' ? 30 : 60);
+  /** Warm parts glow (not under the thermal map, which colours them already). */
+  const heats = $derived(new Map([...temps].flatMap(([id, t]) => (t ? [[id, heat(t.temp, t.limits)] as [string, number]] : []))));
+
+  // The scene's switches (remembered).
+  function flag(key: string, fallback: boolean): boolean {
+    try {
+      const v = localStorage.getItem(key);
+      return v == null ? fallback : v === '1';
+    } catch {
+      return fallback;
+    }
+  }
+  function remember(key: string, on: boolean): void {
+    try {
+      localStorage.setItem(key, on ? '1' : '0');
+    } catch {
+      /* not remembered */
+    }
+  }
+  let airflow = $state(flag('vyro.mypc.airflow', true));
+  let xray = $state(flag('vyro.mypc.xray', true));
+  let explode = $state(false);
+  $effect(() => remember('vyro.mypc.airflow', airflow));
+  $effect(() => remember('vyro.mypc.xray', xray));
+  async function setForm(f: 'auto' | 'desktop' | 'laptop'): Promise<void> {
+    try {
+      await savePrefs({ myPc: { ...DEFAULT_MY_PC, ...prefs.myPc, form: f } });
+      selected = null;
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  // Hover: the part under the pointer, named next to it.
+  let hover = $state<{ id: string; x: number; y: number } | null>(null);
 
   // 3-D: one scene while the tab shows; gone (context freed) otherwise.
   const webgl = typeof document !== 'undefined' && (() => {
@@ -153,15 +194,20 @@
   let wrap = $state<HTMLDivElement | undefined>();
   $effect(() => {
     if (!active || !threeD || !wrap || !hw) return;
-    const kind = view === 'gpu' ? 'gpu' : 'pc';
+    const kind = view === 'gpu' ? 'gpu' : laptop ? 'laptop' : 'pc';
     // From the settings, not the page's computed style: a theme or accent change rebuilds the
     // scene whatever order the effects run in.
     const t = theme(prefs.theme);
     const v = tokens(t.id, prefs.accent);
-    const pal = { line: v['--line']!, board: v['--panel-edge']!, accent: v['--accent-cpu']!, light: t.light };
+    const pal = { line: v['--line']!, board: v['--panel-edge']!, accent: v['--accent-cpu']!, bg: v['--panel']!, light: t.light };
     const el = document.createElement('canvas');
     el.setAttribute('role', 'img');
-    el.setAttribute('aria-label', kind === 'gpu' ? 'Your graphics card in 3-D. Drag to turn it.' : 'This PC in 3-D. Drag to turn it, scroll to zoom.');
+    el.setAttribute(
+      'aria-label',
+      kind === 'gpu'
+        ? 'Your graphics card in 3-D. Drag to turn it.'
+        : `This ${kind === 'laptop' ? 'laptop' : 'PC'} in 3-D. Drag to turn it, scroll to zoom, double-click a part to look closer.`,
+    );
     wrap.prepend(el);
     canvas = el;
     let gone = false;
@@ -174,6 +220,7 @@
         return;
       }
       made.onFrame(() => made && placeLabels(made));
+      made.onHover((id, x, y) => (hover = id ? { id, x, y } : null));
       scene = made;
     });
     return () => {
@@ -183,6 +230,7 @@
       canvas = undefined;
       scene = null;
       spots = new Map();
+      hover = null;
     };
   });
   $effect(() => {
@@ -193,6 +241,23 @@
   $effect(() => scene?.setTint(tint));
   $effect(() => scene?.setSpin(spin));
   $effect(() => scene?.setMaxFps(maxFps));
+  $effect(() => scene?.setHeat(heats));
+  $effect(() => scene?.setOptions({ quality: motion === 'full' ? 'high' : 'low', airflow, explode, xray }));
+  // The laptop's screen shows the readings.
+  $effect(() => {
+    const s = scene;
+    if (!s || !laptop || !snap) return;
+    const g = snap.gpu.find((x) => x.integrated === false) ?? snap.gpu[0];
+    s.setScreen({
+      rows: [
+        ['CPU', fmtTemp(snap.cpu.tempPackage) ?? `${fmt(snap.cpu.usageTotal)} %`],
+        ['GPU', fmtTemp(g?.tempEdge) ?? `${fmt(g?.usage)} %`],
+        ['CPU use', `${fmt(snap.cpu.usageTotal)} %`],
+        ['Memory', snap.memory.usedMB != null ? `${fmt(snap.memory.usedMB / 1024, 1)} GB` : '—'],
+      ],
+      load: snap.cpu.usageTotal,
+    });
+  });
 
   // Inspect.
   const part = $derived(parts.find((p) => p.id === selected) ?? null);
@@ -218,6 +283,28 @@
           ['Power', s?.cpu.powerPkgW != null ? `${fmt(s.cpu.powerPkgW, 1)} W` : null],
           ['Cooling', p.kind === 'aio' ? 'Liquid (pump reported)' : 'Air cooler'],
         ];
+      case 'die':
+        if (p.group === 'gpu') {
+          const g = p.gpuIndex != null ? s?.gpu[p.gpuIndex] : undefined;
+          return [
+            ['Graphics', g?.name ?? null],
+            ...temp,
+            ['Hotspot', fmtTemp(g?.tempHotspot)],
+            ['Usage', g?.usage != null ? `${fmt(g.usage)} %` : null],
+            ['Power', g?.powerW != null ? `${fmt(g.powerW)} W` : null],
+          ];
+        }
+        return [
+          ['Processor', hw?.cpu.brand ?? null],
+          ...temp,
+          ['Usage', s?.cpu.usageTotal != null ? `${fmt(s.cpu.usageTotal)} %` : null],
+          ['Clock', s?.cpu.mhzCurrent != null ? `${fmt(s.cpu.mhzCurrent)} MHz` : null],
+          ['Power', s?.cpu.powerPkgW != null ? `${fmt(s.cpu.powerPkgW, 1)} W` : null],
+        ];
+      case 'battery':
+        return [['Battery', 'see Devices for its charge']];
+      case 'heatpipe':
+        return [['Heat pipe', 'carries heat from the chips to the fins']];
       case 'gpu': {
         const g = s?.gpu[p.gpu!.index];
         return [
@@ -230,7 +317,8 @@
           ['Fans', fanSpeedText(g?.fanRpm ?? null)],
         ];
       }
-      case 'ram': {
+      case 'ram':
+      case 'sodimm': {
         const d = hw?.memory.dimms[p.dimm ?? -1];
         return [
           ['Slot', d?.slot ?? null],
@@ -253,7 +341,8 @@
           ['VRM', fmtTemp(s?.board.tempVrmMos ?? s?.board.tempVrm)],
           ['Chipset', fmtTemp(s?.board.tempChipset ?? s?.board.tempPch)],
         ];
-      case 'fan': {
+      case 'fan':
+      case 'blower': {
         const rpm = p.fan && s ? p.fan.rpm(s) : null;
         return [
           ['Fan', p.label],
@@ -304,10 +393,20 @@
 {:else}
   <div class="bar">
     <div class="views" role="radiogroup" aria-label="View">
-      {#each VIEWS as v (v.id)}
+      {#each views as v (v.id)}
         <button type="button" role="radio" aria-checked={view === v.id} onclick={() => setView(v.id)}>{v.label}</button>
       {/each}
     </div>
+    {#if threeD && view !== 'gpu'}
+      <div class="tools" role="group" aria-label="3-D view">
+        <button type="button" aria-pressed={explode} onclick={() => (explode = !explode)} title="Lift the parts apart">Explode</button>
+        <button type="button" aria-pressed={airflow} onclick={() => (airflow = !airflow)} title="Air from the intakes to the exhausts">Airflow</button>
+        {#if laptop}
+          <button type="button" aria-pressed={xray} onclick={() => (xray = !xray)} title="See through the keyboard deck">See inside</button>
+        {/if}
+        <button type="button" onclick={() => scene?.focus(null)} title="Back to the whole view">Reset view</button>
+      </div>
+    {/if}
     {#if view === 'thermal'}
       <label>
         <span>Show</span>
@@ -325,6 +424,14 @@
       </label>
     {/if}
     <span class="spacer"></span>
+    <label>
+      <span>Model</span>
+      <select value={prefs.myPc?.form ?? 'auto'} onchange={(e) => void setForm(e.currentTarget.value as 'auto' | 'desktop' | 'laptop')}>
+        <option value="auto">Automatic ({hw?.board.formFactor === 'laptop' ? 'laptop' : 'desktop'})</option>
+        <option value="desktop">Desktop</option>
+        <option value="laptop">Laptop</option>
+      </select>
+    </label>
     <label class="toggle">
       <input type="checkbox" checked={threeD} disabled={!webgl || failed} onchange={(e) => void set3d(e.currentTarget.checked)} />
       <span>3-D</span>
@@ -356,6 +463,9 @@
               {/if}
             {/each}
           {/if}
+          {#if hover && !(parts.find((p) => p.id === hover?.id)?.labelled)}
+            <span class="tip" style:left="{hover.x}px" style:top="{hover.y}px" aria-hidden="true">{labels.get(hover.id) ?? hover.id}</span>
+          {/if}
         </div>
       {:else if view === 'gpu' && gpuPart}
         <svg class="card2d" viewBox="-10 -20 {gpuPart.gpu!.shape.lengthMm + 20} 170" role="img" aria-label="Your graphics card, {gpuPart.gpu!.shape.fans} fans, {gpuPart.gpu!.shape.lengthMm} mm long">
@@ -367,7 +477,7 @@
           {/each}
         </svg>
       {:else}
-        <PcPlan parts={view === 'gpu' ? shown : parts} {tint} {labels} {selected} onpick={(id) => (selected = id)} />
+        <PcPlan parts={view === 'gpu' ? shown : parts} {tint} {labels} {selected} {laptop} onpick={(id) => (selected = id)} />
       {/if}
       {#if view === 'thermal'}
         <div class="legend" aria-hidden="true">
@@ -385,7 +495,7 @@
             rows={[
               ['Looks like', mine ? 'Your description' : (detected?.design ?? null)],
               ['Temperature', fmtTemp(snap?.gpu[gpuPart.gpu!.index]?.tempEdge)],
-              ['Fans', snap?.gpu[gpuPart.gpu!.index]?.fanRpm != null ? `${fmt(snap.gpu[gpuPart.gpu!.index]!.fanRpm)} RPM` : null],
+              ['Fans', fanSpeedText(snap?.gpu[gpuPart.gpu!.index]?.fanRpm ?? null)],
             ]}
           />
           <fieldset class="confirm">
@@ -416,7 +526,7 @@
           </fieldset>
         </Card>
       {:else if part}
-        <Card title={part.kind === 'fan' ? 'Fan' : part.label} subtitle={tempKey(part) ? fmtTemp(tempKey(part)!.temp) : null}>
+        <Card title={part.kind === 'fan' || part.kind === 'blower' ? 'Fan' : part.label} subtitle={tempKey(part) ? fmtTemp(tempKey(part)!.temp) : null}>
           <KV rows={details(part)} />
           {#if part.tab}
             {@const tab = part.tab}
@@ -424,12 +534,12 @@
           {/if}
         </Card>
       {:else}
-        <Card title={view === 'thermal' ? 'Thermal map' : 'This PC'} subtitle={hw.board.product ?? null}>
+        <Card title={view === 'thermal' ? 'Thermal map' : laptop ? 'This laptop' : 'This PC'} subtitle={(laptop ? hw.board.systemProduct : null) ?? hw.board.product ?? null}>
           <p class="note">
             {view === 'thermal'
               ? 'Each part is coloured by how close it is to its limits: blue cool, green normal, amber at the warning limit, red at the problem limit. Grey parts report no temperature.'
               : threeD
-                ? 'Click a part or its label for its details. Drag to turn the PC, scroll to zoom.'
+                ? `Click a part or its label for its details; double-click to look closer. Drag to turn the ${laptop ? 'laptop' : 'PC'}, scroll to zoom.`
                 : 'Click a label for its details.'}
           </p>
           <ul class="temps">
@@ -500,6 +610,41 @@
   }
   .spacer {
     flex: 1;
+  }
+  .tools {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+  .tools button {
+    padding: 0.32rem 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--panel);
+    color: var(--muted);
+    font: inherit;
+    cursor: pointer;
+  }
+  .tools button:hover {
+    color: var(--text);
+  }
+  .tools button[aria-pressed='true'] {
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
+    color: var(--text);
+  }
+  .tip {
+    position: absolute;
+    z-index: 3;
+    padding: 0.2rem 0.5rem;
+    border: 1px solid var(--accent-line);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+    color: var(--text);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    transform: translate(12px, -130%);
+    pointer-events: none;
   }
   label {
     display: inline-flex;

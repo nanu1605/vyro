@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cardKey, detectCard, tier, validShape, AMD, INTEL, NVIDIA } from './gpuspecs';
-import { buildPc, CASE, discreteGpus, fanSpeedText, fanState, heat, heatColor, IDLE_SPIN, inMode, LIMITS, partTemp, RAMP, slotIndex, spinRate, type Part } from './pcmodel';
+import { buildLaptop, buildPc, CASE, discreteGpus, fanSpeedText, fanState, formOf, heat, heatColor, IDLE_SPIN, inMode, LAPTOP, LIMITS, partTemp, RAMP, slotIndex, spinRate, type Part } from './pcmodel';
+import { sampleLaptop } from './sample';
 import { sampleHardware } from './sample';
 import { initialSimState, nextSnapshot } from './sim';
 import type { GpuId, SensorSnapshot } from './types';
@@ -105,6 +106,23 @@ describe('My PC layout', () => {
     expect(discreteGpus(igpu, null)).toEqual([]);
   });
 
+  it('always has two front fans and a rear one, turning slowly when nothing reads them', () => {
+    const bare = buildPc({ hw: sampleHardware, snap: { ...snap, fans: [] }, cardKey });
+    const fans = bare.filter((p) => p.kind === 'fan' && p.id !== 'cooler.fan');
+    expect(fans.map((p) => p.label)).toEqual(['Front fan', 'Front fan', 'Rear fan']);
+    expect(fans.every((p) => p.fan!.rpm(snap) === null)).toBe(true);
+    // Reported fans take the places first.
+    const reported = byKind('fan').filter((p) => p.id.startsWith('fan.'));
+    expect(reported.length).toBeGreaterThan(0);
+    expect(byKind('fan').filter((p) => p.id.startsWith('fan.') || p.id.startsWith('casefan.')).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('moves parts out of the case in the exploded view, the board stays', () => {
+    expect(parts.find((p) => p.id === 'board')!.explode).toEqual([0, 0, 0]);
+    expect(byKind('gpu')[0]!.explode![2]).toBeGreaterThan(0);
+    expect(byKind('ram').every((p) => p.explode![2] > 0)).toBe(true);
+  });
+
   it('places RAM by slot name', () => {
     expect(['DIMM_A1', 'DIMM_A2', 'DIMM_B1', 'DIMM_B2'].map(slotIndex)).toEqual([0, 1, 2, 3]);
     expect(['ChannelA-DIMM0', 'ChannelB-DIMM1', 'Controller0-ChannelA-DIMM1'].map(slotIndex)).toEqual([0, 3, 1]);
@@ -178,5 +196,53 @@ describe('thermal map', () => {
     const bare = { ...snap, fans: [] };
     const cooler = buildPc({ hw: sampleHardware, snap: bare, cardKey }).find((p) => p.id === 'cooler.fan')!;
     expect(spinRate(cooler.fan!.rpm(bare))).toBe(IDLE_SPIN);
+  });
+});
+
+describe('laptop', () => {
+  const parts = buildLaptop({ hw: sampleLaptop, snap, cardKey });
+  const of = (k: Part['kind']) => parts.filter((p) => p.kind === k);
+
+  it('is drawn when the firmware says laptop, or the owner picks it', () => {
+    expect(formOf(sampleLaptop)).toBe('laptop');
+    expect(formOf(sampleHardware)).toBe('desktop');
+    expect(formOf(null)).toBe('desktop');
+    expect(formOf(sampleHardware, 'laptop')).toBe('laptop');
+    expect(formOf(sampleLaptop, 'desktop')).toBe('desktop');
+  });
+
+  it('fits its parts in the base, ids unique; the lid stands behind the hinge', () => {
+    expect(new Set(parts.map((p) => p.id)).size).toBe(parts.length);
+    for (const p of parts.filter((x) => x.kind !== 'lid'))
+      for (const a of [0, 1, 2]) {
+        expect(p.pos[a]! - p.size[a]! / 2, `${p.id} axis ${a}`).toBeGreaterThanOrEqual(-0.01);
+        expect(p.pos[a]! + p.size[a]! / 2, `${p.id} axis ${a}`).toBeLessThanOrEqual(LAPTOP[a]! + 0.01);
+      }
+    const lid = of('lid')[0]!;
+    expect(lid.pos[1]).toBeGreaterThan(LAPTOP[1]);
+    expect(lid.pos[2]).toBeLessThan(0);
+  });
+
+  it('has the chips, heat pipes, two blower fans, memory and a battery', () => {
+    expect(of('die').map((p) => p.label)).toEqual(['CPU', 'GPU']);
+    expect(of('heatpipe').length).toBe(3);
+    expect(of('heatpipe').every((p) => (p.path?.length ?? 0) >= 2)).toBe(true);
+    expect(of('blower').map((p) => p.fan?.axis)).toEqual(['y', 'y']);
+    expect(of('sodimm')).toHaveLength(Math.min(2, sampleLaptop.memory.dimms.length));
+    expect(of('battery')).toHaveLength(1);
+    // Without a discrete GPU: one chip, two pipes.
+    const igpu = buildLaptop({ hw: { ...sampleLaptop, gpus: [] }, snap: { ...snap, gpu: [] }, cardKey });
+    expect(igpu.filter((p) => p.kind === 'die').map((p) => p.label)).toEqual(['CPU']);
+    expect(igpu.filter((p) => p.kind === 'heatpipe')).toHaveLength(2);
+  });
+
+  it('reads the chips and memory like the tower does', () => {
+    const cpu = partTemp(of('die')[0]!, snap)!;
+    expect(cpu.temp).toBe(snap.cpu.tempPackage);
+    const gpu = partTemp(of('die')[1]!, snap)!;
+    expect(gpu.limits).toEqual(LIMITS.gpu);
+    expect(partTemp(of('battery')[0]!, snap)).toBeNull();
+    // The deck lifts away in the exploded view.
+    expect(of('deck')[0]!.explode![1]).toBeGreaterThan(0);
   });
 });

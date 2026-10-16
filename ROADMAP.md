@@ -1893,6 +1893,37 @@ scene stay loaded on first use. Footprint as 1.0, plus what P29 and P30 measure 
         386 checks clean. Start bundle 132.8 kB of 200; the companion 31.9 of 32 (its shared
         Svelte runtime is why the toasts use a CSS animation rather than a Svelte transition).
 
+#### P29 — a 3-D PC that looks real, and a laptop
+- [x] Built (2026-10-16):
+      - **Laptop or tower.** SMBIOS type 3 (chassis type) → `BoardId.formFactor`, with a
+        system battery as the fallback when the firmware says nothing; Settings → My PC → Model
+        (Automatic, Desktop, Laptop) for firmware that says wrong. Old files and services read
+        as unknown; the P19 fingerprint does not include it, so no "hardware changed".
+      - **The laptop** (`pcmodel.buildLaptop`): the lid open at 110° with Vyro on its screen
+        (CPU and GPU temperature, use, memory and a minute of CPU use, redrawn each reading), a
+        keyboard deck you can see through ("See inside", remembered), the board with the CPU and
+        GPU chips, copper heat pipes to two blower fans and their fins at the back vents,
+        memory, drives and the battery. The thermal map, labels, inspector and 2-D plan (from
+        above) work as for the tower; there is no separate GPU view.
+      - **The tower** (`scene3d.ts`): lit by a room reflected in metal and glass (PMREM),
+        ACES tone mapping and a soft bloom on the lights; a full case (panels, a front light
+        strip, top vents, feet, PCIe brackets, a PSU shroud with a smoked window, tempered glass);
+        a circuit-board texture with slots, I/O cover and power plugs; sleeved cables; a tower
+        cooler with copper heat pipes and a lit cap, or an AIO with its hoses; curved, pitched
+        fan blades in framed fans with light rings that blur into a disc at speed; graphics
+        cards with lit cuts, heat pipes and gold contacts. Two front fans and a rear one are
+        always there (decision 27). Everything procedural: no image or model files.
+      - **Motion.** RGB drifts around the accent; air flows from the intakes across the board to
+        the exhausts ("Airflow", speed from the fans, remembered); "Explode" lifts the parts
+        apart; the camera flies in on first view and turns slowly after 8 s untouched; hover
+        lights a part and names it; double-click flies to it ("Reset view" back). Warm parts
+        glow in their heat colour.
+      - **Cost.** 60 frames a second with the profile's full animation, 30 with "calmer" (no
+        bloom, drift, fly-in or turning), none with animation off (drawn when a reading or the
+        view changes). Only on My PC, only while it shows; the WebGL context is freed on leaving.
+        Fin stacks and fan blades are single meshes. The lazy `scene3d` chunk is 162.8 kB
+        gzipped (was 141.7).
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

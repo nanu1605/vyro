@@ -1,16 +1,42 @@
-// My PC (P23): a stylized ATX tower with its side off, laid out from what Vyro knows about this PC,
-// and the thermal map's colours. Pure, so it is unit-tested; the 3-D scene and the 2-D plan both
-// draw these parts.
+// My PC (P23, P29): a stylized ATX tower with its side off, or a laptop seen through its keyboard
+// deck, laid out from what Vyro knows about this PC, and the thermal map's colours. Pure, so it is
+// unit-tested; the 3-D scene and the 2-D plan both draw these parts.
 //
-// Units are millimetres. x runs from the back of the case (0) to the front (460), y from the
-// floor (0) up, z from the board (0) out towards the open side.
+// Units are millimetres. Tower: x runs from the back of the case (0) to the front (460), y from
+// the floor (0) up, z from the board (0) out towards the open side. Laptop: x from left to
+// right (0–360), y from the bottom (0) up to the deck (22), z from the hinge (0) to the front
+// edge (250).
 
 import { detectCard, type DetectedCard, type GpuShape } from './gpuspecs';
 import type { DriveInfo, GpuSnapshot, HardwareId, SensorSnapshot } from './types';
 import { fmt } from './format';
 import { LIMITS } from './limits';
 
-export type PartKind = 'board' | 'cpu' | 'cooler' | 'aio' | 'radiator' | 'vrm' | 'chipset' | 'ram' | 'slot' | 'gpu' | 'm2' | 'drive' | 'fan' | 'psu';
+export type PartKind =
+  | 'board'
+  | 'cpu'
+  | 'cooler'
+  | 'aio'
+  | 'radiator'
+  | 'vrm'
+  | 'chipset'
+  | 'ram'
+  | 'slot'
+  | 'gpu'
+  | 'm2'
+  | 'drive'
+  | 'fan'
+  | 'psu'
+  // Laptop (P29).
+  | 'die'
+  | 'blower'
+  | 'heatpipe'
+  | 'sodimm'
+  | 'battery'
+  | 'deck'
+  | 'lid';
+/** Which model to draw. */
+export type Form = 'desktop' | 'laptop';
 export type HeatGroup = 'cpu' | 'gpu' | 'board' | 'storage';
 export type ThermalMode = 'full' | HeatGroup;
 export type Vec3 = [number, number, number];
@@ -38,9 +64,26 @@ export interface Part {
   /** A RAM stick's place in the hardware list, and its slot name. */
   dimm?: number;
   slot?: string;
+  /** A laptop GPU chip: its place in the live GPU list. */
+  gpuIndex?: number;
+  /** A heat pipe's course (laptop). */
+  path?: Vec3[];
+  /** Where it moves in the exploded view, from its place. */
+  explode?: Vec3;
 }
 
 export const CASE: Vec3 = [460, 460, 220];
+export const LAPTOP: Vec3 = [360, 22, 250];
+/** The laptop's lid: open this far from closed, degrees. */
+export const LID_OPEN = 110;
+export const LID: { width: number; height: number; depth: number } = { width: 360, height: 230, depth: 7 };
+
+/** Desktop or laptop: the owner's pick, else what the firmware says (a tower when it is not a
+ * laptop, or says nothing). */
+export function formOf(hw: HardwareId | null, pick: 'auto' | 'desktop' | 'laptop' = 'auto'): Form {
+  if (pick !== 'auto') return pick;
+  return hw?.board.formFactor === 'laptop' ? 'laptop' : 'desktop';
+}
 const BOARD = { x0: 20, x1: 264, y0: 130, y1: 435 };
 const CPU_AT: Vec3 = [150, 345, 0];
 const SLOT_Y = 270;
@@ -221,33 +264,224 @@ export function buildPc(input: PcInput): Part[] {
     }
   }
 
-  // Case fans: front, then rear, then top.
+  // Case fans: front, then rear, then low front. The ones the board reports take the places
+  // first; a tower almost always has two at the front and one at the back, so those are drawn
+  // either way, turning slowly with "Speed not reported" when nothing reads them.
   const spots: Array<{ pos: Vec3; axis: 'x' | 'y' }> = [
     { pos: [446, 390, 110], axis: 'x' },
     { pos: [446, 265, 110], axis: 'x' },
     { pos: [14, 360, 110], axis: 'x' },
     { pos: [446, 140, 110], axis: 'x' },
   ];
+  const caseFan = (id: string, label: string, s: (typeof spots)[number], rpm: (snap: SensorSnapshot) => number | null) =>
+    box({
+      id,
+      kind: 'fan',
+      label,
+      pos: s.pos,
+      size: s.axis === 'x' ? [25, 120, 120] : [120, 25, 120],
+      group: null,
+      tab: 'cooling',
+      fan: { axis: s.axis, rpm },
+    });
   let spot = 0;
   for (const [i, f] of fans.entries()) {
     if (i === pump || i === cpuFan || f.kind !== 'fan' || spot >= spots.length) continue;
-    const s = spots[spot++]!;
-    parts.push(
-      box({
-        id: `fan.${i}`,
-        kind: 'fan',
-        label: f.name,
-        pos: s.pos,
-        size: s.axis === 'x' ? [25, 120, 120] : [120, 25, 120],
-        group: null,
-        tab: 'cooling',
-        fan: { axis: s.axis, rpm: rpmOf(i) },
-      }),
-    );
+    parts.push(caseFan(`fan.${i}`, f.name, spots[spot++]!, rpmOf(i)));
   }
+  const DEFAULT_SPOTS = 3;
+  for (; spot < DEFAULT_SPOTS; spot++) parts.push(caseFan(`casefan.${spot}`, spot === 2 ? 'Rear fan' : 'Front fan', spots[spot]!, () => null));
 
   parts.push(box({ id: 'psu', kind: 'psu', label: 'PSU', pos: [100, 50, 110], size: [150, 86, 140], group: null, tab: null }));
+  for (const p of parts) p.explode = towerExplode(p);
   return parts;
+}
+
+/** The exploded view (P29): parts lift off the board towards the open side, the case fans move
+ * out of their walls. */
+function towerExplode(p: Part): Vec3 {
+  switch (p.kind) {
+    case 'cooler':
+    case 'aio':
+      return [0, 0, 150];
+    case 'cpu':
+      return [0, 0, 80];
+    case 'ram':
+      return [0, 0, 95];
+    case 'gpu':
+      return [0, -10, 120];
+    case 'vrm':
+    case 'chipset':
+      return [0, 0, 35];
+    case 'm2':
+      return [0, 0, 55];
+    case 'drive':
+    case 'psu':
+      return [0, 0, 110];
+    case 'radiator':
+      return [0, 80, 0];
+    case 'fan':
+      if (p.id === 'cooler.fan') return [40, 0, 150];
+      if (p.id.startsWith('radfan')) return [0, 55, 0];
+      return [p.pos[0] > CASE[0] / 2 ? 80 : -80, 0, 0];
+    default:
+      return [0, 0, 0];
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Laptop (P29)
+// ---------------------------------------------------------------------------------------------
+
+/** A heat pipe's part: its course, boxed. */
+function pipe(id: string, path: Vec3[]): Part {
+  const lo = [0, 1, 2].map((a) => Math.min(...path.map((v) => v[a]!)));
+  const hi = [0, 1, 2].map((a) => Math.max(...path.map((v) => v[a]!)));
+  return box({
+    id,
+    kind: 'heatpipe',
+    label: 'Heat pipe',
+    pos: [0, 1, 2].map((a) => (lo[a]! + hi[a]!) / 2) as Vec3,
+    size: [0, 1, 2].map((a) => Math.max(6, hi[a]! - lo[a]!)) as Vec3,
+    group: null,
+    tab: null,
+    labelled: false,
+    path,
+  });
+}
+
+/** The parts of a laptop: the board, its CPU and GPU chips, the heat pipes to two blower fans
+ * and their fins at the back, memory, drives and the battery, under the keyboard deck, with
+ * the lid open behind. */
+export function buildLaptop(input: PcInput): Part[] {
+  const { hw, snap } = input;
+  const fans = snap?.fans ?? [];
+  const named = (re: RegExp) => fans.findIndex((f) => f.kind === 'fan' && re.test(f.name));
+  const cpuFan = named(/cpu/i) >= 0 ? named(/cpu/i) : fans.findIndex((f) => f.kind === 'fan');
+  const gpuFanBoard = named(/gpu/i);
+  const dgpu = discreteGpus(hw, snap)[0];
+  const gpuIndex = dgpu ? (dgpu.live ?? 0) : null;
+  const parts: Part[] = [
+    box({
+      id: 'board',
+      kind: 'board',
+      label: hw?.board.systemProduct ?? hw?.board.product ?? 'Motherboard',
+      pos: [180, 5, 80],
+      size: [330, 2, 140],
+      group: 'board',
+      tab: 'hardware',
+      anchor: [40, 6, 140],
+    }),
+    box({ id: 'cpu', kind: 'die', label: 'CPU', pos: [135, 7.5, 85], size: [24, 3, 20], group: 'cpu', tab: 'hardware', anchor: [135, 12, 85] }),
+  ];
+  if (gpuIndex != null)
+    parts.push(
+      box({ id: `gpu.${gpuIndex}`, kind: 'die', label: 'GPU', pos: [225, 7.5, 85], size: [30, 3, 30], group: 'gpu', tab: 'hardware', gpuIndex, anchor: [225, 12, 85] }),
+    );
+
+  // Copper heat pipes from the chips to the fins at each back corner.
+  parts.push(
+    pipe('pipe.0', [
+      [135, 10, 85],
+      [105, 10, 62],
+      [72, 10, 30],
+      [52, 10, 10],
+    ]),
+    pipe('pipe.1', [
+      [140, 11.5, 90],
+      [200, 11.5, 70],
+      [275, 11.5, 32],
+      [300, 11.5, 10],
+    ]),
+  );
+  if (gpuIndex != null)
+    parts.push(
+      pipe('pipe.2', [
+        [225, 10, 85],
+        [255, 10, 60],
+        [290, 10, 28],
+        [312, 10, 10],
+      ]),
+    );
+
+  // Two blower fans with their fins at the back vents.
+  const blower = (id: string, label: string, x: number, rpm: (s: SensorSnapshot) => number | null) =>
+    box({ id, kind: 'blower', label, pos: [x, 11, 42], size: [64, 14, 64], group: null, tab: 'cooling', labelled: false, fan: { axis: 'y', rpm } });
+  parts.push(
+    blower('fan.cpu', 'CPU fan', 70, (s) => (cpuFan >= 0 ? (s.fans[cpuFan]?.rpm ?? null) : null)),
+    blower('fan.gpu', 'GPU fan', 290, (s) => {
+      if (gpuFanBoard >= 0) return s.fans[gpuFanBoard]?.rpm ?? null;
+      return gpuIndex != null ? (s.gpu[gpuIndex]?.fanRpm ?? null) : null;
+    }),
+    box({ id: 'fins.0', kind: 'radiator', label: 'Fins', pos: [70, 11, 6], size: [62, 12, 10], group: null, tab: null, labelled: false }),
+    box({ id: 'fins.1', kind: 'radiator', label: 'Fins', pos: [290, 11, 6], size: [62, 12, 10], group: null, tab: null, labelled: false }),
+  );
+
+  // Memory: up to two modules, stacked; soldered memory shows none.
+  const dimms = (hw?.memory.dimms ?? []).slice(0, 2);
+  for (const [n, d] of dimms.entries())
+    parts.push(
+      box({
+        id: `ram.${n}`,
+        kind: 'sodimm',
+        label: 'RAM',
+        dimm: n,
+        slot: d.slot,
+        pos: [190, 7.5 + n * 4, 125],
+        size: [70, 3, 30],
+        group: 'board',
+        tab: 'hardware',
+        labelled: n === 0,
+        anchor: [190, 14, 125],
+      }),
+    );
+
+  // NVMe drives on the board.
+  const nvme = (snap?.storage ?? []).filter((d) => d.type === 'NVMe').slice(0, 2);
+  for (const [i, d] of nvme.entries())
+    parts.push(box({ id: d.id, kind: 'm2', label: d.model, pos: [i === 0 ? 95 : 265, 7, 128], size: [80, 3, 22], group: 'storage', tab: 'storage', labelled: i === 0 }));
+
+  parts.push(
+    box({ id: 'battery', kind: 'battery', label: 'Battery', pos: [180, 6, 205], size: [300, 8, 70], group: null, tab: null, labelled: false }),
+    box({ id: 'deck', kind: 'deck', label: 'Keyboard deck', pos: [180, 21, 125], size: [360, 2, 250], group: null, tab: null, labelled: false }),
+  );
+  // The lid stands open behind the hinge; its box is the screen's centre.
+  const a = ((LID_OPEN - 90) * Math.PI) / 180;
+  parts.push(
+    box({
+      id: 'lid',
+      kind: 'lid',
+      label: 'Display',
+      pos: [180, LAPTOP[1] + (LID.height / 2) * Math.cos(a), -(LID.height / 2) * Math.sin(a)],
+      size: [LID.width, LID.height * Math.cos(a), LID.height * Math.sin(a) + LID.depth],
+      group: null,
+      tab: null,
+      labelled: false,
+    }),
+  );
+  for (const p of parts) p.explode = laptopExplode(p);
+  return parts;
+}
+
+function laptopExplode(p: Part): Vec3 {
+  switch (p.kind) {
+    case 'deck':
+      return [0, 110, 0];
+    case 'heatpipe':
+      return [0, 60, 0];
+    case 'blower':
+    case 'radiator':
+      return [0, 45, 0];
+    case 'die':
+      return [0, 30, 0];
+    case 'sodimm':
+    case 'm2':
+      return [0, 22, 0];
+    case 'battery':
+      return [0, -30, 0];
+    default:
+      return [0, 0, 0];
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -280,7 +514,11 @@ export function partTemp(p: Part, s: SensorSnapshot | null): PartTemp | null {
       const g = gpuOf(p, s);
       return t(g?.tempEdge, LIMITS.gpu, 'core');
     }
-    case 'ram': {
+    case 'die':
+      if (p.group === 'gpu') return t(p.gpuIndex != null ? s.gpu[p.gpuIndex]?.tempEdge : null, LIMITS.gpu, 'core');
+      return t(s.cpu.tempPackage, LIMITS.cpu, 'package');
+    case 'ram':
+    case 'sodimm': {
       // The live list names slots as the hardware list does; by position otherwise.
       const want = p.dimm ?? -1;
       const d = s.memory.dimms.find((x) => x.slot === p.slot) ?? s.memory.dimms[want];
