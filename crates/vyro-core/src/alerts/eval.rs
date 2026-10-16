@@ -303,6 +303,11 @@ impl AlertEngine {
                 Some(true) => {
                     let since = *st.since.get_or_insert(ts);
                     st.clear_since = None;
+                    // Fired and never cleared, but its actions ended while a reading was
+                    // missing (or the rule was off): they come back without a second alert.
+                    if st.latched && st.active.is_none() {
+                        st.active = Some(ts);
+                    }
                     if !st.latched
                         && ts - since >= i64::from(rule.for_secs)
                         && Self::cooled(st.last, ts, rule.cooldown_secs)
