@@ -1969,6 +1969,37 @@ scene stay loaded on first use. Footprint as 1.0, plus what P29 and P30 measure 
       - `docs/footprint.md`: the 1.1 rows and what to measure; `docs/field-check-1.1.md`: one
         run sheet for P28–P30 (about two hours), with the defaults to confirm.
 - [ ] Field check (`docs/field-check-1.1.md`), then the owner's go for the release.
+      - **First pass (owner, 2026-10-16, test build `vyro-windows-123a938`): four problems,
+        fixed.**
+        1. Widgets added on the Widgets page never appeared.
+        2. Hardware and Sensors kept waiting for data.
+        3. "Quit Vyro" in the tray did nothing.
+
+        One cause for all three: `set_widgets` was a synchronous command, so it ran on the main
+        thread inside WebView2's message callback. Its window work was run at once there
+        (`run_on_main_thread` does that on the main thread), and building a WebView2 window
+        inside that callback hangs the main thread on Windows. No answer came to any later
+        command, and the tray could not quit. Fix: the widget commands are async, and the
+        window work is always queued to the event loop from a thread of its own, as the
+        overlay's is.
+
+        4. Scrolling was laggy. Causes:
+           - a fixed page background (every scrolled frame repainted the whole window; it
+             doubled the repaints in a trace);
+           - blurs behind the sticky top bar and sidebar;
+           - card hover effects that animated borders and shadows as cards slid under the
+             pointer;
+           - live bars that animated their width, a layout every frame.
+
+           Fix: the background scrolls with the page, there are no backdrop blurs (the bar is
+           98 % opaque), hover lifts are transform-only, and the bars scale instead of resizing.
+           In the browser preview's trace, repaints while scrolling fell from 77 to 35 on
+           Settings and from 161 to 97 on the Dashboard; the rest is the readouts easing once a
+           second.
+      - **CI now runs the installed app** (`src-tauri/src/smoke.rs`, armed by `VYRO_SMOKE`):
+        through the real IPC, the pages' data commands must answer, a widget saved as the
+        Widgets page saves it must open and load, and quitting as the tray does must end the
+        process. Any hang fails the run.
 
 ## Risks
 

@@ -467,14 +467,10 @@
     border: 1px solid var(--line);
     border-radius: 14px;
     background: var(--panel);
-    transition:
-      border-color var(--dur-2),
-      transform var(--dur-2) var(--ease-out),
-      box-shadow var(--dur-2);
+    transition: transform var(--dur-2) var(--ease-out);
   }
   .tile:hover {
     border-color: var(--accent-line);
-    box-shadow: var(--shadow-lift);
     transform: translateY(-2px);
   }
   .tile-foot {

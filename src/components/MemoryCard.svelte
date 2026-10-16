@@ -109,9 +109,9 @@
     border-radius: 4px;
     background: var(--gauge-track);
   }
+  /* Side by side, so sized; they change at once rather than animating a width every frame. */
   .seg {
     height: 100%;
-    transition: width 0.4s ease-out;
   }
   .in-use {
     background: var(--accent-cpu);

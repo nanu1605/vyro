@@ -12,6 +12,7 @@ mod look;
 mod overlay;
 mod remote;
 mod share;
+mod smoke;
 mod tray;
 mod updates;
 mod widgets;
@@ -75,6 +76,8 @@ fn main() {
             // Desktop widgets come back with Vyro, also when it starts in the tray.
             widgets::sync(app.handle());
             updates::watch(app.handle());
+            // CI's smoke test of the installed app (only with VYRO_SMOKE set).
+            smoke::start();
             if minimized {
                 tray::park_after_start(app.handle());
             } else {
@@ -86,6 +89,7 @@ fn main() {
             tray::on_window_event(window, event);
             widgets::on_window_event(window, event);
         })
+        .on_page_load(smoke::on_page_load)
         .invoke_handler(tauri::generate_handler![
             commands::get_latest,
             commands::set_ui_visible,
@@ -103,6 +107,7 @@ fn main() {
             widgets::get_widgets,
             widgets::set_widgets,
             widgets::widget_action,
+            smoke::smoke_report,
             commands::get_drives,
             commands::get_network,
             commands::get_pawnio_status,

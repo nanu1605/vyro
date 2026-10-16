@@ -98,7 +98,7 @@
         {#each top as p (p.pid)}
           <li>
             <span class="pname" title={p.name}>{p.name}</span>
-            <span class="bar" aria-hidden="true"><span style:width="{Math.min(100, p.cpuPct ?? 0)}%"></span></span>
+            <span class="bar" aria-hidden="true"><span style:transform="scaleX({Math.min(100, Math.max(0, p.cpuPct ?? 0)) / 100})"></span></span>
             <span class="pct">{fmt(p.cpuPct, 1)} %</span>
           </li>
         {/each}
@@ -267,15 +267,17 @@
   }
   .bar {
     height: 4px;
+    overflow: hidden;
     border-radius: 2px;
     background: var(--gauge-track);
   }
+  /* Scaled, not sized: no layout or repaint while it moves. */
   .bar span {
     display: block;
     height: 100%;
-    border-radius: 2px;
     background: var(--accent);
-    transition: width var(--dur-3) var(--ease-out);
+    transform-origin: left;
+    transition: transform var(--dur-3) var(--ease-out);
   }
   .pct {
     color: var(--muted);

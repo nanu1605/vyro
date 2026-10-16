@@ -1,7 +1,12 @@
 # Field check: 1.1 (P28 – P30) in one pass
 
-Status: **not yet run.** P28 to P30 are built on one branch, `claude/blissful-knuth-begnu5`, so
-one test build holds all three:
+Status: **first pass (2026-10-16, `vyro-windows-123a938`) found four problems**: widgets did not
+appear, Hardware and Sensors waited forever, Quit did nothing, and scrolling was laggy. All four
+are fixed (ROADMAP → P31). Run sections 1–4 again with the new build. If the old build is still
+stuck, end it in Task Manager first.
+
+P28 to P30 are built on one branch, `claude/blissful-knuth-begnu5`, so one test build holds all
+three:
 - the `vyro-windows-<commit>` artifact of the latest CI run on that branch (Actions → the run →
   Artifacts);
 - unzip it and install the MSI over 1.0.1.

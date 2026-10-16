@@ -253,7 +253,7 @@
         aria-valuemax={100}
         aria-valuenow={Math.round(progress.done * 100)}
       >
-        <span style="width: {progress.done * 100}%"></span>
+        <span style="transform: scaleX({Math.max(0, Math.min(1, progress.done))})"></span>
       </div>
       <p class="fine">
         The CPU and GPU run at full load. Closing the Vyro window or quitting stops the run; so does any temperature
@@ -622,9 +622,9 @@
   .bar span {
     display: block;
     height: 100%;
-    border-radius: 999px;
     background: var(--accent);
-    transition: width 0.25s linear;
+    transform-origin: left;
+    transition: transform 0.25s linear;
   }
   .done {
     display: grid;

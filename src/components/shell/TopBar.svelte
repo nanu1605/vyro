@@ -78,8 +78,9 @@
     margin: 0 calc(-1 * var(--gutter)) 1rem;
     padding: 0.6rem var(--gutter);
     border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
-    background: color-mix(in srgb, var(--bg) 78%, transparent);
-    backdrop-filter: blur(16px) saturate(1.15);
+    /* Nearly opaque rather than blurred: a blur under a sticky bar is redone every scrolled
+       frame. */
+    background: color-mix(in srgb, var(--bg) 98%, transparent);
   }
   /* The page state (idle, gaming, warning, critical) as a line along the bar's foot. */
   .top::after {

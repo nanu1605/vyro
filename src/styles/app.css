@@ -1,10 +1,10 @@
 /* The app window's shared controls and motion (P28), on top of theme.css. Not loaded by the
    phone companion, which has its own few controls. */
 
-/* Cards that are one reading (tiles, widgets) lift a little on hover. */
+/* Cards that are one reading (tiles, widgets) lift a little on hover; only the transform moves,
+   so the lift costs no repaint. */
 .lift:hover,
 .dash-cell > .panel:hover {
-  box-shadow: var(--shadow-lift);
   transform: translateY(-2px);
 }
 

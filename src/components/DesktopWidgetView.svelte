@@ -82,7 +82,7 @@
           <span class="label">{r.label}</span>
           <span class="num"><b>{fmt(r.value, r.digits)}</b> <small>{r.value == null ? '' : r.unit}</small></span>
           {#if r.unit === '%' || r.hot != null}
-            <span class="bar" aria-hidden="true"><i style:width="{Math.max(0, Math.min(100, ((r.value ?? 0) / (r.unit === '%' ? 100 : (r.hot ?? 100))) * 100))}%"></i></span>
+            <span class="bar" aria-hidden="true"><i style:transform="scaleX({Math.max(0, Math.min(1, (r.value ?? 0) / (r.unit === '%' ? 100 : (r.hot ?? 100))))})"></i></span>
           {/if}
         </li>
       {:else}
@@ -259,15 +259,17 @@
   .bar {
     grid-column: 1 / -1;
     height: 4px;
+    overflow: hidden;
     border-radius: 3px;
     background: var(--gauge-track);
   }
+  /* Scaled, not sized: no layout or repaint while it moves. */
   .bar i {
     display: block;
     height: 100%;
-    border-radius: 3px;
     background: var(--accent);
-    transition: width 0.8s var(--ease-out);
+    transform-origin: left;
+    transition: transform 0.8s var(--ease-out);
   }
   li.warn .bar i {
     background: var(--warn);

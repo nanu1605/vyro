@@ -163,7 +163,6 @@
     padding: 1rem 0.75rem 0.75rem;
     border-right: 1px solid var(--line);
     background: color-mix(in srgb, var(--panel) 82%, transparent);
-    backdrop-filter: blur(18px) saturate(1.2);
     transition: width var(--dur-3) var(--ease-out);
   }
   .rail {

@@ -119,7 +119,8 @@ body {
     radial-gradient(60rem 30rem at 20% -10%, var(--glow-1) 0%, transparent 60%),
     radial-gradient(50rem 30rem at 90% 0%, var(--glow-2) 0%, transparent 55%),
     var(--bg);
-  background-attachment: fixed;
+  /* Not fixed: a fixed background makes every scrolled frame repaint the whole window. */
+  background-repeat: no-repeat;
 }
 
 /* Page states (App.svelte sets data-state). Health's words are on the Dashboard strip and the
@@ -146,10 +147,9 @@ body {
   padding: 1rem;
   /* Links from the command palette land below the sticky header. */
   scroll-margin-top: calc(var(--topbar-h) + 1rem);
-  transition:
-    border-color var(--dur-2),
-    box-shadow var(--dur-2),
-    transform var(--dur-2) var(--ease-out);
+  /* Only the lift animates (on the compositor): a fading border or shadow repaints the card
+     every frame, and while the wheel scrolls, cards keep passing under the pointer. */
+  transition: transform var(--dur-2) var(--ease-out);
 }
 .panel:hover {
   border-color: color-mix(in srgb, var(--accent) 22%, var(--line));

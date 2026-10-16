@@ -325,52 +325,64 @@ fn areas(app: &AppHandle) -> Vec<Area> {
 }
 
 /// Opens, updates or closes the widget windows to match the store.
+///
+/// The window work is always queued to the event loop from a thread of its own. Called on the
+/// main thread (a synchronous command, the tray, setup), `run_on_main_thread` runs it at once,
+/// and building or destroying a WebView2 window inside WebView2's own message callback hangs
+/// the main thread on Windows: no widget, no answer to any later command, and Quit does
+/// nothing (1.1's first field check). The game overlay is shown the same way from its own
+/// thread.
 pub fn sync(app: &AppHandle) {
-    let Some(store) = app.try_state::<WidgetStore>() else {
+    if let Some(engine) = app.try_state::<Engine>() {
+        engine.set_widgets(active(app));
+    }
+    let handle = app.clone();
+    let queued = std::thread::Builder::new()
+        .name("vyro-widgets".into())
+        .spawn(move || {
+            let app = handle.clone();
+            if let Err(e) = handle.run_on_main_thread(move || apply(&app)) {
+                log::warn!("widgets: {e}");
+            }
+        });
+    if let Err(e) = queued {
+        log::warn!("widgets: {e}");
+    }
+}
+
+/// The windows as the store has them when the event loop gets to it (the latest of several
+/// quick saves wins). Runs on the main thread, from the event loop.
+fn apply(handle: &AppHandle) {
+    let Some(store) = handle.try_state::<WidgetStore>() else {
         return;
     };
     let cfg = store.get();
-    let want: Vec<DesktopWidget> = if cfg.shown {
-        cfg.widgets.clone()
-    } else {
-        Vec::new()
-    };
-    if let Some(engine) = app.try_state::<Engine>() {
-        engine.set_widgets(!want.is_empty());
+    let want: Vec<DesktopWidget> = if cfg.shown { cfg.widgets } else { Vec::new() };
+    for (label, w) in handle.webview_windows() {
+        if let Some(id) = label.strip_prefix(PREFIX) {
+            if !want.iter().any(|x| x.id == id) {
+                let _ = w.destroy();
+            }
+        }
     }
-    let handle = app.clone();
-    let run = app.run_on_main_thread(move || {
-        for (label, w) in handle.webview_windows() {
-            if let Some(id) = label.strip_prefix(PREFIX) {
-                if !want.iter().any(|x| x.id == id) {
-                    let _ = w.destroy();
-                }
+    let monitors = areas(handle);
+    let mut placed = Vec::new();
+    for (slot, x) in want.iter().enumerate() {
+        if let Some(pos) = open_or_update(handle, x, &monitors, slot) {
+            placed.push((x.id.clone(), pos));
+        }
+    }
+    // New widgets: keep where they were put, so they come back there.
+    if !placed.is_empty() {
+        let mut cfg = store.get();
+        for (id, (px, py)) in placed {
+            if let Some(w) = cfg.widgets.iter_mut().find(|w| w.id == id) {
+                (w.x, w.y, w.placed) = (px.round() as i32, py.round() as i32, true);
             }
         }
-        let monitors = areas(&handle);
-        let mut placed = Vec::new();
-        for (slot, x) in want.iter().enumerate() {
-            if let Some(pos) = open_or_update(&handle, x, &monitors, slot) {
-                placed.push((x.id.clone(), pos));
-            }
+        if let Err(e) = store.set(cfg) {
+            log::warn!("widgets: {e}");
         }
-        // New widgets: keep where they were put, so they come back there.
-        if !placed.is_empty() {
-            if let Some(store) = handle.try_state::<WidgetStore>() {
-                let mut cfg = store.get();
-                for (id, (px, py)) in placed {
-                    if let Some(w) = cfg.widgets.iter_mut().find(|w| w.id == id) {
-                        (w.x, w.y, w.placed) = (px.round() as i32, py.round() as i32, true);
-                    }
-                }
-                if let Err(e) = store.set(cfg) {
-                    log::warn!("widgets: {e}");
-                }
-            }
-        }
-    });
-    if let Err(e) = run {
-        log::warn!("widgets: {e}");
     }
 }
 
@@ -544,15 +556,17 @@ pub fn get_widgets(store: State<'_, WidgetStore>) -> Widgets {
     store.get()
 }
 
-/// Saves the widgets (from the Widgets page) and returns them as stored.
+/// Saves the widgets (from the Widgets page) and returns them as stored. Async, so it runs off
+/// the main thread (see [`sync`]).
 #[tauri::command]
-pub fn set_widgets(app: AppHandle, widgets: Widgets) -> Result<Widgets, String> {
+pub async fn set_widgets(app: AppHandle, widgets: Widgets) -> Result<Widgets, String> {
     store_and_sync(&app, widgets)
 }
 
-/// A widget's own menu: lock, unlock, remove, or edit it on the Widgets page.
+/// A widget's own menu: lock, unlock, remove, or edit it on the Widgets page. Async, so a
+/// widget removing itself is not destroyed inside its own message callback (see [`sync`]).
 #[tauri::command]
-pub fn widget_action(app: AppHandle, id: String, action: String) -> Result<(), String> {
+pub async fn widget_action(app: AppHandle, id: String, action: String) -> Result<(), String> {
     let store = app.try_state::<WidgetStore>().ok_or("widgets not loaded")?;
     let mut cfg = store.get();
     match action.as_str() {

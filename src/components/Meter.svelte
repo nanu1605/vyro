@@ -14,7 +14,7 @@
 
 <div class="meter" class:na={value == null}>
   <span class="label">{label}</span>
-  <span class="track" aria-hidden="true"><span class="fill" style:width="{pct}%"></span></span>
+  <span class="track" aria-hidden="true"><span class="fill" style:transform="scaleX({pct / 100})"></span></span>
   <span class="value">{value == null ? (note ?? NA) : `${fmt(value)}%`}</span>
 </div>
 
@@ -38,12 +38,14 @@
     background: var(--gauge-track);
     overflow: hidden;
   }
+  /* Scaled rather than sized: a moving width lays out and repaints every frame, a scale runs on
+     the compositor. The track's rounded clip keeps the ends round. */
   .fill {
     display: block;
     height: 100%;
-    border-radius: inherit;
     background: var(--accent);
-    transition: width 0.4s ease-out;
+    transform-origin: left;
+    transition: transform 0.4s ease-out;
   }
   .value {
     text-align: right;
