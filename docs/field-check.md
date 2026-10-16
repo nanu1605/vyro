@@ -267,6 +267,8 @@ P16 and P17 were your own choices on 2026-10-15.
   - Up to P26: 0.5 can ship.
   - P27: 1.0.
 
+  The owner chose straight to 1.0 (2026-10-16): no 0.4 or 0.5.
+
   A release built from a point lower in the stack is a different build from the one checked
   here, so give its MSI a short smoke pass: install over the last release, open every tab,
   and turn fan control on and off.
