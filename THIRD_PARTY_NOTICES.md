@@ -359,3 +359,4 @@ Bundled into the app's user interface.
 |---|---|---|---|
 | svelte | 5.57.1 | MIT | git+https://github.com/sveltejs/svelte.git |
 | @tauri-apps/api | 2.11.1 | Apache-2.0 OR MIT | git+https://github.com/tauri-apps/tauri.git |
+| three | 0.186.1 | MIT | https://github.com/mrdoob/three.js |

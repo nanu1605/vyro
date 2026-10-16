@@ -380,12 +380,20 @@ export interface AppSettings {
   accent: AccentId;
   /** Which tab the window opens on, at launch and from the tray. */
   openOn: OpenOn;
+  /** My PC (P23): 3-D or the flat plan, and the owner's GPU shapes by card key. */
+  myPc: MyPcSettings;
 }
+export interface MyPcSettings {
+  threeD: boolean;
+  /** Checked with `validShape` when read; kept as written. */
+  gpuShapes: Record<string, unknown>;
+}
+export const DEFAULT_MY_PC: MyPcSettings = { threeD: true, gpuShapes: {} };
 export { DEFAULT_OVERLAY };
 export type { OverlayCorner, OverlayData, OverlaySettings };
 let browserSettings: AppSettings = {
   closeToTray: true, temperatureUnit: 'c', hiddenSensors: [], profile: 'desktop', gameCapture: true, overlay: { ...DEFAULT_OVERLAY }, checkUpdates: true,
-  games: { ...DEFAULT_GAMES }, ...savedLook(),
+  games: { ...DEFAULT_GAMES }, ...savedLook(), myPc: { ...DEFAULT_MY_PC },
 };
 
 /** Overlay readings, at the overlay's update rate while it shows; in a browser, from the

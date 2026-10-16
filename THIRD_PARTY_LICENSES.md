@@ -9524,7 +9524,35 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 152. LICENSE-MIT
+## 152. LICENSE
+
+Used by: three 0.186.1 (npm)
+
+~~~~text
+The MIT License
+
+Copyright © 2010-2026 three.js authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+~~~~
+
+## 153. LICENSE-MIT
 
 Used by: time 0.3.55, time-core 0.1.9, time-macros 0.2.32
 
@@ -9550,7 +9578,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 153. LICENSE-ZLIB.md
+## 154. LICENSE-ZLIB.md
 
 Used by: tinyvec 1.13.3
 
@@ -9568,7 +9596,7 @@ Permission is granted to anyone to use this software for any purpose, including 
 3. This notice may not be removed or altered from any source distribution.
 ~~~~
 
-## 154. LICENSE
+## 155. LICENSE
 
 Used by: tokio 1.53.1, tokio-util 0.7.19
 
@@ -9596,7 +9624,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 155. LICENSE-APACHE
+## 156. LICENSE-APACHE
 
 Used by: tokio-rustls 0.26.5
 
@@ -9804,7 +9832,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ~~~~
 
-## 156. LICENSE-MIT
+## 157. LICENSE-MIT
 
 Used by: tokio-rustls 0.26.5
 
@@ -9836,7 +9864,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 157. LICENSE
+## 158. LICENSE
 
 Used by: tower 0.5.3, tower-layer 0.3.3, tower-service 0.3.3
 
@@ -9868,7 +9896,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 158. LICENSE
+## 159. LICENSE
 
 Used by: tower-http 0.6.11
 
@@ -9900,7 +9928,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 159. LICENSE
+## 160. LICENSE
 
 Used by: tracing 0.1.44, tracing-attributes 0.1.31, tracing-core 0.1.36
 
@@ -9932,7 +9960,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 160. LICENSE.spdx
+## 161. LICENSE.spdx
 
 Used by: tray-icon 0.24.2
 
@@ -9958,7 +9986,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/tray-icon.git
 Creator: Person: Daniel Thompson-Yvetot
 ~~~~
 
-## 161. LICENSE
+## 162. LICENSE
 
 Used by: try-lock 0.2.5
 
@@ -9985,7 +10013,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 162. MIT (standard text; the package ships none)
+## 163. MIT (standard text; the package ships none)
 
 Used by: ts-rs 12.0.1, ts-rs-macros 12.0.1
 
@@ -10010,7 +10038,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 163. LICENSE
+## 164. LICENSE
 
 Used by: typenum 1.20.1
 
@@ -10018,7 +10046,7 @@ Used by: typenum 1.20.1
 MIT OR Apache-2.0
 ~~~~
 
-## 164. LICENSE-APACHE
+## 165. LICENSE-APACHE
 
 Used by: typenum 1.20.1
 
@@ -10226,7 +10254,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ~~~~
 
-## 165. LICENSE-MIT
+## 166. LICENSE-MIT
 
 Used by: typenum 1.20.1
 
@@ -10254,7 +10282,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 166. MIT (standard text; the package ships none)
+## 167. MIT (standard text; the package ships none)
 
 Used by: unic-char-property 0.9.0, unic-char-range 0.9.0, unic-common 0.9.0, unic-ucd-ident 0.9.0, unic-ucd-version 0.9.0
 
@@ -10279,7 +10307,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 167. LICENSE-UNICODE
+## 168. LICENSE-UNICODE
 
 Used by: unicode-ident 1.0.26
 
@@ -10325,7 +10353,7 @@ dealings in these Data Files or Software without prior written
 authorization of the copyright holder.
 ~~~~
 
-## 168. LICENSE.txt
+## 169. LICENSE.txt
 
 Used by: untrusted 0.9.0
 
@@ -10345,7 +10373,7 @@ Used by: untrusted 0.9.0
 // OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ~~~~
 
-## 169. LICENSE
+## 170. LICENSE
 
 Used by: urlpattern 0.3.0
 
@@ -10373,7 +10401,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 170. LICENSE-MIT
+## 171. LICENSE-MIT
 
 Used by: utf8_iter 1.0.4
 
@@ -10405,7 +10433,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 171. LICENSE-MIT
+## 172. LICENSE-MIT
 
 Used by: uuid 1.26.1
 
@@ -10438,7 +10466,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 172. LICENSE
+## 173. LICENSE
 
 Used by: want 0.3.1
 
@@ -10464,7 +10492,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 173. MIT (standard text; the package ships none)
+## 174. MIT (standard text; the package ships none)
 
 Used by: webview2-com 0.38.2
 
@@ -10489,7 +10517,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 174. MIT (standard text; the package ships none)
+## 175. MIT (standard text; the package ships none)
 
 Used by: webview2-com-macros 0.8.1
 
@@ -10514,7 +10542,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 175. MIT (standard text; the package ships none)
+## 176. MIT (standard text; the package ships none)
 
 Used by: webview2-com-sys 0.38.2
 
@@ -10539,7 +10567,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 176. LICENSE-MIT
+## 177. LICENSE-MIT
 
 Used by: window-vibrancy 0.6.0
 
@@ -10567,7 +10595,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 177. LICENSE.spdx
+## 178. LICENSE.spdx
 
 Used by: window-vibrancy 0.6.0
 
@@ -10593,7 +10621,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/window-vibrancy.git
 Creator: Person: Daniel Thompson-Yvetot
 ~~~~
 
-## 178. license-apache-2.0
+## 179. license-apache-2.0
 
 Used by: windows 0.61.3, windows 0.62.2, windows-collections 0.2.0, windows-collections 0.3.2, windows-core 0.61.2, windows-core 0.62.2, windows-future 0.2.1, windows-future 0.3.2, windows-implement 0.60.2, windows-interface 0.59.3, windows-link 0.1.3, windows-link 0.2.1, windows-numerics 0.2.0, windows-numerics 0.3.1, windows-registry 0.6.1, windows-result 0.3.4, windows-result 0.4.1, windows-strings 0.4.2, windows-strings 0.5.1, windows-sys 0.59.0, windows-sys 0.60.2, windows-sys 0.61.2, windows-targets 0.52.6, windows-targets 0.53.5, windows-threading 0.1.0, windows-threading 0.2.1, windows-version 0.1.7, windows_x86_64_msvc 0.52.6, windows_x86_64_msvc 0.53.1
 
@@ -10801,7 +10829,7 @@ Apache License
    limitations under the License.
 ~~~~
 
-## 179. license-mit
+## 180. license-mit
 
 Used by: windows 0.61.3, windows 0.62.2, windows-collections 0.2.0, windows-collections 0.3.2, windows-core 0.61.2, windows-core 0.62.2, windows-future 0.2.1, windows-future 0.3.2, windows-implement 0.60.2, windows-interface 0.59.3, windows-link 0.1.3, windows-link 0.2.1, windows-numerics 0.2.0, windows-numerics 0.3.1, windows-registry 0.6.1, windows-result 0.3.4, windows-result 0.4.1, windows-strings 0.4.2, windows-strings 0.5.1, windows-sys 0.59.0, windows-sys 0.60.2, windows-sys 0.61.2, windows-targets 0.52.6, windows-targets 0.53.5, windows-threading 0.1.0, windows-threading 0.2.1, windows-version 0.1.7, windows_x86_64_msvc 0.52.6, windows_x86_64_msvc 0.53.1
 
@@ -10829,7 +10857,7 @@ MIT License
     SOFTWARE
 ~~~~
 
-## 180. LICENSE-MIT
+## 181. LICENSE-MIT
 
 Used by: wry 0.55.1
 
@@ -10857,7 +10885,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 181. LICENSE.spdx
+## 182. LICENSE.spdx
 
 Used by: wry 0.55.1
 
@@ -10884,7 +10912,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/wry.git
 Creator: Person: Daniel Thompson-Yvetot
 ~~~~
 
-## 182. LICENSE-APACHE
+## 183. LICENSE-APACHE
 
 Used by: zerocopy 0.8.59
 
@@ -11092,7 +11120,7 @@ Apache License
    limitations under the License.
 ~~~~
 
-## 183. LICENSE-BSD
+## 184. LICENSE-BSD
 
 Used by: zerocopy 0.8.59
 
@@ -11123,7 +11151,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ~~~~
 
-## 184. LICENSE-MIT
+## 185. LICENSE-MIT
 
 Used by: zerocopy 0.8.59
 
@@ -11155,7 +11183,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 185. LICENSE-MIT
+## 186. LICENSE-MIT
 
 Used by: zeroize 1.9.0
 
@@ -11187,7 +11215,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 186. LICENSE
+## 187. LICENSE
 
 Used by: zip 4.6.1
 
@@ -11218,7 +11246,7 @@ Some files in the "tests/data" subdirectory of this repository are under other
 licences; see files named LICENSE.*.txt for details.
 ~~~~
 
-## 187. LICENSE
+## 188. LICENSE
 
 Used by: zlib-rs 0.6.8
 

@@ -14,6 +14,8 @@ export default defineConfig({
   build: {
     target: 'es2022',
     sourcemap: false,
+    // The 3-D view's chunk (Three.js, ~570 kB) loads only with the My PC tab (P23).
+    chunkSizeWarningLimit: 600,
   },
   test: {
     include: ['src/**/*.test.ts'],

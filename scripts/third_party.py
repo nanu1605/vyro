@@ -22,7 +22,7 @@ LICENSE_FILE = re.compile(r"^(LICEN[CS]E|COPYING|NOTICE|UNLICENSE)", re.I)
 TARGET = "x86_64-pc-windows-msvc"
 # npm packages whose code ends up in dist/ (the UI bundle). Svelte is a devDependency but its
 # runtime is compiled into the bundle.
-UI_PACKAGES = ["svelte", "@tauri-apps/api"]
+UI_PACKAGES = ["svelte", "@tauri-apps/api", "three"]
 
 HEADER = """# Third-party notices
 
