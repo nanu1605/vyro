@@ -1228,7 +1228,7 @@ Budget:
         (3.1 kB gzipped) plus 3 kB of CSS.
       - **Wine.** Wine has no device query API, so CI's Windows runner is the first real read,
         and the field check the second.
-- [ ] Field check (MS-7E24):
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
       - Every keyboard, mouse, headset and controller in use is listed once, with the right
         kind and connection. Monitors, hubs and the PC's own parts are not listed.
       - Plug a USB device in and out: it appears and goes within a couple of seconds. Turn a
