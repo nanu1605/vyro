@@ -888,11 +888,13 @@ stays v3 (the `score` table is created in place); IPC protocol 11.
         moving it through Good, Fair and Needs attention, a first day without a score, the
         event-log counts, the daily store. Browser preview: axe clean, no overflow at 390 px;
         the main bundle grows 6.9 kB.
-- [ ] Field check (MS-7E24): after a day of use the score appears with all inputs that apply;
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
+      after a day of use the score appears with all inputs that apply;
       the thermal headroom matches the History of a gaming evening; a heavy stress test with a
       lowered fan curve shows in Throttling or Sustained clocks; the stability counts match the
       System log in Event Viewer (Kernel-Power 41, WHEA-Logger); the daily point appears in the
       trend the next day.
+      With P16, P18 and P19 also field-checked, M9 is complete.
 
 ### P20 — Benchmark mode (M10 → 0.4)
 - [ ] Own workloads, hard stop, variance; `benchmark_runs` / `benchmark_metrics`.
