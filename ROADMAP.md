@@ -1574,7 +1574,8 @@ Budget:
       - **Bundle.** The main bundle grows 1.4 kB gzipped (the second entry moved Svelte's
         runtime into a shared chunk). The phone loads 29 kB gzipped in all; the Settings
         card is a 3.6 kB chunk.
-- [ ] Field check (MS-7E24 and a phone on the same Wi-Fi):
+- [x] Field check (MS-7E24 and a phone on the same Wi-Fi, 2026-10-16, test build
+      `vyro-windows-bab8a30`), all passed:
       - Settings → Remote → Turn on: Windows asks about the firewall; allow Private. The card
         then says the firewall allows Vyro, and the header chip shows.
       - Pair a device: scan the QR code with the phone and pair. The tiles update every
@@ -1589,6 +1590,7 @@ Budget:
         watching.
       - The defaults above are what you want: port, 30 days, plain HTTP, the app rather than
         the service.
+      M12 is complete; with M11, 0.5 could ship from here (the owner's call).
 
 ### P27 — V2 polish & validation (M13 → 1.0)
 - [ ] Footprint audit, accessibility, V1→V2 migration, clean machine, control-safety matrix.
