@@ -20,8 +20,30 @@ pub const SENSORS_EVENT: &str = "sensors";
 /// Emitted (no payload) when the display configuration changes.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub const DISPLAYS_EVENT: &str = "displays-changed";
+/// Emitted (no payload) when a device arrives, leaves, connects or disconnects (P22).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub const DEVICES_EVENT: &str = "devices-changed";
 /// Emitted with a [`BackendStatus`] when the service connection changes.
 pub const BACKEND_EVENT: &str = "backend-status";
+
+/// Starts the device hot-plug watch on first use (the Devices tab's first read); later calls
+/// do nothing.
+pub fn watch_devices(app: &AppHandle) {
+    #[cfg(windows)]
+    {
+        static STARTED: std::sync::Once = std::sync::Once::new();
+        STARTED.call_once(|| {
+            let app = app.clone();
+            vyro_core::devices::watch(move || {
+                if let Err(e) = app.emit(DEVICES_EVENT, ()) {
+                    log::debug!("emit {DEVICES_EVENT}: {e}");
+                }
+            });
+        });
+    }
+    #[cfg(not(windows))]
+    let _ = app;
+}
 
 /// How long to wait for a service that is starting (sign-in right after boot).
 const SERVICE_WAIT: Duration = Duration::from_secs(5);

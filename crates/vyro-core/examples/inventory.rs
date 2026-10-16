@@ -1,4 +1,4 @@
-//! Collects the static inventory (hardware, system, displays, drives, network) and saves it as JSON, for checking against msinfo32 / Task
+//! Collects the static inventory (hardware, system, displays, drives, network, devices) and saves it as JSON, for checking against msinfo32 / Task
 //! Manager. Double-click friendly: writes `vyro-inventory.json` next to the executable, prints
 //! it, and waits for Enter before closing.
 //!
@@ -61,6 +61,16 @@ fn drives() -> Vec<vyro_core::info::DriveInfo> {
 #[cfg(not(windows))]
 fn drives() -> Vec<vyro_core::info::DriveInfo> {
     vyro_core::storage::sample()
+}
+
+#[cfg(windows)]
+fn devices() -> vyro_core::devices::Devices {
+    vyro_core::devices::collect()
+}
+
+#[cfg(not(windows))]
+fn devices() -> vyro_core::devices::Devices {
+    vyro_core::devices::sample()
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -134,6 +144,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "displays": shown,
         "drives": disks,
         "network": nets,
+        "devices": devices(),
         "pawnio": vyro_core::pawnio::status(),
         "log": log,
     }))?;

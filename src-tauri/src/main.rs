@@ -85,6 +85,7 @@ fn main() {
             commands::get_system_info,
             commands::get_hardware_id,
             commands::get_displays,
+            commands::get_devices,
             commands::get_drives,
             commands::get_network,
             commands::get_pawnio_status,

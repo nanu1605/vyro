@@ -1168,7 +1168,88 @@ Budget:
       - The defaults above are what you want.
 
 ### P22 — Devices & wireless battery (M11)
-- [ ] `devices/` provider, hot add/remove, battery via BLE / PnP / XInput.
+On `v2-p22-devices`, stacked on `v2-p25-themes` (it adds a tab next to P25's changes).
+
+Defaults chosen at build (2026-10-15). The owner can change them at the field check:
+- **Where.** A Devices tab after Displays: input (keyboards, mice, controllers, receivers),
+  audio (headsets, headphones, speakers, microphones), then the rest (cameras, printers,
+  phones, USB storage, other USB devices). Below them, the sound outputs and inputs, with
+  Windows' default and empty jacks.
+- **What is listed.** Each physical device once, as Windows groups it (its device
+  container). The PC's own parts, monitors (Displays has them), USB hubs and virtual devices
+  (Print to PDF) are left out. A paired Bluetooth device that is off shows "Not connected";
+  an unplugged USB device disappears.
+- **Kind.** The device's own name first (a gaming mouse also has a keyboard function), then
+  Windows' category, then what it does (audio endpoints, keyboard/mouse, camera, printer).
+  Keyboard-and-mouse devices with no other clue show as "Keyboard / mouse".
+- **Battery.** Windows' own Bluetooth battery reading (what Settings shows) first; the
+  Bluetooth LE Battery Service (0x180F, Windows' cached value) where Windows has none;
+  XInput's four levels for an Xbox controller. "—" where the device reports nothing (2.4 GHz
+  receivers need vendor protocols, later). Battery is shown only while connected; under 20 %
+  it is amber, under 10 % red, always with the number.
+- **Refresh.** On opening the tab, within a second of a device arriving, leaving, connecting
+  or disconnecting, and every 60 s while the tab is open (battery).
+- **Privacy.** No Bluetooth addresses, device paths or serial numbers leave the collector; ids
+  are hashes. Device names stay on this PC: not in reports, cards or history.
+- **No low-battery notification yet.** It fits P18's alerts later.
+
+Budget:
+- **No service change.** Devices are read by the app (no administrator rights, no driver);
+  IPC protocol stays 13.
+- **No polling while the tab is closed.** One Windows device-change registration and one
+  device-container query, both on Windows' own threads, and one parked thread that waits a
+  short quiet moment before telling the window.
+- **A read** is three device queries, Core Audio and XInput, under 100 ms, off the UI thread.
+  Battery Service reads are cached by Windows; each device is read at most once a minute.
+- **Bundle.** The tab loads on first visit; the main bundle grows under 2 kB.
+
+- [x] Built (2026-10-15, branch `v2-p22-devices`, stacked on `v2-p25-themes`):
+      - **Collector (`crates/vyro-core/src/devices/`).**
+        - Device containers and present device nodes come from the device query API
+          (`DevGetObjects`, with a present-only filter and a fallback without it), plus
+          Windows' Bluetooth battery property on each node.
+        - The Battery Service is read through `bluetoothapis.dll` and XInput 1.4; both are loaded
+          at run time. Battery Service readings are cached for 55 s, with a 3 s budget per read.
+        - Core Audio endpoints come with their state, form factor, container and the defaults.
+        - `build` is pure and unit-tested: kinds, what is left out, connection, battery
+          precedence, XInput matching, audio links, and hashed ids with nothing identifying in
+          the output.
+      - **Hot-plug.**
+        - `CM_Register_Notification` covers every interface class, and a container query covers
+          "connected".
+        - A parked thread waits for 0.6 s of quiet (at most 3 s), then the app emits
+          `devices-changed`. Both start with the tab's first read.
+      - **App.**
+        - `get_devices` runs off the UI thread; non-Windows builds and `VYRO_SIM` get the
+          sample.
+        - The inventory example prints the list too, and a Windows-only test reads the CI
+          machine.
+      - **Tab.**
+        - Devices sits after Displays and loads on first visit.
+        - It shows the groups, each device's state, and a battery bar and number (amber under
+          20 %, red under 10 %), with a low-battery line above.
+        - Sound shows playback and recording, the defaults, empty jacks, and which device each
+          belongs to.
+        - It refreshes on opening, on a change while shown, and every 60 s while shown.
+      - **Checked:**
+        - core tests (560), frontend tests (100) and app tests under Wine (13) pass;
+        - axe is clean on Devices in all six themes at 1440 and 390 px, with no overflow;
+        - all 16 tabs are reachable with the arrow keys.
+      - **Bundle.** The main bundle grows 0.9 kB (0.2 kB gzipped). The tab is a 7.4 kB chunk
+        (3.1 kB gzipped) plus 3 kB of CSS.
+      - **Wine.** Wine has no device query API, so CI's Windows runner is the first real read,
+        and the field check the second.
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
+      - Every keyboard, mouse, headset and controller in use is listed once, with the right
+        kind and connection. Monitors, hubs and the PC's own parts are not listed.
+      - Plug a USB device in and out: it appears and goes within a couple of seconds. Turn a
+        Bluetooth device off and on: "Not connected" and "Connected" follow.
+      - Battery matches Windows Settings › Bluetooth & devices for Bluetooth devices. An Xbox
+        controller shows a level; a 2.4 GHz receiver shows "—".
+      - Sound lists the outputs and inputs and marks the defaults. An empty front jack says
+        "nothing plugged in".
+      - With the tab closed, Vyro's CPU in Task Manager is unchanged; the tab opens at once.
+      - The defaults above are what you want.
 
 ### P24 — Custom dashboard builder (M11)
 - [ ] Depth decided at start; `dashboard_layouts` with presets.

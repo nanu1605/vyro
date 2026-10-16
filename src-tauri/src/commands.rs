@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use tauri::State;
 use vyro_core::alerts::{AlertFired, AlertRule};
+use vyro_core::devices::Devices;
 use vyro_core::engine::{BackendStatus, EngineApi};
 use vyro_core::health::HealthEvent;
 use vyro_core::info::{
@@ -114,6 +115,30 @@ pub(crate) fn collect_displays() -> Vec<DisplayInfo> {
 #[cfg(not(windows))]
 pub(crate) fn collect_displays() -> Vec<DisplayInfo> {
     vyro_core::display::sample()
+}
+
+/// Peripherals, wireless battery and sound devices (P22), read fresh on every call: when the
+/// Devices tab opens, after each `devices-changed` event and once a minute while it shows. The
+/// first call starts the hot-plug watch, so nothing watches until the tab is used.
+#[tauri::command]
+pub async fn get_devices(app: tauri::AppHandle) -> Result<Devices, String> {
+    crate::engine::watch_devices(&app);
+    tauri::async_runtime::spawn_blocking(collect_devices)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(windows)]
+fn collect_devices() -> Devices {
+    if std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1") {
+        return vyro_core::devices::sample();
+    }
+    vyro_core::devices::collect()
+}
+
+#[cfg(not(windows))]
+fn collect_devices() -> Devices {
+    vyro_core::devices::sample()
 }
 
 /// Drives with full health data, read fresh by the engine (SMART needs the service or
