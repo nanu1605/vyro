@@ -1,0 +1,16 @@
+{
+  "closeToTray": false,
+  "temperatureUnit": "f",
+  "hiddenSensors": [
+    "fan.4",
+    "cpu.voltage.soc"
+  ],
+  "profile": "gaming",
+  "gameCapture": false,
+  "overlay": {
+    "enabled": true,
+    "corner": "bottomRight",
+    "detailed": false
+  },
+  "checkUpdates": false
+}

@@ -1,0 +1,58 @@
+{
+  "closeToTray": false,
+  "temperatureUnit": "f",
+  "hiddenSensors": [
+    "fan.4",
+    "cpu.voltage.soc"
+  ],
+  "profile": "gaming",
+  "gameCapture": false,
+  "overlay": {
+    "enabled": true,
+    "mode": "full",
+    "corner": "topRight",
+    "offsetX": 24,
+    "offsetY": 40,
+    "scale": 125,
+    "opacity": 60,
+    "metrics": [
+      "fps",
+      "low1",
+      "cpuTemp"
+    ],
+    "graph": false,
+    "updateMs": 500,
+    "accent": "cyan",
+    "compact": true
+  },
+  "checkUpdates": false,
+  "games": {
+    "enabled": true,
+    "defaultProfile": "benchmark",
+    "loadTrigger": true,
+    "rules": [
+      {
+        "exe": "cyberpunk2077.exe",
+        "name": "Cyberpunk2077.exe",
+        "profile": "gaming",
+        "keep": false,
+        "fans": "silent",
+        "overlay": true,
+        "overlayMode": "graph",
+        "pollMs": 500,
+        "ignore": false
+      },
+      {
+        "exe": "discord.exe",
+        "name": "Discord.exe",
+        "profile": null,
+        "keep": false,
+        "fans": null,
+        "overlay": null,
+        "overlayMode": null,
+        "pollMs": null,
+        "ignore": true
+      }
+    ]
+  }
+}

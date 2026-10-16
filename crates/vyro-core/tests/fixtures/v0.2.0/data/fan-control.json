@@ -1,0 +1,91 @@
+{
+  "enabled": true,
+  "headers": [
+    {
+      "index": 0,
+      "mode": {
+        "mode": "curve",
+        "curve": {
+          "source": "cpu.temp.package",
+          "points": [
+            {
+              "tempC": 35.0,
+              "pct": 25.0
+            },
+            {
+              "tempC": 55.0,
+              "pct": 40.0
+            },
+            {
+              "tempC": 70.0,
+              "pct": 65.0
+            },
+            {
+              "tempC": 82.0,
+              "pct": 100.0
+            }
+          ],
+          "hysteresisC": 4.0,
+          "rampUpPctS": 15.0,
+          "rampDownPctS": 4.0
+        }
+      }
+    },
+    {
+      "index": 1,
+      "mode": {
+        "mode": "fixed",
+        "pct": 80.0
+      }
+    },
+    {
+      "index": 2,
+      "mode": {
+        "mode": "fixed",
+        "pct": 45.0
+      }
+    }
+  ],
+  "emergencyCpuC": 92.0,
+  "emergencyGpuC": 88.0,
+  "pumps": [
+    1
+  ],
+  "labels": {
+    "2": "Front intake"
+  },
+  "profiles": {
+    "silent": [
+      {
+        "index": 0,
+        "mode": {
+          "mode": "curve",
+          "curve": {
+            "source": "cpu.temp.package",
+            "points": [
+              {
+                "tempC": 40.0,
+                "pct": 20.0
+              },
+              {
+                "tempC": 65.0,
+                "pct": 35.0
+              },
+              {
+                "tempC": 80.0,
+                "pct": 70.0
+              },
+              {
+                "tempC": 88.0,
+                "pct": 100.0
+              }
+            ],
+            "hysteresisC": 4.0,
+            "rampUpPctS": 15.0,
+            "rampDownPctS": 4.0
+          }
+        }
+      }
+    ]
+  }
+}

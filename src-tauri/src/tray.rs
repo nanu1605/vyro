@@ -2,11 +2,12 @@
 //! monitoring and alerts continue until Quit. Settings are saved in `settings.json` (app config
 //! folder); the tray menu also switches profiles.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, Window, WindowEvent, Wry};
@@ -15,7 +16,7 @@ use vyro_core::fan::FanBrief;
 use vyro_core::gaming::auto::GameAutomation;
 use vyro_core::profiles::Profile;
 use vyro_core::units::TempUnit;
-use vyro_core::{lock, unix_now};
+use vyro_core::{files, lock, unix_now};
 
 use crate::engine::{notify, Engine};
 use crate::look::{Accent, MyPc, OpenOn, Theme};
@@ -79,6 +80,74 @@ pub struct SettingsStore {
     hinted: AtomicBool,
 }
 
+/// Reads `settings.json` one setting at a time: a value this version cannot read (damaged, or
+/// written by a newer Vyro) falls back to its default and the others are kept. Returns the
+/// settings and the names of those reset; an error when the text is not a settings object.
+fn parse(text: &str) -> Result<(Settings, Vec<String>), String> {
+    let file = match serde_json::from_str::<Value>(text) {
+        Ok(Value::Object(m)) => m,
+        Ok(_) => return Err("not a settings object".into()),
+        Err(e) => return Err(e.to_string()),
+    };
+    let Value::Object(mut merged) =
+        serde_json::to_value(Settings::default()).map_err(|e| e.to_string())?
+    else {
+        return Err("defaults are not an object".into());
+    };
+    let mut reset = Vec::new();
+    for (key, value) in file {
+        let before = merged.insert(key.clone(), value);
+        if serde_json::from_value::<Settings>(Value::Object(merged.clone())).is_err() {
+            match before {
+                Some(v) => merged.insert(key.clone(), v),
+                None => merged.remove(&key),
+            };
+            reset.push(key);
+        }
+    }
+    let settings = serde_json::from_value(Value::Object(merged)).map_err(|e| e.to_string())?;
+    Ok((settings, reset))
+}
+
+/// The saved settings; defaults on first run. A file that is not settings at all is set aside
+/// as `settings.bad.json` (see `vyro_core::files`), never overwritten by the next save.
+fn read_settings(path: &Path) -> Settings {
+    let text = match std::fs::read(path) {
+        Ok(b) => String::from_utf8(b).map_err(|e| e.to_string()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Settings::default(),
+        Err(e) => {
+            log::warn!(
+                "settings: cannot read {}: {e}; using the defaults",
+                path.display()
+            );
+            return Settings::default();
+        }
+    };
+    match text.and_then(|t| parse(&t)) {
+        Ok((settings, reset)) => {
+            if !reset.is_empty() {
+                log::warn!(
+                    "settings: {} could not be read and went back to the default",
+                    reset.join(", ")
+                );
+            }
+            settings
+        }
+        Err(e) => {
+            let aside = files::set_aside(path);
+            log::warn!(
+                "settings: {} does not load ({e}); using the defaults{}",
+                path.display(),
+                aside.map_or(String::new(), |p| format!(
+                    ", the file is kept as {}",
+                    p.display()
+                ))
+            );
+            Settings::default()
+        }
+    }
+}
+
 impl SettingsStore {
     pub fn load(app: &AppHandle) -> Self {
         let path = app
@@ -86,11 +155,7 @@ impl SettingsStore {
             .app_config_dir()
             .ok()
             .map(|d| d.join("settings.json"));
-        let current = path
-            .as_deref()
-            .and_then(|p| std::fs::read_to_string(p).ok())
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or_default();
+        let current = path.as_deref().map(read_settings).unwrap_or_default();
         Self {
             path,
             current: Mutex::new(current),
@@ -110,11 +175,7 @@ impl SettingsStore {
     pub fn set(&self, s: Settings) -> Result<(), String> {
         *lock(&self.current) = s.clone();
         let path = self.path.as_ref().ok_or("no config folder")?;
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-        }
-        let json = serde_json::to_string_pretty(&s).map_err(|e| e.to_string())?;
-        std::fs::write(path, json).map_err(|e| format!("{}: {e}", path.display()))
+        files::write_json(path, &s).map_err(|e| format!("{}: {e}", path.display()))
     }
 }
 
@@ -494,6 +555,110 @@ mod tests {
         assert_eq!(s.theme, Theme::Midnight);
         assert_eq!(s.accent, Accent::Blue);
         assert_eq!(s.open_on, OpenOn::Last);
+    }
+
+    fn release(version: &str) -> Settings {
+        let text = match version {
+            "0.1.4" => {
+                include_str!("../../crates/vyro-core/tests/fixtures/v0.1.4/config/settings.json")
+            }
+            "0.2.0" => {
+                include_str!("../../crates/vyro-core/tests/fixtures/v0.2.0/config/settings.json")
+            }
+            _ => include_str!("../../crates/vyro-core/tests/fixtures/v0.3.0/config/settings.json"),
+        };
+        let (s, reset) = parse(text).unwrap();
+        assert!(reset.is_empty(), "{version}: {reset:?}");
+        s
+    }
+
+    #[test]
+    fn every_release_s_settings_carry_over() {
+        // Written by 0.1.4 and 0.2.0 themselves (crates/vyro-core/tests/fixtures/gen).
+        for version in ["0.1.4", "0.2.0"] {
+            let s = release(version);
+            assert!(!s.close_to_tray);
+            assert_eq!(s.temperature_unit, TempUnit::F);
+            assert_eq!(s.hidden_sensors, ["fan.4", "cpu.voltage.soc"]);
+            assert_eq!(s.profile, Profile::Gaming);
+            assert!(!s.game_capture);
+            assert!(!s.check_updates);
+            assert!(s.overlay.enabled);
+            assert_eq!(s.overlay.corner, crate::overlay::Corner::BottomRight);
+            // "Not detailed" became the Minimal mode in 0.3.
+            assert_eq!(
+                s.overlay.mode,
+                vyro_core::gaming::overlay::OverlayMode::Minimal
+            );
+            assert_eq!(s.games, GameAutomation::default());
+            assert_eq!(s.theme, Theme::Midnight);
+            assert_eq!(s.open_on, OpenOn::Dashboard);
+        }
+        let s = release("0.3.0");
+        assert_eq!(s.profile, Profile::Gaming);
+        assert_eq!(s.temperature_unit, TempUnit::F);
+        assert_eq!(
+            s.overlay.mode,
+            vyro_core::gaming::overlay::OverlayMode::Full
+        );
+        assert_eq!(s.overlay.corner, crate::overlay::Corner::TopRight);
+        assert_eq!((s.overlay.offset_x, s.overlay.offset_y), (24, 40));
+        assert_eq!((s.overlay.scale, s.overlay.opacity), (125, 60));
+        assert_eq!(s.overlay.metrics.len(), 3);
+        assert!(!s.overlay.graph && s.overlay.compact);
+        assert_eq!(s.overlay.update_ms, 500);
+        assert_eq!(s.overlay.accent, crate::overlay::Accent::Cyan);
+        assert_eq!(s.games.default_profile, Some(Profile::Benchmark));
+        assert!(s.games.enabled && s.games.load_trigger);
+        assert_eq!(s.games.rules.len(), 2);
+        let cp = &s.games.rules[0];
+        assert_eq!(cp.exe, "cyberpunk2077.exe");
+        assert_eq!(cp.profile, Some(Profile::Gaming));
+        assert_eq!(cp.fans, Some(Profile::Silent));
+        assert_eq!(cp.poll_ms, Some(500));
+        assert!(s.games.rules[1].ignore);
+    }
+
+    #[test]
+    fn one_bad_setting_resets_only_itself() {
+        let (s, reset) = parse(
+            r#"{"profile":"work","temperatureUnit":"kelvin","closeToTray":false,"future":1}"#,
+        )
+        .unwrap();
+        assert_eq!(s.profile, Profile::Work);
+        assert!(!s.close_to_tray);
+        assert_eq!(s.temperature_unit, TempUnit::C);
+        assert_eq!(reset, ["temperatureUnit"]);
+        assert!(parse("{\"profile\":").is_err());
+        assert!(parse("[]").is_err());
+        assert_eq!(parse("{}").unwrap(), (Settings::default(), Vec::new()));
+    }
+
+    #[test]
+    fn a_damaged_settings_file_is_set_aside_and_saves_are_whole() {
+        let dir = std::env::temp_dir().join(format!("vyro-settings-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.json");
+        assert_eq!(read_settings(&path), Settings::default());
+        std::fs::write(&path, b"{\"profile\":\"work\",\"clo").unwrap();
+        assert_eq!(read_settings(&path), Settings::default());
+        assert!(!path.exists());
+        assert!(dir.join("settings.bad.json").exists());
+
+        let store = SettingsStore {
+            path: Some(path.clone()),
+            current: Mutex::new(Settings::default()),
+            hinted: AtomicBool::new(false),
+        };
+        let s = Settings {
+            profile: Profile::Silent,
+            ..Settings::default()
+        };
+        store.set(s.clone()).unwrap();
+        assert_eq!(read_settings(&path), s);
+        assert!(!dir.join("settings.json.tmp").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

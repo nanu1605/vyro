@@ -7,6 +7,7 @@
   import { fmtTemp } from '../prefs.svelte';
   import { getDrives } from '../ipc';
   import type { DriveInfo, Status, StorageSnapshot } from '../types';
+  import { scrollable } from '../scrollable';
 
   interface Props {
     /** Live readings from the `sensors` event, matched to drives by id. */
@@ -198,7 +199,7 @@
         {#if d.smart.length > 0}
           <details>
             <summary>SMART attributes ({d.smart.length})</summary>
-            <div class="table-wrap">
+            <div class="table-wrap" use:scrollable role="region" aria-label="SMART attributes">
               <table>
                 <thead>
                   <tr><th>ID</th><th class="name">Attribute</th><th>Cur</th><th>Worst</th><th>Thr</th><th>Raw</th></tr>

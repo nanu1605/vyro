@@ -1,0 +1,68 @@
+[
+  {
+    "id": "cpu-temp",
+    "name": "CPU temperature",
+    "enabled": true,
+    "kind": {
+      "type": "threshold",
+      "sensor": "cpu.temp.package",
+      "above": true,
+      "value": 90.0
+    },
+    "forSecs": 30,
+    "cooldownSecs": 600,
+    "sound": true
+  },
+  {
+    "id": "gpu-temp",
+    "name": "GPU temperature",
+    "enabled": true,
+    "kind": {
+      "type": "threshold",
+      "sensor": "gpu.0.temp.edge",
+      "above": true,
+      "value": 90.0
+    },
+    "forSecs": 30,
+    "cooldownSecs": 600,
+    "sound": true
+  },
+  {
+    "id": "health-problems",
+    "name": "Hardware problems",
+    "enabled": true,
+    "kind": {
+      "type": "health",
+      "problems": true
+    },
+    "forSecs": 0,
+    "cooldownSecs": 600,
+    "sound": true
+  },
+  {
+    "id": "health-warnings",
+    "name": "Health warnings",
+    "enabled": true,
+    "kind": {
+      "type": "health",
+      "problems": false
+    },
+    "forSecs": 0,
+    "cooldownSecs": 1800,
+    "sound": false
+  },
+  {
+    "id": "custom-fan",
+    "name": "CPU fan stopped",
+    "enabled": true,
+    "kind": {
+      "type": "threshold",
+      "sensor": "fan.0",
+      "above": false,
+      "value": 200.0
+    },
+    "forSecs": 10,
+    "cooldownSecs": 300,
+    "sound": false
+  }
+]

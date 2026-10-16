@@ -359,21 +359,19 @@ pub fn headers(mode: u8, commands: &[u8], outputs: &[u8]) -> Vec<HeaderState> {
         .collect()
 }
 
-/// Saves the BIOS state before the first write (temporary file, then rename, so a crash never
-/// leaves half a file). The service restores from it at start if it exists.
+/// Saves the BIOS state before the first write (flushed to disk through a temporary file, so
+/// a crash never leaves half a file). The service restores from it at start if it exists.
 pub fn save(path: &Path, state: &BiosState) -> io::Result<()> {
-    let json = serde_json::to_vec_pretty(state).map_err(io::Error::other)?;
-    let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, json)?;
-    std::fs::rename(tmp, path)
+    crate::files::write_json(path, state)
 }
 
-/// The saved BIOS state, `None` when there is none (nothing to restore).
+/// The saved BIOS state, `None` when there is none (nothing to restore). A file that does not
+/// parse is an [`io::ErrorKind::InvalidData`] error.
 pub fn load(path: &Path) -> io::Result<Option<BiosState>> {
     match std::fs::read(path) {
         Ok(b) => serde_json::from_slice(&b)
             .map(Some)
-            .map_err(io::Error::other),
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e)),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e),
     }
@@ -690,9 +688,9 @@ mod tests {
         };
         save(&path, &state).unwrap();
         assert_eq!(load(&path).unwrap(), Some(state));
-        assert!(!path.with_extension("tmp").exists());
+        assert!(!dir.join("fan-restore.json.tmp").exists());
         std::fs::write(&path, b"{").unwrap();
-        assert!(load(&path).is_err());
+        assert_eq!(load(&path).unwrap_err().kind(), io::ErrorKind::InvalidData);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

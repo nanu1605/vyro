@@ -258,9 +258,57 @@ pub struct History {
     last_prune: Option<i64>,
 }
 
+/// Whether `e` says the file is not a usable database (rather than locked, full or newer).
+pub fn is_damaged(e: &rusqlite::Error) -> bool {
+    matches!(
+        e,
+        rusqlite::Error::SqliteFailure(f, _)
+            if matches!(f.code, rusqlite::ErrorCode::NotADatabase | rusqlite::ErrorCode::DatabaseCorrupt)
+    )
+}
+
+/// Moves the database and its journal files to [`crate::files::bad_path`], replacing an older
+/// set.
+fn set_aside_db(path: &Path) {
+    let bad = crate::files::bad_path(path);
+    for suffix in ["", "-wal", "-shm"] {
+        let with = |p: &Path| {
+            let mut name = p.as_os_str().to_owned();
+            name.push(suffix);
+            std::path::PathBuf::from(name)
+        };
+        let (from, to) = (with(path), with(&bad));
+        let _ = std::fs::remove_file(&to);
+        if from.exists() {
+            if let Err(e) = std::fs::rename(&from, &to) {
+                log::warn!("history: cannot set {} aside: {e}", from.display());
+            }
+        }
+    }
+}
+
 impl History {
     pub fn open(path: &Path, cfg: HistoryConfig) -> Result<Self> {
         Self::with_connection(Connection::open(path)?, cfg)
+    }
+
+    /// [`Self::open`], except that a file that is not a usable database (damaged, or not a
+    /// database at all) is set aside as `history.bad.sqlite`, with its journal, and a new store
+    /// started; the flag says so. Anything else (a file from a newer Vyro, a locked or full
+    /// disk) is an error and the file is left alone.
+    pub fn open_or_replace(path: &Path, cfg: HistoryConfig) -> Result<(Self, bool)> {
+        match Self::open(path, cfg.clone()) {
+            Ok(h) => Ok((h, false)),
+            Err(e) if is_damaged(&e) => {
+                log::error!(
+                    "history: {} unusable ({e}); set aside, starting a new one",
+                    path.display()
+                );
+                set_aside_db(path);
+                Self::open(path, cfg).map(|h| (h, true))
+            }
+            Err(e) => Err(e),
+        }
     }
 
     pub fn open_in_memory(cfg: HistoryConfig) -> Result<Self> {
@@ -903,6 +951,37 @@ mod tests {
             .pragma_update(None, "user_version", schema::VERSION + 1)
             .unwrap();
         assert!(History::open(&path, HistoryConfig::default()).is_err());
+    }
+
+    #[test]
+    fn a_damaged_file_is_set_aside_and_a_newer_one_left_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("history.sqlite");
+        let junk = vec![0x5A_u8; 8192];
+        std::fs::write(&path, &junk).unwrap();
+        let (mut h, replaced) = History::open_or_replace(&path, HistoryConfig::default()).unwrap();
+        assert!(replaced);
+        assert_eq!(
+            std::fs::read(dir.path().join("history.bad.sqlite")).unwrap(),
+            junk
+        );
+        h.record(T0, [("a", 1.0)]).unwrap();
+        assert_eq!(h.query("a", HistoryRange::M5, T0).unwrap().points.len(), 1);
+        drop(h);
+        let (_, replaced) = History::open_or_replace(&path, HistoryConfig::default()).unwrap();
+        assert!(!replaced, "a good file is opened as it is");
+
+        // From a newer Vyro: refused, and kept as it is for that version.
+        Connection::open(&path)
+            .unwrap()
+            .pragma_update(None, "user_version", schema::VERSION + 1)
+            .unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let e = History::open_or_replace(&path, HistoryConfig::default())
+            .err()
+            .unwrap();
+        assert!(!is_damaged(&e), "{e}");
+        assert_eq!(std::fs::read(&path).unwrap(), before);
     }
 
     #[test]

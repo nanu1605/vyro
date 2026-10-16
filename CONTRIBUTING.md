@@ -15,8 +15,16 @@ cargo clippy -p vyro-core --target x86_64-pc-windows-gnu --all-targets -- -D war
 cargo test -p vyro-core                  # also regenerates src/bindings: commit any changes
 cargo test -p vyro-service
 pnpm check && pnpm test && pnpm build
+python3 scripts/bundle_budget.py --check # what each page loads at start, gzipped
+pnpm a11y                                # axe-core on every tab, theme and width
 python3 scripts/third_party.py --check   # after adding or updating a dependency
 ```
+
+`pnpm a11y` drives the browser preview with Playwright; install its browser once with
+`pnpm exec playwright install chromium`. A change that stores something new in a state file
+goes through `vyro_core::files` (atomic writes, damaged files set aside). If it changes a
+file's format, it gets a migration test with a file from the last release
+(`crates/vyro-core/tests/migration.rs`, `tests/fixtures/gen/`).
 
 If you add or update a Rust crate or a UI package, run `python3 scripts/third_party.py` and
 commit the regenerated `THIRD_PARTY_NOTICES.md` and `THIRD_PARTY_LICENSES.md`. Dependencies

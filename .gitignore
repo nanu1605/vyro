@@ -13,6 +13,8 @@ src-tauri/gen/schemas/
 
 # Local data / logs
 *.sqlite
+# Migration fixtures: history files written by released versions (P27).
+!crates/vyro-core/tests/fixtures/*/data/history.sqlite
 *.sqlite-wal
 *.sqlite-shm
 *.log

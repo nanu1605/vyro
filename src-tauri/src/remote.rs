@@ -15,7 +15,7 @@ use vyro_core::remote::{
     firewall, net, qr, FirewallState, Hooks, RemoteBrief, RemoteInfo, RemoteServer, RemoteSettings,
     RemoteStatus, ServerConfig, DAY_CHOICES, FILE, MIN_PORT,
 };
-use vyro_core::{lock, unix_now, SensorSnapshot};
+use vyro_core::{files, lock, unix_now, SensorSnapshot};
 
 use crate::tray::SettingsStore;
 
@@ -33,20 +33,16 @@ pub struct Remote {
     watching: AtomicU32,
 }
 
-/// Reads `remote.json`; one that does not parse is set aside as `remote.bad.json` and the
-/// companion stays off.
+/// Reads `remote.json`; one that does not parse is set aside as `remote.bad.json` (see
+/// `vyro_core::files`) and the companion stays off.
 fn read(path: &Path) -> Stored {
-    let Ok(text) = std::fs::read_to_string(path) else {
-        return Stored::default();
-    };
-    match serde_json::from_str::<Stored>(&text) {
-        Ok(s) => s,
+    match files::read_json::<Stored>(path, |_| Ok(())) {
+        Ok(s) => s.unwrap_or_default(),
         Err(e) => {
             log::warn!(
                 "remote: {} does not load ({e}); the companion stays off",
                 path.display()
             );
-            let _ = std::fs::rename(path, path.with_file_name("remote.bad.json"));
             Stored::default()
         }
     }
@@ -54,13 +50,7 @@ fn read(path: &Path) -> Stored {
 
 /// Writes through a temporary file, so a crash mid-write never leaves half a file.
 fn write(path: &Path, stored: &Stored) -> Result<(), String> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
-    let json = serde_json::to_string_pretty(stored).map_err(|e| e.to_string())?;
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, json).map_err(|e| format!("{}: {e}", tmp.display()))?;
-    std::fs::rename(&tmp, path).map_err(|e| format!("{}: {e}", path.display()))
+    files::write_json(path, stored).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// A settings enum's name ("midnight").
