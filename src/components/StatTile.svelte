@@ -19,7 +19,7 @@
   );
 </script>
 
-<div class="panel tile {level}">
+<div class="panel tile lift {level}">
   <span class="label">
     {label}
     <!-- Not by colour alone: the level is also written out. -->

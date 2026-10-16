@@ -2,8 +2,8 @@
   // The overlay's plate (P14): readable over any scene, with large tabular figures; only the
   // graph moves (1.0.1). Used by the overlay window and by the preview in Settings.
   import OverlayGraph from './OverlayGraph.svelte';
-  import { ACCENTS, formatRow, type OverlayData } from '../overlay';
-  import { fmtTemp } from '../prefs.svelte';
+  import { formatRow, plateColor, type OverlayData } from '../overlay';
+  import { fmtTemp, prefs } from '../prefs.svelte';
 
   interface Props {
     data: OverlayData;
@@ -18,13 +18,14 @@
   const graphW = $derived(
     data.mode === 'graph' ? 284 : data.mode === 'full' ? (data.compact ? 230 : 264) : data.compact ? 206 : 232,
   );
+  const color = $derived(plateColor(data.accent, prefs));
   const graphH = $derived(data.mode === 'graph' ? 120 : data.compact ? 38 : 44);
 </script>
 
 <div
   class="plate {data.mode}"
   class:compact={data.compact}
-  style:--plate-accent={ACCENTS[data.accent]}
+  style:--plate-accent={color}
   style:--plate-bg="rgb(8 11 16 / {data.opacity}%)"
   style:zoom={data.scale / 100}
 >
@@ -46,7 +47,7 @@
       </div>
     {/if}
     {#if data.timeline.length}
-      <OverlayGraph points={data.timeline} width={graphW} height={graphH} color={ACCENTS[data.accent]} zoom={data.scale / 100} />
+      <OverlayGraph points={data.timeline} width={graphW} height={graphH} {color} zoom={data.scale / 100} />
     {/if}
     {#if rest.length}
       <dl>

@@ -391,7 +391,7 @@
   }
   .palette {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
     gap: 0.5rem;
     margin-bottom: 0.75rem;
   }
@@ -488,7 +488,7 @@
   }
   .actions {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 6.5rem), 1fr));
     gap: 0.35rem;
   }
   .preview {

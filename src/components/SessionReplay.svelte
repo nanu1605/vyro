@@ -259,7 +259,7 @@
   }
   .summary {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 8rem), 1fr));
     gap: 0.5rem;
     margin: 0.8rem 0;
   }

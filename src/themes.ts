@@ -253,6 +253,8 @@ export function tokens(themeId: string, accent: string): Record<string, string> 
     '--glow-2': p.glow[1],
     '--radius': p.radius,
     '--shadow': p.shadow,
+    // The cards' drop (P28): soft on a light page, deep on a dark one.
+    '--shadow-color': t.light ? 'rgb(23 32 43 / 14%)' : 'rgb(0 0 0 / 70%)',
   };
 }
 

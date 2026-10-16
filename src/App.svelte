@@ -24,33 +24,16 @@
   import { loadSeenKeys, markSeen, unseen } from './insights';
   import { loadPrefs, prefs, profileSpec, tempText } from './prefs.svelte';
   import { applyLook, savedLook, uiState } from './themes';
+  import { isTab, VIEWS, type Tab } from './nav';
+  import Sidebar, { type Dot } from './components/shell/Sidebar.svelte';
+  import TopBar from './components/shell/TopBar.svelte';
+  import LiveRail from './components/shell/LiveRail.svelte';
   import type { AlertFired, BackendStatus, PawnIoStatus, RemoteBrief, SensorSnapshot } from './types';
-
-  const TABS = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'cooling', label: 'Cooling' },
-    { id: 'history', label: 'History' },
-    { id: 'health', label: 'Health' },
-    { id: 'insights', label: 'Insights' },
-    { id: 'gaming', label: 'Gaming' },
-    { id: 'benchmark', label: 'Benchmark' },
-    { id: 'processes', label: 'Processes' },
-    { id: 'hardware', label: 'Hardware' },
-    { id: 'mypc', label: 'My PC' },
-    { id: 'storage', label: 'Storage' },
-    { id: 'network', label: 'Network' },
-    { id: 'displays', label: 'Displays' },
-    { id: 'devices', label: 'Devices' },
-    { id: 'system', label: 'System' },
-    { id: 'sensors', label: 'Sensors' },
-    { id: 'settings', label: 'Settings' },
-  ] as const;
-  type Tab = (typeof TABS)[number]['id'];
 
   function lastTab(): Tab {
     try {
       const t = localStorage.getItem('vyro.tab');
-      return TABS.some((x) => x.id === t) ? (t as Tab) : 'dashboard';
+      return isTab(t) ? t : 'dashboard';
     } catch {
       return 'dashboard';
     }
@@ -62,25 +45,7 @@
   /** Set by the first tab the owner picks, so loading the settings never moves them. */
   let navigated = false;
   // Panels mount on first visit and then stay mounted (keeps fetched data and live history).
-  let visited = $state<Record<Tab, boolean>>({
-    dashboard: true,
-    cooling: false,
-    history: false,
-    health: false,
-    insights: false,
-    gaming: false,
-    benchmark: false,
-    processes: false,
-    hardware: false,
-    mypc: false,
-    storage: false,
-    network: false,
-    displays: false,
-    devices: false,
-    system: false,
-    sensors: false,
-    settings: false,
-  });
+  let visited = $state(Object.fromEntries(VIEWS.map((v) => [v.id, v.id === 'dashboard'])) as Record<Tab, boolean>);
 
   /** Alerts that fired while the window is open, shown briefly in the corner. */
   let toasts = $state<Array<AlertFired & { key: number }>>([]);
@@ -124,25 +89,6 @@
       localStorage.setItem('vyro.tab', t);
     } catch {
       /* storage unavailable: tab just isn't remembered */
-    }
-  }
-
-  /** Tab list keys (WAI-ARIA tabs pattern): arrows move and wrap, Home/End jump to the ends. */
-  function onTabKey(e: KeyboardEvent): void {
-    const i = TABS.findIndex((x) => x.id === tab);
-    const at: Record<string, number> = {
-      ArrowRight: (i + 1) % TABS.length,
-      ArrowLeft: (i + TABS.length - 1) % TABS.length,
-      Home: 0,
-      End: TABS.length - 1,
-    };
-    const to = at[e.key];
-    if (to == null) return;
-    e.preventDefault();
-    const next = TABS[to];
-    if (next) {
-      select(next.id);
-      document.getElementById(`tab-${next.id}`)?.focus();
     }
   }
 
@@ -209,10 +155,59 @@
   // Remote companion (P26): the header says so while it is on, from any tab.
   let remote = $state.raw<RemoteBrief | null>(null);
   function openRemote(): void {
-    select('settings');
-    // The card loads with the panel.
-    setTimeout(() => document.getElementById('remote')?.scrollIntoView({ block: 'start' }), 150);
+    openSection('settings', 'remote');
   }
+  /** A view, scrolled to one of its cards (the card loads with the panel). */
+  function openSection(t: Tab, id: string): void {
+    select(t);
+    setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 150);
+  }
+
+  // Command palette (P28): Ctrl+K from anywhere; loaded the first time it opens.
+  let palette = $state(false);
+  let paletteLoaded = $state(false);
+  function openPalette(): void {
+    paletteLoaded = true;
+    palette = true;
+  }
+
+  // The live rail beside the Dashboard's widgets on a wide window (P28), unless folded away.
+  const RAIL_KEY = 'vyro.rail';
+  let wide = $state(false);
+  let railWanted = $state(
+    (() => {
+      try {
+        return localStorage.getItem(RAIL_KEY) !== '0';
+      } catch {
+        return true;
+      }
+    })(),
+  );
+  function setRail(on: boolean): void {
+    railWanted = on;
+    try {
+      localStorage.setItem(RAIL_KEY, on ? '1' : '0');
+    } catch {
+      /* not remembered */
+    }
+  }
+  const railOn = $derived(wide && railWanted && snap != null);
+
+  // Dots in the sidebar, with their words for screen readers.
+  const dots = $derived.by(() => {
+    const d: Partial<Record<Tab, Dot>> = {};
+    if (overall === 'warn' || overall === 'fail') d.health = { tone: overall, note: overall === 'fail' ? 'problem' : 'warning' };
+    if (newestChange > changesSeen) d.hardware = { tone: 'new', note: 'new PC changes' };
+    if (insightsNew.length) d.insights = { tone: 'new', note: 'new findings' };
+    return d;
+  });
+  /** Where readings come from, for the sidebar's foot. */
+  const source = $derived.by((): { tone: 'ok' | 'warn' | 'off'; text: string } => {
+    if (!inTauri) return { tone: 'warn', text: 'Preview, simulated' };
+    if (!backend) return { tone: 'off', text: 'Starting…' };
+    if (backend.mode === 'local') return { tone: 'warn', text: 'Without the service' };
+    return backend.connected ? { tone: 'ok', text: 'Sensor service' } : { tone: 'off', text: 'Connecting…' };
+  });
 
   onMount(() => {
     visited[tab] = true;
@@ -279,7 +274,20 @@
       setUiVisible(!document.hidden);
     };
     document.addEventListener('visibilitychange', onVisibility);
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        openPalette();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    const mq = window.matchMedia('(min-width: 1500px)');
+    wide = mq.matches;
+    const onWide = (e: MediaQueryListEvent) => (wide = e.matches);
+    mq.addEventListener('change', onWide);
     return () => {
+      window.removeEventListener('keydown', onKey);
+      mq.removeEventListener('change', onWide);
       disposed = true;
       stop?.();
       stopBackend?.();
@@ -291,200 +299,161 @@
   });
 </script>
 
-<div class="app">
-  <header>
-    <h1>VYRO</h1>
-    <span class="sub">hardware monitor</span>
-    <div class="tabs" role="tablist" aria-label="Views" tabindex="-1" onkeydown={onTabKey}>
-      {#each TABS as t (t.id)}
-        <button
-          id="tab-{t.id}"
-          role="tab"
-          type="button"
-          aria-selected={tab === t.id}
-          aria-controls="panel-{t.id}"
-          tabindex={tab === t.id ? 0 : -1}
-          onclick={() => select(t.id)}
-        >
-          {t.label}
-          {#if t.id === 'health' && (overall === 'warn' || overall === 'fail')}
-            <span class="alert-dot {overall}" aria-hidden="true"></span>
-            <span class="sr-only">({overall === 'fail' ? 'problem' : 'warning'})</span>
-          {/if}
-          {#if t.id === 'hardware' && newestChange > changesSeen}
-            <span class="alert-dot new" aria-hidden="true"></span>
-            <span class="sr-only">(new PC changes)</span>
-          {/if}
-          {#if t.id === 'insights' && insightsNew.length}
-            <span class="alert-dot new" aria-hidden="true"></span>
-            <span class="sr-only">(new findings)</span>
-          {/if}
-        </button>
-      {/each}
-    </div>
-    {#if remote?.running}
-      <button
-        type="button"
-        class="remote-chip"
-        onclick={openRemote}
-        title="Open Settings → Remote"
-        aria-label="Remote companion on{remote.watching ? `, ${remote.watching} watching` : ''}. Open its settings."
-      >
-        <span class="remote-dot" class:live={remote.watching > 0} aria-hidden="true"></span>
-        Remote{remote.watching ? ` · ${remote.watching} watching` : ''}
-      </button>
-    {/if}
-    {#if fans?.active}
-      <div class="fan-chip" role="status">
-        <button type="button" class="chip-open" onclick={() => select('cooling')}>
-          <span class="fan-dot" class:hot={fans.fullSpeed} aria-hidden="true"></span>
-          {fans.fullSpeed ? 'Fans at full speed' : 'Fan control active'}
-        </button>
-        <button type="button" class="chip-bios" onclick={fansToBios} title="Hand every fan back to the BIOS">
-          Return to BIOS
-        </button>
-      </div>
-    {/if}
-  </header>
-  <div class="rail" aria-hidden="true"></div>
+<div class="shell">
+  <Sidebar {tab} onselect={select} {dots} status={source} />
 
-  <main>
-    {#if visited.cooling}
-      <div id="panel-cooling" role="tabpanel" aria-labelledby="tab-cooling" hidden={tab !== 'cooling'}>
-        <CoolingPanel {snap} {backend} active={tab === 'cooling'} />
-      </div>
-    {/if}
-    <div id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard" hidden={tab !== 'dashboard'}>
-      <ServiceBanner status={backend} />
-      {#if !snap}
-        <p class="waiting" role="status">
-          {backend && !backend.connected ? 'Connecting to the Vyro Sensor Service…' : 'Waiting for the first reading…'}
-        </p>
+  <div class="main">
+    <TopBar
+      {tab}
+      {remote}
+      {fans}
+      update={update.status?.available && !update.status.installing ? update.status.available.version : null}
+      onselect={select}
+      onremote={openRemote}
+      onbios={fansToBios}
+      onsearch={openPalette}
+    />
+
+    <main>
+      {#if visited.cooling}
+        <div id="panel-cooling" role="tabpanel" aria-labelledby="tab-cooling" hidden={tab !== 'cooling'}>
+          <CoolingPanel {snap} {backend} active={tab === 'cooling'} />
+        </div>
       {/if}
-      <PawnIoBanner status={pawnioShown} />
-      {#if update.status?.available && !update.status.installing}
-        <button type="button" class="health-strip update" onclick={() => select('settings')}>
-          <span class="msg">Vyro {update.status.available.version} is available</span>
-          <span class="go">Settings →</span>
-        </button>
+      <div id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard" hidden={tab !== 'dashboard'}>
+        <div class="dash" class:with-rail={railOn}>
+          <div class="dash-main">
+            <ServiceBanner status={backend} />
+            {#if !snap}
+              <p class="waiting" role="status">
+                {backend && !backend.connected ? 'Connecting to the Vyro Sensor Service…' : 'Waiting for the first reading…'}
+              </p>
+            {/if}
+            <PawnIoBanner status={pawnioShown} />
+            {#if attention.length}
+              <button type="button" class="health-strip {overall}" onclick={() => select('health')}>
+                <span class="alert-dot {overall}" aria-hidden="true"></span>
+                <span class="msg">{attention[0]}{attention.length > 1 ? ` (+${attention.length - 1} more)` : ''}</span>
+                <span class="go">Health →</span>
+              </button>
+            {/if}
+            <DashboardGrid
+              {snap}
+              active={tab === 'dashboard'}
+              needs={NEEDS_DRIVER}
+              {uiFps}
+              {compact}
+              profileName={spec.name}
+              onselect={select}
+              onrail={wide && !railWanted ? () => setRail(true) : undefined}
+            />
+          </div>
+          {#if railOn && snap}
+            <LiveRail {snap} {attention} onselect={select} onfold={() => setRail(false)} />
+          {/if}
+        </div>
+      </div>
+
+      {#if visited.history}
+        <div id="panel-history" role="tabpanel" aria-labelledby="tab-history" hidden={tab !== 'history'}>
+          <HistoryPanel
+            {snap}
+            active={tab === 'history'}
+            focus={historyFocus}
+            focusAt={historyAt}
+            onclearfocus={() => ((historyFocus = null), (historyAt = null))}
+          />
+        </div>
       {/if}
-      {#if attention.length}
-        <button type="button" class="health-strip {overall}" onclick={() => select('health')}>
-          <span class="alert-dot {overall}" aria-hidden="true"></span>
-          <span class="msg">{attention[0]}{attention.length > 1 ? ` (+${attention.length - 1} more)` : ''}</span>
-          <span class="go">Health →</span>
-        </button>
+
+      {#if visited.health}
+        <div id="panel-health" role="tabpanel" aria-labelledby="tab-health" hidden={tab !== 'health'}>
+          <HealthPanel {snap} active={tab === 'health'} oninsights={() => select('insights')} onhistory={openHistory} />
+        </div>
       {/if}
-      <DashboardGrid
-        {snap}
-        active={tab === 'dashboard'}
-        needs={NEEDS_DRIVER}
-        {uiFps}
-        {compact}
-        profileName={spec.name}
-        onselect={select}
-      />
-    </div>
 
-    {#if visited.history}
-      <div id="panel-history" role="tabpanel" aria-labelledby="tab-history" hidden={tab !== 'history'}>
-        <HistoryPanel
-          {snap}
-          active={tab === 'history'}
-          focus={historyFocus}
-          focusAt={historyAt}
-          onclearfocus={() => ((historyFocus = null), (historyAt = null))}
-        />
-      </div>
-    {/if}
+      {#if visited.insights}
+        <div id="panel-insights" role="tabpanel" aria-labelledby="tab-insights" hidden={tab !== 'insights'}>
+          <InsightsPanel active={tab === 'insights'} fresh={insightsFresh} onhistory={openHistory} />
+        </div>
+      {/if}
 
-    {#if visited.health}
-      <div id="panel-health" role="tabpanel" aria-labelledby="tab-health" hidden={tab !== 'health'}>
-        <HealthPanel {snap} active={tab === 'health'} oninsights={() => select('insights')} onhistory={openHistory} />
-      </div>
-    {/if}
+      {#if visited.gaming}
+        <div id="panel-gaming" role="tabpanel" aria-labelledby="tab-gaming" hidden={tab !== 'gaming'}>
+          <GamingPanel {snap} {backend} active={tab === 'gaming'} onsettings={() => select('settings')} />
+        </div>
+      {/if}
 
-    {#if visited.insights}
-      <div id="panel-insights" role="tabpanel" aria-labelledby="tab-insights" hidden={tab !== 'insights'}>
-        <InsightsPanel active={tab === 'insights'} fresh={insightsFresh} onhistory={openHistory} />
-      </div>
-    {/if}
+      {#if visited.benchmark}
+        <div id="panel-benchmark" role="tabpanel" aria-labelledby="tab-benchmark" hidden={tab !== 'benchmark'}>
+          <!-- Loaded on first visit: most sessions never open it. -->
+          {#await import('./components/BenchmarkPanel.svelte') then { default: BenchmarkPanel }}
+            <BenchmarkPanel active={tab === 'benchmark'} />
+          {/await}
+        </div>
+      {/if}
 
-    {#if visited.gaming}
-      <div id="panel-gaming" role="tabpanel" aria-labelledby="tab-gaming" hidden={tab !== 'gaming'}>
-        <GamingPanel {snap} {backend} active={tab === 'gaming'} onsettings={() => select('settings')} />
-      </div>
-    {/if}
+      {#if visited.processes}
+        <div id="panel-processes" role="tabpanel" aria-labelledby="tab-processes" hidden={tab !== 'processes'}>
+          <ProcessesPanel processes={snap?.processes ?? []} />
+        </div>
+      {/if}
 
-    {#if visited.benchmark}
-      <div id="panel-benchmark" role="tabpanel" aria-labelledby="tab-benchmark" hidden={tab !== 'benchmark'}>
-        <!-- Loaded on first visit: most sessions never open it. -->
-        {#await import('./components/BenchmarkPanel.svelte') then { default: BenchmarkPanel }}
-          <BenchmarkPanel active={tab === 'benchmark'} />
-        {/await}
-      </div>
-    {/if}
+      {#if visited.hardware}
+        <div id="panel-hardware" role="tabpanel" aria-labelledby="tab-hardware" hidden={tab !== 'hardware'}>
+          <HardwarePanel newSince={changesNewSince} />
+        </div>
+      {/if}
+      {#if visited.mypc}
+        <div id="panel-mypc" role="tabpanel" aria-labelledby="tab-mypc" hidden={tab !== 'mypc'}>
+          <!-- Loaded on first visit; its 3-D view (Three.js) exists only while the tab shows. -->
+          {#await import('./components/MyPcPanel.svelte') then { default: MyPcPanel }}
+            <MyPcPanel {snap} active={tab === 'mypc' && !pageHidden} onselect={select} />
+          {/await}
+        </div>
+      {/if}
+      {#if visited.storage}
+        <div id="panel-storage" role="tabpanel" aria-labelledby="tab-storage" hidden={tab !== 'storage'}>
+          <StoragePanel live={snap?.storage ?? []} />
+        </div>
+      {/if}
+      {#if visited.network}
+        <div id="panel-network" role="tabpanel" aria-labelledby="tab-network" hidden={tab !== 'network'}>
+          <NetworkPanel ts={snap?.ts ?? 0} live={snap?.network ?? []} ping={snap?.ping ?? null} />
+        </div>
+      {/if}
+      {#if visited.displays}
+        <div id="panel-displays" role="tabpanel" aria-labelledby="tab-displays" hidden={tab !== 'displays'}>
+          <DisplaysPanel />
+        </div>
+      {/if}
+      {#if visited.devices}
+        <div id="panel-devices" role="tabpanel" aria-labelledby="tab-devices" hidden={tab !== 'devices'}>
+          <!-- Loaded on first visit, like Benchmark. -->
+          {#await import('./components/DevicesPanel.svelte') then { default: DevicesPanel }}
+            <DevicesPanel active={tab === 'devices'} />
+          {/await}
+        </div>
+      {/if}
+      {#if visited.system}
+        <div id="panel-system" role="tabpanel" aria-labelledby="tab-system" hidden={tab !== 'system'}>
+          <SystemPanel />
+        </div>
+      {/if}
+      {#if visited.sensors}
+        <div id="panel-sensors" role="tabpanel" aria-labelledby="tab-sensors" hidden={tab !== 'sensors'}>
+          <SensorsPanel {snap} active={tab === 'sensors'} onhistory={openHistory} />
+        </div>
+      {/if}
+      {#if visited.settings}
+        <div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden={tab !== 'settings'}>
+          <SettingsPanel {snap} {backend} active={tab === 'settings'} />
+        </div>
+      {/if}
+    </main>
 
-    {#if visited.processes}
-      <div id="panel-processes" role="tabpanel" aria-labelledby="tab-processes" hidden={tab !== 'processes'}>
-        <ProcessesPanel processes={snap?.processes ?? []} />
-      </div>
-    {/if}
-
-    {#if visited.hardware}
-      <div id="panel-hardware" role="tabpanel" aria-labelledby="tab-hardware" hidden={tab !== 'hardware'}>
-        <HardwarePanel newSince={changesNewSince} />
-      </div>
-    {/if}
-    {#if visited.mypc}
-      <div id="panel-mypc" role="tabpanel" aria-labelledby="tab-mypc" hidden={tab !== 'mypc'}>
-        <!-- Loaded on first visit; its 3-D view (Three.js) exists only while the tab shows. -->
-        {#await import('./components/MyPcPanel.svelte') then { default: MyPcPanel }}
-          <MyPcPanel {snap} active={tab === 'mypc' && !pageHidden} onselect={select} />
-        {/await}
-      </div>
-    {/if}
-    {#if visited.storage}
-      <div id="panel-storage" role="tabpanel" aria-labelledby="tab-storage" hidden={tab !== 'storage'}>
-        <StoragePanel live={snap?.storage ?? []} />
-      </div>
-    {/if}
-    {#if visited.network}
-      <div id="panel-network" role="tabpanel" aria-labelledby="tab-network" hidden={tab !== 'network'}>
-        <NetworkPanel ts={snap?.ts ?? 0} live={snap?.network ?? []} ping={snap?.ping ?? null} />
-      </div>
-    {/if}
-    {#if visited.displays}
-      <div id="panel-displays" role="tabpanel" aria-labelledby="tab-displays" hidden={tab !== 'displays'}>
-        <DisplaysPanel />
-      </div>
-    {/if}
-    {#if visited.devices}
-      <div id="panel-devices" role="tabpanel" aria-labelledby="tab-devices" hidden={tab !== 'devices'}>
-        <!-- Loaded on first visit, like Benchmark. -->
-        {#await import('./components/DevicesPanel.svelte') then { default: DevicesPanel }}
-          <DevicesPanel active={tab === 'devices'} />
-        {/await}
-      </div>
-    {/if}
-    {#if visited.system}
-      <div id="panel-system" role="tabpanel" aria-labelledby="tab-system" hidden={tab !== 'system'}>
-        <SystemPanel />
-      </div>
-    {/if}
-    {#if visited.sensors}
-      <div id="panel-sensors" role="tabpanel" aria-labelledby="tab-sensors" hidden={tab !== 'sensors'}>
-        <SensorsPanel {snap} active={tab === 'sensors'} onhistory={openHistory} />
-      </div>
-    {/if}
-    {#if visited.settings}
-      <div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden={tab !== 'settings'}>
-        <SettingsPanel {snap} {backend} active={tab === 'settings'} />
-      </div>
-    {/if}
-  </main>
-
-  <AppStatus app={snap?.app ?? null} {uiFps} source={inTauri ? 'engine' : 'browser sim'} />
+    <AppStatus app={snap?.app ?? null} {uiFps} source={inTauri ? 'engine' : 'browser sim'} />
+  </div>
 
   <div class="toasts" role="status" aria-live="polite">
     {#each toasts as t (t.key)}
@@ -496,143 +465,54 @@
   </div>
 </div>
 
+{#if paletteLoaded}
+  {#await import('./components/shell/CommandPalette.svelte') then { default: CommandPalette }}
+    <CommandPalette
+      bind:open={palette}
+      {snap}
+      fansActive={fans?.active ?? false}
+      onselect={select}
+      onsection={openSection}
+      onhistory={(id) => openHistory(id)}
+      onbios={fansToBios}
+    />
+  {/await}
+{/if}
+
 <style>
-  .app {
-    max-width: 72rem;
-    margin: 0 auto;
-    padding: 1rem 1rem 0.8rem;
+  .shell {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    min-height: 100vh;
   }
-  header {
+  .main {
+    --gutter: clamp(0.75rem, 1.8vw, 2rem);
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem 0.75rem;
-    margin-bottom: 0.55rem;
+    flex-direction: column;
+    min-width: 0;
+    padding: 0 var(--gutter) 0.8rem;
   }
-  /* The page state (idle, gaming, warning, critical) as a thin line under the header. */
-  .rail {
-    height: 2px;
-    margin-bottom: 0.85rem;
-    border-radius: 2px;
-    background: linear-gradient(90deg, transparent, var(--state) 20%, var(--state) 80%, transparent);
-    opacity: 0.35;
+  main {
+    flex: 1;
   }
-  :global(:root:not([data-state='idle'])) .rail {
-    opacity: 1;
+  /* A view comes in with a short rise (nothing with the profile's animation off). */
+  [role='tabpanel']:not([hidden]) {
+    animation: view-in var(--dur-3) var(--ease-out);
   }
-  /* Critical pulses four times, then stays lit; not at all with the profile's motion off. */
-  :global(:root[data-state='critical']) .rail {
-    animation: rail-pulse 1.2s ease-in-out 8 alternate;
-  }
-  :global(:root[data-motion='off']) .rail {
-    animation: none;
-  }
-  @keyframes rail-pulse {
-    to {
-      opacity: 0.3;
+  @keyframes view-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
     }
   }
-  .remote-chip {
-    display: flex;
-    align-items: center;
-    padding: 0.3rem 0.7rem;
-    border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
-    border-radius: 999px;
-    background: none;
-    color: var(--text);
-    font: inherit;
-    font-size: 0.78rem;
-    cursor: pointer;
+  .dash.with-rail {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(17rem, 18vw, 21rem);
+    align-items: start;
+    gap: 1.25rem;
   }
-  .remote-dot {
-    width: 0.5rem;
-    height: 0.5rem;
-    margin-right: 0.4rem;
-    border: 1.5px solid var(--accent);
-    border-radius: 50%;
-  }
-  .remote-dot.live {
-    background: var(--accent);
-  }
-  .fan-chip {
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
-    margin-left: auto;
-    padding: 0.15rem;
-    border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
-    border-radius: 999px;
-    font-size: 0.78rem;
-  }
-  .fan-chip button {
-    padding: 0.2rem 0.6rem;
-    border: 0;
-    border-radius: 999px;
-    background: none;
-    color: var(--text);
-    font: inherit;
-    cursor: pointer;
-  }
-  .fan-chip .chip-bios {
-    background: color-mix(in srgb, var(--accent) 14%, var(--bg));
-  }
-  .fan-dot {
-    display: inline-block;
-    width: 0.5rem;
-    height: 0.5rem;
-    margin-right: 0.35rem;
-    border-radius: 50%;
-    background: var(--accent);
-  }
-  .fan-dot.hot {
-    background: var(--hot);
-  }
-  .tabs {
-    display: flex;
-    gap: 0.25rem;
-    max-width: 100%;
-    margin-left: auto;
-    overflow-x: auto;
-    padding: 0.2rem;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    background: var(--panel);
-  }
-  .tabs button {
-    /* Holds the tab's screen-reader note, so it scrolls with the tab instead of widening the page. */
-    position: relative;
-    padding: 0.35rem 0.85rem;
-    border: 0;
-    border-radius: 7px;
-    background: transparent;
-    color: var(--muted);
-    font: inherit;
-    font-size: 0.82rem;
-    white-space: nowrap;
-    cursor: pointer;
-  }
-  .tabs button:hover {
-    color: var(--text);
-  }
-  .tabs button[aria-selected='true'] {
-    background: var(--accent-soft);
-    box-shadow: inset 0 -2px 0 var(--accent);
-    color: var(--text);
-  }
-  .alert-dot {
-    display: inline-block;
-    width: 0.5rem;
-    height: 0.5rem;
-    margin-left: 0.3rem;
-    border-radius: 50%;
-    background: var(--warn);
-    vertical-align: 0.1rem;
-  }
-  .alert-dot.fail {
-    background: var(--hot);
-  }
-  .alert-dot.new {
-    background: var(--accent);
+  .dash-main {
+    min-width: 0;
   }
   .toasts {
     position: fixed;
@@ -648,9 +528,9 @@
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
-    padding: 0.6rem 0.8rem;
+    padding: 0.7rem 0.9rem;
     border: 1px solid color-mix(in srgb, var(--hot) 50%, var(--line));
-    border-radius: 10px;
+    border-radius: 12px;
     background: var(--panel);
     box-shadow: var(--shadow);
     color: var(--text);
@@ -662,34 +542,51 @@
   .toast span {
     color: var(--muted);
   }
+  .toast {
+    animation: toast-in var(--dur-3) var(--ease-out);
+  }
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateX(24px);
+    }
+  }
+  .alert-dot {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--warn);
+  }
+  .alert-dot.fail {
+    background: var(--hot);
+  }
   .health-strip {
     display: flex;
     align-items: center;
     gap: 0.6rem;
     width: 100%;
     margin: 0 0 0.9rem;
-    padding: 0.55rem 0.85rem;
+    padding: 0.6rem 0.9rem;
     border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line));
-    border-radius: 10px;
+    border-radius: 12px;
     background: color-mix(in srgb, var(--warn) 8%, var(--panel));
     color: var(--text);
     font: inherit;
     font-size: 0.85rem;
     text-align: left;
     cursor: pointer;
+    transition: border-color var(--dur-2);
+  }
+  .health-strip:hover {
+    border-color: var(--warn);
   }
   .health-strip.fail {
     border-color: color-mix(in srgb, var(--hot) 55%, var(--line));
     background: color-mix(in srgb, var(--hot) 10%, var(--panel));
   }
-  .health-strip.update {
-    border-color: color-mix(in srgb, var(--accent-gpu) 45%, var(--line));
-    background: color-mix(in srgb, var(--accent-gpu) 8%, var(--panel));
-  }
   .health-strip .alert-dot {
     flex: none;
-    margin: 0;
-    vertical-align: 0;
   }
   .health-strip .msg {
     flex: 1;
@@ -702,16 +599,6 @@
   }
   [hidden] {
     display: none !important;
-  }
-  h1 {
-    margin: 0;
-    color: var(--accent);
-    font-size: 1.1rem;
-    letter-spacing: 0.35em;
-  }
-  .sub {
-    color: var(--muted);
-    font-size: 0.8rem;
   }
   .waiting {
     margin: 0 0 0.9rem;

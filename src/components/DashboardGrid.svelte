@@ -17,8 +17,10 @@
     compact: boolean;
     profileName: string;
     onselect: (tab: 'gaming' | 'health' | 'settings') => void;
+    /** Shows the live rail again (a wide window with the rail folded away). */
+    onrail?: () => void;
   }
-  let { snap, active, needs, uiFps, compact, profileName, onselect }: Props = $props();
+  let { snap, active, needs, uiFps, compact, profileName, onselect, onrail }: Props = $props();
 
   let dash = $state.raw<Dashboard>(initial());
   let editing = $state(false);
@@ -81,6 +83,7 @@
   >
     {layout.locked ? 'Locked' : 'Lock'}
   </button>
+  {#if onrail}<button type="button" onclick={onrail}>Live panel</button>{/if}
   {#if error}<span class="error" role="alert">Could not save the layout: {error}</span>{/if}
 </div>
 
@@ -90,8 +93,8 @@
   {/await}
 {:else}
   <div class="dash-grid">
-    {#each visible as w (w.id)}
-      <div class="dash-cell" style:--w={w.w} style:--wn={narrowSpan(w.w)} style:--h={w.h}>
+    {#each visible as w, i (w.id)}
+      <div class="dash-cell" style:--w={w.w} style:--wn={narrowSpan(w.w)} style:--h={w.h} style:--i={i}>
         <DashWidget widget={w} {snap} {active} {needs} {uiFps} {onselect} />
       </div>
     {/each}

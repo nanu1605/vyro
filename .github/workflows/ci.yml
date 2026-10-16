@@ -108,7 +108,7 @@ jobs:
         run: ./scripts/fetch-presentmon.ps1
       - name: Build the app and the MSI installer
         run: pnpm tauri build
-      - name: Installer size budget (spec §8, < 20 MB)
+      - name: Installer size budget (spec §8, < 60 MB since 1.1)
         shell: pwsh
         run: |
           $msi = Get-Item target\release\bundle\msi\*.msi | Select-Object -First 1
@@ -116,7 +116,7 @@ jobs:
           $mb = [math]::Round($msi.Length / 1MB, 2)
           "Installer: $($msi.Name) $mb MB; vyro.exe $([math]::Round($exe.Length / 1MB, 2)) MB" |
             Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
-          if ($msi.Length -ge 20MB) { throw "installer is $mb MB, over the 20 MB budget" }
+          if ($msi.Length -ge 60MB) { throw "installer is $mb MB, over the 60 MB budget" }
 
       # P27: the runner has never had Vyro. Install the MSI as a user would (silently here),
       # check what it put where, ask the service over its pipe, then uninstall and check what

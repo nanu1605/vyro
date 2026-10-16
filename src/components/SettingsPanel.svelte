@@ -5,7 +5,7 @@
   import { activeProfile, game, prefs, profiles, savePrefs } from '../prefs.svelte';
   import OverlayPlate from './OverlayPlate.svelte';
   import { pollLabel } from '../games';
-  import { ACCENTS, defaultMetrics, graphShown, METRICS, MODES, overlayData, shownMetrics, UPDATE_CHOICES, type OverlayAccent } from '../overlay';
+  import { ACCENTS, defaultMetrics, graphShown, METRICS, MODES, overlayData, plateColor, shownMetrics, UPDATE_CHOICES, type OverlayAccent } from '../overlay';
   import { simGame } from '../sim-game';
   import type { GameAutomation, OverlayMetric, Profile } from '../types';
   import { checkNow, install, update } from '../updates.svelte';
@@ -88,6 +88,48 @@
     busy = false;
   }
 
+  // The section list beside the cards (P28): a click scrolls to the card; the card in view is
+  // marked as you scroll.
+  const SECTIONS: Array<[string, string]> = [
+    ['appearance', 'Appearance'],
+    ['profile', 'Profile'],
+    ['general', 'General'],
+    ['gaming', 'Gaming'],
+    ['overlay', 'Overlay'],
+    ['remote', 'Remote'],
+    ['units', 'Units'],
+    ['hidden-sensors', 'Hidden sensors'],
+    ['service', 'Sensor service'],
+    ['updates', 'Updates'],
+  ];
+  let at = $state('appearance');
+  let grid = $state<HTMLElement | undefined>();
+  function go(e: MouseEvent, id: string): void {
+    e.preventDefault();
+    at = id;
+    document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+  $effect(() => {
+    if (!active || !grid) return;
+    const seen = new Map<string, boolean>();
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const en of entries) seen.set(en.target.id, en.isIntersecting);
+        const first = SECTIONS.find(([id]) => seen.get(id));
+        if (first) at = first[0];
+      },
+      { rootMargin: '-80px 0px -55% 0px' },
+    );
+    // The Remote card loads a moment later.
+    const watch = () => grid?.querySelectorAll(':scope > [id]').forEach((el) => io.observe(el));
+    watch();
+    const t = setTimeout(watch, 500);
+    return () => {
+      clearTimeout(t);
+      io.disconnect();
+    };
+  });
+
   const names = $derived(new Map((tree?.groups ?? []).flatMap((g) => g.sensors).map((s) => [s.id, s.name])));
   const UNITS: Array<{ id: TempUnit; label: string }> = [
     { id: 'c', label: 'Celsius (°C)' },
@@ -95,58 +137,14 @@
   ];
 </script>
 
-<section class="grid">
-  <Card title="Profile" subtitle={nameOf(activeProfile()) || null}>
-    <fieldset>
-      <legend>Poll rate, notifications, animation, dashboard</legend>
-      {#each profiles.list as p (p.id)}
-        <label class="check">
-          <input
-            type="radio"
-            name="profile"
-            checked={activeProfile() === p.id}
-            onchange={() => void save('Profile', () => pickProfile(p.id))}
-          />
-          <span>{p.name}<small>{p.description}</small></span>
-        </label>
-      {/each}
-    </fieldset>
-    {#if game.state?.alert}
-      <p class="note" role="status">
-        {nameOf(game.state.profile)} is in use while the alert “{game.state.alert}” holds; it ends 30 s after the alert
-        clears. Picking a profile here keeps it instead.
-      </p>
-    {:else if game.state?.game && game.state.auto}
-      <p class="note" role="status">
-        {nameOf(game.state.profile)} is in use while {snap?.game?.app ?? game.state.game} runs; {nameOf(game.state.base)} comes
-        back when it closes. Picking a profile here keeps it for the rest of the game.
-      </p>
-    {:else}
-      <p class="note">Also in the tray icon's menu.</p>
-    {/if}
-  </Card>
-
-  <Card title="General">
-    <label class="check">
-      <input
-        type="checkbox"
-        checked={prefs.closeToTray}
-        onchange={(e) => void save('Tray', () => savePrefs({ closeToTray: (e.currentTarget as HTMLInputElement).checked }))}
-      />
-      <span>Keep running in the tray when the window is closed<small>Alerts need Vyro running; quit from the tray icon.</small></span>
-    </label>
-    <label class="check">
-      <input
-        type="checkbox"
-        checked={autostart ?? false}
-        disabled={autostart == null}
-        onchange={(e) => void setStart((e.currentTarget as HTMLInputElement).checked)}
-      />
-      <span>Start with Windows<small>Opens in the tray when you sign in.</small></span>
-    </label>
-  </Card>
-
-  <Card title="Appearance" subtitle={look.name}>
+<div class="settings">
+  <nav class="toc" aria-label="Settings sections">
+    {#each SECTIONS as [id, label] (id)}
+      <a href="#{id}" class:on={at === id} aria-current={at === id ? 'true' : undefined} onclick={(e) => go(e, id)}>{label}</a>
+    {/each}
+  </nav>
+<section class="grid" bind:this={grid}>
+  <Card title="Appearance" id="appearance" subtitle={look.name}>
     <fieldset>
       <legend>Theme</legend>
       <div class="themes">
@@ -193,10 +191,66 @@
     <p class="note">OK, warning and problem colours keep their meaning in every theme.</p>
   </Card>
 
-  <Card title="Gaming">
+  <Card title="Profile" id="profile" subtitle={nameOf(activeProfile()) || null}>
+    <fieldset>
+      <legend>Poll rate, notifications, animation, dashboard</legend>
+      {#each profiles.list as p (p.id)}
+        <label class="check">
+          <input
+            type="radio"
+            name="profile"
+            checked={activeProfile() === p.id}
+            onchange={() => void save('Profile', () => pickProfile(p.id))}
+          />
+          <span>{p.name}<small>{p.description}</small></span>
+        </label>
+      {/each}
+    </fieldset>
+    {#if game.state?.alert}
+      <p class="note" role="status">
+        {nameOf(game.state.profile)} is in use while the alert “{game.state.alert}” holds; it ends 30 s after the alert
+        clears. Picking a profile here keeps it instead.
+      </p>
+    {:else if game.state?.game && game.state.auto}
+      <p class="note" role="status">
+        {nameOf(game.state.profile)} is in use while {snap?.game?.app ?? game.state.game} runs; {nameOf(game.state.base)} comes
+        back when it closes. Picking a profile here keeps it for the rest of the game.
+      </p>
+    {:else}
+      <p class="note">Also in the tray icon's menu.</p>
+    {/if}
+  </Card>
+
+  <Card title="General" id="general">
     <label class="check">
       <input
         type="checkbox"
+        class="switch"
+        role="switch"
+        checked={prefs.closeToTray}
+        onchange={(e) => void save('Tray', () => savePrefs({ closeToTray: (e.currentTarget as HTMLInputElement).checked }))}
+      />
+      <span>Keep running in the tray when the window is closed<small>Alerts need Vyro running; quit from the tray icon.</small></span>
+    </label>
+    <label class="check">
+      <input
+        type="checkbox"
+        class="switch"
+        role="switch"
+        checked={autostart ?? false}
+        disabled={autostart == null}
+        onchange={(e) => void setStart((e.currentTarget as HTMLInputElement).checked)}
+      />
+      <span>Start with Windows<small>Opens in the tray when you sign in.</small></span>
+    </label>
+  </Card>
+
+  <Card title="Gaming" id="gaming">
+    <label class="check">
+      <input
+        type="checkbox"
+        class="switch"
+        role="switch"
         checked={prefs.gameCapture}
         onchange={(e) => void save('Gaming', () => savePrefs({ gameCapture: (e.currentTarget as HTMLInputElement).checked }))}
       />
@@ -210,6 +264,8 @@
     <label class="check">
       <input
         type="checkbox"
+        class="switch"
+        role="switch"
         checked={prefs.games.enabled}
         onchange={(e) => void setGames({ enabled: (e.currentTarget as HTMLInputElement).checked })}
       />
@@ -238,6 +294,8 @@
         <label class="check">
           <input
             type="checkbox"
+            class="switch"
+            role="switch"
             checked={prefs.games.loadTrigger}
             onchange={(e) => void setGames({ loadTrigger: (e.currentTarget as HTMLInputElement).checked })}
           />
@@ -252,12 +310,14 @@
     {/if}
   </Card>
 
-  <Card title="Overlay" subtitle={prefs.overlay.enabled ? (MODES.find((m) => m.id === prefs.overlay.mode)?.label ?? null) : 'Off'} wide>
+  <Card title="Overlay" id="overlay" subtitle={prefs.overlay.enabled ? (MODES.find((m) => m.id === prefs.overlay.mode)?.label ?? null) : 'Off'} wide>
     <div class="overlay-grid">
       <div class="controls">
         <label class="check">
           <input
             type="checkbox"
+            class="switch"
+            role="switch"
             checked={prefs.overlay.enabled}
             disabled={!prefs.gameCapture}
             onchange={(e) => void setOverlay({ enabled: (e.currentTarget as HTMLInputElement).checked })}
@@ -316,6 +376,8 @@
         <label class="check">
           <input
             type="checkbox"
+            class="switch"
+            role="switch"
             checked={graphShown(prefs.overlay)}
             disabled={prefs.overlay.mode === 'minimal' || prefs.overlay.mode === 'graph'}
             onchange={(e) => void setOverlay({ graph: (e.currentTarget as HTMLInputElement).checked })}
@@ -325,6 +387,8 @@
         <label class="check">
           <input
             type="checkbox"
+            class="switch"
+            role="switch"
             checked={prefs.overlay.compact}
             onchange={(e) => void setOverlay({ compact: (e.currentTarget as HTMLInputElement).checked })}
           />
@@ -332,9 +396,9 @@
         </label>
         <fieldset class="swatches">
           <legend>Colour</legend>
-          {#each Object.entries(ACCENTS) as [id, color] (id)}
-            <label class="swatch" style:--swatch={color}>
-              <input type="radio" name="overlay-accent" aria-label={id} checked={prefs.overlay.accent === id} onchange={() => void setOverlay({ accent: id as OverlayAccent })} />
+          {#each [['app', plateColor('app', prefs)], ...Object.entries(ACCENTS)] as [id, color] (id)}
+            <label class="swatch" class:app={id === 'app'} style:--swatch={color} title={id === 'app' ? 'The app’s accent' : undefined}>
+              <input type="radio" name="overlay-accent" aria-label={id === 'app' ? 'app accent' : id} checked={prefs.overlay.accent === id} onchange={() => void setOverlay({ accent: id as OverlayAccent })} />
             </label>
           {/each}
         </fieldset>
@@ -378,7 +442,11 @@
     </div>
   </Card>
 
-  <Card title="Units">
+  {#await import('./RemoteCard.svelte') then { default: RemoteCard }}
+    <RemoteCard {active} />
+  {/await}
+
+  <Card title="Units" id="units">
     <fieldset>
       <legend>Temperature</legend>
       {#each UNITS as u (u.id)}
@@ -396,7 +464,7 @@
     <p class="note">Everywhere, including limits, history and notifications. Vyro measures and compares in °C.</p>
   </Card>
 
-  <Card title="Hidden sensors" subtitle={prefs.hiddenSensors.length ? `${prefs.hiddenSensors.length} hidden` : null}>
+  <Card title="Hidden sensors" id="hidden-sensors" subtitle={prefs.hiddenSensors.length ? `${prefs.hiddenSensors.length} hidden` : null}>
     {#if prefs.hiddenSensors.length === 0}
       <p class="note">None. Hide a sensor with × in the Sensors view to leave it out of Sensors and History.</p>
     {:else}
@@ -416,11 +484,7 @@
     {/if}
   </Card>
 
-  {#await import('./RemoteCard.svelte') then { default: RemoteCard }}
-    <RemoteCard {active} />
-  {/await}
-
-  <Card title="Sensor service">
+  <Card title="Sensor service" id="service">
     {#if !backend}
       <p class="note">Browser preview: no service.</p>
     {:else if backend.mode === 'service'}
@@ -440,7 +504,7 @@
     {/if}
   </Card>
 
-  <Card title="Updates" subtitle={upd ? `version ${upd.current}` : null}>
+  <Card title="Updates" id="updates" subtitle={upd ? `version ${upd.current}` : null}>
     {#if !upd}
       <p class="note">Loading…</p>
     {:else if !upd.configured}
@@ -452,6 +516,8 @@
       <label class="check">
         <input
           type="checkbox"
+          class="switch"
+          role="switch"
           checked={prefs.checkUpdates}
           onchange={(e) => void save('Updates', () => savePrefs({ checkUpdates: (e.currentTarget as HTMLInputElement).checked }))}
         />
@@ -493,6 +559,7 @@
 
   {#if error}<p class="err" role="alert">{error}</p>{/if}
 </section>
+</div>
 
 <style>
   .overlay-grid {
@@ -554,6 +621,10 @@
     cursor: pointer;
     appearance: none;
   }
+  /* The app's accent: a dot in a ring, so it reads as "follows the app". */
+  .swatch.app input {
+    background: radial-gradient(circle, var(--swatch) 0 40%, var(--panel-edge) 44%);
+  }
   .swatch input:checked {
     border-color: var(--text);
     box-shadow: 0 0 0 2px var(--bg) inset;
@@ -572,7 +643,7 @@
   }
   .metrics {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 7.5rem), 1fr));
     column-gap: 0.75rem;
   }
   .metrics .check {
@@ -611,9 +682,50 @@
     align-items: flex-end;
     justify-content: flex-end;
   }
+  .settings {
+    display: grid;
+    grid-template-columns: 11.5rem minmax(0, 1fr);
+    align-items: start;
+    gap: 1.5rem;
+  }
+  .toc {
+    position: sticky;
+    top: calc(var(--topbar-h) + 1rem);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .toc a {
+    padding: 0.45rem 0.75rem;
+    border-radius: 9px;
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-decoration: none;
+    transition:
+      color var(--dur-2),
+      background-color var(--dur-2);
+  }
+  .toc a:hover {
+    color: var(--text);
+  }
+  .toc a.on {
+    background: var(--accent-soft);
+    box-shadow: inset 3px 0 0 var(--accent);
+    color: var(--text);
+  }
+  @media (max-width: 900px) {
+    .settings {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .toc {
+      display: none;
+    }
+  }
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr));
+    grid-auto-flow: row dense;
+    align-items: start;
     gap: 1rem;
   }
   .check {
@@ -661,7 +773,7 @@
   }
   .themes {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
     column-gap: 0.75rem;
   }
   .swatch {

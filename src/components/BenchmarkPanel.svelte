@@ -29,6 +29,7 @@
     verdictText,
   } from '../bench';
   import { describe } from '../changes';
+  import { scrollable } from '../scrollable';
   import { fmtTemp, tempText } from '../prefs.svelte';
   import type { BenchMode, BenchProgress, BenchRun, HardwareChange, Preflight, RunSummary, SustainLoop, Watch } from '../types';
 
@@ -354,6 +355,7 @@
             {#if a.missing}
               <p class="fine">{tempText(a.missing)}</p>
             {:else}
+              <div class="table-wrap" use:scrollable role="region" aria-label="{AREAS[a.area].label} results">
               <table>
                 <tbody>
                   {#each a.metrics as m (m.key)}
@@ -372,6 +374,7 @@
                   {/each}
                 </tbody>
               </table>
+              </div>
               {#if a.area === 'sustained' && a.loops.length}
                 {@const cpu = loopBars(a.loops, (l) => l.cpu)}
                 {@const gpu = loopBars(a.loops, (l) => l.gpu)}
@@ -417,6 +420,7 @@
     {#if !runs.length}
       <p class="fine">No runs yet. The first one becomes the baseline later runs compare with.</p>
     {:else}
+      <div class="table-wrap" use:scrollable role="region" aria-label="Runs, table">
       <table class="runs">
         <thead>
           <tr>
@@ -458,15 +462,20 @@
           {/each}
         </tbody>
       </table>
+      </div>
     {/if}
   </section>
 </section>
 
 <style>
+  .table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+  }
   .bench {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 1rem;
-    max-width: 72rem;
   }
   h2 {
     margin: 0;
@@ -543,7 +552,7 @@
   }
   .modes {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
     gap: 0.6rem;
     margin: 0;
     padding: 0;

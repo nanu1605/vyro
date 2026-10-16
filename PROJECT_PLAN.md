@@ -431,7 +431,7 @@ Development uses **test‑signing**.
 | GPU | ~0% idle; negligible during animation |
 | History store on disk | capped (e.g., ≤ 200 MB) with retention/downsampling |
 | Poll → render latency | < 1 frame after snapshot |
-| Installer size | < 20 MB (excluding vendor SDK redistributables) |
+| Installer size | < 60 MB (excluding vendor SDK redistributables; raised from 20 MB for 1.1, ROADMAP decision 28) |
 | Startup to first data | < 2 s |
 
 The **app self‑monitoring** widget is the built‑in verification instrument for these numbers; record them in `README.md`.

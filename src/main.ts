@@ -1,5 +1,6 @@
 import { mount } from 'svelte';
 import './styles/theme.css';
+import './styles/app.css';
 import App from './App.svelte';
 import { applyLook, savedLook } from './themes';
 import Overlay from './Overlay.svelte';

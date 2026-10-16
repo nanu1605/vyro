@@ -42,6 +42,8 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 25 | Tagline | "Know your machine." unless changed | open |
 | 26 | Navigation (new IA) | Adopted incrementally; V1 tabs keep working each release | decided |
 | 27 | Fans with no speed reading (My PC) | Turn slowly and say "Speed not reported"; a real 0 RPM stays still (the owner, 2026-10-16) | decided |
+| 28 | Installer size budget | **< 60 MB** from 1.1 (was < 20 MB, spec §8): "we have to make good software using good tools" (the owner, 2026-10-16). The window's start bundle budget goes from 125 to 200 kB gzipped | decided |
+| 29 | Navigation | A sidebar with grouped views replaces the tab strip (supersedes 26); the views and their ids stay | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -1850,6 +1852,46 @@ branch `claude/blissful-knuth-begnu5`, merged into `main` at each release.
         reports none) the model stood still. Fans with no reading now turn slowly
         (0.35 turns a second) and their details say "Speed not reported"; a real 0 RPM stays
         still and says "Stopped (0 RPM)" (decision 27).
+- [x] **1.0.1 released** (2026-10-16): CI passed on 262c711 (Linux, Windows, accessibility);
+      `main` fast-forwarded to it and Release run 38911862292 tagged `v1.0.1` and published the
+      11.3 MB MSI, `latest.json` and checksums here and to `nanu1605/vyro-releases`, whose
+      `latest.json` now offers 1.0.1 to installed copies (checksums verified).
+
+### 1.1.0 — the new look, a livelier My PC, a laptop model, desktop widgets
+Built in order P28 → P31 on the same branch. Budgets (decision 28): installer < 60 MB; the
+window's start bundle < 200 kB gzipped (the companion's stays < 32 kB); the views and the 3-D
+scene stay loaded on first use. Footprint as 1.0, plus what P29 and P30 measure for themselves.
+
+#### P28 — the frame and the design system
+- [x] Built (2026-10-16):
+      - **Navigation.** A sidebar (`components/shell/Sidebar.svelte`) with the views in four
+        groups (Overview, Performance, This PC, Vyro), Lucide icons (`@lucide/svelte`, ISC, one
+        file per icon) and a highlight that slides to the chosen view; it folds to a rail of
+        icons (remembered) and folds by itself below 1100 px. Still the tabs pattern, vertical,
+        with the same `tab-<id>` ids, so links, "last tab" and the accessibility sweep keep
+        working (decision 29). The view list lives in `src/nav.ts`.
+      - **Top bar.** The view's name and what it is for, the fan control, remote and update chips
+        (they were in the header and on the Dashboard), the page-state line along its foot, and
+        a search button.
+      - **Command palette** (Ctrl+K, loaded on first use): views, settings and Health sections,
+        theme and accent, every sensor (opens it in History) and "Return fans to BIOS".
+      - **The whole width.** The 72rem cap is gone; on a window 1500 px or wider the Dashboard
+        has a live rail (vitals with their last minute, the running game, network and ping, the
+        top five processes, Health), which folds away (remembered). Card grids that had a fixed
+        minimum shrink with the window (`minmax(min(100%, …), 1fr)`).
+      - **Settings** has a section list beside the cards (it follows the scroll), Appearance
+        first, and on/off settings as switches (`input.switch` with `role="switch"`).
+      - **Look and motion.** Layered cards (an accent edge on top, a soft drop whose colour each
+        theme sets, a lift on reading tiles and widgets), segmented controls, a common button
+        feel, a view that rises in when chosen, widgets that come in one after another, dialogs
+        and toasts that spring in, shimmering loading lines. Durations are tokens that the
+        profile's animation level shortens ("calmer") or turns off, as does the system's
+        reduced-motion setting; nothing loops while the Dashboard is still.
+      - **Overlay colour** "App accent" (`overlay::Accent::App`): the app accent's shade for
+        dark backgrounds, since the plate is always dark.
+      - Accessibility sweep: also the palette (empty and with results) and the folded sidebar;
+        386 checks clean. Start bundle 132.8 kB of 200; the companion 31.9 of 32 (its shared
+        Svelte runtime is why the toasts use a CSS animation rather than a Svelte transition).
 
 ## Risks
 

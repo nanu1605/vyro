@@ -151,6 +151,29 @@ async function sweepDialogs(browser, theme, width) {
   await ctx.close();
 }
 
+// --- The app's frame (P28): the command palette and the sidebar folded to icons. ------------
+
+async function sweepShell(browser, theme) {
+  const { ctx, page } = await open(browser, BASE, { width: 1440, theme });
+  await page.goto(`${BASE}/`);
+  await page.waitForTimeout(1200);
+  const at = (what) => `${what} · ${theme}`;
+  await page.keyboard.press('Control+k');
+  await page.getByRole('combobox', { name: /^Search/ }).waitFor();
+  await page.waitForTimeout(300);
+  await axe(page, at('Command palette'));
+  await page.keyboard.type('temp');
+  await page.waitForTimeout(400);
+  await axe(page, at('Command palette, results'));
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Collapse the sidebar' }).click();
+  await page.waitForTimeout(400);
+  await axe(page, at('Sidebar folded'));
+  await noSidewaysScroll(page, at('Sidebar folded'));
+  await page.getByRole('button', { name: 'Expand the sidebar' }).click();
+  await ctx.close();
+}
+
 // --- The phone companion, served the API's answers. --------------------------------------------
 
 const VIEW = {
@@ -280,6 +303,7 @@ try {
     }
     for (const theme of ['midnight', 'daylight']) {
       await Promise.all(WIDTHS.map((w) => sweepDialogs(browser, theme, w)));
+      await sweepShell(browser, theme);
     }
     await sweepKeyboard(browser);
     await sweepMotion(browser);

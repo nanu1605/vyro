@@ -20,7 +20,9 @@ DIST = Path(__file__).resolve().parent.parent / "dist"
 # Bytes, gzipped. Raise one only on purpose, in the same change as what needs it, and say why
 # in the ROADMAP.
 BUDGETS = {
-    "index.html": 125_000,  # the app's window
+    # The app's window. 125 kB until 1.1; raised for the new frame (sidebar, top bar, live
+    # rail, icons, motion; ROADMAP P28), with the palette and the heavy views still lazy.
+    "index.html": 200_000,
     "remote.html": 32_000,  # the phone companion (P26)
 }
 

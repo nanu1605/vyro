@@ -3,10 +3,12 @@
 // `vyro_core::gaming::overlay` and `src-tauri/src/overlay.rs`.
 
 import { fmt } from './format';
+import { ACCENTS as APP_ACCENTS, theme as themeOf } from './themes';
 import type { FramePoint, GameSnapshot, OverlayMetric, OverlayMode, OverlayRow, SensorSnapshot } from './types';
 
 export type OverlayCorner = 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
-export type OverlayAccent = 'green' | 'cyan' | 'amber' | 'pink' | 'white';
+/** `app`: the app's own accent (1.1), in a shade that reads on the dark plate. */
+export type OverlayAccent = 'app' | 'green' | 'cyan' | 'amber' | 'pink' | 'white';
 
 export interface OverlaySettings {
   enabled: boolean;
@@ -55,9 +57,19 @@ export const MODES: Array<{ id: OverlayMode; label: string; text: string }> = [
   { id: 'graph', label: 'Graph', text: 'Frame rate over a large frame-time graph.' },
 ];
 
-export const ACCENTS: Record<OverlayAccent, string> = {
+export const ACCENTS: Record<Exclude<OverlayAccent, 'app'>, string> = {
   green: '#7ee787', cyan: '#4cc9f0', amber: '#f5b942', pink: '#ff79c6', white: '#f2f6fa',
 };
+
+/** The plate's colour. For `app`: the app accent's dark-theme shade, since the plate is always
+ * dark; a light theme's own accent (made for white) gives way to cyan. */
+export function plateColor(accent: OverlayAccent, look: { theme: string; accent: string }): string {
+  if (accent !== 'app') return ACCENTS[accent] ?? ACCENTS.green;
+  const named = APP_ACCENTS.find((a) => a.id === look.accent);
+  if (named) return named.dark[0];
+  const t = themeOf(look.theme);
+  return t.light ? APP_ACCENTS[0]!.dark[0] : t.accent[0];
+}
 
 export const UPDATE_CHOICES = [500, 1000, 2000] as const;
 

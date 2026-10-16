@@ -45,6 +45,43 @@
   --font-ui: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-num: 'Segoe UI Variable Display', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --radius: 14px;
+
+  /* Layered cards (P28): a lit top edge and a soft drop, deeper on hover. */
+  --shadow-color: rgb(0 0 0 / 70%);
+  --shadow-card: inset 0 1px 0 color-mix(in srgb, var(--accent) 26%, transparent), 0 14px 32px -22px var(--shadow-color);
+  --shadow-lift: inset 0 1px 0 color-mix(in srgb, var(--accent) 45%, transparent), 0 0 0 1px var(--accent-line),
+    0 18px 40px -20px color-mix(in srgb, var(--accent) 40%, var(--shadow-color));
+
+  /* The app's frame (P28). */
+  --sidebar-w: 15rem;
+  --sidebar-rail: 4.25rem;
+  --topbar-h: 3.6rem;
+
+  /* Motion (P28): short, eased, the same everywhere; the profile's animation level scales it. */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 300ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* The profile's animation level (App.svelte sets data-motion): calmer, or none at all. */
+@media (max-width: 640px) {
+  :root {
+    --sidebar-rail: 3.5rem;
+  }
+}
+
+:root[data-motion='reduced'] {
+  --dur-1: 80ms;
+  --dur-2: 120ms;
+  --dur-3: 160ms;
+}
+:root[data-motion='off'] *,
+:root[data-motion='off'] *::before,
+:root[data-motion='off'] *::after {
+  transition: none !important;
+  animation: none !important;
 }
 
 *,
@@ -101,12 +138,26 @@ body {
 }
 
 .panel {
-  background: linear-gradient(180deg, var(--card-top) 0%, var(--card) 18%);
+  background: linear-gradient(180deg, var(--card-top) 0%, var(--card) 22%);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  /* A faint accent edge along the top of every card. */
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent) 30%, transparent);
+  /* A faint accent edge along the top of every card, and a soft drop. */
+  box-shadow: var(--shadow-card);
   padding: 1rem;
+  /* Links from the command palette land below the sticky header. */
+  scroll-margin-top: calc(var(--topbar-h) + 1rem);
+  transition:
+    border-color var(--dur-2),
+    box-shadow var(--dur-2),
+    transform var(--dur-2) var(--ease-out);
+}
+.panel:hover {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
+}
+
+/* Scrollbars that sit back. */
+* {
+  scrollbar-color: color-mix(in srgb, var(--muted) 35%, transparent) transparent;
 }
 
 :focus-visible {

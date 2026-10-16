@@ -140,7 +140,7 @@
       Averages per interval with the min–max band. Kept on disk: every second for 30 min, 10 s averages for
       24 h, 1 min averages for 7 days.{loading ? ' Loading…' : ''}
     </p>
-    <div class="ranges" role="group" aria-label="Time range">
+    <div class="ranges segmented" role="group" aria-label="Time range">
       {#each RANGES as r (r.id)}
         <button type="button" aria-pressed={range === r.id} onclick={() => pick(r.id)}>{r.label}</button>
       {/each}
@@ -193,28 +193,7 @@
     font-size: 0.8rem;
   }
   .ranges {
-    display: flex;
     flex-wrap: wrap;
-    gap: 0.3rem;
-  }
-  .ranges button {
-    padding: 0.3rem 0.6rem;
-    border: 1px solid var(--line);
-    border-radius: 7px;
-    background: var(--bg);
-    color: var(--muted);
-    font: inherit;
-    font-size: 0.8rem;
-    cursor: pointer;
-  }
-  .ranges button:hover {
-    color: var(--text);
-  }
-  .ranges button[aria-pressed='true'] {
-    border-color: var(--muted);
-    background: var(--panel-edge);
-    color: var(--text);
-    font-weight: 600;
   }
   .grid {
     display: grid;

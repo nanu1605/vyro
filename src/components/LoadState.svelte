@@ -22,7 +22,10 @@
     {#if retry}<button type="button" onclick={retry}>Try again</button>{/if}
   </div>
 {:else if loading}
-  <p class="state" role="status" aria-live="polite">Reading {what}…</p>
+  <div class="state loading" role="status" aria-live="polite">
+    <p>Reading {what}…</p>
+    <span class="bones" aria-hidden="true"><i></i><i></i><i></i></span>
+  </div>
 {:else if empty}
   <div class="state" role="status">
     <p>{empty}</p>
@@ -46,6 +49,42 @@
   }
   .error {
     border-color: color-mix(in srgb, var(--hot) 50%, var(--line));
+  }
+  /* While loading: placeholder lines with a light sweeping across them. */
+  .loading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .bones {
+    display: grid;
+    gap: 0.45rem;
+  }
+  .bones i {
+    height: 0.7rem;
+    border-radius: 6px;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        color-mix(in srgb, var(--text) 9%, transparent) 50%,
+        transparent 100%
+      )
+      0 0 / 200% 100%,
+      color-mix(in srgb, var(--text) 5%, transparent);
+    animation: sweep 1.4s linear infinite;
+  }
+  .bones i:nth-child(2) {
+    width: 82%;
+  }
+  .bones i:nth-child(3) {
+    width: 64%;
+  }
+  @keyframes sweep {
+    from {
+      background-position: 200% 0, 0 0;
+    }
+    to {
+      background-position: -200% 0, 0 0;
+    }
   }
   p {
     flex: 1;

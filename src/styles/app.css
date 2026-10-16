@@ -1,0 +1,124 @@
+/* The app window's shared controls and motion (P28), on top of theme.css. Not loaded by the
+   phone companion, which has its own few controls. */
+
+/* Cards that are one reading (tiles, widgets) lift a little on hover. */
+.lift:hover,
+.dash-cell > .panel:hover {
+  box-shadow: var(--shadow-lift);
+  transform: translateY(-2px);
+}
+
+/* Widgets come in one after another when the Dashboard shows. */
+[role='tabpanel']:not([hidden]) .dash-cell {
+  animation: rise var(--dur-3) var(--ease-out) both;
+  animation-delay: calc(min(var(--i, 0), 6) * 30ms);
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+}
+
+/* Dialogs open with a small spring. */
+dialog[open] {
+  animation: pop var(--dur-2) var(--ease-out);
+}
+dialog[open]::backdrop {
+  animation: fade var(--dur-2) ease-out;
+}
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Plain buttons share one look; components that style their own keep theirs (any class
+   selector outranks these). */
+:where(button):not([role='tab']) {
+  border-radius: 8px;
+  font: inherit;
+  transition:
+    border-color var(--dur-2),
+    background-color var(--dur-2),
+    color var(--dur-2),
+    transform var(--dur-1);
+}
+:where(button):not([role='tab']):not(:disabled):active {
+  transform: translateY(1px);
+}
+
+/* On/off settings as switches: a checkbox with role="switch" and this class. */
+input.switch {
+  position: relative;
+  flex: none;
+  width: 2.1rem;
+  height: 1.2rem;
+  margin: 0.1rem 0 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--gauge-track);
+  cursor: pointer;
+  appearance: none;
+  transition:
+    background-color var(--dur-2),
+    border-color var(--dur-2);
+}
+input.switch::after {
+  position: absolute;
+  top: 0.12rem;
+  left: 0.14rem;
+  width: 0.82rem;
+  height: 0.82rem;
+  border-radius: 50%;
+  background: var(--muted);
+  content: '';
+  transition:
+    transform var(--dur-2) var(--ease-spring),
+    background-color var(--dur-2);
+}
+input.switch:checked {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 45%, var(--panel));
+}
+input.switch:checked::after {
+  background: var(--text);
+  transform: translateX(0.86rem);
+}
+input.switch:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Segmented control: a row of buttons with aria-pressed (PC / GPU / Thermal map). */
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--panel);
+}
+.segmented button {
+  padding: 0.32rem 0.85rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.segmented button:hover {
+  color: var(--text);
+}
+.segmented button[aria-pressed='true'] {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+  color: var(--text);
+}

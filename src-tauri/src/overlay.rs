@@ -42,7 +42,8 @@ pub enum Corner {
     BottomRight,
 }
 
-/// Colour of the frame rate and graph (fixed choices until themes arrive).
+/// Colour of the frame rate and graph: a fixed one, or `App`, the app's own accent (1.1; the
+/// page picks a shade that reads on the dark plate).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Accent {
@@ -52,6 +53,7 @@ pub enum Accent {
     Amber,
     Pink,
     White,
+    App,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -517,5 +519,12 @@ mod tests {
         };
         assert!(!minimal.graph_shown());
         assert_eq!(minimal.shown(), vec![OverlayMetric::Fps]);
+    }
+
+    #[test]
+    fn the_app_accent_reads_back() {
+        let s: OverlaySettings = serde_json::from_str(r#"{"accent":"app"}"#).unwrap();
+        assert_eq!(s.accent, Accent::App);
+        assert_eq!(serde_json::to_value(Accent::App).unwrap(), "app");
     }
 }

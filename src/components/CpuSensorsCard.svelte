@@ -36,7 +36,7 @@
 <style>
   .cores {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 4.5rem), 1fr));
     gap: 0.3rem 0.75rem;
     margin: 0.75rem 0 0;
     padding: 0;

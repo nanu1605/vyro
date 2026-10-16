@@ -212,7 +212,7 @@
   }
   .inputs li {
     display: grid;
-    grid-template-columns: minmax(9rem, 1.3fr) minmax(4rem, 1fr) 2.2rem 4.4rem 5.8rem;
+    grid-template-columns: minmax(9rem, 1.3fr) minmax(min(100%, 4rem), 1fr) 2.2rem 4.4rem 5.8rem;
     align-items: center;
     gap: 0.15rem 0.7rem;
     padding: 0.4rem 0;
