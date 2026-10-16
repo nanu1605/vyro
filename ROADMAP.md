@@ -1924,6 +1924,41 @@ scene stay loaded on first use. Footprint as 1.0, plus what P29 and P30 measure 
         Fin stacks and fan blades are single meshes. The lazy `scene3d` chunk is 162.8 kB
         gzipped (was 141.7).
 
+#### P30 — desktop widgets
+- [x] Built (2026-10-16):
+      - **What they are.** Up to 8 small windows on the desktop, each showing live readings: a
+        gauge (one reading on a dial), a reading (one, large), a graph (one with its last
+        minute), a stack (up to six with bars) or a clock (time, date and two readings). Any
+        reading the Dashboard has. Each has a size (50–200 %), a background strength, a style
+        (the app's card, glass, or solid), a layer ("Behind windows", the default, or "On top")
+        and a lock.
+      - **The Widgets page** (sidebar, under Vyro; loaded on first use): a gallery of the five
+        kinds with live previews over a bit of wallpaper, "Add", then each widget's readings,
+        size, background, style, layer and lock, with its preview beside them; "Show on the
+        desktop" and "Lock all" / "Unlock all to arrange". In the browser preview the widgets
+        live on the page only.
+      - **On the desktop** (`src-tauri/src/widgets.rs`): `widgets.json` (sanitized, atomic, as
+        `dashboard.json`); one window per widget, `widget-<id>` loading `index.html#widget=<id>`,
+        transparent, frameless, no taskbar button, shown without taking focus, behind or above
+        other windows by its layer, sharing the main window's WebView2 process (same browser
+        arguments). Unlocked, a widget is dragged by its body; its place is saved once it stops
+        moving, and the page's older copy never overrides it. A new widget goes down the right
+        edge of the first monitor; a saved place off every connected monitor comes back there.
+        Right-click: Lock or Unlock, Edit… (opens the Widgets page), Remove. The windows follow
+        the theme, accent and animation level, and come back when Vyro starts in the tray.
+      - **Data.** Each snapshot also goes to the widget windows (`widget-sensors`) while any
+        widget shows, and they keep the profile's polling rate with the main window in the tray
+        (`Engine::set_widgets`, as the overlay does). Tray: "Desktop widgets" shows or hides them
+        all. Their own capability (`capabilities/widgets.json`) allows only listening to events
+        and dragging their own window.
+      - **Known limit.** Windows' Show desktop (Win+D) can hide widgets set behind windows until
+        a window is switched to; "On top" keeps a widget visible. Pinning to the desktop layer
+        itself (as Rainmeter does) is a later step.
+      - Accessibility sweep: the Widgets page in every theme at both widths, each kind's window
+        and the widget menu; 411 checks clean. The page's chunk is 4.5 kB gzipped; the widget
+        window shares the start bundle (139.1 kB of 200). Each widget is one more WebView2 view in
+        the same browser process: its memory goes into `docs/footprint.md` at the field check.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

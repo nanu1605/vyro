@@ -60,6 +60,9 @@ named!(
 /// the Dashboard.
 pub const OPENED_EVENT: &str = "window-opened";
 
+/// Asks the main window to show a view (a desktop widget's "Edit…" opens Widgets).
+pub const OPEN_VIEW_EVENT: &str = "open-view";
+
 /// The theme's page background (the same as `src/themes.ts`, checked by its tests).
 pub fn background(theme: Theme) -> (u8, u8, u8) {
     match theme {

@@ -14,6 +14,7 @@ mod remote;
 mod share;
 mod tray;
 mod updates;
+mod widgets;
 
 use tauri::Manager;
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
@@ -62,6 +63,7 @@ fn main() {
             app.manage(tray::SettingsStore::load(app.handle()));
             app.manage(dashboard::DashboardStore::load(app.handle()));
             app.manage(remote::Remote::load(app.handle()));
+            app.manage(widgets::WidgetStore::load(app.handle()));
             tray::build(app.handle())?;
             let settings = app.state::<tray::SettingsStore>().get();
             if let Err(e) = tray::apply(app.handle(), settings) {
@@ -70,6 +72,8 @@ fn main() {
             gaming::watch(app.handle());
             app.state::<remote::Remote>().resume(app.handle());
             changes::check(app.handle(), changes::Reason::Start);
+            // Desktop widgets come back with Vyro, also when it starts in the tray.
+            widgets::sync(app.handle());
             updates::watch(app.handle());
             if minimized {
                 tray::park_after_start(app.handle());
@@ -78,7 +82,10 @@ fn main() {
             }
             Ok(())
         })
-        .on_window_event(tray::on_window_event)
+        .on_window_event(|window, event| {
+            tray::on_window_event(window, event);
+            widgets::on_window_event(window, event);
+        })
         .invoke_handler(tauri::generate_handler![
             commands::get_latest,
             commands::set_ui_visible,
@@ -93,6 +100,9 @@ fn main() {
             commands::get_devices,
             dashboard::get_dashboard,
             dashboard::set_dashboard,
+            widgets::get_widgets,
+            widgets::set_widgets,
+            widgets::widget_action,
             commands::get_drives,
             commands::get_network,
             commands::get_pawnio_status,

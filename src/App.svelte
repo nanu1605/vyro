@@ -19,7 +19,7 @@
   import CoolingPanel from './components/CoolingPanel.svelte';
   import { animator } from './anim';
   import { loadUpdates, update } from './updates.svelte';
-  import { getBackendStatus, getHardwareChanges, getPawnIoStatus, getRemoteBrief, inTauri, onBackendStatus, onHardwareChanged, onRemote, onSensors, onWindowOpened, restoreFans, setUiVisible } from './ipc';
+  import { getBackendStatus, getHardwareChanges, getPawnIoStatus, getRemoteBrief, inTauri, onBackendStatus, onHardwareChanged, onOpenView, onRemote, onSensors, onWindowOpened, restoreFans, setUiVisible } from './ipc';
   import { loadSeen, newestId, saveSeen } from './changes';
   import { loadSeenKeys, markSeen, unseen } from './insights';
   import { loadPrefs, prefs, profileSpec, tempText } from './prefs.svelte';
@@ -226,6 +226,7 @@
     let stopChanges: (() => void) | undefined;
     let stopOpened: (() => void) | undefined;
     let stopRemote: (() => void) | undefined;
+    let stopView: (() => void) | undefined;
     let disposed = false;
     // Opened again from the tray: back to the Dashboard unless "Last tab" is chosen.
     void onWindowOpened(() => {
@@ -240,6 +241,13 @@
     void onHardwareChanged((found) => (newestChange = Math.max(newestChange, newestId(found)))).then((fn) => {
       if (disposed) fn();
       else stopChanges = fn;
+    });
+    // A desktop widget's "Edit…" opens its page.
+    void onOpenView((v) => {
+      if (isTab(v)) select(v);
+    }).then((fn) => {
+      if (disposed) fn();
+      else stopView = fn;
     });
     getBackendStatus()
       .then((s) => (backend = s))
@@ -294,6 +302,7 @@
       stopChanges?.();
       stopOpened?.();
       stopRemote?.();
+      stopView?.();
       document.removeEventListener('visibilitychange', onVisibility);
     };
   });
@@ -443,6 +452,14 @@
       {#if visited.sensors}
         <div id="panel-sensors" role="tabpanel" aria-labelledby="tab-sensors" hidden={tab !== 'sensors'}>
           <SensorsPanel {snap} active={tab === 'sensors'} onhistory={openHistory} />
+        </div>
+      {/if}
+      {#if visited.widgets}
+        <div id="panel-widgets" role="tabpanel" aria-labelledby="tab-widgets" hidden={tab !== 'widgets'}>
+          <!-- Loaded on first visit. -->
+          {#await import('./components/WidgetsPanel.svelte') then { default: WidgetsPanel }}
+            <WidgetsPanel {snap} />
+          {/await}
         </div>
       {/if}
       {#if visited.settings}

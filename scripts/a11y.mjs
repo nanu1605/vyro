@@ -1,6 +1,6 @@
 // Accessibility sweep (P27): axe-core on every tab of the app in all six themes at desktop and
-// phone width, the main dialogs and the phone companion, plus keyboard focus rings and reduced
-// motion. Runs against the browser preview (sample data) of a finished build:
+// phone width, the main dialogs, the desktop widgets and the phone companion, plus keyboard focus
+// rings and reduced motion. Runs against the browser preview (sample data) of a finished build:
 //
 //   pnpm build && pnpm a11y
 //
@@ -23,8 +23,25 @@ const THEMES = ['midnight', 'amoled', 'cyber', 'glass', 'minimal', 'daylight'];
 const WIDTHS = [1440, 390];
 const TABS = [
   'Dashboard', 'Cooling', 'History', 'Health', 'Insights', 'Gaming', 'Benchmark', 'Processes',
-  'Hardware', 'My PC', 'Storage', 'Network', 'Displays', 'Devices', 'System', 'Sensors', 'Settings',
+  'Hardware', 'My PC', 'Storage', 'Network', 'Displays', 'Devices', 'System', 'Sensors', 'Widgets', 'Settings',
 ];
+
+// Desktop widgets (P30), one of each kind and style, as the browser preview keeps them.
+const DESK = (id, kind, sources, style) => ({
+  id, kind, sources, x: 0, y: 0, placed: false, scale: 100, opacity: 85, style, layer: 'desktop', locked: false,
+});
+const WIDGETS = {
+  version: 1,
+  shown: true,
+  widgets: [
+    DESK('gauge1', 'gauge', ['cpu.usage'], 'app'),
+    DESK('reading1', 'reading', ['cpu.temp'], 'solid'),
+    DESK('graph1', 'graph', ['gpu.0.usage'], 'app'),
+    DESK('stack1', 'stack', ['cpu.usage', 'cpu.temp', 'gpu.0.usage', 'gpu.0.temp', 'mem.load', 'cpu.power'], 'glass'),
+    DESK('clock1', 'clock', ['cpu.temp', 'gpu.0.temp'], 'app'),
+  ],
+};
+const SEED_WIDGETS = `localStorage.setItem('vyro.widgets', ${JSON.stringify(JSON.stringify(WIDGETS))})`;
 
 const problems = [];
 const problem = (where, what) => problems.push(`${where}: ${what}`);
@@ -78,7 +95,7 @@ async function tab(page, name) {
 // --- The app: every tab, every theme, both widths. -------------------------------------------
 
 async function sweepApp(browser, theme, width) {
-  const { ctx, page } = await open(browser, BASE, { width, theme });
+  const { ctx, page } = await open(browser, BASE, { width, theme, init: SEED_WIDGETS });
   await page.goto(`${BASE}/`);
   await page.waitForTimeout(1200);
   for (const t of TABS) {
@@ -174,6 +191,30 @@ async function sweepShell(browser, theme) {
   await ctx.close();
 }
 
+// --- Desktop widget windows (P30): each kind at its window's size, and a widget's menu. -------
+
+async function sweepWidgets(browser, theme) {
+  const sizes = { gauge1: [200, 200], reading1: [220, 104], graph1: [300, 150], stack1: [250, 268], clock1: [260, 120] };
+  for (const w of WIDGETS.widgets) {
+    const [width, height] = sizes[w.id];
+    const { ctx, page } = await open(browser, `${BASE}/#widget=${w.id}`, { width, theme, init: SEED_WIDGETS });
+    await page.setViewportSize({ width, height });
+    await page.goto(`${BASE}/#widget=${w.id}`);
+    await page.waitForTimeout(1200);
+    const at = (what) => `Widget ${w.kind} (${w.style})${what} · ${theme}`;
+    // Glass shows the desktop through, which no check can see: its text is drawn with a shadow
+    // for any wallpaper, so contrast is left to the field check.
+    if (w.style === 'glass') await page.addStyleTag({ content: ':root.widget body { background: #1b2433 }' });
+    await axe(page, at(''));
+    if (w.id === 'gauge1') {
+      await page.mouse.click(width / 2, height / 2, { button: 'right' });
+      await page.getByRole('menu').waitFor();
+      await axe(page, at(', menu'));
+    }
+    await ctx.close();
+  }
+}
+
 // --- The phone companion, served the API's answers. --------------------------------------------
 
 const VIEW = {
@@ -258,7 +299,7 @@ async function sweepMotion(browser) {
   const { ctx, page } = await open(browser, BASE, { width: 1440, theme: 'cyber', motion: 'reduce' });
   await page.goto(`${BASE}/`);
   await page.waitForTimeout(1200);
-  for (const t of ['Dashboard', 'Cooling', 'Gaming', 'Settings']) {
+  for (const t of ['Dashboard', 'Cooling', 'Gaming', 'Widgets', 'Settings']) {
     await tab(page, t);
     const running = await page.evaluate(() =>
       document.getAnimations().filter((a) => a.playState === 'running').map((a) => a.animationName ?? a.constructor.name),
@@ -304,6 +345,7 @@ try {
     for (const theme of ['midnight', 'daylight']) {
       await Promise.all(WIDTHS.map((w) => sweepDialogs(browser, theme, w)));
       await sweepShell(browser, theme);
+      await sweepWidgets(browser, theme);
     }
     await sweepKeyboard(browser);
     await sweepMotion(browser);

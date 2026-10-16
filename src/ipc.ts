@@ -7,6 +7,7 @@ import { evaluate } from './curve';
 import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
 import { savedLook, type AccentId, type OpenOn, type ThemeId } from './themes';
+import { EMPTY as NO_WIDGETS, type Widgets } from './widgets';
 import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Dashboard, Devices, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -764,4 +765,78 @@ export async function cancelRemotePairing(): Promise<RemoteStatus> {
 export async function signOutRemote(id: string | null): Promise<RemoteStatus> {
   if (!inTauri) return (await import('./sim-remote')).simSignOut(id);
   return invoke<RemoteStatus>('sign_out_remote', { id });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Desktop widgets (P30)
+// ---------------------------------------------------------------------------------------------
+
+/** The browser preview keeps widgets in this page's storage (they cannot open windows here). */
+function browserWidgets(): Widgets {
+  try {
+    const t = localStorage.getItem('vyro.widgets');
+    return t ? (JSON.parse(t) as Widgets) : { ...NO_WIDGETS };
+  } catch {
+    return { ...NO_WIDGETS };
+  }
+}
+const widgetListeners = new Set<(w: Widgets) => void>();
+
+export async function getWidgets(): Promise<Widgets> {
+  if (!inTauri) return browserWidgets();
+  return invoke<Widgets>('get_widgets');
+}
+
+/** Saves the widgets; the app opens, moves or closes their windows and returns them as stored. */
+export async function setWidgets(widgets: Widgets): Promise<Widgets> {
+  if (!inTauri) {
+    try {
+      localStorage.setItem('vyro.widgets', JSON.stringify(widgets));
+    } catch {
+      /* not kept */
+    }
+    for (const cb of widgetListeners) cb(widgets);
+    return widgets;
+  }
+  return invoke<Widgets>('set_widgets', { widgets });
+}
+
+/** A widget's own menu: lock, unlock, remove, or edit it on the Widgets page. */
+export async function widgetAction(id: string, action: 'lock' | 'unlock' | 'remove' | 'edit'): Promise<void> {
+  if (!inTauri) {
+    const w = browserWidgets();
+    if (action === 'remove') w.widgets = w.widgets.filter((x) => x.id !== id);
+    else if (action !== 'edit') w.widgets = w.widgets.map((x) => (x.id === id ? { ...x, locked: action === 'lock' } : x));
+    await setWidgets(w);
+    return;
+  }
+  await invoke('widget_action', { id, action });
+}
+
+/** The widgets after any change (the Widgets page, a widget's menu, the tray). */
+export async function onWidgets(cb: (w: Widgets) => void): Promise<() => void> {
+  if (!inTauri) {
+    widgetListeners.add(cb);
+    return () => widgetListeners.delete(cb);
+  }
+  return listen<Widgets>('widgets-changed', (e) => cb(e.payload));
+}
+
+/** Snapshots for a widget window (sent also while the main window is in the tray). */
+export async function onWidgetSensors(cb: (s: SensorSnapshot) => void): Promise<() => void> {
+  if (!inTauri) return onSensors(cb);
+  return listen<SensorSnapshot>('widget-sensors', (e) => cb(e.payload));
+}
+
+/** Moves the widget's window with the pointer (pressed on an unlocked widget). */
+export async function dragWidget(): Promise<void> {
+  if (!inTauri) return;
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  await getCurrentWindow().startDragging();
+}
+
+/** The app asks the window to show a view (a widget's "Edit…"). */
+export async function onOpenView(cb: (view: string) => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<string>('open-view', (e) => cb(e.payload));
 }

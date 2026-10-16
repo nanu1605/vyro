@@ -283,6 +283,14 @@ fn set_webview_active(_window: &tauri::WebviewWindow, _active: bool) {}
 pub struct ProfileItems(Vec<(Profile, CheckMenuItem<Wry>)>);
 /// The tray's "Game overlay" item.
 pub struct OverlayItem(CheckMenuItem<Wry>);
+pub struct WidgetsItem(CheckMenuItem<Wry>);
+
+/// Moves the tray's check mark for desktop widgets.
+pub fn set_widgets_checked(app: &AppHandle, on: bool) {
+    if let Some(item) = app.try_state::<WidgetsItem>() {
+        let _ = item.0.set_checked(on);
+    }
+}
 
 /// "Return fans to BIOS", enabled while Vyro drives fans.
 pub struct FanItem(MenuItem<Wry>);
@@ -415,13 +423,29 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     )?;
     app.manage(OverlayItem(overlay.clone()));
 
+    let widgets_on = app
+        .try_state::<crate::widgets::WidgetStore>()
+        .is_some_and(|s| s.get().shown);
+    let widgets = CheckMenuItem::with_id(
+        app,
+        "widgets",
+        "Desktop widgets",
+        true,
+        widgets_on,
+        None::<&str>,
+    )?;
+    app.manage(WidgetsItem(widgets.clone()));
+
     let fans = MenuItem::with_id(app, "fans-bios", "Return fans to BIOS", false, None::<&str>)?;
     app.manage(FanItem(fans.clone()));
 
     let show = MenuItem::with_id(app, "show", "Show Vyro", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Vyro", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&show, &profiles, &overlay, &fans, &sep, &quit])?;
+    let menu = Menu::with_items(
+        app,
+        &[&show, &profiles, &overlay, &widgets, &fans, &sep, &quit],
+    )?;
     let mut tray = TrayIconBuilder::with_id("main")
         .tooltip("Vyro")
         .menu(&menu)
@@ -436,6 +460,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
                     }
                 }
             }
+            "widgets" => crate::widgets::toggle_shown(app),
             "overlay" => {
                 if let Some(store) = app.try_state::<SettingsStore>() {
                     let mut settings = store.get();
@@ -479,6 +504,10 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
     let WindowEvent::CloseRequested { api, .. } = event else {
         return;
     };
+    // The main window only: the overlay and the desktop widgets have their own rules.
+    if window.label() != "main" {
+        return;
+    }
     let app = window.app_handle();
     // A benchmark never runs on unseen (P20).
     crate::bench::stop(app, "The Vyro window was closed.");

@@ -184,9 +184,12 @@ body {
   white-space: nowrap;
 }
 
-/* Game overlay window: only the plate is drawn, the rest shows the game through. */
+/* Game overlay and desktop widget windows: only the plate or card is drawn, the rest shows
+   the game or the desktop through. */
 :root.overlay,
-:root.overlay body {
+:root.overlay body,
+:root.widget,
+:root.widget body {
   overflow: hidden;
   background: transparent;
 }

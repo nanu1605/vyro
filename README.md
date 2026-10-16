@@ -193,6 +193,27 @@ or actions, 0.3 moves `alerts.json` aside (to `alerts.json.bad`) and uses its de
   square or story size. It is saved to `Pictures\Vyro` or copied to the clipboard, and never
   shows the computer's name or serial numbers.
 
+## Desktop widgets (1.1)
+
+The Widgets page (in the sidebar, under Vyro) puts live readings on your desktop, up to eight
+widgets:
+
+- **Gauge:** one reading on a dial.
+- **Reading:** one reading, large.
+- **Graph:** one reading and its last minute.
+- **Stack:** up to six readings, one under the other, with bars.
+- **Clock:** the time and date, with two readings.
+
+Any reading the Dashboard has can go on a widget. Each widget has a size (50–200 %), a
+background strength, a style (the app's card, see-through glass, or solid) and a place: behind
+your windows (the default) or on top of them. Drag an unlocked widget to move it; Vyro
+remembers where it is. Right-click a widget to lock it, edit it or remove it. "Desktop
+widgets" in the tray icon's menu shows or hides them all, and they come back when Vyro starts.
+
+Widgets follow your theme and accent, and update at your profile's rate while the window is
+in the tray. Windows' Show desktop (Win+D) can hide widgets that sit behind windows until you
+switch back to a window; choose "On top" to keep one in view.
+
 ## Phone companion (1.0)
 
 **Off by default.** Settings → Remote turns on a read-only page that a phone or another

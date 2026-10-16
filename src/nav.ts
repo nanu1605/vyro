@@ -12,6 +12,7 @@ import Gauge from '@lucide/svelte/icons/gauge';
 import HardDrive from '@lucide/svelte/icons/hard-drive';
 import HeartPulse from '@lucide/svelte/icons/heart-pulse';
 import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
+import LayoutGrid from '@lucide/svelte/icons/layout-grid';
 import Lightbulb from '@lucide/svelte/icons/lightbulb';
 import Monitor from '@lucide/svelte/icons/monitor';
 import Mouse from '@lucide/svelte/icons/mouse';
@@ -55,6 +56,7 @@ export const VIEWS = [
   { id: 'system', label: 'System', group: 'pc', icon: AppWindow, blurb: 'Windows, security and start-up apps' },
   { id: 'processes', label: 'Processes', group: 'pc', icon: Activity, blurb: 'What uses the CPU, memory and GPU' },
   { id: 'sensors', label: 'Sensors', group: 'pc', icon: Thermometer, blurb: 'Every sensor, with min, max and average' },
+  { id: 'widgets', label: 'Widgets', group: 'app', icon: LayoutGrid, blurb: 'Readings on your desktop' },
   { id: 'settings', label: 'Settings', group: 'app', icon: Settings, blurb: 'Look, profiles, overlay and more' },
 ] as const satisfies readonly View[];
 
