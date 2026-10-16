@@ -1720,6 +1720,11 @@ Budget:
         at phone width with no keyboard access (WCAG 2.1.1). Scrolling tables (System,
         SMART, game profiles, sessions) now get a tab stop only while they scroll
         (`src/scrollable.ts`).
+      - **Found and fixed by the sweep on CI.** In the Sensors tab, a row with no reading or
+        a hidden sensor was dimmed with 50 % opacity, which put its numbers below 4.5:1 in
+        every theme (WCAG 1.4.3). The sweep only caught it on CI, where a reading happened to
+        be missing. Dimmed rows now use the muted colour. The sweep hides a sensor first, so
+        a dimmed row is always checked.
       - **Docs.**
         - `docs/control-safety.md`: every safety rule → code → tests → MS-7E24 result.
         - `docs/anti-cheat.md`: what an anti-cheat sees and what Vyro never does. FACEIT's
@@ -1731,7 +1736,8 @@ Budget:
       - **Small polish.** The companion server's threads are now `vyro-companion`. They shared
         the name `vyro-remote` with the app's service-connection thread.
       - **Checked.** Core tests (614 + 3 migration), the service test, app tests under Wine
-        (20) and frontend tests (132) pass, and `pnpm a11y` is clean.
+        (20) and frontend tests (132) pass, and `pnpm a11y` is clean. On CI, the Windows
+        clean install (install, probe the service, uninstall) passes.
 - [ ] Field check (MS-7E24; ideally also a clean Windows PC or virtual machine):
       - **Upgrade.** Install this build over 0.3.0 (or 0.2.0) as you use it: settings, alert
         rules, fan settings and profile, History (7 days back), Health and alert logs, game

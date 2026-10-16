@@ -83,6 +83,11 @@ async function sweepApp(browser, theme, width) {
   await page.waitForTimeout(1200);
   for (const t of TABS) {
     await tab(page, t);
+    if (t === 'Sensors') {
+      // A dimmed row (hidden, or no reading) must keep its contrast: make sure one is on screen.
+      await page.getByRole('button', { name: /^Hide / }).first().click();
+      await page.getByRole('checkbox', { name: /^Show hidden/ }).check();
+    }
     const where = `${t} · ${theme} ${width}px`;
     await axe(page, where);
     await noSidewaysScroll(page, where);
