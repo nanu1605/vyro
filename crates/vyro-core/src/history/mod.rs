@@ -9,6 +9,7 @@
 //! covers both; when over it, the oldest data goes first, whichever it is.
 
 mod changes;
+mod digest;
 mod games;
 mod schema;
 
@@ -22,6 +23,7 @@ use ts_rs::TS;
 use crate::gaming::markers::GameEvent;
 use crate::gaming::replay::GameSample;
 use crate::gaming::GameSession;
+use crate::intel::digest::MinuteDigest;
 
 pub use rusqlite::Error;
 pub type Result<T> = rusqlite::Result<T>;
@@ -248,6 +250,7 @@ pub struct History {
     pending_samples: Vec<(i64, GameSample)>,
     pending_events: Vec<(i64, GameEvent)>,
     pending_summary: Option<(i64, GameSession)>,
+    pending_digests: Vec<MinuteDigest>,
     last_flush: Option<i64>,
     last_prune: Option<i64>,
 }
@@ -273,6 +276,7 @@ impl History {
             pending_samples: Vec::new(),
             pending_events: Vec::new(),
             pending_summary: None,
+            pending_digests: Vec::new(),
             last_flush: None,
             last_prune: None,
         };
@@ -339,17 +343,20 @@ impl History {
         let samples = std::mem::take(&mut self.pending_samples);
         let events = std::mem::take(&mut self.pending_events);
         let summary = self.pending_summary.take();
+        let digests = std::mem::take(&mut self.pending_digests);
         if raw.is_empty()
             && agg10.is_empty()
             && agg60.is_empty()
             && samples.is_empty()
             && events.is_empty()
             && summary.is_none()
+            && digests.is_empty()
         {
             return Ok(());
         }
         let tx = self.conn.transaction()?;
         games::write(&tx, &samples, &events, summary.as_ref())?;
+        digest::write(&tx, &digests)?;
         {
             let mut st =
                 tx.prepare_cached("INSERT OR REPLACE INTO raw(metric, ts, v) VALUES (?1, ?2, ?3)")?;
@@ -526,9 +533,13 @@ impl History {
                 st.execute(params![id, now - retention])?;
             }
         }
-        // Events: same 7-day window as the longest tier, and a cap per kind.
+        // Events and minute digests: same 7-day window as the longest tier, and a cap per kind.
         tx.execute(
             "DELETE FROM event WHERE ts <= ?1",
+            params![now - self.cfg.agg1m_retention_secs],
+        )?;
+        tx.execute(
+            "DELETE FROM digest WHERE ts <= ?1",
             params![now - self.cfg.agg1m_retention_secs],
         )?;
         tx.execute(
@@ -589,6 +600,9 @@ impl History {
                         &format!("DELETE FROM {} WHERE ts < ?1", tier.table()),
                         [oldest + slice],
                     )?;
+                    // The digests of minutes whose history is gone go with it.
+                    self.conn
+                        .execute("DELETE FROM digest WHERE ts < ?1", [oldest + slice])?;
                 }
                 _ => break,
             }

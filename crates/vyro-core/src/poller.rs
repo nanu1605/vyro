@@ -15,6 +15,7 @@ use crate::alerts::{AlertEngine, Reading};
 use crate::fan::{self, controller::FanControl};
 use crate::health::{HealthEvent, HealthMonitor};
 use crate::history::History;
+use crate::intel::Intel;
 use crate::provider::Provider;
 use crate::registry::{Group, Registry, SensorDesc, SensorKey, Source, Unit};
 use crate::snapshot::{EngineStatus, SensorSnapshot};
@@ -77,6 +78,7 @@ pub struct Poller {
     health: Arc<Mutex<HealthMonitor>>,
     alerts: Option<Arc<Mutex<AlertEngine>>>,
     fans: Option<Arc<FanControl>>,
+    intel: Option<Arc<Intel>>,
     cfg: PollerConfig,
     /// `app.cpu` / `app.ram`: the footprint as sensors, for averages, peaks and history.
     app_keys: Option<(SensorKey, SensorKey)>,
@@ -93,6 +95,7 @@ impl Poller {
             health: Arc::new(Mutex::new(HealthMonitor::new())),
             alerts: None,
             fans: None,
+            intel: None,
             cfg,
             app_keys: None,
             startup_ms: None,
@@ -127,6 +130,13 @@ impl Poller {
     /// tray interval is capped so their sources stay fresh.
     pub fn with_fans(mut self, fans: Arc<FanControl>) -> Self {
         self.fans = Some(fans);
+        self
+    }
+
+    /// Feeds the intelligence engine's minute digest every tick and puts its brief in the
+    /// snapshot.
+    pub fn with_intel(mut self, intel: Arc<Intel>) -> Self {
+        self.intel = Some(intel);
         self
     }
 
@@ -292,8 +302,16 @@ impl Poller {
             snap.alerts = lock(alerts).evaluate(snap.ts, reading, health.fresh());
         }
 
+        let digest = self.intel.as_ref().and_then(|intel| {
+            snap.insights = intel.brief();
+            intel.tick(&snap)
+        });
+
         if let Some(history) = &self.history {
             let mut h = lock(history);
+            if let Some(d) = digest {
+                h.add_digest(d);
+            }
             let fresh = lock(&self.health).fresh().to_vec();
             let result = h
                 .log_events(EVENT_HEALTH, snap.ts, &fresh)

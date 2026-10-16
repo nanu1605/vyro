@@ -35,8 +35,10 @@ pub use transport::{connect, default_endpoint, Conn, Listener};
 /// 2: `AppSnapshot::parts`. 3: `SensorSnapshot::game`, capture target and game sessions.
 /// 4: `GameSnapshot::timeline` replaces the raw frame times. 5: fan control (0.2).
 /// 6: `SetGameContext` (P13). 7: game session replay (P15): `GameTimeline`, `HistoryWindow`,
-/// session ids. 8: PC change history (P19): `RecordInventory`, `HardwareChanges`.
-pub const PROTOCOL_VERSION: u32 = 8;
+/// session ids. 8: PC change history (P19): `RecordInventory`, `HardwareChanges`. 9: the
+/// intelligence engine (P16): `Insights` answers with findings and vital signs, and
+/// `SensorSnapshot::insights`.
+pub const PROTOCOL_VERSION: u32 = 9;
 /// Windows service name (installed by the MSI).
 pub const SERVICE_NAME: &str = "VyroService";
 /// Largest request the server accepts (alert rules are the biggest, a few KB).
@@ -305,7 +307,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&hello).unwrap(),
-            r#"{"protocol":8,"role":"snapshots","session":7,"pid":42,"visible":false}"#
+            r#"{"protocol":9,"role":"snapshots","session":7,"pid":42,"visible":false}"#
         );
         let reply: Reply = Err("nope".into());
         assert_eq!(serde_json::to_string(&reply).unwrap(), r#"{"Err":"nope"}"#);

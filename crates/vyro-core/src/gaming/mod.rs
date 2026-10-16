@@ -69,7 +69,7 @@ pub struct GameContext {
 }
 
 /// What limits the frame rate.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum Bound {
@@ -171,6 +171,10 @@ pub struct GameSession {
     /// Its replay is kept (since 0.3; the oldest go when the history store is full).
     #[serde(default)]
     pub has_timeline: bool,
+    /// Average CPU package + GPU board power while frames came, W (since 0.4), for frames
+    /// per watt.
+    #[serde(default)]
+    pub power_avg: Option<f64>,
 }
 
 /// Running mean and maximum of a reading over the session.
@@ -212,6 +216,7 @@ struct Session {
     gpu_temp: Track,
     cpu_usage: Track,
     gpu_usage: Track,
+    power: Track,
     profile: Option<Profile>,
     /// In the history store.
     id: Option<i64>,
@@ -245,6 +250,7 @@ impl Session {
             gpu_temp: Track::default(),
             cpu_usage: Track::default(),
             gpu_usage: Track::default(),
+            power: Track::default(),
             profile: context.map(|c| c.profile),
             id: None,
             begun: Instant::now(),
@@ -279,6 +285,7 @@ impl Session {
             profile: self.profile,
             ended: None,
             has_timeline: self.id.is_some(),
+            power_avg: self.power.avg(),
         }
     }
 }
@@ -563,6 +570,10 @@ impl Gaming {
                 s.gpu_temp.add(g.temp_edge);
                 s.gpu_usage.add(g.usage);
             }
+            // CPU and GPU together, only when both are read (or there is no GPU power).
+            let gpu_w = snap.gpu.first().map_or(Some(0.0), |g| g.power_w);
+            s.power
+                .add(snap.cpu.power_pkg_w.zip(gpu_w).map(|(c, g)| c + g));
         }
         let state = if s.failed.is_some() {
             CaptureState::Unavailable

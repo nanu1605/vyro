@@ -13,7 +13,7 @@ const timeline = (samples: GameSample[]): GameTimeline => ({
   session: {
     id: 1, app: 'Game.exe', runtime: null, started: 1000, secs: 60, frames: 0, avgFps: null, low1Fps: null, low01Fps: null,
     maxFrameMs: null, bound: null, cpuTempMax: null, gpuTempMax: null, cpuUsageAvg: null, gpuUsageAvg: null,
-    profile: null, ended: 1062, hasTimeline: true,
+    profile: null, ended: 1062, hasTimeline: true, powerAvg: null,
   },
   stepMs: 2000,
   samples,

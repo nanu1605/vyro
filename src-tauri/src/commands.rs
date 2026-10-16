@@ -198,11 +198,9 @@ pub async fn get_health_events(engine: State<'_, Engine>) -> Result<Vec<HealthEv
     with_engine(&engine, |e| e.health_events()).await
 }
 
-/// Findings from history: unusual temperatures, throttling, slow fans, power changes.
+/// The intelligence engine's findings and vital signs (P16).
 #[tauri::command]
-pub async fn get_insights(
-    engine: State<'_, Engine>,
-) -> Result<Vec<vyro_core::analysis::Insight>, String> {
+pub async fn get_insights(engine: State<'_, Engine>) -> Result<vyro_core::intel::Insights, String> {
     with_engine(&engine, |e| e.insights()).await
 }
 

@@ -8,6 +8,7 @@ import type { FanSnapshot } from "./FanSnapshot";
 import type { GameSnapshot } from "./GameSnapshot";
 import type { GpuSnapshot } from "./GpuSnapshot";
 import type { HealthReport } from "./HealthReport";
+import type { InsightBrief } from "./InsightBrief";
 import type { MemorySnapshot } from "./MemorySnapshot";
 import type { NetworkSnapshot } from "./NetworkSnapshot";
 import type { PingSnapshot } from "./PingSnapshot";
@@ -36,4 +37,8 @@ alerts: Array<AlertFired>,
 /**
  * Whether Vyro drives fans (P12), for the header chip and the tray.
  */
-fanControl: FanBrief, };
+fanControl: FanBrief, 
+/**
+ * Findings worth a look (P16), as of the last pass, for the Insights tab dot.
+ */
+insights: InsightBrief, };

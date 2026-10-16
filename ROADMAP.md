@@ -728,7 +728,69 @@ so going back to 0.3 turns its history off; IPC protocol 8.
       change; the list survives a service restart.
 
 ### P16 — Intelligence engine (M9)
-- [ ] Derived metrics → baselines → events → cause chains; measured vs inferred, confidence.
+Owner's choices (2026-10-15): findings get their own Insights tab (Health keeps its limits and
+events, with a link); a new finding worth a look puts a dot on that tab, from a check the engine
+runs every 10 minutes, with no notification; to spot background interference the engine keeps
+the names of the busiest programs of each minute (at most five, names only) in the history
+database for 7 days, like the sensor history.
+
+Budget: no new long-lived thread; the only per-tick work is the minute digest (one pass over
+the top processes and the throttle flags, well under 0.1 ms). The analysis runs on a
+short-lived thread at most every 10 minutes in the background and on demand while Insights is
+open (cached 60 s), under 250 ms of one core on the reference PC. The digest table stays under
+3 MB over 7 days; footprint within +2 MB of 0.3.0. History schema stays v3 (the new table is
+created in place); IPC protocol 9.
+
+Rules that keep a weak correlation from reading as a cause: a cause is "likely" only when a
+fixed table says it can produce that effect, it came just before the effect began, the effect
+lasted, and it is the only such candidate; timing alone is never high confidence. Several
+candidates are each "possible"; anything else in the window is listed apart as "around the
+same time, not shown to be the cause".
+
+- [x] Built (2026-10-15, branch `v2-p16-intelligence`):
+      - `vyro_core::intel` replaces P9d's `analysis`. Derived metrics: thermal headroom against
+        the Health problem limits, temperature for the load, CPU fan speed for the CPU
+        temperature, frames per watt per game session (sessions now log CPU + GPU power), and
+        clock steadiness under full load. Baselines: the last half hour against the past week
+        at the same load, on the profile in force when there is enough of it (else every
+        profile, one step less sure), the same game's earlier sessions, and the time before a
+        lasting shift: a change-point search over the week (hourly, 6 h each side) or the last
+        day (3 h before, 30 min after) dates when it began, and a shift must hold from that
+        date, so a recent one is not dated hours too early.
+      - Findings: hotter than usual, a fan slower than usual, slowed by heat (measured from
+        the CPU's and GPU's own limit flags where they report them, else inferred from clocks),
+        close to the temperature limit, power steps, what set a game's frame rate, background
+        load during a game (with frame drops tied to it only at 5 or more drops and 3 times
+        the rate of the other minutes) and a game slower than its earlier sessions. Each has
+        evidence (value against usual over a window, opening History at that moment), a basis
+        and a confidence; under three days of history confidence drops a step.
+      - Causes follow the rules above, from P19 changes, profile switches, fan control events
+        and busy programs, with chains up to three deep (slowed by heat ← hotter ← fan slower ←
+        BIOS update). A likely cause the owner chose (a profile, turning fan control on)
+        makes the finding an explanation rather than a warning.
+      - The poller builds a minute digest each tick (busiest programs, names only; seconds of
+        heat, power and current limiting; profile; game and what bound it), kept 7 days in
+        the new `digest` table. The analysis runs on a "vyro-intel" thread every 10 minutes
+        and on demand (cached 60 s); `SensorSnapshot::insights` carries the keys of the
+        findings worth a look. IPC protocol 9.
+      - UI: Insights tab after Health (vital signs, then findings with Measured (solid) and
+        Inferred (dashed, italic) badges that say which in words, confidence in words,
+        evidence with "Show in History", "Why" chains and a separate "Around the same time
+        (not shown to be the cause)" list) and a dot on the tab until new warnings are shown;
+        Health keeps a one-line summary with a link. Tests: the five P9d cases and the
+        acceptance scenarios (load alone, a dated shift with one able change and a coincident
+        monitor, two changes at once, a change after the onset, thin history, fan control and
+        the Silent profile as the owner's choice, background load with and without matching
+        drops, a game slower after a driver update). Browser preview: axe clean, no overflow
+        at 390 px (the tab bar's screen-reader notes no longer widen the page); the main
+        bundle grows 9.5 kB.
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
+      quiet at normal desktop use; a CPU stress test gives headroom but
+      no "hotter"; Silent or a lower fan curve under load is explained by the profile or fan
+      change; a background job during a game names the program; badges, "Show in History"
+      and the tab dot work; footprint within budget.
+      The test build is the top of the stack (`v2-p27-polish`), which holds P16 to P27; one
+      pass of `docs/field-check.md` covered them all.
 
 ### P18 — Smart compound alerts (M9)
 - [ ] AND/OR, rate of change, FOR duration, cooldown; fan action only with control enabled.
