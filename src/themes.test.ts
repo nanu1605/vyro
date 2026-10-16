@@ -45,7 +45,13 @@ describe('themes', () => {
     for (const t of THEMES) {
       for (const accent of ACCENT_IDS) {
         const v = tokens(t.id, accent);
-        const tints = [mix(v['--accent-cpu']!, 16, v['--bg']!), mix(v['--warn']!, 8, v['--panel']!), mix(v['--hot']!, 10, v['--panel']!)];
+        const tints = [
+          mix(v['--accent-cpu']!, 16, v['--bg']!),
+          // --accent-soft: the selected tab.
+          mix(v['--accent-cpu']!, 16, v['--panel']!),
+          mix(v['--warn']!, 8, v['--panel']!),
+          mix(v['--hot']!, 10, v['--panel']!),
+        ];
         for (const bg of tints) expect(contrast(v['--text']!, bg), `${t.id}/${accent} on ${bg}`).toBeGreaterThanOrEqual(7);
       }
     }

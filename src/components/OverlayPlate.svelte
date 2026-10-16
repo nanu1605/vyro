@@ -1,6 +1,6 @@
 <script lang="ts">
-  // The overlay's plate (P14): readable over any scene, with large tabular figures and no
-  // animation. Used by the overlay window and by the preview in Settings.
+  // The overlay's plate (P14): readable over any scene, with large tabular figures; only the
+  // graph moves (1.0.1). Used by the overlay window and by the preview in Settings.
   import OverlayGraph from './OverlayGraph.svelte';
   import { ACCENTS, formatRow, type OverlayData } from '../overlay';
   import { fmtTemp } from '../prefs.svelte';

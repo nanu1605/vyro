@@ -17,6 +17,9 @@
   --accent-cpu: #4cc9f0;
   --accent-gpu: #7ee787;
   --accent: var(--accent-cpu);
+  /* The accent as a fill behind text and as a border (selected tab, card edge). */
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--panel));
+  --accent-line: color-mix(in srgb, var(--accent) 55%, var(--line));
   --ok: #57d68d;
   --warn: #f5b942;
   --hot: #ff5d5d;
@@ -60,6 +63,19 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Checkboxes, radios, ranges and progress bars take the accent everywhere. */
+:root {
+  accent-color: var(--accent);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+a {
+  color: var(--accent);
+}
+
 body {
   background:
     radial-gradient(70rem 22rem at 50% -12rem, var(--state-wash) 0%, transparent 70%),
@@ -88,6 +104,8 @@ body {
   background: linear-gradient(180deg, var(--card-top) 0%, var(--card) 18%);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  /* A faint accent edge along the top of every card. */
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent) 30%, transparent);
   padding: 1rem;
 }
 

@@ -7,6 +7,7 @@
 
 import { detectCard, type DetectedCard, type GpuShape } from './gpuspecs';
 import type { DriveInfo, GpuSnapshot, HardwareId, SensorSnapshot } from './types';
+import { fmt } from './format';
 import { LIMITS } from './limits';
 
 export type PartKind = 'board' | 'cpu' | 'cooler' | 'aio' | 'radiator' | 'vrm' | 'chipset' | 'ram' | 'slot' | 'gpu' | 'm2' | 'drive' | 'fan' | 'psu';
@@ -339,6 +340,25 @@ export const MODES: Array<{ id: ThermalMode; label: string }> = [
   { id: 'storage', label: 'Storage' },
 ];
 
+/** What a fan's reading says: a speed, stopped (a real 0 RPM, e.g. a GPU resting at idle), or
+ * nothing (no sensor, or the board's sensors need PawnIO). */
+export type FanState = 'measured' | 'stopped' | 'unknown';
+
+export const fanState = (rpm: number | null): FanState => (rpm == null ? 'unknown' : rpm <= 0 ? 'stopped' : 'measured');
+
+/** Turns a second for a fan whose speed is not reported: it is almost surely running, so it
+ * turns slowly, and its details say the speed is not known. */
+export const IDLE_SPIN = 0.35;
+
 /** Spin rate shown for a fan, revolutions per second: the real rate scaled down so it reads
  * as speed, not a blur (2000 RPM → about 1.1 turns a second). */
-export const spinRate = (rpm: number | null): number => (rpm == null || rpm <= 0 ? 0 : Math.min(2.5, Math.sqrt(rpm) / 40));
+export const spinRate = (rpm: number | null): number =>
+  rpm == null ? IDLE_SPIN : rpm <= 0 ? 0 : Math.min(2.5, Math.sqrt(rpm) / 40);
+
+/** A fan's speed for its details. */
+export function fanSpeedText(rpm: number | null): string {
+  const state = fanState(rpm);
+  if (state === 'unknown') return 'Speed not reported';
+  if (state === 'stopped') return 'Stopped (0 RPM)';
+  return `${fmt(rpm)} RPM`;
+}

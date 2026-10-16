@@ -19,11 +19,11 @@
     validShape,
     type GpuShape,
   } from '../gpuspecs';
-  import { buildPc, heat, heatColor, inMode, MODES, partTemp, spinRate, type Part, type ThermalMode } from '../pcmodel';
+  import { buildPc, fanSpeedText, heat, heatColor, inMode, MODES, partTemp, spinRate, type Part, type ThermalMode } from '../pcmodel';
   import { fmt } from '../format';
   import { getDisplays, getDrives, getHardwareId } from '../ipc';
   import { fmtTemp, prefs, profileSpec, savePrefs } from '../prefs.svelte';
-  import { theme } from '../themes';
+  import { theme, tokens } from '../themes';
   import type { DisplayInfo, DriveInfo, HardwareId, SensorSnapshot } from '../types';
   import type { PcScene } from '../scene3d';
 
@@ -154,14 +154,11 @@
   $effect(() => {
     if (!active || !threeD || !wrap || !hw) return;
     const kind = view === 'gpu' ? 'gpu' : 'pc';
+    // From the settings, not the page's computed style: a theme or accent change rebuilds the
+    // scene whatever order the effects run in.
     const t = theme(prefs.theme);
-    const css = getComputedStyle(document.documentElement);
-    const pal = {
-      line: css.getPropertyValue('--line').trim() || '#243040',
-      board: css.getPropertyValue('--panel-edge').trim() || '#1a2330',
-      accent: css.getPropertyValue('--accent-cpu').trim() || '#4cc9f0',
-      light: t.light,
-    };
+    const v = tokens(t.id, prefs.accent);
+    const pal = { line: v['--line']!, board: v['--panel-edge']!, accent: v['--accent-cpu']!, light: t.light };
     const el = document.createElement('canvas');
     el.setAttribute('role', 'img');
     el.setAttribute('aria-label', kind === 'gpu' ? 'Your graphics card in 3-D. Drag to turn it.' : 'This PC in 3-D. Drag to turn it, scroll to zoom.');
@@ -230,7 +227,7 @@
           ['Hotspot', fmtTemp(g?.tempHotspot)],
           ['Usage', g?.usage != null ? `${fmt(g.usage)} %` : null],
           ['Power', g?.powerW != null ? `${fmt(g.powerW)} W` : null],
-          ['Fans', g?.fanRpm != null ? `${fmt(g.fanRpm)} RPM` : null],
+          ['Fans', fanSpeedText(g?.fanRpm ?? null)],
         ];
       }
       case 'ram': {
@@ -260,7 +257,7 @@
         const rpm = p.fan && s ? p.fan.rpm(s) : null;
         return [
           ['Fan', p.label],
-          ['Speed', rpm != null ? `${fmt(rpm)} RPM` : 'not reported'],
+          ['Speed', fanSpeedText(rpm)],
         ];
       }
       default:

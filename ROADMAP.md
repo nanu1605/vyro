@@ -41,6 +41,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 24 | Fan-control launch boards | **MSI B650M GAMING PLUS WIFI (MS-7E24, NCT6687D) only**; each further board after its own validation | decided |
 | 25 | Tagline | "Know your machine." unless changed | open |
 | 26 | Navigation (new IA) | Adopted incrementally; V1 tabs keep working each release | decided |
+| 27 | Fans with no speed reading (My PC) | Turn slowly and say "Speed not reported"; a real 0 RPM stays still (the owner, 2026-10-16) | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -1818,6 +1819,37 @@ Budget:
       published the 11.3 MB MSI, `latest.json` and checksums here and to
       `nanu1605/vyro-releases`, where copies of 0.3.0 find the update. The footprint figures
       and the anti-cheat table are still to be written down from the owner's notes.
+
+## After 1.0
+
+The owner's notes on 1.0.0 (2026-10-16), nine items: a larger installer is fine; a new look
+with animation; use the empty space beside the content; the accent does not change; the tab
+strip's sideways scroll; a livelier 3-D PC whose fans all turn; a laptop model on laptops; a
+smooth overlay graph; desktop widgets. The owner chose the "Pro dashboard" look (sidebar,
+layered cards, soft accent glow, live side rail, calm motion), the three fixes first as 1.0.1
+and the rest as 1.1.0, and that fans with no reading turn slowly and say so. Built on the
+branch `claude/blissful-knuth-begnu5`, merged into `main` at each release.
+
+### 1.0.1 — accent, overlay graph, fans
+- [x] Built (2026-10-16):
+      - **Accent.** The theme set the accent correctly, but little showed it: the selected tab
+        was grey, and My PC rebuilt its 3-D scene on a theme change only, so its lights kept
+        the old accent. Now the selected tab (tint and underline), the logo, every checkbox,
+        radio and slider (`accent-color`), links, text selection and a faint line along each
+        card's top follow it, and My PC takes its colours from the settings and rebuilds on an
+        accent change. The other charts are SVG on the theme's variables and already followed.
+        New contrast test: text on the selected tab's tint, every theme and accent.
+      - **Overlay graph.** Readings arrive every 0.5–2 s with 15 s of 100 ms points; drawn as
+        they came, the line jumped. `src/overlay-graph.ts` lines each update up with the last
+        (by the points they share, else by the time between them), plays the points back about
+        one update late so they slide in at an even pace, and draws a monotone curve that never
+        overshoots a reading. The scale eases to a new step. At most 30 frames a second, only
+        while the line moves; with the profile's animation off (Benchmark, Silent) it is drawn
+        when readings arrive, as before. This replaces P14's "no animation between readings".
+      - **Fans.** A fan turned only with an RPM reading, so without PawnIO (or on a GPU that
+        reports none) the model stood still. Fans with no reading now turn slowly
+        (0.35 turns a second) and their details say "Speed not reported"; a real 0 RPM stays
+        still and says "Stopped (0 RPM)" (decision 27).
 
 ## Risks
 

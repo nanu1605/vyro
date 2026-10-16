@@ -615,7 +615,8 @@
     color: var(--text);
   }
   .tabs button[aria-selected='true'] {
-    background: var(--panel-edge);
+    background: var(--accent-soft);
+    box-shadow: inset 0 -2px 0 var(--accent);
     color: var(--text);
   }
   .alert-dot {
@@ -704,6 +705,7 @@
   }
   h1 {
     margin: 0;
+    color: var(--accent);
     font-size: 1.1rem;
     letter-spacing: 0.35em;
   }

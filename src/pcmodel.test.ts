@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cardKey, detectCard, tier, validShape, AMD, INTEL, NVIDIA } from './gpuspecs';
-import { buildPc, CASE, discreteGpus, heat, heatColor, inMode, LIMITS, partTemp, RAMP, slotIndex, spinRate, type Part } from './pcmodel';
+import { buildPc, CASE, discreteGpus, fanSpeedText, fanState, heat, heatColor, IDLE_SPIN, inMode, LIMITS, partTemp, RAMP, slotIndex, spinRate, type Part } from './pcmodel';
 import { sampleHardware } from './sample';
 import { initialSimState, nextSnapshot } from './sim';
 import type { GpuId, SensorSnapshot } from './types';
@@ -162,9 +162,21 @@ describe('thermal map', () => {
   });
 
   it('fans spin slower than real, faster with more RPM', () => {
-    expect(spinRate(null)).toBe(0);
     expect(spinRate(0)).toBe(0);
+    expect(spinRate(400)).toBeGreaterThan(IDLE_SPIN);
     expect(spinRate(400)).toBeLessThan(spinRate(1600));
     expect(spinRate(100_000)).toBe(2.5);
+  });
+
+  it('turn fans with no reading slowly and say so; a real 0 RPM stays still', () => {
+    expect(spinRate(null)).toBe(IDLE_SPIN);
+    expect([fanState(null), fanState(0), fanState(900)]).toEqual(['unknown', 'stopped', 'measured']);
+    expect(fanSpeedText(null)).toBe('Speed not reported');
+    expect(fanSpeedText(0)).toBe('Stopped (0 RPM)');
+    expect(fanSpeedText(1234)).toBe('1,234 RPM');
+    // Without board fan readings (no PawnIO) the cooler's fan still turns.
+    const bare = { ...snap, fans: [] };
+    const cooler = buildPc({ hw: sampleHardware, snap: bare, cardKey }).find((p) => p.id === 'cooler.fan')!;
+    expect(spinRate(cooler.fan!.rpm(bare))).toBe(IDLE_SPIN);
   });
 });

@@ -4845,7 +4845,7 @@ dependencies = [
 
 [[package]]
 name = "vyro"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "log",
  "serde",
@@ -4864,7 +4864,7 @@ dependencies = [
 
 [[package]]
 name = "vyro-core"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "fastrand",
  "getrandom 0.3.4",
@@ -4886,7 +4886,7 @@ dependencies = [
 
 [[package]]
 name = "vyro-service"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "log",
  "tempfile",
