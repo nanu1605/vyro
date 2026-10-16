@@ -25,7 +25,8 @@ or warns about Vyro, the "If a game complains" section lists what to turn off, f
 ## What has been reported
 
 - **FACEIT blocked PawnIO** in September 2025. The reason was the certificate it was signed with, which had also signed cheat software ([PawnIO.Setup#1](https://github.com/namazso/PawnIO.Setup/issues/1)). PawnIO's author reported it fixed in PawnIO 2.1.0 (February 2026) with a new signature. Vyro bundles 2.2.0, and its installer upgrades older 1.x installs. FACEIT has not been seen confirming the fix.
-- **No other anti-cheat** (Easy Anti-Cheat, BattlEye, Riot Vanguard, EA Javelin) was found reported as blocking PawnIO up to October 2026 ([FanControl discussion 3537](https://github.com/Rem0o/FanControl.Releases/discussions/3537) asks and has no reports). Absence of reports is not a guarantee.
+- **Riot Vanguard:** Valorant ran on the reference PC with PawnIO 2.2 installed (the owner's field test, 27 September 2026, in the Vyro 0.1 days; recorded in the ROADMAP's P6 section). The overlay, frame capture and fan control came later and are part of the P27 check below.
+- **No other anti-cheat** (Easy Anti-Cheat, BattlEye, EA Javelin) was found reported as blocking PawnIO up to October 2026 ([FanControl discussion 3537](https://github.com/Rem0o/FanControl.Releases/discussions/3537) asks and has no reports). Absence of reports is not a guarantee.
 - **ETW frame capture** (PresentMon) is what tools such as RTSS and Intel PresentMon use alongside protected games. No vendor statement about it was found.
 
 ## If a game complains
@@ -41,4 +42,5 @@ The owner plays at least one game protected by each anti-cheat available to them
 
 | Game | Anti-cheat | Vyro version | Result |
 |---|---|---|---|
+| Valorant | Riot Vanguard | 0.1 (PawnIO 2.2), 2026-09 | Runs. Before the overlay, frame capture and fan control: check again |
 | — | — | — | to be filled at the field check |

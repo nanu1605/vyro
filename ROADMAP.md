@@ -451,6 +451,10 @@ Built in this order (V2_PLAN.md has each phase's scope and acceptance). Every ph
 a thin Windows layer, CI green, then merge into `v2`. Hardware writes never ship without the
 owner's field check on the reference PC.
 
+P16 to P27 are stacked, so one test build holds them all. [`docs/field-check.md`](docs/field-check.md)
+orders their field checks into sittings for that build. Results are recorded in each
+phase's entry below.
+
 ### P12 — Fan & pump control (M7 → 0.2)
 All control runs in the service; the app only asks over the pipe. Writes go through PawnIO
 `LpcIO` port I/O on the NCT6687 EC (same page/index/data transaction as the reads), only on
@@ -1732,7 +1736,13 @@ Budget:
           2.2.0.
         - `docs/footprint.md`: every V2 feature's threads and costs, and the 1.0 measurement
           procedure.
-        - README and CONTRIBUTING updated.
+        - `docs/field-check.md`: the field checks of P16 to P27, ordered into sittings for the
+          one build that holds them all.
+        - README: what 0.4 and 0.5 add, for users (Insights, the score, alerts, Benchmark,
+          Diagnostics, themes, the dashboard builder, My PC, Devices, cards, and the phone
+          companion with its security model). CONTRIBUTING updated.
+        - `docs/anti-cheat.md` now records the owner's Valorant run from P6. The Risks entry
+          now has the FACEIT certificate fix reported for PawnIO 2.1.0.
       - **Small polish.** The companion server's threads are now `vyro-companion`. They shared
         the name `vyro-remote` with the app's service-connection thread.
       - **Checked.** Core tests (614 + 3 migration), the service test, app tests under Wine
@@ -1784,9 +1794,12 @@ Budget:
   Windows as soon as P0 runs there.
 - Hardware acceptance criteria require real machines from the §9 test matrix; CI can only prove
   compilation and unit tests.
-- Anti-cheat: FACEIT refuses to run with PawnIO loaded; Valorant (Vanguard) runs with it.
-  PawnIO has its own entry in Installed apps, so FACEIT players can remove it; Vyro then runs
-  without the low-level sensors and says so.
+- Anti-cheat: FACEIT refused to run with PawnIO loaded over its old signing certificate;
+  PawnIO's author reports that fixed in 2.1.0 (Vyro ships 2.2.0), and FACEIT has not been seen
+  confirming it. Valorant (Vanguard) runs with it. PawnIO has its own entry in Installed apps,
+  so anyone whose game refuses it can remove it; Vyro then runs without the low-level sensors
+  and says so. [`docs/anti-cheat.md`](docs/anti-cheat.md) has the details and the P27 field
+  table.
 - PawnIO has a single upstream maintainer; module ABI or signing changes need a Vyro update.
 - SignPath / Certum OSS require a public repo with an OSI license and a verifiable build.
 - Fan control (P12): some boards' fans are owned by the embedded controller and cannot be
