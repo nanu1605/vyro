@@ -1812,8 +1812,12 @@ Budget:
       The clean-machine install and uninstall are covered by CI's Windows runner on every run,
       without a person watching or a real board. Still to write down from the owner's notes:
       the games in `docs/anti-cheat.md` and the 1.0 footprint figures in the README's
-      Performance table. M13 is complete, and with it V2. The release (0.4 and 0.5 first, or
-      straight to 1.0) is the owner's call.
+      Performance table. M13 is complete, and with it V2.
+- [x] **1.0.0 released** (2026-10-16): M9–M13 in one release (decision 20). `v2` merged into
+      `main` (6cc4f8c) after CI passed on both; Release run 38899109384 tagged `v1.0.0` and
+      published the 11.3 MB MSI, `latest.json` and checksums here and to
+      `nanu1605/vyro-releases`, where copies of 0.3.0 find the update. The footprint figures
+      and the anti-cheat table are still to be written down from the owner's notes.
 
 ## Risks
 

@@ -345,7 +345,7 @@ which counts the sensor service, the app and its WebView2 processes. Reference P
 | RAM peak | — | 132 MB after visiting every tab | 125–150 MB with History open | not re-measured | not written down |
 | RAM (closed to the tray) | — | ≈ 40 MB (service 33 MB, app 7 MB, WebView2 suspended) | not re-measured | not re-measured | not written down |
 | Startup to first data | < 2 s | 0.76 s | 1.02 s | not re-measured | within target, not written down |
-| Installer | < 20 MB | 9.5 MB | 9.7 MB | 9.9 MB | measured at release |
+| Installer | < 20 MB | 9.5 MB | 9.7 MB | 9.9 MB | 11.3 MB |
 
 In 0.2.0, of the visible figure, WebView2 takes 85 MB (five processes), the service 33 MB and
 the app 7 MB. Animation runs at most 60 fps and only while values move. For 0.3.0 the field
