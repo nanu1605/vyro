@@ -7,7 +7,7 @@ import { evaluate } from './curve';
 import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
 import { savedLook, type AccentId, type OpenOn, type ThemeId } from './themes';
-import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Devices, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Dashboard, Devices, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -619,6 +619,33 @@ export async function getDevices(): Promise<Devices> {
 export async function onDevicesChanged(cb: () => void): Promise<() => void> {
   if (!inTauri) return () => {};
   return listen('devices-changed', () => cb());
+}
+
+/** Saved Dashboard layouts (P24); null before the first save (the Dashboard then starts from
+ * the presets). The browser preview keeps them in this page's storage. */
+export async function getDashboard(): Promise<Dashboard | null> {
+  if (!inTauri) {
+    try {
+      const t = localStorage.getItem('vyro.dashboard');
+      return t ? (JSON.parse(t) as Dashboard) : null;
+    } catch {
+      return null;
+    }
+  }
+  return invoke<Dashboard | null>('get_dashboard');
+}
+
+/** Saves the layouts; returns them as stored (checked and tidied by the app). */
+export async function setDashboard(dashboard: Dashboard): Promise<Dashboard> {
+  if (!inTauri) {
+    try {
+      localStorage.setItem('vyro.dashboard', JSON.stringify(dashboard));
+    } catch {
+      /* storage unavailable: kept for this page only */
+    }
+    return dashboard;
+  }
+  return invoke<Dashboard>('set_dashboard', { dashboard });
 }
 
 /** The PC change history (P19), newest first. */

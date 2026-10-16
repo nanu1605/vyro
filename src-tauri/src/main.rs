@@ -4,6 +4,7 @@
 mod bench;
 mod changes;
 mod commands;
+mod dashboard;
 mod diag;
 mod engine;
 mod gaming;
@@ -58,6 +59,7 @@ fn main() {
             app.manage(updates::Updates::new(can_update, current));
             app.manage(engine);
             app.manage(tray::SettingsStore::load(app.handle()));
+            app.manage(dashboard::DashboardStore::load(app.handle()));
             tray::build(app.handle())?;
             let settings = app.state::<tray::SettingsStore>().get();
             if let Err(e) = tray::apply(app.handle(), settings) {
@@ -86,6 +88,8 @@ fn main() {
             commands::get_hardware_id,
             commands::get_displays,
             commands::get_devices,
+            dashboard::get_dashboard,
+            dashboard::set_dashboard,
             commands::get_drives,
             commands::get_network,
             commands::get_pawnio_status,
