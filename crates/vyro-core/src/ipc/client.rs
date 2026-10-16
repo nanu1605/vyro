@@ -325,6 +325,12 @@ impl EngineApi for RemoteEngine {
         self.call(&Request::AlertLog)
     }
 
+    fn alert_usual(&self, sensor: &str) -> Result<Option<f64>, String> {
+        self.call(&Request::AlertUsual {
+            sensor: sensor.to_owned(),
+        })
+    }
+
     fn drives(&self) -> Result<Vec<DriveInfo>, String> {
         self.call(&Request::Drives)
     }
@@ -536,6 +542,10 @@ mod tests {
         );
         assert!(remote.set_ping_host("bad host!").is_err());
         assert_eq!(remote.insights().unwrap_err(), "history store unavailable");
+        assert_eq!(
+            remote.alert_usual("cpu.temp.package").unwrap_err(),
+            "history store unavailable"
+        );
         assert_eq!(
             remote.game_timeline(1).unwrap_err(),
             "history store unavailable"

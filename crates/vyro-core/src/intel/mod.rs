@@ -22,7 +22,7 @@ mod derive;
 mod detect;
 pub mod digest;
 pub mod runner;
-mod stats;
+pub(crate) mod stats;
 #[cfg(test)]
 mod tests;
 

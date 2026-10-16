@@ -157,13 +157,7 @@ mod tests {
     use super::*;
 
     fn fired(rule: &str) -> AlertFired {
-        AlertFired {
-            ts: 0,
-            rule_id: rule.into(),
-            title: "t".into(),
-            message: "m".into(),
-            sound: true,
-        }
+        AlertFired::new(0, rule, "t".into(), "m".into(), true)
     }
 
     #[test]

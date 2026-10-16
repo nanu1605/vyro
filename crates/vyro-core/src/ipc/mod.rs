@@ -37,8 +37,9 @@ pub use transport::{connect, default_endpoint, Conn, Listener};
 /// 6: `SetGameContext` (P13). 7: game session replay (P15): `GameTimeline`, `HistoryWindow`,
 /// session ids. 8: PC change history (P19): `RecordInventory`, `HardwareChanges`. 9: the
 /// intelligence engine (P16): `Insights` answers with findings and vital signs, and
-/// `SensorSnapshot::insights`.
-pub const PROTOCOL_VERSION: u32 = 9;
+/// `SensorSnapshot::insights`. 10: compound alerts (P18): rule conditions and actions,
+/// `AlertUsual`, `SensorSnapshot::alert_state`, `FanStatus::boost`.
+pub const PROTOCOL_VERSION: u32 = 10;
 /// Windows service name (installed by the MSI).
 pub const SERVICE_NAME: &str = "VyroService";
 /// Largest request the server accepts (alert rules are the biggest, a few KB).
@@ -103,6 +104,10 @@ pub enum Request {
         rules: Vec<AlertRule>,
     },
     AlertLog,
+    #[serde(rename_all = "camelCase")]
+    AlertUsual {
+        sensor: String,
+    },
     Drives,
     PawnIoStatus,
     #[serde(rename_all = "camelCase")]
@@ -267,6 +272,12 @@ mod tests {
         );
         assert_eq!(json(&Request::RestoreFans), r#"{"method":"restoreFans"}"#);
         assert_eq!(
+            json(&Request::AlertUsual {
+                sensor: "cpu.temp.package".into()
+            }),
+            r#"{"method":"alertUsual","params":{"sensor":"cpu.temp.package"}}"#
+        );
+        assert_eq!(
             json(&Request::GameTimeline { id: 12 }),
             r#"{"method":"gameTimeline","params":{"id":12}}"#
         );
@@ -307,7 +318,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&hello).unwrap(),
-            r#"{"protocol":9,"role":"snapshots","session":7,"pid":42,"visible":false}"#
+            r#"{"protocol":10,"role":"snapshots","session":7,"pid":42,"visible":false}"#
         );
         let reply: Reply = Err("nope".into());
         assert_eq!(serde_json::to_string(&reply).unwrap(), r#"{"Err":"nope"}"#);

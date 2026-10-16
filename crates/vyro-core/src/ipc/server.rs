@@ -289,6 +289,7 @@ impl Server {
             Request::AlertRules => json(e.alert_rules()),
             Request::SetAlertRules { rules } => json(e.set_alert_rules(rules)),
             Request::AlertLog => json(e.alert_log()),
+            Request::AlertUsual { sensor } => json(e.alert_usual(&sensor)),
             Request::Drives => json(e.drives()),
             Request::PawnIoStatus => json(e.pawnio_status()),
             Request::SetPingHost { host } => json(e.set_ping_host(&host)),

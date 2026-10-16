@@ -292,6 +292,11 @@
     {#if status.overrideReason}
       <p class="alert" role="alert">{status.overrideReason}</p>
     {/if}
+    {#if status.boost}
+      <p class="note boost" role="status">
+        The alert “{status.boost.rule}” holds: the fans Vyro drives run {status.boost.pct} % faster until it clears.
+      </p>
+    {/if}
     {#if status.lastError}
       <p class="alert" role="alert">{status.lastError}</p>
     {/if}
@@ -744,6 +749,9 @@
     margin: 0.4rem 0;
     color: var(--muted);
     font-size: 0.78rem;
+  }
+  .note.boost {
+    color: var(--text);
   }
   .modes {
     display: inline-flex;

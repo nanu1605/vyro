@@ -41,4 +41,8 @@ auto: boolean,
 /**
  * The owner kept their own profile for this game.
  */
-suppressed: boolean, };
+suppressed: boolean, 
+/**
+ * The alert rule whose profile is in force (P18), if any.
+ */
+alert: string | null, };

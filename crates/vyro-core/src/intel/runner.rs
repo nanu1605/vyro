@@ -1,6 +1,7 @@
 //! The intelligence engine inside the engine: builds the minute digest from the poller's
 //! ticks, works out the findings on demand (kept a minute) and in the background every ten
 //! minutes on a short-lived thread, and hands the app the keys of the findings worth a look.
+//! The same pass works out the usual readings "above usual" alert rules compare with (P18).
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
@@ -8,12 +9,13 @@ use std::sync::{Arc, Mutex};
 
 use super::digest::{DigestBuilder, MinuteDigest};
 use super::{analyze, wanted, Inputs, InsightBrief, Insights, SeriesMap};
+use crate::alerts::usual::{load_of, usual, Usual};
 use crate::changes::MAX_CHANGES;
 use crate::fan::{self, FanEvent};
 use crate::gaming::MAX_SESSIONS;
 use crate::history::History;
 use crate::profiles::Profile;
-use crate::registry::Registry;
+use crate::registry::{Registry, Unit};
 use crate::snapshot::SensorSnapshot;
 use crate::{lock, HistoryRange};
 
@@ -36,6 +38,9 @@ pub struct Intel {
     busy: AtomicBool,
     /// When the last pass started (unix seconds).
     last_pass: AtomicI64,
+    /// Sensors alert rules compare with their usual reading, and those readings.
+    alert_sensors: Mutex<Vec<String>>,
+    usual: Mutex<HashMap<String, Usual>>,
 }
 
 impl Intel {
@@ -53,6 +58,8 @@ impl Intel {
             brief: Mutex::new(InsightBrief::default()),
             busy: AtomicBool::new(false),
             last_pass: AtomicI64::new(now - BACKGROUND_SECS + FIRST_PASS_SECS),
+            alert_sensors: Mutex::new(Vec::new()),
+            usual: Mutex::new(HashMap::new()),
         })
     }
 
@@ -89,6 +96,82 @@ impl Intel {
         closed
     }
 
+    /// The sensors alert rules compare with their usual reading. New ones are worked out
+    /// right away (a few week queries); the rest keep theirs until the next pass.
+    pub fn set_alert_sensors(&self, ids: Vec<String>, now: i64) {
+        let new: Vec<String> = {
+            let known = lock(&self.usual);
+            ids.iter()
+                .filter(|id| !known.contains_key(*id))
+                .cloned()
+                .collect()
+        };
+        *lock(&self.alert_sensors) = ids.clone();
+        let mut fresh = HashMap::new();
+        if !new.is_empty() && self.history.is_some() {
+            match self.compute_usual(&new, now) {
+                Ok(u) => fresh = u,
+                Err(e) => log::warn!("alerts: usual readings: {e}"),
+            }
+        }
+        let mut usual = lock(&self.usual);
+        usual.retain(|id, _| ids.contains(id));
+        usual.extend(fresh);
+    }
+
+    /// `sensor`'s usual reading now, as of the last pass; `read` gives the current load.
+    pub fn usual_now(&self, sensor: &str, read: impl Fn(&str) -> Option<f64>) -> Option<f64> {
+        lock(&self.usual).get(sensor)?.now(read)
+    }
+
+    /// `sensor`'s usual reading now, worked out afresh (the alert editor asks).
+    pub fn usual_for(&self, sensor: &str, now: i64) -> Result<Option<f64>, String> {
+        let u = self.compute_usual(&[sensor.to_owned()], now)?;
+        let reg = lock(&self.registry);
+        Ok(u.get(sensor)
+            .and_then(|u| u.now(|id| reg.get(id).and_then(|s| s.value))))
+    }
+
+    /// The week's history of `ids` (and the loads their temperatures follow) and their usual
+    /// readings.
+    fn compute_usual(&self, ids: &[String], now: i64) -> Result<HashMap<String, Usual>, String> {
+        let history = self.history.as_ref().ok_or("history store unavailable")?;
+        let celsius: HashMap<&str, bool> = {
+            let reg = lock(&self.registry);
+            ids.iter()
+                .map(|id| {
+                    let c = reg.get(id).is_some_and(|s| s.unit == Unit::Celsius);
+                    (id.as_str(), c)
+                })
+                .collect()
+        };
+        let mut week = SeriesMap::new();
+        for id in ids {
+            let load = celsius
+                .get(id.as_str())
+                .copied()
+                .unwrap_or(false)
+                .then(|| load_of(id))
+                .flatten();
+            for metric in std::iter::once(id.clone()).chain(load) {
+                if week.contains_key(&metric) {
+                    continue;
+                }
+                let s = lock(history)
+                    .query(&metric, HistoryRange::D7, now)
+                    .map_err(|e| e.to_string())?;
+                week.insert(metric, s.points);
+            }
+        }
+        Ok(ids
+            .iter()
+            .filter_map(|id| {
+                let c = celsius.get(id.as_str()).copied().unwrap_or(false);
+                usual(&week, id, c, now).map(|u| (id.clone(), u))
+            })
+            .collect())
+    }
+
     /// The keys of the findings worth a look, as of the last pass.
     pub fn brief(&self) -> InsightBrief {
         lock(&self.brief).clone()
@@ -109,6 +192,13 @@ impl Intel {
     }
 
     fn keep(&self, i: Insights) {
+        let ids = lock(&self.alert_sensors).clone();
+        if !ids.is_empty() {
+            match self.compute_usual(&ids, i.ts) {
+                Ok(u) => *lock(&self.usual) = u,
+                Err(e) => log::warn!("alerts: usual readings: {e}"),
+            }
+        }
         *lock(&self.brief) = i.brief();
         *lock(&self.latest) = Some(i);
     }

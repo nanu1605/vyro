@@ -15,12 +15,15 @@ export async function onSensors(cb: (s: SensorSnapshot) => void): Promise<() => 
   if (!inTauri) {
     const { startSim } = await import('./sim');
     const { SIM_ATTENTION } = await import('./sim-insights');
-    // The simulated board's fan control and the preview's findings, as the service reports
-    // them in each snapshot.
+    const { simAlertState } = await import('./sim-alerts');
+    const rules = await simRules();
+    // The simulated board's fan control, the preview's findings and the alert rules that hold,
+    // as the service reports them in each snapshot.
     return startSim((s) => {
-      const f = simFanStatus(s);
+      const withAlerts = { ...s, alertState: simAlertState(rules(), s.ts) };
+      const f = simFanStatus(withAlerts);
       cb({
-        ...s,
+        ...withAlerts,
         fanControl: { active: f.active, fullSpeed: f.active && f.overrideReason != null },
         insights: { attention: SIM_ATTENTION },
       });
@@ -102,6 +105,10 @@ const SIM_HEADERS = [
 
 function simFanStatus(snap: SensorSnapshot | null): FanStatus {
   const cpu = snap?.cpu.tempPackage ?? null;
+  // An alert's fan boost (P18): the largest any rule that holds asks for.
+  const boost = (snap?.alertState?.active ?? [])
+    .filter((a) => a.fanBoost != null)
+    .reduce<{ pct: number; rule: string } | null>((b, a) => (b && b.pct >= a.fanBoost! ? b : { pct: a.fanBoost!, rule: a.name }), null);
   const hot = cpu != null && cpu >= browserFans.emergencyCpuC;
   const headers: HeaderStatus[] = SIM_HEADERS.map((h) => {
     const list = browserFans.profiles[browserSettings.profile] ?? browserFans.headers;
@@ -113,10 +120,10 @@ function simFanStatus(snap: SensorSnapshot | null): FanStatus {
     let source: number | null = null;
     if (driven) {
       if (hot) target = 100;
-      else if (mode.mode === 'fixed') target = mode.pct;
+      else if (mode.mode === 'fixed') target = Math.min(100, mode.pct + (boost?.pct ?? 0));
       else if (mode.mode === 'curve') {
         source = mode.curve.source === 'cpu.temp.package' ? cpu : 45;
-        target = source == null ? 100 : evaluate(mode.curve.points, source);
+        target = source == null ? 100 : Math.min(100, evaluate(mode.curve.points, source) + (boost?.pct ?? 0));
       }
       if (target != null) target = Math.max(pump ? Math.max(h.minPct, SIM_PUMP_MIN) : h.minPct, target);
     }
@@ -136,6 +143,7 @@ function simFanStatus(snap: SensorSnapshot | null): FanStatus {
     headers,
     pumpMinPct: SIM_PUMP_MIN,
     profile: browserSettings.profile,
+    boost: headers.some((h) => h.software) ? boost : null,
   };
 }
 
@@ -198,16 +206,15 @@ export async function getHealthEvents(): Promise<HealthEvent[]> {
   return invoke<HealthEvent[]>('get_health_events');
 }
 
-// Browser preview only: rules live in memory, mirroring the engine's first-run defaults.
-let browserRules: AlertRule[] = [
-  { id: 'cpu-temp', name: 'CPU temperature', enabled: true, kind: { type: 'threshold', sensor: 'cpu.temp.package', above: true, value: 95 }, forSecs: 30, cooldownSecs: 600, sound: true },
-  { id: 'gpu-temp', name: 'GPU temperature', enabled: true, kind: { type: 'threshold', sensor: 'gpu.0.temp.edge', above: true, value: 90 }, forSecs: 30, cooldownSecs: 600, sound: true },
-  { id: 'health-problems', name: 'Hardware problems', enabled: true, kind: { type: 'health', problems: true }, forSecs: 0, cooldownSecs: 600, sound: true },
-  { id: 'health-warnings', name: 'Health warnings', enabled: false, kind: { type: 'health', problems: false }, forSecs: 0, cooldownSecs: 1800, sound: false },
-];
+// Browser preview only: rules live in memory, starting from the preview's (`sim-alerts.ts`).
+let browserRules: AlertRule[] | null = null;
+async function simRules(): Promise<() => AlertRule[]> {
+  if (!browserRules) browserRules = JSON.parse(JSON.stringify((await import('./sim-alerts')).SIM_RULES)) as AlertRule[];
+  return () => browserRules ?? [];
+}
 
 export async function getAlertRules(): Promise<AlertRule[]> {
-  if (!inTauri) return JSON.parse(JSON.stringify(browserRules)) as AlertRule[];
+  if (!inTauri) return JSON.parse(JSON.stringify((await simRules())())) as AlertRule[];
   return invoke<AlertRule[]>('get_alert_rules');
 }
 
@@ -221,11 +228,15 @@ export async function setAlertRules(rules: AlertRule[]): Promise<void> {
 }
 
 export async function getAlertLog(): Promise<AlertFired[]> {
-  if (!inTauri) {
-    const now = Math.floor(Date.now() / 1000);
-    return [{ ts: now - 3890, ruleId: 'cpu-temp', title: 'CPU temperature', message: 'CPU (Tdie) at 95.4 °C (above 95.0 °C for 10 s)', sound: true }];
-  }
+  if (!inTauri) return (await import('./sim-alerts')).simAlertLog(Math.floor(Date.now() / 1000));
   return invoke<AlertFired[]>('get_alert_log');
+}
+
+/** A sensor's usual reading now, for "above usual" conditions; `null` until there is about a
+ * day of history. */
+export async function getAlertUsual(sensor: string): Promise<number | null> {
+  if (!inTauri) return (await import('./sim-alerts')).simUsual(sensor);
+  return invoke<number | null>('get_alert_usual', { sensor });
 }
 
 export interface AppSettings {

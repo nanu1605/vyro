@@ -176,18 +176,28 @@ pub async fn get_alert_log(engine: State<'_, Engine>) -> Result<Vec<AlertFired>,
     with_engine(&engine, |e| e.alert_log()).await
 }
 
+/// A sensor's usual reading now, for "above usual" alert conditions (`None` until there is
+/// about a day of history).
+#[tauri::command]
+pub async fn get_alert_usual(
+    engine: State<'_, Engine>,
+    sensor: String,
+) -> Result<Option<f64>, String> {
+    with_engine(&engine, move |e| e.alert_usual(&sensor)).await
+}
+
 /// Sends a sample notification so the user can check Windows lets Vyro notify.
 #[tauri::command]
 pub fn test_alert(app: tauri::AppHandle, sound: bool) {
     crate::engine::show_notification(
         &app,
-        &AlertFired {
-            ts: unix_now(),
-            rule_id: "test".into(),
-            title: "Vyro test alert".into(),
-            message: "Alerts will look like this.".into(),
+        &AlertFired::new(
+            unix_now(),
+            "test",
+            "Vyro test alert".into(),
+            "Alerts will look like this.".into(),
             sound,
-        },
+        ),
         true,
     );
 }
