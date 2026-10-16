@@ -1755,7 +1755,8 @@ Budget:
       - **Checked.** Core tests (614 + 3 migration), the service test, app tests under Wine
         (20) and frontend tests (132) pass, and `pnpm a11y` is clean. On CI, the Windows
         clean install (install, probe the service, uninstall) passes.
-- [ ] Field check (MS-7E24; ideally also a clean Windows PC or virtual machine):
+- [x] Field check (MS-7E24; ideally also a clean Windows PC or virtual machine; 2026-10-16,
+      test build `vyro-windows-bab8a30`), all passed on MS-7E24; the clean machine was not done:
       - **Upgrade.** Install this build over 0.3.0 (or 0.2.0) as you use it: settings, alert
         rules, fan settings and profile, History (7 days back), Health and alert logs, game
         sessions and replays are all still there.
@@ -1794,6 +1795,11 @@ Budget:
       - **Keyboard and screen reader.** Narrator on two tabs; Tab through Settings and Cooling.
       - **Defaults.** Confirm the defaults above, especially the size budgets and the fan
         full-speed rule.
+      The clean-machine install and uninstall are covered by CI's Windows runner on every run,
+      without a person watching or a real board. Still to write down from the owner's notes:
+      the games in `docs/anti-cheat.md` and the 1.0 footprint figures in the README's
+      Performance table. M13 is complete, and with it V2. The release (0.4 and 0.5 first, or
+      straight to 1.0) is the owner's call.
 
 ## Risks
 

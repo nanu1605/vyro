@@ -1,7 +1,8 @@
 # Field check: V2 (P16 – P27) in one pass
 
-Status: **ready (2026-10-16)**. Phases P16 to P27 are built and green on CI, waiting for the
-owner's field check on the reference PC (MS-7E24, Ryzen 7 9700X, RTX 5060 Ti).
+Status: **passed (2026-10-16)** on the reference PC (MS-7E24, Ryzen 7 9700X, RTX 5060 Ti)
+with test build `vyro-windows-bab8a30`: sittings 0 to 9; sitting 10 (a clean machine) was not
+done. Phases P16 to P27 merge into `v2` in the order below.
 
 Every phase branch is stacked on the one before it, so **one test build holds all eleven**:
 - the `vyro-windows-<commit>` artifact of the latest CI run on `v2-p27-polish` (Actions →
