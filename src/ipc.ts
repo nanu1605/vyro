@@ -7,7 +7,7 @@ import { evaluate } from './curve';
 import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
 import { savedLook, type AccentId, type OpenOn, type ThemeId } from './themes';
-import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Dashboard, Devices, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Dashboard, Devices, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -705,4 +705,52 @@ export async function setPingHost(host: string): Promise<void> {
 export async function getPawnIoStatus(): Promise<PawnIoStatus> {
   if (!inTauri) return { state: 'ready', version: '2.0.0 (simulated)', detail: null };
   return invoke<PawnIoStatus>('get_pawnio_status');
+}
+
+// Remote companion (P26). The browser preview keeps a pretend companion in memory.
+
+/** Settings → Remote: on or off, addresses, paired devices, the open pairing code. */
+export async function getRemoteStatus(): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simRemoteStatus();
+  return invoke<RemoteStatus>('get_remote_status');
+}
+
+/** On, and how many live views are open (the header chip). */
+export async function getRemoteBrief(): Promise<RemoteBrief> {
+  if (!inTauri) return (await import('./sim-remote')).simRemoteBrief();
+  return invoke<RemoteBrief>('get_remote_brief');
+}
+
+/** Fires when the companion starts or stops, a phone opens or closes its view, or a device is
+ * paired or signed out. */
+export async function onRemote(cb: (b: RemoteBrief) => void): Promise<() => void> {
+  if (!inTauri) return (await import('./sim-remote')).onSimRemote(cb);
+  return listen<RemoteBrief>('remote-status', (e) => cb(e.payload));
+}
+
+export async function setRemoteEnabled(enabled: boolean): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simSetEnabled(enabled);
+  return invoke<RemoteStatus>('set_remote_enabled', { enabled });
+}
+
+export async function setRemoteOptions(port: number, sessionDays: number): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simSetOptions(port, sessionDays);
+  return invoke<RemoteStatus>('set_remote_options', { port, sessionDays });
+}
+
+/** Opens a pairing code (5 minutes, one device). */
+export async function startRemotePairing(): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simStartPairing();
+  return invoke<RemoteStatus>('start_remote_pairing');
+}
+
+export async function cancelRemotePairing(): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simCancelPairing();
+  return invoke<RemoteStatus>('cancel_remote_pairing');
+}
+
+/** Signs one device out, or every device with `null`; their live views close at once. */
+export async function signOutRemote(id: string | null): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simSignOut(id);
+  return invoke<RemoteStatus>('sign_out_remote', { id });
 }

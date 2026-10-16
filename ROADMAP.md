@@ -33,7 +33,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 16 | Devices battery sources | BLE GATT 0x180F + PnP battery devnode property + XInput; vendor HID++ later | decided |
 | 17 | Open on Dashboard | Default on, with an "Open on: Dashboard / Last tab" setting | decided |
 | 18 | Fan / pump control | **Yes, the V2 flagship**, safety-gated (V2_PLAN "Hardware-control safety"); read-only by default; per-board allow-list | decided |
-| 19 | Remote / web companion | In V2: LAN-only, opt-in, authenticated, built last (M12); timing confirmed at P26 | decided |
+| 19 | Remote / web companion | In V2 (P26): served by the desktop app (not the service) over plain HTTP on the LAN, off by default, QR + code pairing, hashed session tokens that expire, sign-out at once | default |
 | 20 | Versions | 0.2 / 0.3 / 0.4 / 0.5 at milestone merges; **1.0** at M13 | decided |
 | 21 | Themes | Several themes + accent colour, accessibility preserved | decided |
 | 22 | Performance Score method | Formula v1 ([`docs/performance-score.md`](docs/performance-score.md)): nine observed inputs, fixed weights and breakpoints, versioned, inputs shown | decided (signed off 2026-10-15) |
@@ -1452,7 +1452,157 @@ Budget:
       With P25, P22 and P24 also field-checked, M11 is complete.
 
 ### P26 — Remote companion (M12 → 0.5)
-- [ ] Off by default, LAN-only, token + QR pairing, expiry, revoke; transport decided at start.
+On `v2-p26-remote`, stacked on `v2-p23-visual` (it adds a Settings card and a header chip next
+to the earlier phases' changes).
+
+Defaults chosen at build (2026-10-15). The owner can change them at the field check:
+- **Where it runs: the desktop app, not the service.** V2_PLAN put the server in
+  `VyroService`; it is in the app instead. Reasons:
+  - The code that reads from the network runs as the signed-in user, never as LocalSystem.
+  - Windows' own firewall prompt asks the owner the first time.
+  - It works with the in-process engine too.
+  - The page is the app's own bundled build.
+
+  The cost: the companion answers only while Vyro runs. Running in the tray counts.
+- **Off by default.** Settings → Remote turns it on, after saying what that means:
+  - local network only;
+  - not encrypted;
+  - Windows will ask about the firewall (allow Private networks only).
+
+  It stays on across restarts until turned off. Turning it off closes the port and every
+  connection at once. Paired devices are kept until they expire, so turning it back on needs
+  no new pairing. "Sign out all devices" removes them all.
+- **Transport: plain HTTP on the local network.** It uses IPv4 on port 8976, which can be
+  changed. HTTPS was ruled out because a self-signed certificate puts a warning on every
+  phone that the owner would have to click through. The page says "Local network · not
+  encrypted". It is read-only: nothing on it changes the PC.
+- **Who may connect:**
+  - Peers in private ranges (10/8, 172.16/12, 192.168/16, 169.254/16) and this PC (127/8).
+    Anyone else is dropped before a byte is read.
+  - The Host header must be an IP address, `localhost` or this PC's name. A web page cannot
+    reach the companion through DNS rebinding.
+  - Sign-ins must come from the page itself (same Origin, JSON body). No CORS.
+- **Pairing.** "Pair a device" shows a QR code and an 8-character code (`K7QM-4XPA`, 40
+  bits).
+  - The code is valid for 5 minutes and for one device. Five wrong tries spend it.
+  - The QR code opens `http://<PC address>:8976/#pair=<code>`. The code travels in the URL
+    fragment, which the browser does not send with the page request; the page posts it once
+    and removes it from the address bar.
+  - The device names itself. The name is guessed from its browser and can be edited.
+- **Sessions:**
+  - A paired device gets a random 256-bit token in an HttpOnly, SameSite=Strict cookie.
+    Vyro keeps only the token's SHA-256 hash, in `remote.json` in the app's local data
+    folder (not roamed).
+  - Sessions end 30 days after pairing (choices: 1, 7, 30 or 90 days). At most 8 devices.
+  - Settings lists each device: its name, when it was paired, when it expires, when it was
+    last seen and from which address.
+  - "Sign out" ends a session at once and closes its live view within a second.
+  - A damaged `remote.json` turns the companion off and is kept as `remote.bad.json`.
+- **What it shows:**
+  - CPU, GPUs, memory, drives, fans, temperatures and power;
+  - FPS while a game is measured;
+  - network rates and ping;
+  - Health and active alerts.
+
+  It is refreshed every second while open, in the app's theme and temperature unit. Never
+  sent: processes, serial numbers, IP or MAC addresses, user or device names, Health notes.
+- **Remote alerts.** Active alerts and Health problems head the page and its title. Push
+  notifications to a phone are not offered: they need HTTPS and an internet push service.
+- **Indicators while on:**
+  - a "Remote" chip in the app's header, with the number of devices watching;
+  - the tray tooltip says so;
+  - Settings shows the address and the Windows firewall's state for Vyro.
+
+Budget:
+- **Off.** No socket and no thread.
+- **On, nobody watching.** One thread waiting on the port, using under 1 MB.
+- **Watching:**
+  - One short-lived thread per connection: at most 32 connections, 8 per address (a browser
+    opens up to six at once for the page's files) and 6 live views.
+  - Each reading is turned into the page's view once (about 3 kB) and shared by all viewers.
+  - While anyone watches, the engine keeps its 1 Hz rate with the window hidden, as the
+    overlay does.
+- **No service change.** IPC protocol stays 13, and the history is unchanged.
+- **Bundle.** The companion is its own page (`remote.html`), under 30 kB gzipped beyond what
+  it shares with the app. The Settings card loads on first view, and the main bundle grows
+  under 3 kB.
+- **Installer.** Grows under 0.3 MB. `httparse` is already in the tree; `qrcodegen` is new.
+
+- [x] Built (2026-10-15, branch `v2-p26-remote`, stacked on `v2-p23-visual`):
+      - **Core (`crates/vyro-core/src/remote/`):**
+        - `view` builds the page's view from each snapshot. A test checks that process names,
+          drive ids, adapter names, Health notes and drive letters never reach it.
+        - `auth` handles pairing codes (5 bits per character from an alphabet without
+          look-alikes, compared in constant time) and sessions. It keeps only SHA-256 hashes,
+          saves "last seen" at most once a minute, and drops expired devices.
+        - `http` reads one request per connection through `httparse`:
+          - head at most 8 kB and 32 headers;
+          - body at most 4 kB, no chunked uploads;
+          - 10 s to send the whole request;
+          - every answer carries `nosniff`, `no-referrer` and `DENY`, and CR/LF are stripped
+            from header values.
+        - `net` checks peers and the Host header and orders this PC's addresses (the default
+          route first, link-local last). `firewall` reads Windows Defender Firewall's rules
+          for the app; it never writes one.
+        - `qr` draws the pairing QR code as an SVG path.
+        - `server` routes the page, its files and the API. The live view uses server-sent
+          events, and signing a device out ends its live view at once. `stop` closes the
+          port and every connection.
+        - `examples/companion.rs` serves a built page with simulated readings, for working
+          on the page; `pnpm dev` proxies `/api` to it.
+      - **App (`src-tauri/src/remote.rs`):**
+        - `remote.json` lives in the local app data folder. A damaged one turns the
+          companion off and is kept as `remote.bad.json`.
+        - Start, stop, port and length changes, pairing and sign-out run off the UI thread.
+        - The page comes from the bundled build, never Tauri's `index.html` fallback.
+        - A phone watching keeps the 1 Hz rate.
+        - The tray tooltip says "remote on".
+      - **UI:**
+        - `remote.html` is its own Vite entry (`src/remote/`). It covers pairing (the code
+          from the QR link, the device's name from its browser), live tiles, temperatures,
+          fans, drives, alerts, sign-out, and stale and reconnect states.
+        - Settings has a Remote card (loaded on first view): confirm before turning on, the
+          addresses, the firewall state, the QR code with a countdown, devices with sign-out,
+          and options.
+        - A header chip shows while the companion is on and opens the card.
+        - Health's limits moved to `src/limits.ts`, so the page does not load the 3-D model's
+          code.
+      - **Checked:**
+        - core tests (607), app tests under Wine (17) and
+          frontend tests (132) pass. The companion's server tests also pass under Wine;
+          Windows' firewall and address read is checked on CI's Windows runner.
+        - End to end in Chromium against the example server: a wrong code is refused with
+          the tries left; the QR link fills the code and leaves the address bar clean;
+          pairing survives a reload; a spent code is refused; signing out answers 401 after.
+        - axe is clean on the pairing and live pages in all six themes at 390 and 1440 px,
+          and on the Settings card (midnight 1440, daylight 390), with no overflow.
+        - In the browser preview of the Settings card: a bad port is refused, a new port
+          changes the addresses, the chip opens the card, and turning off removes the chip.
+      - **Fixed along the way:**
+        - 4 connections per address was too few: a browser opens six at once for a page's
+          files, and the page never started. Now 8 per address and 32 in all.
+        - A pairing link opened while the page already showed was ignored.
+        - A live view whose device was signed out stayed open until its next heartbeat.
+      - **Bundle.** The main bundle grows 1.4 kB gzipped (the second entry moved Svelte's
+        runtime into a shared chunk). The phone loads 29 kB gzipped in all; the Settings
+        card is a 3.6 kB chunk.
+- [x] Field check (MS-7E24 and a phone on the same Wi-Fi, 2026-10-16, test build
+      `vyro-windows-bab8a30`), all passed:
+      - Settings → Remote → Turn on: Windows asks about the firewall; allow Private. The card
+        then says the firewall allows Vyro, and the header chip shows.
+      - Pair a device: scan the QR code with the phone and pair. The tiles update every
+        second, in Vyro's theme and unit, and the chip says "1 watching".
+      - Type the code by hand from a second device. Five wrong codes spend it.
+      - Sign the phone out in Vyro: its page goes back to pairing within seconds.
+      - Close the window to the tray: the phone keeps updating every second. Turn the
+        companion off: the phone shows "Can't reach Vyro". Turn it back on: the phone
+        reconnects without pairing again.
+      - From a phone on mobile data (not the Wi-Fi), the address does not answer.
+      - Task Manager: Vyro's memory and CPU with the companion off, on, and with a phone
+        watching.
+      - The defaults above are what you want: port, 30 days, plain HTTP, the app rather than
+        the service.
+      M12 is complete; with M11, 0.5 could ship from here (the owner's call).
 
 ### P27 — V2 polish & validation (M13 → 1.0)
 - [ ] Footprint audit, accessibility, V1→V2 migration, clean machine, control-safety matrix.

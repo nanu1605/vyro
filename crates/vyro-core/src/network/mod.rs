@@ -7,7 +7,7 @@
 mod win;
 
 #[cfg(windows)]
-pub use win::{collect, set_ping_host, NetworkProvider};
+pub use win::{collect, local_ipv4, set_ping_host, NetworkProvider};
 
 use std::collections::{HashMap, VecDeque};
 

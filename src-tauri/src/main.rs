@@ -10,6 +10,7 @@ mod engine;
 mod gaming;
 mod look;
 mod overlay;
+mod remote;
 mod share;
 mod tray;
 mod updates;
@@ -60,12 +61,14 @@ fn main() {
             app.manage(engine);
             app.manage(tray::SettingsStore::load(app.handle()));
             app.manage(dashboard::DashboardStore::load(app.handle()));
+            app.manage(remote::Remote::load(app.handle()));
             tray::build(app.handle())?;
             let settings = app.state::<tray::SettingsStore>().get();
             if let Err(e) = tray::apply(app.handle(), settings) {
                 log::warn!("settings: {e}");
             }
             gaming::watch(app.handle());
+            app.state::<remote::Remote>().resume(app.handle());
             changes::check(app.handle(), changes::Reason::Start);
             updates::watch(app.handle());
             if minimized {
@@ -132,6 +135,13 @@ fn main() {
             diag::delete_diagnostic,
             diag::export_diagnostics,
             diag::reveal_report,
+            remote::get_remote_status,
+            remote::get_remote_brief,
+            remote::set_remote_enabled,
+            remote::set_remote_options,
+            remote::start_remote_pairing,
+            remote::cancel_remote_pairing,
+            remote::sign_out_remote,
             share::save_share_card,
             share::reveal_card,
             updates::get_update_status,
@@ -145,6 +155,9 @@ fn main() {
         if let tauri::RunEvent::Exit = event {
             // Ends a benchmark's load and keeps the stopped run before the engine goes.
             bench::stop_and_wait(handle, "Vyro quit.", std::time::Duration::from_secs(3));
+            if let Some(remote) = handle.try_state::<remote::Remote>() {
+                remote.stop();
+            }
             if let Some(engine) = handle.try_state::<Engine>() {
                 engine.shutdown();
             }
