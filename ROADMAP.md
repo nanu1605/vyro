@@ -1145,7 +1145,7 @@ Budget:
         - The main bundle grows 9.8 kB (3.5 kB gzipped), over the 6 kB budget: the theme
           tables and the Appearance card have to be there at first paint. The card maker is an
           11 kB chunk.
-- [ ] Field check (MS-7E24):
+- [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
       - Each theme looks right in the app, Daylight opens without a dark flash, and the title
         bar follows.
       - The dials change colour with the theme at once.
