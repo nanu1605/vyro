@@ -56,7 +56,9 @@ jobs:
 
   accessibility:
     name: Accessibility (every tab and theme)
-    runs-on: ubuntu-latest
+    # Pinned: Playwright installs its browser's system packages per Ubuntu release, and
+    # ubuntu-latest moves to a release this Playwright version does not know (2026-10-19).
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
