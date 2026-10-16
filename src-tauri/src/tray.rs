@@ -676,5 +676,11 @@ mod tests {
         .unwrap();
         assert!(!s.my_pc.three_d);
         assert_eq!(s.my_pc.gpu_shapes["10de:2786:51411458"]["glow"], true);
+        // 1.1: the model; 1.0 files have none, unknown names mean "as the firmware says".
+        assert_eq!(s.my_pc.form, crate::look::Form::Auto);
+        let s: Settings = serde_json::from_str(r#"{"myPc":{"form":"laptop"}}"#).unwrap();
+        assert_eq!(s.my_pc.form, crate::look::Form::Laptop);
+        let s: Settings = serde_json::from_str(r#"{"myPc":{"form":"tablet"}}"#).unwrap();
+        assert_eq!(s.my_pc.form, crate::look::Form::Auto);
     }
 }

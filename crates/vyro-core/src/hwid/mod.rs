@@ -127,6 +127,12 @@ fn collect_windows(hw: &mut HardwareId) {
     if let Some(mb) = win::installed_memory_mb() {
         hw.memory.total_mb = Some(mb);
     }
+    // Firmware that does not name the chassis: a system battery means a laptop.
+    if hw.board.form_factor == crate::info::FormFactor::Unknown
+        && win::has_system_battery() == Some(true)
+    {
+        hw.board.form_factor = crate::info::FormFactor::Laptop;
+    }
     // Intel names the chipset on the LPC bridge; AMD boards don't, so fall back to the board name.
     hw.board.chipset = win::chipset().or_else(|| {
         hw.board

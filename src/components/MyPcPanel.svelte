@@ -21,7 +21,7 @@
   } from '../gpuspecs';
   import { buildPc, fanSpeedText, heat, heatColor, inMode, MODES, partTemp, spinRate, type Part, type ThermalMode } from '../pcmodel';
   import { fmt } from '../format';
-  import { getDisplays, getDrives, getHardwareId } from '../ipc';
+  import { DEFAULT_MY_PC, getDisplays, getDrives, getHardwareId } from '../ipc';
   import { fmtTemp, prefs, profileSpec, savePrefs } from '../prefs.svelte';
   import { theme, tokens } from '../themes';
   import type { DisplayInfo, DriveInfo, HardwareId, SensorSnapshot } from '../types';
@@ -279,7 +279,7 @@
     if (shape) next[gpuPart.gpu!.key] = shape;
     else delete next[gpuPart.gpu!.key];
     try {
-      await savePrefs({ myPc: { threeD: prefs.myPc?.threeD ?? true, gpuShapes: next } });
+      await savePrefs({ myPc: { ...DEFAULT_MY_PC, ...prefs.myPc, gpuShapes: next } });
       error = null;
     } catch (e) {
       error = String(e);
@@ -287,7 +287,7 @@
   }
   async function set3d(on: boolean): Promise<void> {
     try {
-      await savePrefs({ myPc: { threeD: on, gpuShapes: prefs.myPc?.gpuShapes ?? {} } });
+      await savePrefs({ myPc: { ...DEFAULT_MY_PC, ...prefs.myPc, threeD: on } });
     } catch (e) {
       error = String(e);
     }
@@ -475,24 +475,28 @@
   }
   .views {
     display: inline-flex;
-    padding: 2px;
+    gap: 2px;
+    padding: 3px;
     border: 1px solid var(--line);
-    border-radius: 9px;
+    border-radius: 11px;
     background: var(--panel);
   }
   .views button {
-    padding: 0.3rem 0.8rem;
+    padding: 0.32rem 0.85rem;
     border: 0;
-    border-radius: 7px;
+    border-radius: 8px;
     background: none;
     color: var(--muted);
     font: inherit;
     cursor: pointer;
   }
-  .views button[aria-checked='true'] {
-    background: var(--panel-edge);
+  .views button:hover {
     color: var(--text);
-    font-weight: 600;
+  }
+  .views button[aria-checked='true'] {
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px var(--accent-line);
+    color: var(--text);
   }
   .spacer {
     flex: 1;

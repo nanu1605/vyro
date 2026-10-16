@@ -68,6 +68,7 @@ export const sampleHardware: HardwareId = {
     biosVersion: '1801',
     biosDate: '07/12/2024',
     chipset: 'Intel Z790',
+    formFactor: 'desktop',
   },
   gpus: [
     {
@@ -129,4 +130,23 @@ export const sampleSystem: SystemInfo = {
     { ts: boot - 60, kind: 'shutdown', detail: null },
   ],
   elevated: false,
+};
+
+/** The browser preview as a laptop (`localStorage['vyro.sim.form'] = 'laptop'`). */
+export const sampleLaptop: HardwareId = {
+  ...sampleHardware,
+  board: {
+    ...sampleHardware.board,
+    systemManufacturer: 'ASUSTeK COMPUTER INC.',
+    systemProduct: 'ROG Zephyrus G16 GU605MV',
+    manufacturer: 'ASUSTeK COMPUTER INC.',
+    product: 'GU605MV',
+    chipset: null,
+    formFactor: 'laptop',
+  },
+  memory: {
+    ...sampleHardware.memory,
+    slotsTotal: 2,
+    dimms: sampleHardware.memory.dimms.slice(0, 2).map((d, i) => ({ ...d, slot: `DIMM ${i}`, formFactor: 'SODIMM' })),
+  },
 };

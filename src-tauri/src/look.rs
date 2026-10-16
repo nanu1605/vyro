@@ -140,13 +140,21 @@ mod tests {
 pub struct MyPc {
     pub three_d: bool,
     pub gpu_shapes: std::collections::BTreeMap<String, serde_json::Value>,
+    /// Desktop or laptop model (1.1): `Auto` follows what the firmware says.
+    pub form: Form,
 }
+
+named!(
+    /// My PC's model: as the firmware says, or the owner's pick when it says wrong.
+    Form { Auto = "auto", Desktop = "desktop", Laptop = "laptop" }
+);
 
 impl Default for MyPc {
     fn default() -> Self {
         Self {
             three_d: true,
             gpu_shapes: std::collections::BTreeMap::new(),
+            form: Form::Auto,
         }
     }
 }

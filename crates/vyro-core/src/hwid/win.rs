@@ -71,6 +71,20 @@ pub fn topology_raw() -> Option<Vec<u8>> {
     Some(bytes)
 }
 
+/// Whether the PC runs on a system battery (a laptop), for when the firmware does not say what
+/// kind of computer it is; `None` when Windows does not know.
+pub fn has_system_battery() -> Option<bool> {
+    use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+    let mut st = SYSTEM_POWER_STATUS::default();
+    // SAFETY: valid out-pointer.
+    unsafe { GetSystemPowerStatus(&mut st) }.ok()?;
+    // BatteryFlag 128: no system battery; 255: unknown.
+    match st.BatteryFlag {
+        255 => None,
+        f => Some(f & 128 == 0),
+    }
+}
+
 pub fn installed_memory_mb() -> Option<f64> {
     let mut kb = 0u64;
     // SAFETY: valid out-pointer.

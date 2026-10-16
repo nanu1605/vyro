@@ -57,6 +57,7 @@ export type { Unit } from './bindings/Unit';
 export type { SensorSnapshot } from './bindings/SensorSnapshot';
 export type { SensorTree } from './bindings/SensorTree';
 export type { BoardId } from './bindings/BoardId';
+export type { FormFactor } from './bindings/FormFactor';
 export type { CacheInfo } from './bindings/CacheInfo';
 export type { CoreInfo } from './bindings/CoreInfo';
 export type { CpuId } from './bindings/CpuId';

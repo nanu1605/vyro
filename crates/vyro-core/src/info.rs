@@ -248,6 +248,37 @@ pub struct DimmInfo {
     pub rank: Option<u32>,
 }
 
+/// What kind of computer this is (SMBIOS type 3 chassis type, 1.1), so My PC can draw a laptop
+/// on a laptop. `Unknown` when the firmware does not say (or says "Other").
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum FormFactor {
+    #[default]
+    Unknown,
+    Desktop,
+    /// Laptops, notebooks, convertibles, tablets and handhelds: anything portable.
+    Laptop,
+    AllInOne,
+    /// Mini PCs and stick PCs.
+    Mini,
+    Server,
+}
+
+impl FormFactor {
+    /// From the chassis type byte (bit 7 is the lock flag).
+    pub fn from_chassis(code: u8) -> Self {
+        match code & 0x7F {
+            0x03..=0x07 | 0x0F | 0x10 | 0x18 => Self::Desktop,
+            0x08..=0x0B | 0x0E | 0x1E..=0x20 => Self::Laptop,
+            0x0D => Self::AllInOne,
+            0x22..=0x24 => Self::Mini,
+            0x11 | 0x17 | 0x19 | 0x1C | 0x1D => Self::Server,
+            _ => Self::Unknown,
+        }
+    }
+}
+
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -263,6 +294,9 @@ pub struct BoardId {
     pub bios_version: Option<String>,
     pub bios_date: Option<String>,
     pub chipset: Option<String>,
+    /// Desktop or laptop (1.1; files and services from before it read as `Unknown`).
+    #[serde(default)]
+    pub form_factor: FormFactor,
 }
 
 impl std::fmt::Debug for BoardId {
@@ -278,6 +312,7 @@ impl std::fmt::Debug for BoardId {
             .field("bios_version", &self.bios_version)
             .field("bios_date", &self.bios_date)
             .field("chipset", &self.chipset)
+            .field("form_factor", &self.form_factor)
             .finish()
     }
 }
@@ -641,6 +676,30 @@ mod tests {
         let text = format!("{board:?}");
         assert!(!text.contains("SN-SECRET-123"));
         assert!(text.contains("<redacted>"));
+    }
+
+    #[test]
+    fn chassis_types_map_to_form_factors() {
+        use FormFactor::*;
+        for (code, want) in [
+            (0x03, Desktop),
+            (0x07, Desktop),
+            (0x09, Laptop),
+            (0x0A, Laptop),
+            (0x1F, Laptop),
+            (0x89, Laptop), // with the lock bit
+            (0x0D, AllInOne),
+            (0x23, Mini),
+            (0x17, Server),
+            (0x01, Unknown),
+            (0x02, Unknown),
+            (0x7F, Unknown),
+        ] {
+            assert_eq!(FormFactor::from_chassis(code), want, "{code:#x}");
+        }
+        // Saved before 1.1: no form factor yet.
+        let b: BoardId = serde_json::from_str(r#"{"systemManufacturer":null,"systemProduct":null,"manufacturer":"MSI","product":null,"version":null,"serial":null,"biosVendor":null,"biosVersion":null,"biosDate":null,"chipset":null}"#).unwrap();
+        assert_eq!(b.form_factor, Unknown);
     }
 }
 

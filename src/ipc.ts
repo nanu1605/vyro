@@ -387,8 +387,10 @@ export interface MyPcSettings {
   threeD: boolean;
   /** Checked with `validShape` when read; kept as written. */
   gpuShapes: Record<string, unknown>;
+  /** Desktop or laptop model (1.1); `auto`: as the firmware says. */
+  form: 'auto' | 'desktop' | 'laptop';
 }
-export const DEFAULT_MY_PC: MyPcSettings = { threeD: true, gpuShapes: {} };
+export const DEFAULT_MY_PC: MyPcSettings = { threeD: true, gpuShapes: {}, form: 'auto' };
 export { DEFAULT_OVERLAY };
 export type { OverlayCorner, OverlayData, OverlaySettings };
 let browserSettings: AppSettings = {
@@ -598,7 +600,16 @@ export async function resetSensorStats(): Promise<void> {
 }
 
 export async function getHardwareId(): Promise<HardwareId> {
-  if (!inTauri) return (await import('./sample')).sampleHardware;
+  if (!inTauri) {
+    const { sampleHardware, sampleLaptop } = await import('./sample');
+    let form: string | null = null;
+    try {
+      form = localStorage.getItem('vyro.sim.form');
+    } catch {
+      /* the desktop sample */
+    }
+    return form === 'laptop' ? sampleLaptop : sampleHardware;
+  }
   return invoke<HardwareId>('get_hardware_id');
 }
 

@@ -5,7 +5,7 @@
 //! decoded; every accessor bounds-checks against the structure's declared length, so short or
 //! older-version structures yield `None` instead of reading garbage.
 
-use crate::info::{BoardId, DimmInfo, MemoryId};
+use crate::info::{BoardId, DimmInfo, FormFactor, MemoryId};
 
 pub struct Smbios<'a> {
     pub major: u8,
@@ -164,7 +164,8 @@ impl Structure<'_> {
 // Typed extraction
 // ---------------------------------------------------------------------------------------------
 
-/// Type 0 (BIOS), 1 (System) and 2 (Baseboard). Chipset is not in SMBIOS.
+/// Type 0 (BIOS), 1 (System), 2 (Baseboard) and 3 (the chassis: desktop or laptop). Chipset
+/// is not in SMBIOS.
 pub fn board(smbios: &Smbios) -> BoardId {
     let mut b = BoardId::default();
     if let Some(s) = smbios.of_kind(0).next() {
@@ -181,6 +182,9 @@ pub fn board(smbios: &Smbios) -> BoardId {
         b.product = s.string(0x05);
         b.version = s.string(0x06);
         b.serial = s.string(0x07);
+    }
+    if let Some(code) = smbios.of_kind(3).next().and_then(|s| s.byte(0x05)) {
+        b.form_factor = FormFactor::from_chassis(code);
     }
     b
 }
@@ -529,6 +533,7 @@ mod tests {
                         "240912345678901",
                     ],
                 ),
+                (3, body(0x16, &[(0x05, &[0x03])]), &[]),
                 (
                     4,
                     body(
@@ -597,7 +602,7 @@ mod tests {
         let s = Smbios::from_raw(&buf).unwrap();
         assert_eq!(s.version(), "3.5");
         let kinds: Vec<u8> = s.structures().iter().map(|x| x.kind).collect();
-        assert_eq!(kinds, [0, 1, 2, 4, 16, 17, 17, 17, 127]);
+        assert_eq!(kinds, [0, 1, 2, 3, 4, 16, 17, 17, 17, 127]);
     }
 
     #[test]
@@ -614,6 +619,20 @@ mod tests {
         assert_eq!(b.system_product, None, "placeholder filtered");
         assert_eq!(b.product.as_deref(), Some("ROG STRIX Z790-E GAMING WIFI"));
         assert_eq!(b.serial.as_deref(), Some("240912345678901"));
+        assert_eq!(b.form_factor, FormFactor::Desktop, "chassis type 3");
+    }
+
+    #[test]
+    fn a_laptop_chassis_reads_as_a_laptop() {
+        let buf = raw(3, 5, &[(3, body(0x16, &[(0x05, &[0x0A])]), &[])]);
+        let b = board(&Smbios::from_raw(&buf).unwrap());
+        assert_eq!(b.form_factor, FormFactor::Laptop);
+        // No chassis structure at all.
+        let none = raw(3, 5, &[(0, body(0x18, &[]), &[])]);
+        assert_eq!(
+            board(&Smbios::from_raw(&none).unwrap()).form_factor,
+            FormFactor::Unknown
+        );
     }
 
     #[test]
