@@ -977,7 +977,8 @@ Budget:
           runs every GPU workload on WARP and checks the shader's hashes against the CPU's.
         - Browser preview: axe clean and no overflow at 1440 and 390 px.
         - The main bundle grows 3.1 kB; the tab is a 19 kB chunk.
-- [ ] Field check (MS-7E24, RTX 5060 Ti):
+- [x] Field check (MS-7E24, RTX 5060 Ti, 2026-10-16, test build `vyro-windows-bab8a30`),
+      all passed:
       - A Quick run completes in about 3 minutes, then a second scores within noise of the first.
       - The CPU multi-thread peak temperature and power match HWMonitor.
       - The GPU areas name the RTX 5060 Ti (not the iGPU), and Graphics holds it at full load.
@@ -985,6 +986,7 @@ Budget:
         and leave no `vyro-bench-*.tmp` in `%TEMP%`.
       - A Full run's Sustained loops read steady.
       - A run after a GPU driver update lists the change.
+      The defaults above stay.
 
 ### P21 — One-click diagnostics + reports (M10)
 - [ ] Checks with telemetry evidence; HTML / JSON / Markdown / PDF, serials redacted.
