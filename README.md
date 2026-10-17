@@ -7,11 +7,15 @@ app or library).
 - **Build spec:** [`PROJECT_PLAN.md`](PROJECT_PLAN.md) — what to build and why.
 - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — milestones, phase tracker, decision log.
 
-**Status:** 1.1. Live CPU, GPU, board, fan, voltage, RAM, storage and network sensors on
+**Status:** 1.2. Live CPU, GPU, board, fan, voltage, RAM, storage and network sensors on
 Windows (low-level ones through PawnIO, read by the Vyro Sensor Service), history, System
-Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 1.1: a new look
-(a sidebar, a command palette and the whole width of the window), a livelier 3-D My PC with a
-laptop model, [desktop widgets](#desktop-widgets-11) and a smoother overlay graph. 1.0 added
+Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 1.2:
+[desktop widgets](#desktop-widgets-11-12) stay in view through Show desktop, snap to the
+screen's edges and to each other, can let clicks through, and come in three new kinds (Network,
+Game FPS, Top processes); My PC shows its airflow as smoke lines; and Dashboard cards pack
+without blank space. 1.1 added a new look (a sidebar, a command palette and the whole width of
+the window), a livelier 3-D My PC with a laptop model, desktop widgets and a smoother overlay
+graph. 1.0 added
 Insights with a Performance Score, alerts with several conditions and actions, a benchmark,
 one-click diagnostics and reports, themes, a dashboard builder, a My PC view, a Devices tab and
 a phone companion (the sections marked (1.0) below). 0.3 added automatic game profiles, a
