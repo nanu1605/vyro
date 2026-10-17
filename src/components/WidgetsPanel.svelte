@@ -16,7 +16,9 @@
     DESK_KINDS,
     EMPTY,
     MAX_WIDGETS,
+    PROC_SORTS,
     kindOf,
+    sortOf,
     newWidget,
     widgetSize,
     withSources,
@@ -99,9 +101,18 @@
     return [...g].map(([group, items]) => ({ group, items }));
   });
   const label = (id: string) => readingDef(id, snap)?.label ?? id;
-  /** "Gauge · CPU usage"; a stack or a clock shows several readings, so only its kind. */
-  const title = (w: DesktopWidget) =>
-    kindOf(w.kind).sources > 1 ? kindOf(w.kind).name : `${kindOf(w.kind).name} · ${w.sources[0] ? label(w.sources[0]) : 'no reading'}`;
+  /** "Gauge · CPU usage", "Top processes · CPU"; a stack, a clock or a fixed set: only its kind. */
+  function title(w: DesktopWidget): string {
+    const k = kindOf(w.kind);
+    if (k.picks === 'rank') return `${k.name} · ${PROC_SORTS.find((s) => s.id === sortOf(w))?.name}`;
+    if (k.picks === 'none' || k.sources > 1) return k.name;
+    return `${k.name} · ${w.sources[0] ? label(w.sources[0]) : 'no reading'}`;
+  }
+  /** What a widget with nothing to pick shows. */
+  const FIXED: Partial<Record<DeskKind, string>> = {
+    network: "The connected network's download and upload, and their last minute.",
+    game: 'The frame rate of the game Vyro measures (see Gaming), and its last minute; "No game running" otherwise.',
+  };
 
   function setSource(w: DesktopWidget, i: number, id: string): void {
     const s = [...w.sources];
@@ -166,8 +177,9 @@
     <div class="intro-text">
       <h2 id="desk-head">Desktop widgets</h2>
       <p>
-        Live readings on your desktop, each in a small window of its own. Drag an unlocked widget to move it;
-        right-click it to lock, edit or remove it.
+        Live readings on your desktop, each in a small window of its own. Drag an unlocked widget to move it: it
+        snaps to the screen's edges and to other widgets (hold Shift to place it freely). Right-click it to lock,
+        edit or remove it.
       </p>
       {#if !inTauri}
         <p class="note">In the browser preview, widgets stay on this page; the app puts them on your desktop.</p>
@@ -236,22 +248,35 @@
             </button>
           </header>
 
-          <fieldset>
-            <legend>{k.sources > 1 ? `Readings (up to ${k.sources})` : 'Reading'}</legend>
-            {#each w.sources as id, i (id)}
-              <div class="source">
-                {@render readingSelect(w, i, id, k.sources > 1 ? `Reading ${i + 1}` : 'Reading')}
-                {#if w.sources.length > 1}
-                  <button type="button" class="icon" onclick={() => dropSource(w, i)} aria-label="Remove {label(id)}" title="Remove">
-                    <X size={15} aria-hidden="true" />
-                  </button>
-                {/if}
+          {#if k.picks === 'readings'}
+            <fieldset>
+              <legend>{k.sources > 1 ? `Readings (up to ${k.sources})` : 'Reading'}</legend>
+              {#each w.sources as id, i (id)}
+                <div class="source">
+                  {@render readingSelect(w, i, id, k.sources > 1 ? `Reading ${i + 1}` : 'Reading')}
+                  {#if w.sources.length > 1}
+                    <button type="button" class="icon" onclick={() => dropSource(w, i)} aria-label="Remove {label(id)}" title="Remove">
+                      <X size={15} aria-hidden="true" />
+                    </button>
+                  {/if}
+                </div>
+              {/each}
+              {#if w.sources.length < k.sources}
+                <div class="source">{@render readingSelect(w, w.sources.length, '', 'Add a reading')}</div>
+              {/if}
+            </fieldset>
+          {:else if k.picks === 'rank'}
+            <div class="row">
+              <span class="name" id="rank-{w.id}">Busiest by</span>
+              <div class="segmented" role="group" aria-labelledby="rank-{w.id}">
+                {#each PROC_SORTS as r (r.id)}
+                  <button type="button" aria-pressed={sortOf(w) === r.id} onclick={() => change(w.id, { sources: [r.id] })}>{r.name}</button>
+                {/each}
               </div>
-            {/each}
-            {#if w.sources.length < k.sources}
-              <div class="source">{@render readingSelect(w, w.sources.length, '', 'Add a reading')}</div>
-            {/if}
-          </fieldset>
+            </div>
+          {:else}
+            <p class="shows">{FIXED[w.kind] ?? k.text}</p>
+          {/if}
 
           <div class="ranges">
             <label>
@@ -305,6 +330,22 @@
               onchange={(e) => change(w.id, { locked: e.currentTarget.checked }, e.currentTarget.checked ? 'Locked in place.' : 'Unlocked: drag it to move it.')}
             />
             <span>Locked in place<small>Unlocked, the widget moves when you drag it.</small></span>
+          </label>
+          <label class="check" class:off={!w.locked}>
+            <input
+              type="checkbox"
+              class="switch"
+              role="switch"
+              checked={w.clickThrough}
+              disabled={!w.locked}
+              onchange={(e) =>
+                change(
+                  w.id,
+                  { clickThrough: e.currentTarget.checked },
+                  e.currentTarget.checked ? 'Clicks now pass through the widget.' : 'The widget catches the mouse again.',
+                )}
+            />
+            <span>Clicks pass through<small>While locked, the widget ignores the mouse. To move or change it, unlock it here.</small></span>
           </label>
         </div>
       </section>
@@ -586,6 +627,14 @@
   }
   .row .name {
     margin: 0;
+  }
+  .shows {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+  .check.off {
+    cursor: default;
   }
   .note {
     margin: 0.6rem 0 0;

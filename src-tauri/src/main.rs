@@ -14,6 +14,7 @@ mod pin;
 mod remote;
 mod share;
 mod smoke;
+mod snap;
 mod tray;
 mod updates;
 mod widgets;

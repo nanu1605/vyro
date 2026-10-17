@@ -4,8 +4,10 @@
 //! `#widget=<id>`; they share the app's WebView2 browser process. Readings reach them as
 //! `widget-sensors` events, also while the main window sits in the tray, and the engine keeps
 //! the window's poll rate for them. Dragging a widget moves its window; where it ends up is
-//! saved a moment after it stops. Widgets behind windows stay in view through Windows' Show
-//! desktop (Win+D): while the desktop shows they are kept on top (`pin.rs`, 1.1.1).
+//! saved a moment after it stops; while dragged it snaps to the screen's edges and to other
+//! widgets (`snap.rs`, 1.2.0). Locked, a widget can let clicks through to what is under it.
+//! Widgets behind windows stay in view through Windows' Show desktop (Win+D): while the desktop
+//! shows they are kept on top (`pin.rs`, 1.1.1).
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -30,7 +32,11 @@ pub const DATA_EVENT: &str = "widget-sensors";
 pub const CHANGED_EVENT: &str = "widgets-changed";
 pub const MAX_WIDGETS: usize = 8;
 pub const MAX_SOURCES: usize = 6;
-pub const KINDS: [&str; 5] = ["gauge", "reading", "graph", "stack", "clock"];
+pub const KINDS: [&str; 8] = [
+    "gauge", "reading", "graph", "stack", "clock", "network", "game", "top",
+];
+/// What a "top" widget ranks processes by (its one source).
+pub const PROC_SORTS: [&str; 3] = ["proc.cpu", "proc.ram", "proc.gpu"];
 /// Every widget window's title (`pin.rs` tells widgets from Vyro's other windows by it).
 pub const TITLE: &str = "Vyro widget";
 
@@ -79,7 +85,8 @@ pub struct DesktopWidget {
     pub id: String,
     /// One of [`KINDS`].
     pub kind: String,
-    /// Reading ids (the Dashboard's): one, several for "stack", none or two for "clock".
+    /// Reading ids (the Dashboard's): one, several for "stack", none or two for "clock", none
+    /// for "network" and "game". A "top" widget keeps what it ranks by ([`PROC_SORTS`]).
     pub sources: Vec<String>,
     /// Top left on the desktop, logical px; set once the window has been placed.
     pub x: i32,
@@ -93,6 +100,8 @@ pub struct DesktopWidget {
     pub layer: Layer,
     /// Not moved by dragging.
     pub locked: bool,
+    /// While locked, the mouse goes through to what is under the widget ([`passes_clicks`]).
+    pub click_through: bool,
 }
 
 impl Default for DesktopWidget {
@@ -109,6 +118,7 @@ impl Default for DesktopWidget {
             style: Style::App,
             layer: Layer::Desktop,
             locked: false,
+            click_through: false,
         }
     }
 }
@@ -157,11 +167,14 @@ pub fn sanitize(mut w: Widgets) -> Widgets {
     w.widgets.truncate(MAX_WIDGETS);
     for x in &mut w.widgets {
         let mut kept = HashSet::new();
-        x.sources
-            .retain(|s| valid_source(s) && kept.insert(s.clone()));
+        let top = x.kind == "top";
+        x.sources.retain(|s| {
+            valid_source(s) && (!top || PROC_SORTS.contains(&s.as_str())) && kept.insert(s.clone())
+        });
         let max = match x.kind.as_str() {
             "stack" => MAX_SOURCES,
             "clock" => 2,
+            "network" | "game" => 0,
             _ => 1,
         };
         x.sources.truncate(max);
@@ -178,10 +191,19 @@ pub fn size(w: &DesktopWidget) -> (f64, f64) {
         "graph" => (300.0, 150.0),
         "stack" => (250.0, 52.0 + 36.0 * w.sources.len().max(1) as f64),
         "clock" => (260.0, 120.0),
+        "network" => (280.0, 150.0),
+        "game" => (260.0, 150.0),
+        "top" => (260.0, 200.0),
         _ => (220.0, 104.0),
     };
     let k = f64::from(w.scale) / 100.0;
     (bw * k, bh * k)
+}
+
+/// Whether the mouse goes through the widget: only while it is locked, so unlocking it (on the
+/// Widgets page, as it can't be right-clicked then) always makes it grabbable again.
+pub fn passes_clicks(w: &DesktopWidget) -> bool {
+    w.locked && w.click_through
 }
 
 /// The saved widgets with the positions the store keeps: a page's copy may be older than the
@@ -406,6 +428,8 @@ fn open_or_update(
     if let Some(win) = app.get_webview_window(&label) {
         let _ = win.set_size(LogicalSize::new(sw, sh));
         stack(&win, (top, bottom));
+        // tao changes nothing when the flag is as it was.
+        let _ = win.set_ignore_cursor_events(passes_clicks(w));
         if moved {
             let _ = win.set_position(LogicalPosition::new(x, y));
         }
@@ -438,6 +462,9 @@ fn open_or_update(
             // hidden on its next change of flags (a layer switch, Show desktop). Built unfocused,
             // tao shows it without activating it (SW_SHOWNOACTIVATE), so it takes no focus.
             let _ = win.show();
+            let _ = win.set_ignore_cursor_events(passes_clicks(w));
+            #[cfg(windows)]
+            crate::snap::attach(&win);
             moved.then_some((x, y))
         }
         Err(e) => {
@@ -554,7 +581,7 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
 }
 
 /// Saves, then puts the windows and every view in step.
-fn store_and_sync(app: &AppHandle, next: Widgets) -> Result<Widgets, String> {
+pub(crate) fn store_and_sync(app: &AppHandle, next: Widgets) -> Result<Widgets, String> {
     let store = app.try_state::<WidgetStore>().ok_or("widgets not loaded")?;
     let next = sanitize(merge_positions(&store.get(), next));
     store.set(next.clone())?;
@@ -668,6 +695,42 @@ mod tests {
     }
 
     #[test]
+    fn the_new_kinds_keep_only_what_they_show() {
+        let s = sanitize(Widgets {
+            widgets: vec![
+                widget("n", "network", &["net.down"]),
+                widget("g", "game", &["game.fps"]),
+                widget("t", "top", &["cpu.usage", "proc.ram", "proc.gpu"]),
+                widget("u", "top", &["../etc"]),
+            ],
+            ..Widgets::default()
+        });
+        let sources: Vec<&[String]> = s.widgets.iter().map(|w| w.sources.as_slice()).collect();
+        assert!(sources[0].is_empty() && sources[1].is_empty());
+        assert_eq!(sources[2], ["proc.ram"], "a known ranking, one of them");
+        assert!(sources[3].is_empty(), "an unknown ranking reads as CPU");
+    }
+
+    #[test]
+    fn clicks_go_through_only_while_locked() {
+        let mut w = widget("a", "reading", &[]);
+        w.click_through = true;
+        assert!(!passes_clicks(&w), "unlocked: it can be dragged");
+        w.locked = true;
+        assert!(passes_clicks(&w));
+        w.click_through = false;
+        assert!(!passes_clicks(&w));
+        // Files from 1.1 have no such field.
+        let old: DesktopWidget =
+            serde_json::from_str(r#"{"id":"a","kind":"reading","locked":true}"#).unwrap();
+        assert!(!old.click_through);
+        assert_eq!(
+            serde_json::to_value(&w).unwrap()["clickThrough"],
+            serde_json::Value::Bool(false)
+        );
+    }
+
+    #[test]
     fn unknown_styles_and_layers_read_as_the_defaults() {
         let w: DesktopWidget =
             serde_json::from_str(r#"{"id":"a","kind":"reading","style":"neon","layer":"middle"}"#)
@@ -696,6 +759,9 @@ mod tests {
         assert_eq!(size(&g), (300.0, 300.0));
         let s = widget("s", "stack", &["a", "b", "c"]);
         assert_eq!(size(&s), (250.0, 52.0 + 108.0));
+        assert_eq!(size(&widget("n", "network", &[])), (280.0, 150.0));
+        assert_eq!(size(&widget("g", "game", &[])), (260.0, 150.0));
+        assert_eq!(size(&widget("t", "top", &["proc.cpu"])), (260.0, 200.0));
     }
 
     #[test]

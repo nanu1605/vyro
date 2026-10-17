@@ -28,7 +28,7 @@ const TABS = [
 
 // Desktop widgets (P30), one of each kind and style, as the browser preview keeps them.
 const DESK = (id, kind, sources, style) => ({
-  id, kind, sources, x: 0, y: 0, placed: false, scale: 100, opacity: 85, style, layer: 'desktop', locked: false,
+  id, kind, sources, x: 0, y: 0, placed: false, scale: 100, opacity: 85, style, layer: 'desktop', locked: false, clickThrough: false,
 });
 const WIDGETS = {
   version: 1,
@@ -39,6 +39,9 @@ const WIDGETS = {
     DESK('graph1', 'graph', ['gpu.0.usage'], 'app'),
     DESK('stack1', 'stack', ['cpu.usage', 'cpu.temp', 'gpu.0.usage', 'gpu.0.temp', 'mem.load', 'cpu.power'], 'glass'),
     DESK('clock1', 'clock', ['cpu.temp', 'gpu.0.temp'], 'app'),
+    DESK('network1', 'network', [], 'glass'),
+    DESK('game1', 'game', [], 'solid'),
+    { ...DESK('top1', 'top', ['proc.ram'], 'app'), locked: true, clickThrough: true },
   ],
 };
 const SEED_WIDGETS = `localStorage.setItem('vyro.widgets', ${JSON.stringify(JSON.stringify(WIDGETS))})`;
@@ -233,10 +236,19 @@ async function markOnSelected(page, where) {
   if (off > 1) problem(where, `the sidebar's highlight is ${Math.round(off)} px off the selected view`);
 }
 
-// --- Desktop widget windows (P30): each kind at its window's size, and a widget's menu. -------
+// --- Desktop widget windows (P30, 1.2): each kind at its window's size, and a widget's menu. --
 
 async function sweepWidgets(browser, theme) {
-  const sizes = { gauge1: [200, 200], reading1: [220, 104], graph1: [300, 150], stack1: [250, 268], clock1: [260, 120] };
+  const sizes = {
+    gauge1: [200, 200],
+    reading1: [220, 104],
+    graph1: [300, 150],
+    stack1: [250, 268],
+    clock1: [260, 120],
+    network1: [280, 150],
+    game1: [260, 150],
+    top1: [260, 200],
+  };
   for (const w of WIDGETS.widgets) {
     const [width, height] = sizes[w.id];
     const { ctx, page } = await open(browser, `${BASE}/#widget=${w.id}`, { width, theme, init: SEED_WIDGETS });

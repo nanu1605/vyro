@@ -5,10 +5,11 @@
 //! Once the main page has loaded, `smoke.js` calls the commands the pages call (hardware,
 //! system, sensors, widgets) through the real IPC, then saves a widget as the Widgets page
 //! does. [`smoke_report`] then checks that the widget's window opened, shows without having
-//! taken focus and loaded its page, and that it stays over the desktop through Show desktop (`pin.rs`; skipped where the
-//! runner has no desktop to show), writes the result and quits the way the tray's "Quit Vyro"
-//! does. A watchdog writes a failure and ends the process if any of that hangs, so CI fails
-//! rather than waits.
+//! taken focus and loaded its page. On Windows it also checks that the widget stays over the
+//! desktop through Show desktop (`pin.rs`; skipped where the runner has no desktop to show),
+//! snaps when dragged near the screen's edge (`snap.rs`) and lets clicks through when locked so.
+//! Then it writes the result and quits the way the tray's "Quit Vyro" does. A watchdog writes a
+//! failure and ends the process if any of that hangs, so CI fails rather than waits.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -63,6 +64,17 @@ pub struct Facts {
     pub widget_focused: bool,
 }
 
+/// The checks of Windows' own behaviour: each "passed", "skipped: …" or "failed: …".
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Checks {
+    /// Show desktop with the widget behind windows (`pin.rs`).
+    pub show_desktop: String,
+    /// A drag step near the work area's corner snaps to it (`snap.rs`).
+    pub snap: String,
+    /// Locked with "Clicks pass through", the window lets the mouse through; unlocked, not.
+    pub click_through: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct Outcome {
     pub ok: bool,
@@ -71,13 +83,15 @@ pub struct Outcome {
     pub widget_window: bool,
     pub widget_visible: bool,
     pub widget_loaded: bool,
-    /// Show desktop with the widget behind windows: "passed", "skipped: …" or "failed: …".
+    /// As [`Checks`].
     pub show_desktop: String,
+    pub snap: String,
+    pub click_through: String,
 }
 
 /// Passes when every expected step answered without an error, the widget's window opened, shows
-/// and loaded its page, and Show desktop did not fail (a skip is not a failure).
-pub fn verdict(steps: &Value, facts: Facts, show_desktop: &str) -> Outcome {
+/// and loaded its page, and none of the [`Checks`] failed (a skip is not a failure).
+pub fn verdict(steps: &Value, facts: Facts, checks: &Checks) -> Outcome {
     let mut failures = Vec::new();
     let list = steps.as_array().map(Vec::as_slice).unwrap_or_default();
     for name in STEPS {
@@ -103,8 +117,14 @@ pub fn verdict(steps: &Value, facts: Facts, show_desktop: &str) -> Outcome {
             failures.push("the widget took focus when it opened".into());
         }
     }
-    if let Some(why) = show_desktop.strip_prefix("failed: ") {
-        failures.push(format!("Show desktop: {why}"));
+    for (name, result) in [
+        ("Show desktop", &checks.show_desktop),
+        ("Snapping", &checks.snap),
+        ("Click-through", &checks.click_through),
+    ] {
+        if let Some(why) = result.strip_prefix("failed: ") {
+            failures.push(format!("{name}: {why}"));
+        }
     }
     Outcome {
         ok: failures.is_empty(),
@@ -113,7 +133,9 @@ pub fn verdict(steps: &Value, facts: Facts, show_desktop: &str) -> Outcome {
         widget_window: facts.widget_window,
         widget_visible: facts.widget_visible,
         widget_loaded: facts.widget_loaded,
-        show_desktop: show_desktop.to_owned(),
+        show_desktop: checks.show_desktop.clone(),
+        snap: checks.snap.clone(),
+        click_through: checks.click_through.clone(),
     }
 }
 
@@ -140,6 +162,8 @@ fn failed(why: &str) -> Outcome {
         widget_visible: false,
         widget_loaded: false,
         show_desktop: "not run".into(),
+        snap: "not run".into(),
+        click_through: "not run".into(),
     }
 }
 
@@ -212,26 +236,103 @@ pub async fn smoke_report(app: AppHandle, steps: Value) -> Result<(), String> {
                 widget_visible: window.is_some_and(|w| w.is_visible().unwrap_or(false)),
                 widget_loaded: WIDGET_LOADED.load(Ordering::SeqCst),
             };
-            #[cfg(windows)]
-            let show_desktop = if facts.widget_loaded && facts.widget_visible {
-                crate::pin::smoke_show_desktop(&app, &label)
+            let checks = if !(facts.widget_loaded && facts.widget_visible) {
+                let skip = || "skipped: the widget did not show".to_owned();
+                Checks {
+                    show_desktop: skip(),
+                    snap: skip(),
+                    click_through: skip(),
+                }
             } else {
-                "skipped: the widget did not show".to_owned()
+                windows_checks(&app, &label)
             };
-            #[cfg(not(windows))]
-            let show_desktop = "skipped: not Windows".to_owned();
-            let outcome = verdict(&steps, facts, &show_desktop);
+            let outcome = verdict(&steps, facts, &checks);
             log::info!(
-                "smoke: ok {} {:?}; Show desktop {}",
+                "smoke: ok {} {:?}; Show desktop {}; snap {}; click-through {}",
                 outcome.ok,
                 outcome.failures,
-                outcome.show_desktop
+                outcome.show_desktop,
+                outcome.snap,
+                outcome.click_through
             );
             write(&outcome);
             app.exit(0);
         })
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+#[cfg(windows)]
+fn windows_checks(app: &AppHandle, label: &str) -> Checks {
+    Checks {
+        show_desktop: crate::pin::smoke_show_desktop(app, label),
+        snap: crate::snap::smoke_snap(app, label),
+        click_through: click_through(app, label),
+    }
+}
+
+#[cfg(not(windows))]
+fn windows_checks(_app: &AppHandle, _label: &str) -> Checks {
+    let skip = || "skipped: not Windows".to_owned();
+    Checks {
+        show_desktop: skip(),
+        snap: skip(),
+        click_through: skip(),
+    }
+}
+
+/// Locks the widget with "Clicks pass through" as the Widgets page would, and checks that its
+/// window lets the mouse through (tao's `WS_EX_TRANSPARENT`); then unlocks it and checks that
+/// it catches the mouse again.
+#[cfg(windows)]
+fn click_through(app: &AppHandle, label: &str) -> String {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongPtrW, GWL_EXSTYLE, WS_EX_TRANSPARENT,
+    };
+
+    let Some(hwnd) = app.get_webview_window(label).and_then(|w| w.hwnd().ok()) else {
+        return "failed: no widget window".into();
+    };
+    let Some(store) = app.try_state::<crate::widgets::WidgetStore>() else {
+        return "failed: widgets not loaded".into();
+    };
+    let set = |locked: bool| -> Result<(), String> {
+        let mut cfg = store.get();
+        let w = cfg
+            .widgets
+            .iter_mut()
+            .find(|w| w.id == WIDGET)
+            .ok_or("the widget is gone")?;
+        (w.locked, w.click_through) = (locked, true);
+        crate::widgets::store_and_sync(app, cfg).map(|_| ())
+    };
+    // SAFETY: reads a window's extended style.
+    let through =
+        || unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) } & WS_EX_TRANSPARENT.0 as isize != 0;
+    let wait = |want: bool| {
+        let since = Instant::now();
+        while through() != want {
+            if since.elapsed() >= Duration::from_secs(3) {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        true
+    };
+    if let Err(e) = set(true) {
+        return format!("failed: {e}");
+    }
+    if !wait(true) {
+        return "failed: locked with clicks passing through, the widget still catches the mouse"
+            .into();
+    }
+    if let Err(e) = set(false) {
+        return format!("failed: {e}");
+    }
+    if !wait(false) {
+        return "failed: unlocked, the widget still lets clicks through".into();
+    }
+    "passed".into()
 }
 
 #[cfg(test)]
@@ -247,6 +348,13 @@ mod tests {
                 .collect(),
         )
     }
+    fn passed() -> Checks {
+        Checks {
+            show_desktop: "passed".into(),
+            snap: "passed".into(),
+            click_through: "passed".into(),
+        }
+    }
     const SHOWN: Facts = Facts {
         widget_window: true,
         widget_visible: true,
@@ -256,23 +364,31 @@ mod tests {
 
     #[test]
     fn passes_when_every_step_answers_and_the_widget_shows() {
-        let o = verdict(&all_ok(), SHOWN, "passed");
+        let o = verdict(&all_ok(), SHOWN, &passed());
         assert!(o.ok, "{:?}", o.failures);
     }
 
     #[test]
-    fn show_desktop_fails_the_run_only_when_it_failed() {
-        let skipped = verdict(&all_ok(), SHOWN, "skipped: no desktop shell");
-        assert!(skipped.ok, "{:?}", skipped.failures);
-        assert_eq!(skipped.show_desktop, "skipped: no desktop shell");
-        let failed = verdict(
-            &all_ok(),
-            SHOWN,
-            "failed: the widget did not stay over the shown desktop",
-        );
+    fn a_windows_check_fails_the_run_only_when_it_failed() {
+        let skipped = Checks {
+            show_desktop: "skipped: no desktop shell".into(),
+            ..passed()
+        };
+        let o = verdict(&all_ok(), SHOWN, &skipped);
+        assert!(o.ok, "{:?}", o.failures);
+        assert_eq!(o.show_desktop, "skipped: no desktop shell");
+        let failed = Checks {
+            show_desktop: "failed: the widget did not stay over the shown desktop".into(),
+            snap: "failed: a widget 4 px from the corner went to 4,4".into(),
+            click_through: "failed: unlocked, the widget still lets clicks through".into(),
+        };
         assert_eq!(
-            failed.failures,
-            ["Show desktop: the widget did not stay over the shown desktop"]
+            verdict(&all_ok(), SHOWN, &failed).failures,
+            [
+                "Show desktop: the widget did not stay over the shown desktop",
+                "Snapping: a widget 4 px from the corner went to 4,4",
+                "Click-through: unlocked, the widget still lets clicks through",
+            ]
         );
     }
 
@@ -281,18 +397,18 @@ mod tests {
         let mut steps = all_ok();
         steps[2] =
             json!({ "name": "get_sensor_tree", "ok": false, "error": "timed out after 20 s" });
-        let o = verdict(&steps, SHOWN, "passed");
+        let o = verdict(&steps, SHOWN, &passed());
         assert!(!o.ok);
         assert_eq!(o.failures, ["get_sensor_tree: timed out after 20 s"]);
 
-        let o = verdict(&json!([]), SHOWN, "passed");
+        let o = verdict(&json!([]), SHOWN, &passed());
         assert_eq!(o.failures.len(), STEPS.len());
-        assert!(!verdict(&Value::Null, SHOWN, "passed").ok);
+        assert!(!verdict(&Value::Null, SHOWN, &passed()).ok);
     }
 
     #[test]
     fn the_widget_must_open_show_and_load() {
-        let o = verdict(&all_ok(), Facts::default(), "passed");
+        let o = verdict(&all_ok(), Facts::default(), &passed());
         assert_eq!(o.failures, ["the widget's window did not open"]);
         let o = verdict(
             &all_ok(),
@@ -300,7 +416,7 @@ mod tests {
                 widget_loaded: false,
                 ..SHOWN
             },
-            "passed",
+            &passed(),
         );
         assert_eq!(o.failures, ["the widget's page did not load"]);
         let o = verdict(
@@ -309,7 +425,7 @@ mod tests {
                 widget_visible: false,
                 ..SHOWN
             },
-            "passed",
+            &passed(),
         );
         assert_eq!(o.failures, ["the widget's window is not shown"]);
         let o = verdict(
@@ -318,7 +434,7 @@ mod tests {
                 widget_focused: true,
                 ..SHOWN
             },
-            "passed",
+            &passed(),
         );
         assert_eq!(o.failures, ["the widget took focus when it opened"]);
     }

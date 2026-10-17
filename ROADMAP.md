@@ -45,6 +45,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 28 | Installer size budget | **< 60 MB** from 1.1 (was < 20 MB, spec §8): "we have to make good software using good tools" (the owner, 2026-10-16). The window's start bundle budget goes from 125 to 200 kB gzipped | decided |
 | 29 | Navigation | A sidebar with grouped views replaces the tab strip (supersedes 26); the views and their ids stay | decided |
 | 30 | Widgets and Show desktop | "Behind windows" widgets stay in view through Show desktop (Win+D), as Rainmeter's "On desktop" skins do: a probe window detects it and the widgets go on top while it lasts; Vyro's windows are never put inside Explorer's (the owner, 2026-10-17) | decided |
+| 31 | Moving widgets and clicks | Widgets snap while dragged, in Windows' own move loop (`WM_MOVING`): to the work area's edges, beside another widget 8 px apart, or in line with it; Shift places freely. "Clicks pass through" works only while a widget is locked, so unlocking it on the Widgets page is always the way back (in the plan the owner approved, 2026-10-17) | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -2075,6 +2076,56 @@ hid widgets set behind windows (decision 30).
         desktop and went back when the main window came forward. It opened without taking
         focus. The installer is 11.41 MB.
 - [ ] Field check ([`docs/field-check-1.1.1.md`](docs/field-check-1.1.1.md)), then the owner's go
+      for the release.
+
+### 1.2.0 — widgets, next round
+The owner's pick while 1.1.1 waits for its field check (2026-10-17): widgets that are easier to
+live with (decision 31). Built on the same branch after 5536a64; 1.1.1 is released from
+5536a64 itself, so none of this goes into it.
+- [x] Built (2026-10-17):
+      - **Snapping** (`src-tauri/src/snap.rs`). A widget is dragged by Windows' move loop, which
+        asks the window with `WM_MOVING` where each step goes. A window subclass on each widget
+        answers with `snap`:
+        - Each axis is handled on its own. The nearest pull within 10 px (logical, at the
+          window's DPI) wins: the work area's edges (flush), a neighbour's side 8 px away, or
+          a neighbour's edge in line.
+        - A neighbour counts only when it is near on the other axis, so a widget across the
+          screen never pulls. Shift held: no snapping.
+        - The other widgets' rectangles are read once as the drag starts. Outside a drag
+          nothing runs, and the place saved after the move is the snapped one.
+        - `snap` is pure and unit-tested on every platform.
+      - **Click-through.** "Clicks pass through" on the Widgets page (`clickThrough` in
+        `widgets.json`, off by default and in older files).
+        - While the widget is locked, its window ignores the mouse (tao's
+          `set_ignore_cursor_events`, the same call the game overlay uses).
+        - Unlocking it on the page, or "Unlock all to arrange", gives the mouse back; the
+          switch is greyed while it is unlocked.
+      - **Three new kinds:**
+        - **Network:** the default route's adapter, download and upload with one graph of
+          both.
+        - **Game FPS:** the game's name, FPS, 1% low and frame time with an FPS graph; "No game
+          running" otherwise.
+        - **Top processes:** the five busiest programs by CPU, memory or GPU, one row per name
+          with its processes added up (`topProcesses`, tested). The snapshot already lists the
+          busiest 25 by each measure every reading, so no new data is read.
+        - `sanitize` keeps no readings for the first two and one known ranking for the last.
+      - **The Widgets page:** the gallery has eight kinds; the network and game widgets say what
+        they show instead of a readings picker; top processes has "Busiest by". The intro
+        mentions snapping and Shift.
+      - **`windows` features** that `pin.rs` and `snap.rs` use are declared in
+        `src-tauri/Cargo.toml` rather than borrowed from tao's and wry's.
+      - **CI's smoke test**, after Show desktop:
+        - **snap:** plays a drag's messages to the widget window. A step 4 px from the work
+          area's corner must come back flush; one 40 px away must come back as it was.
+        - **click-through:** locks the widget with clicks passing through, and checks that its
+          window takes `WS_EX_TRANSPARENT`; then unlocks it and checks that the style goes.
+        - Both are printed with Show desktop in the log and the step summary.
+      - **Accessibility sweep:** one widget of each new kind (8, the limit), one of them locked
+        with clicks passing through: 555 checks clean. The start bundle is 140.7 kB of 200.
+      - Version 1.2.0. `docs/field-check-1.1.1.md` now names its exact test build, since later
+        runs carry this work.
+- [ ] CI on Windows: "snap: passed" and "click-through: passed"
+- [ ] Field check ([`docs/field-check-1.2.md`](docs/field-check-1.2.md)), then the owner's go
       for the release.
 
 ## Risks

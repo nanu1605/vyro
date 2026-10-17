@@ -33,6 +33,7 @@
     style: 'app',
     layer: 'desktop',
     locked: false,
+    clickThrough: false,
   };
   const others = (current?.widgets ?? []).filter((w) => w.id !== widget.id).slice(0, 7);
   await step('set_widgets', { widgets: { version: 1, shown: true, widgets: [...others, widget] } });

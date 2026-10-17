@@ -159,8 +159,9 @@ jobs:
           # The installed app through its real IPC (src-tauri/src/smoke.rs, after 1.1's first
           # field check): the pages' data commands answer, a desktop widget saved as the Widgets
           # page saves it opens and loads, stays over the desktop through Show desktop (1.1.1;
-          # skipped where the runner has no desktop to show), and quitting as the tray does ends
-          # the process.
+          # skipped where the runner has no desktop to show), snaps to the screen's edge when
+          # dragged near it and lets clicks through when locked so (1.2), and quitting as the tray
+          # does ends the process.
           $smoke = Join-Path $env:RUNNER_TEMP 'smoke.json'
           $env:VYRO_SMOKE = $smoke
           $app = Start-Process (Join-Path $dir 'vyro.exe') -PassThru
@@ -178,7 +179,8 @@ jobs:
             throw "app smoke test failed: $($result.failures -join '; ')"
           }
           $timings = ($result.steps | ForEach-Object { "$($_.name) $($_.ms) ms" }) -join ', '
-          Write-Host "App smoke test: $timings; Show desktop: $($result.show_desktop)"
+          $checks = "Show desktop: $($result.show_desktop); snap: $($result.snap); click-through: $($result.click_through)"
+          Write-Host "App smoke test: $timings; $checks"
 
           Msi '/x' "$env:RUNNER_TEMP\uninstall.log"
           if (Get-Service VyroService -ErrorAction SilentlyContinue) { throw 'VyroService is still registered' }
@@ -190,7 +192,7 @@ jobs:
             (Get-Content probe.md -Raw).TrimEnd(),
             "| Installed | $dir; VyroService automatic, LocalSystem, restarts on failure |",
             "| PawnIO | $(if ($pawnio) { "installed ($($pawnio.DisplayVersion))" } else { 'not installed (the app then asks for it)' }) |",
-            "| App | $timings; the widget's window opened (without taking focus) and loaded; Show desktop: $($result.show_desktop); Quit ended the app |",
+            "| App | $timings; the widget's window opened (without taking focus) and loaded; $checks; Quit ended the app |",
             '| Uninstalled | service and program files removed; history kept in %ProgramData%\Vyro |'
           ) -join "`n" | Add-Content $env:GITHUB_STEP_SUMMARY
 

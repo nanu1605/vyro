@@ -208,7 +208,7 @@ or actions, 0.3 moves `alerts.json` aside (to `alerts.json.bad`) and uses its de
   square or story size. It is saved to `Pictures\Vyro` or copied to the clipboard, and never
   shows the computer's name or serial numbers.
 
-## Desktop widgets (1.1)
+## Desktop widgets (1.1, 1.2)
 
 The Widgets page (in the sidebar, under Vyro) puts live readings on your desktop, up to eight
 widgets:
@@ -218,12 +218,24 @@ widgets:
 - **Graph:** one reading and its last minute.
 - **Stack:** up to six readings, one under the other, with bars.
 - **Clock:** the time and date, with two readings.
+- **Network** (1.2): download and upload, and their last minute.
+- **Game FPS** (1.2): the running game's frame rate, 1% low and frame time, and the last
+  minute; "No game running" otherwise.
+- **Top processes** (1.2): the five busiest programs by CPU, memory or GPU, a program's
+  processes added up ("chrome.exe ×12").
 
-Any reading the Dashboard has can go on a widget. Each widget has a size (50–200 %), a
+Any reading the Dashboard has can go on the first five. Each widget has a size (50–200 %), a
 background strength, a style (the app's card, see-through glass, or solid) and a place: behind
-your windows (the default) or on top of them. Drag an unlocked widget to move it; Vyro
-remembers where it is. Right-click a widget to lock it, edit it or remove it. "Desktop
-widgets" in the tray icon's menu shows or hides them all, and they come back when Vyro starts.
+your windows (the default) or on top of them. Right-click a widget to lock it, edit it or
+remove it. "Desktop widgets" in the tray icon's menu shows or hides them all, and they come back
+when Vyro starts.
+
+- **Moving.** Drag an unlocked widget; Vyro remembers where it is. It snaps to the edges of the
+  screen and to other widgets, beside them with a small gap or in line with them; hold Shift to
+  place it freely (1.2).
+- **Clicks pass through** (1.2): a locked widget can ignore the mouse, so clicks reach the
+  window or the desktop under it. Unlocking it on the Widgets page makes it catch the mouse
+  again.
 
 Widgets follow your theme and accent, and update at your profile's rate while the window is
 in the tray. Widgets behind your windows stay in view when you use Show desktop (Win+D) and go
@@ -282,6 +294,7 @@ Nothing on it changes the PC.
 | [`docs/field-check.md`](docs/field-check.md) | The owner's field check of 1.0 (P16–P27) on the reference PC, in one pass |
 | [`docs/field-check-1.1.md`](docs/field-check-1.1.md) | The field check of 1.1 (P28–P30): the new look, My PC and the laptop, desktop widgets |
 | [`docs/field-check-1.1.1.md`](docs/field-check-1.1.1.md) | The field check of 1.1.1: widgets behind windows through Show desktop |
+| [`docs/field-check-1.2.md`](docs/field-check-1.2.md) | The field check of 1.2: widgets that snap, let clicks through, and three new kinds |
 
 `vyro-remote.exe` in the same artifact checks the service from the outside (state, connection,
 sensors; `--capture Game.exe` measures a running game for 15 s). The service logs to `%ProgramData%\Vyro\service.log`.

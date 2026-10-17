@@ -6,9 +6,10 @@ Status: **not run yet.**
 desktop (Win+D, or the far right corner of the taskbar). Before, they disappeared until a
 window was switched to. ROADMAP → 1.1.1 has how it works.
 
-The test build is the `vyro-windows-<commit>` artifact of the latest CI run on
-`claude/blissful-knuth-begnu5` (Actions → the run → Artifacts). Install the MSI over 1.1.0. About
-15 minutes.
+The test build is the `vyro-windows-5536a64…` artifact of CI run 39009261547 on
+`claude/blissful-knuth-begnu5` (Actions → that run → Artifacts); `vyro-windows-8ed55e9…` holds
+the same app. Later runs on the branch carry 1.2 work, so use one of these. Install the MSI over
+1.1.0. About 15 minutes.
 
 ## Before you start
 
