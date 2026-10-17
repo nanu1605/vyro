@@ -2245,6 +2245,10 @@ two ship together as one release (the owner's choice).
         - the thread bars span their card.
 
         Run against the old code, these checks report every finding above.
+- [x] **CI** (run 39034665063 on 0760929): every job is green, the accessibility sweep with its
+      new checks included. On the Windows runner the smoke test reports "Show desktop: passed;
+      snap: passed (Windows built each step on the last one answered); click-through: passed".
+      The installer is 11.43 MB.
 - [ ] Field check 2 ([`docs/field-check-1.2.md`](docs/field-check-1.2.md)), then the owner's go
       for the release.
 
