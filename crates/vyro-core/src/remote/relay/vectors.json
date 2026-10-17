@@ -1,0 +1,111 @@
+{
+  "about": "Relay sealing (1.4): checked by crates/vyro-core/src/remote/relay/seal.rs and src/phone/seal.test.ts. Hex throughout; plain is UTF-8.",
+  "salt": "vyro-relay-1",
+  "cases": [
+    {
+      "secret": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "room": "00112233445566778899aabbccddeeff",
+      "phone": "0a1b2c3d",
+      "dir": "toPhone",
+      "nonce": "a0a1a2a3a4a5a6a7a8a9aaab",
+      "plain": "{\"t\":\"view\",\"view\":{\"ts\":1760000000,\"cpu\":{\"usage\":37.4,\"temp\":92}}}",
+      "auth": "a917cd423a726b264896f58fb9b8c4b9bc94d7d0a2b129b13a3d6981d3a2d6a6",
+      "authHash": "1d9f267943cda52f2ee7dd2495eb7e654487ca30e339b43e25716ad29eb868e1",
+      "seal": "8253b6b02f19f6f43331f6d95cee00ae99f72f3d066699f4ba54a0a69f5233cb",
+      "aad": "7679726f3100112233445566778899aabbccddeeff0a1b2c3d00",
+      "frame": "01a0a1a2a3a4a5a6a7a8a9aaab6bee33dcd9460b524c36add4d947d3553379c460218f1522ed2da34613b845f6dfbc0e9d5ba337ee98e72b756693b8714f2ca2daba4efe27c22190c6ff1f4d06c9736b9d67bfe680c01293668b76f0d6342b1697"
+    },
+    {
+      "secret": "ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100",
+      "room": "0f0e0d0c0b0a09080706050403020100",
+      "phone": "deadbeef",
+      "dir": "toPc",
+      "nonce": "000000000000000000000001",
+      "plain": "{\"t\":\"hello\",\"name\":\"iPhone · Safari\"}",
+      "auth": "398aface00b9a1ec75be48ec27dbac5bddb13c1cefc799b2b466951f4933dceb",
+      "authHash": "a40de3605bdefb7cbd519a993527a4bd2e22d52efa07a50a2780c3bbfaabe746",
+      "seal": "1c310231675515caa9e2038f5f76fe9d91d183a5d3fd1ea7d56ccc5fa5df1fab",
+      "aad": "7679726f310f0e0d0c0b0a09080706050403020100deadbeef01",
+      "frame": "010000000000000000000000013809224956690d4d9231997c123076608cd041640c752707e4df3f3d521f9ccda553ab1c7e8cb8dfbd074387c5f09fadb64e5c7dfa3857"
+    },
+    {
+      "secret": "5555555555555555555555555555555555555555555555555555555555555555",
+      "room": "ffffffffffffffffffffffffffffffff",
+      "phone": "00000000",
+      "dir": "toPhone",
+      "nonce": "ffffffffffffffffffffffff",
+      "plain": "",
+      "auth": "1891c96c7a2d03f46db50433d59960c3e3e11b38159fa9558c7f5478700252c4",
+      "authHash": "218e9f7a634c235bfb159bb6fa0438a581939bdfc207737dacd4ae1ecf64537a",
+      "seal": "df09301192b59c0d8a900fcced9f7b18efc36d123348eaec87c14db3b001779e",
+      "aad": "7679726f31ffffffffffffffffffffffffffffffff0000000000",
+      "frame": "01fffffffffffffffffffffffff1f5c8efcb58d2856f5461b9cd283a4f"
+    }
+  ],
+  "refused": [
+    {
+      "why": "a bit of the message changed",
+      "case": 0,
+      "room": "00112233445566778899aabbccddeeff",
+      "phone": "0a1b2c3d",
+      "dir": "toPhone",
+      "frame": "01a0a1a2a3a4a5a6a7a8a9aaab6aee33dcd9460b524c36add4d947d3553379c460218f1522ed2da34613b845f6dfbc0e9d5ba337ee98e72b756693b8714f2ca2daba4efe27c22190c6ff1f4d06c9736b9d67bfe680c01293668b76f0d6342b1697"
+    },
+    {
+      "why": "a bit of the tag changed",
+      "case": 0,
+      "room": "00112233445566778899aabbccddeeff",
+      "phone": "0a1b2c3d",
+      "dir": "toPhone",
+      "frame": "01a0a1a2a3a4a5a6a7a8a9aaab6bee33dcd9460b524c36add4d947d3553379c460218f1522ed2da34613b845f6dfbc0e9d5ba337ee98e72b756693b8714f2ca2daba4efe27c22190c6ff1f4d06c9736b9d67bfe680c01293668b76f0d6342b1617"
+    },
+    {
+      "why": "an unknown version",
+      "case": 0,
+      "room": "00112233445566778899aabbccddeeff",
+      "phone": "0a1b2c3d",
+      "dir": "toPhone",
+      "frame": "02a0a1a2a3a4a5a6a7a8a9aaab6bee33dcd9460b524c36add4d947d3553379c460218f1522ed2da34613b845f6dfbc0e9d5ba337ee98e72b756693b8714f2ca2daba4efe27c22190c6ff1f4d06c9736b9d67bfe680c01293668b76f0d6342b1697"
+    },
+    {
+      "why": "too short to be a frame",
+      "case": 0,
+      "room": "00112233445566778899aabbccddeeff",
+      "phone": "0a1b2c3d",
+      "dir": "toPhone",
+      "frame": "01a0a1a2a3a4a5a6a7a8a9aaab6bee33dcd9460b524c36add4d947d3"
+    },
+    {
+      "why": "sent back to its sender (the other direction)",
+      "case": 0,
+      "room": "00112233445566778899aabbccddeeff",
+      "phone": "0a1b2c3d",
+      "dir": "toPc",
+      "frame": "01a0a1a2a3a4a5a6a7a8a9aaab6bee33dcd9460b524c36add4d947d3553379c460218f1522ed2da34613b845f6dfbc0e9d5ba337ee98e72b756693b8714f2ca2daba4efe27c22190c6ff1f4d06c9736b9d67bfe680c01293668b76f0d6342b1697"
+    },
+    {
+      "why": "replayed to another phone",
+      "case": 0,
+      "room": "00112233445566778899aabbccddeeff",
+      "phone": "0a1b2c3e",
+      "dir": "toPhone",
+      "frame": "01a0a1a2a3a4a5a6a7a8a9aaab6bee33dcd9460b524c36add4d947d3553379c460218f1522ed2da34613b845f6dfbc0e9d5ba337ee98e72b756693b8714f2ca2daba4efe27c22190c6ff1f4d06c9736b9d67bfe680c01293668b76f0d6342b1697"
+    },
+    {
+      "why": "replayed into another room",
+      "case": 0,
+      "room": "00112233445566778899aabbccddeefe",
+      "phone": "0a1b2c3d",
+      "dir": "toPhone",
+      "frame": "01a0a1a2a3a4a5a6a7a8a9aaab6bee33dcd9460b524c36add4d947d3553379c460218f1522ed2da34613b845f6dfbc0e9d5ba337ee98e72b756693b8714f2ca2daba4efe27c22190c6ff1f4d06c9736b9d67bfe680c01293668b76f0d6342b1697"
+    },
+    {
+      "why": "sealed with another phone's key",
+      "case": 1,
+      "room": "00112233445566778899aabbccddeeff",
+      "phone": "0a1b2c3d",
+      "dir": "toPhone",
+      "frame": "01a0a1a2a3a4a5a6a7a8a9aaab6bee33dcd9460b524c36add4d947d3553379c460218f1522ed2da34613b845f6dfbc0e9d5ba337ee98e72b756693b8714f2ca2daba4efe27c22190c6ff1f4d06c9736b9d67bfe680c01293668b76f0d6342b1697"
+    }
+  ]
+}

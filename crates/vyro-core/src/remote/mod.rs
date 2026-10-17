@@ -8,6 +8,7 @@
 //! - [`net`]: which peers and Host names are let in, and the addresses to show.
 //! - [`firewall`]: what Windows Defender Firewall does with the app (read only).
 //! - [`server`]: the listener, the routes and the live view.
+//! - [`relay`]: the same readings for phones anywhere, through a relay, sealed end to end (1.4).
 //!
 //! The server never runs as an administrator: the app hosts it, as the signed-in user.
 
@@ -16,6 +17,7 @@ pub mod firewall;
 pub mod http;
 pub mod net;
 pub mod qr;
+pub mod relay;
 pub mod server;
 pub mod view;
 
