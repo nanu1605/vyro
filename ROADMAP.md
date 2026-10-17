@@ -2124,7 +2124,9 @@ live with (decision 31). Built on the same branch after 5536a64; 1.1.1 is releas
         with clicks passing through: 555 checks clean. The start bundle is 140.7 kB of 200.
       - Version 1.2.0. `docs/field-check-1.1.1.md` now names its exact test build, since later
         runs carry this work.
-- [ ] CI on Windows: "snap: passed" and "click-through: passed"
+- [x] **CI** (run 39012201775 on 019d0a7): every job is green. On the Windows runner the smoke
+      test reports "Show desktop: passed; snap: passed; click-through: passed". The installer is
+      11.41 MB.
 - [ ] Field check ([`docs/field-check-1.2.md`](docs/field-check-1.2.md)), then the owner's go
       for the release.
 
