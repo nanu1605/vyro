@@ -2269,6 +2269,10 @@ two ship together as one release (the owner's choice).
           across lines unless it is wider than its card.
 
         Run against the old code, these checks report 57 split words.
+- [x] **CI** (run 39040225531 on d7bbf18): every job is green, the accessibility sweep with the
+      narrow layout included. On the Windows runner the smoke test reports "Show desktop:
+      passed; snap: passed (Windows built each step on the last one answered); click-through:
+      passed". The installer is 11.42 MB.
 - [ ] Field check 2 ([`docs/field-check-1.2.md`](docs/field-check-1.2.md)), then the owner's go
       for the release.
 
