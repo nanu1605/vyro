@@ -2027,10 +2027,12 @@ hid widgets set behind windows (decision 30).
         - Show desktop lifts the window holding the desktop icons (`SHELLDLL_DefView`'s
           parent: Progman on Windows 11 24H2, a WorkerW before) above every window that is not
           always-on-top.
-        - Vyro keeps a hidden, disabled tool window, the probe, at the bottom of the stack. When
-          the icons' window is above the probe and the desktop is in front, Show desktop is on.
+        - Vyro keeps a hidden, disabled tool window, the probe, just above the icons' window.
+          When the icons' window rises above the probe with the desktop in front, Show desktop
+          is on.
         - Widgets behind windows then go on top. They go back under windows when an app comes
-          forward, or when the desktop drops back (Win+D again).
+          forward (Vyro's own main window counts as one), or when the desktop drops back (Win+D
+          again).
         - Clicking the desktop doesn't lift it, so widgets don't jump over open windows.
           Through Start, the taskbar, task switching or a click on a widget, the state holds.
       - **When it runs:** a foreground-window hook, set only while a widget sits behind
@@ -2043,9 +2045,16 @@ hid widgets set behind windows (decision 30).
         always-on-bottom. One flag is cleared before the other is set, because tao keeps an
         always-on-bottom window at the bottom of every move.
       - **CI's smoke test** presses Show desktop through Explorer
-        (`IShellDispatch4::ToggleDesktop`). It checks that the widget stays visible and on top,
-        presses it again, and checks that the widget goes back. On a runner with no desktop to
-        show, it reports "skipped" in the step summary instead of failing.
+        (`IShellDispatch4::ToggleDesktop`) and checks that the widget stays visible and on top.
+        Then it brings Vyro's main window forward, as a click on an app in the taskbar would,
+        and checks that the widget goes back. Each failure says what the check saw (desktop
+        lifted, what is in front). On a runner with no desktop to show, it reports "skipped" in
+        the step summary instead of failing.
+        - The first runs found two faults. The widget vanished as it went on top (see "Also
+          fixed" below). It also stayed on top after Show desktop was pressed again: the check
+          still saw the desktop lifted, and Vyro's main window, which could have ended it,
+          counted as a widget. The probe now sits just above the icons' window, not at the
+          bottom of the stack.
       - **Also fixed (from 1.1.0):** switching a widget between "Behind windows" and "On top"
         hid it.
         - Cause: widgets were shown with a bare `ShowWindow`, which tao never hears about. tao

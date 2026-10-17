@@ -31,6 +31,8 @@ pub const CHANGED_EVENT: &str = "widgets-changed";
 pub const MAX_WIDGETS: usize = 8;
 pub const MAX_SOURCES: usize = 6;
 pub const KINDS: [&str; 5] = ["gauge", "reading", "graph", "stack", "clock"];
+/// Every widget window's title (`pin.rs` tells widgets from Vyro's other windows by it).
+pub const TITLE: &str = "Vyro widget";
 
 /// How a widget's card looks: the app's theme, see-through dark, or solid.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -414,7 +416,7 @@ fn open_or_update(
         &label,
         WebviewUrl::App(format!("index.html#widget={}", w.id).into()),
     )
-    .title("Vyro widget")
+    .title(TITLE)
     .additional_browser_args(crate::overlay::WEBVIEW_ARGS)
     .transparent(true)
     .decorations(false)

@@ -3,8 +3,9 @@
 //!
 //! Show desktop lifts the window that holds the desktop icons above every window that is not
 //! always-on-top, so a widget kept at the bottom disappears under it. Vyro keeps a hidden probe
-//! window at the bottom too: when the icons' window sits above the probe, the desktop is being
-//! shown, and the widgets go on top of it until an app comes forward again. The check runs
+//! window just above the icons' window: when the icons' window rises above the probe with the
+//! desktop in front, the desktop is being shown, and the widgets go on top of it until an app
+//! (Vyro's main window too) comes forward or the desktop drops back. The check runs
 //! for a moment after each change of foreground window (the shell lifts the desktop a little
 //! after), and every 100 ms while the desktop shows, from a hook set only while a widget sits
 //! behind windows; otherwise nothing runs. Vyro's windows are never put inside Explorer's: that
@@ -21,7 +22,7 @@ pub enum Front {
     Desktop,
     /// The taskbar, Start, search, the notification area, task switching.
     Shell,
-    /// One of Vyro's windows (a widget, the main window).
+    /// One of Vyro's widgets (Vyro's main window counts as an app).
     Vyro,
     /// Any other window.
     App,
@@ -82,9 +83,10 @@ mod imp {
     use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
     use windows::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, FindWindowExW, GetClassNameW, GetForegroundWindow,
-        GetShellWindow, GetWindowLongPtrW, GetWindowThreadProcessId, IsWindowVisible, KillTimer,
-        RegisterClassExW, SetTimer, SetWindowPos, EVENT_SYSTEM_FOREGROUND, GWL_EXSTYLE,
-        HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSENDCHANGING, SWP_NOSIZE,
+        GetShellWindow, GetWindow, GetWindowLongPtrW, GetWindowTextW, GetWindowThreadProcessId,
+        IsWindowVisible, KillTimer, RegisterClassExW, SetTimer, SetWindowPos,
+        EVENT_SYSTEM_FOREGROUND, GWL_EXSTYLE, GW_HWNDPREV, HWND_BOTTOM, HWND_NOTOPMOST,
+        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSENDCHANGING, SWP_NOSIZE,
         WINEVENT_OUTOFCONTEXT, WNDCLASSEXW, WS_DISABLED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
         WS_EX_TOPMOST, WS_POPUP,
     };
@@ -116,10 +118,11 @@ mod imp {
         let _ = APP.set(app.clone());
         let hooked = HOOK.load(Ordering::SeqCst) != 0;
         if on && !hooked {
-            if probe().is_none() {
+            let Some(probe) = probe() else {
                 log::warn!("pin: no probe window; widgets behind windows hide on Show desktop");
                 return;
-            }
+            };
+            place(probe);
             // SAFETY: an out-of-context hook: Windows posts its events to this thread, whose
             // message loop calls `on_foreground`.
             let hook = unsafe {
@@ -149,7 +152,7 @@ mod imp {
             stop();
             if SHOWN.swap(false, Ordering::SeqCst) {
                 if let Some(probe) = probe_hwnd() {
-                    to_bottom(probe);
+                    place(probe);
                 }
             }
         }
@@ -160,8 +163,8 @@ mod imp {
         (p != 0).then_some(HWND(p as _))
     }
 
-    /// The probe, made the first time: a hidden, disabled tool window at the bottom of the
-    /// stack. It also carries the check's timer.
+    /// The probe, made the first time: a hidden, disabled tool window. It also carries the
+    /// check's timer.
     fn probe() -> Option<HWND> {
         if let Some(probe) = probe_hwnd() {
             return Some(probe);
@@ -194,7 +197,6 @@ mod imp {
             )
             .ok()?;
             PROBE.store(hwnd.0 as isize, Ordering::SeqCst);
-            to_bottom(hwnd);
             Some(hwnd)
         }
     }
@@ -204,12 +206,26 @@ mod imp {
         unsafe { DefWindowProcW(hwnd, msg, w, l) }
     }
 
-    fn to_bottom(probe: HWND) {
-        // SAFETY: moves the probe (this process's window) in the stack only.
+    /// Puts the probe just above the icons' window, while the desktop is not shown (so the
+    /// icons' window is where it rests): below every window over it, above it. Without one, at
+    /// the bottom of the stack.
+    fn place(probe: HWND) {
+        // SAFETY: reads the stack and moves the probe (this process's window) in it only.
         unsafe {
+            let after = match host() {
+                Some(host) => match GetWindow(host, GW_HWNDPREV) {
+                    Ok(above) if above == probe => return,
+                    // Just under a topmost window would make the probe topmost too: the top of
+                    // the ordinary windows is the same place then.
+                    Ok(above) if topmost(above) => HWND_NOTOPMOST,
+                    Ok(above) => above,
+                    Err(_) => HWND_NOTOPMOST,
+                },
+                None => HWND_BOTTOM,
+            };
             let _ = SetWindowPos(
                 probe,
-                Some(HWND_BOTTOM),
+                Some(after),
                 0,
                 0,
                 0,
@@ -278,7 +294,7 @@ mod imp {
         }
         SHOWN.store(now, Ordering::SeqCst);
         if !now {
-            to_bottom(probe);
+            place(probe);
         }
         log::info!(
             "pin: {}",
@@ -351,12 +367,43 @@ mod imp {
             let mut pid = 0u32;
             GetWindowThreadProcessId(fg, Some(&mut pid));
             if pid == std::process::id() {
-                return Front::Vyro;
+                // A widget keeps the desktop shown; the main window covers it as any app does.
+                let mut title = [0u16; 32];
+                let n = usize::try_from(GetWindowTextW(fg, &mut title)).unwrap_or(0);
+                let title = String::from_utf16_lossy(&title[..n.min(title.len())]);
+                return if title == crate::widgets::TITLE {
+                    Front::Vyro
+                } else {
+                    Front::App
+                };
             }
-            let mut class = [0u16; 64];
-            let n = usize::try_from(GetClassNameW(fg, &mut class)).unwrap_or(0);
-            front_of_class(&String::from_utf16_lossy(&class[..n.min(class.len())]))
+            front_of_class(&class_of(fg))
         }
+    }
+
+    fn class_of(window: HWND) -> String {
+        let mut class = [0u16; 64];
+        // SAFETY: reads a window's class name into the buffer.
+        let n = usize::try_from(unsafe { GetClassNameW(window, &mut class) }).unwrap_or(0);
+        String::from_utf16_lossy(&class[..n.min(class.len())])
+    }
+
+    /// What the check sees, for the smoke test's messages.
+    fn describe(probe: HWND) -> String {
+        let host = host();
+        // SAFETY: reads the foreground window.
+        let fg = unsafe { GetForegroundWindow() };
+        format!(
+            "desktop lifted: {}; in front: {:?} ({}); icons' window: {}",
+            host.is_some_and(|h| raised(h, probe)),
+            front(host),
+            if fg.is_invalid() {
+                "none".into()
+            } else {
+                class_of(fg)
+            },
+            host.map_or_else(|| "none".into(), class_of),
+        )
     }
 
     fn topmost(window: HWND) -> bool {
@@ -378,8 +425,9 @@ mod imp {
         }
     }
 
-    /// CI's smoke test (`smoke.rs`): presses Show desktop through Explorer, checks the widget
-    /// (behind windows) stays over the desktop, presses it again and checks the widget goes back.
+    /// CI's smoke test (`smoke.rs`): presses Show desktop through Explorer and checks the widget
+    /// (behind windows) stays over the desktop; then brings Vyro's main window forward, as a
+    /// click on an app in the taskbar would, and checks the widget goes back behind windows.
     /// "skipped: …" where the runner has no desktop to show. Runs on the smoke test's thread.
     pub fn smoke_show_desktop(app: &AppHandle, label: &str) -> String {
         use windows::Win32::System::Com::{
@@ -420,14 +468,27 @@ mod imp {
                 let kept = wait(Duration::from_secs(2), || {
                     desktop_shown() && topmost(widget) && IsWindowVisible(widget).as_bool()
                 });
-                let _ = shell.ToggleDesktop();
                 if !kept {
-                    return "failed: the widget did not stay over the shown desktop".into();
+                    let seen = describe(probe);
+                    let _ = shell.ToggleDesktop();
+                    return format!(
+                        "failed: the widget did not stay over the shown desktop ({seen})"
+                    );
                 }
+                let Some(main) = app.get_webview_window("main") else {
+                    let _ = shell.ToggleDesktop();
+                    return "skipped: no main window to bring forward".into();
+                };
+                let _ = main.show();
+                let _ = main.unminimize();
+                let _ = main.set_focus();
                 if !wait(Duration::from_secs(3), || {
                     !desktop_shown() && !topmost(widget)
                 }) {
-                    return "failed: the widget did not go back behind windows".into();
+                    return format!(
+                        "failed: the widget did not go back behind windows ({})",
+                        describe(probe)
+                    );
                 }
                 "passed".into()
             })();
