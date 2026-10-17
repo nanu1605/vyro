@@ -290,6 +290,164 @@ fn connection_state_and_problems() {
 }
 
 #[test]
+fn indirect_names_give_their_fallback_text() {
+    assert_eq!(
+        plain_text("@input.inf,%hid.mousedevice%;HID-compliant mouse").as_deref(),
+        Some("HID-compliant mouse")
+    );
+    assert_eq!(plain_text("@bthpan.sys,#1"), None);
+    assert_eq!(
+        plain_text("  MX Master 3S ").as_deref(),
+        Some("MX Master 3S")
+    );
+    assert_eq!(plain_text("   "), None);
+}
+
+/// 1.3: Settings named every device while Vyro said "Unknown device". The name comes from the
+/// device itself first, then its paired entry, its bus, its own node, and only then its kind.
+#[test]
+fn names_come_from_the_device_then_its_parts_then_its_kind() {
+    let unnamed = || RawContainer {
+        id: "a".into(),
+        connected: Some(true),
+        ..RawContainer::default()
+    };
+    let named = |n: &str, mut node: RawNode| {
+        node.name = Some(n.into());
+        node
+    };
+    let name = |c: RawContainer, nodes: Vec<RawNode>, aeps: Vec<RawAep>| {
+        one(&Raw {
+            containers: vec![c],
+            nodes,
+            aeps,
+            ..Raw::default()
+        })
+        .name
+    };
+    let aep = |n: &str| RawAep {
+        container: Some("{A}".into()),
+        name: Some(n.into()),
+        battery: None,
+    };
+
+    // The container's own name wins.
+    assert_eq!(
+        name(
+            container("a", "WH-1000XM4"),
+            vec![named("Avrcp Transport", node("a", "Bluetooth", "BTHENUM"))],
+            vec![aep("Other")]
+        ),
+        "WH-1000XM4"
+    );
+    // A paired device's entry, as Settings lists it, even with its parts named generically.
+    assert_eq!(
+        name(
+            unnamed(),
+            vec![named(
+                "Generic Attribute Profile",
+                node("a", "Bluetooth", "BTHLEDEVICE")
+            )],
+            vec![aep("MX Master 3S")]
+        ),
+        "MX Master 3S"
+    );
+    // The product string on the USB bus before Windows' function names.
+    let mut usb = node("a", "USB", "USB");
+    usb.bus_name = Some("USB Audio Condenser Mic".into());
+    usb.name = Some("USB Composite Device".into());
+    assert_eq!(
+        name(
+            unnamed(),
+            vec![usb, node("a", "AudioEndpoint", "SWD")],
+            vec![]
+        ),
+        "USB Audio Condenser Mic"
+    );
+    // A Bluetooth LE device's own node, not its GATT services.
+    assert_eq!(
+        name(
+            unnamed(),
+            vec![
+                named(
+                    "Device Information Service",
+                    node("a", "Bluetooth", "BTHLEDEVICE")
+                ),
+                named("Xbox Wireless Controller", node("a", "Bluetooth", "BTHLE")),
+                named(
+                    "HID-compliant game controller",
+                    node("a", "HIDClass", "HID")
+                ),
+            ],
+            vec![]
+        ),
+        "Xbox Wireless Controller"
+    );
+    // Nothing but Windows' function names: the kind, never "Unknown device".
+    assert_eq!(
+        name(
+            unnamed(),
+            vec![named("HID-compliant mouse", node("a", "Mouse", "HID"))],
+            vec![]
+        ),
+        "Mouse"
+    );
+    assert_eq!(
+        name(unnamed(), vec![node("a", "Keyboard", "HID")], vec![]),
+        "Keyboard"
+    );
+}
+
+#[test]
+fn the_chosen_name_decides_the_kind() {
+    let unnamed = RawContainer {
+        id: "a".into(),
+        connected: Some(true),
+        ..RawContainer::default()
+    };
+    let mut usb = node("a", "USB", "USB");
+    usb.bus_name = Some("USB Receiver".into());
+    let d = one(&Raw {
+        containers: vec![unnamed],
+        nodes: vec![usb, node("a", "Mouse", "HID"), node("a", "Keyboard", "HID")],
+        ..Raw::default()
+    });
+    assert_eq!(
+        (d.name.as_str(), d.kind),
+        ("USB Receiver", DeviceKind::Receiver)
+    );
+    assert!(d.wireless);
+}
+
+#[test]
+fn windows_battery_also_from_the_container_or_paired_entry() {
+    let raw = |c_battery: Option<u8>, a_battery: Option<u8>| {
+        let mut c = container("{A}", "Buds");
+        c.battery = c_battery;
+        Raw {
+            containers: vec![c],
+            nodes: vec![node("A", "Bluetooth", "BTHENUM")],
+            aeps: vec![RawAep {
+                container: Some("a".into()),
+                name: None,
+                battery: a_battery,
+            }],
+            ..Raw::default()
+        }
+    };
+    let pct = |r: &Raw| one(r).battery.map(|b| (b.percent, b.source));
+    assert_eq!(
+        pct(&raw(Some(40), None)),
+        Some((Some(40), BatterySource::Windows))
+    );
+    assert_eq!(
+        pct(&raw(None, Some(55))),
+        Some((Some(55), BatterySource::Windows))
+    );
+    assert_eq!(pct(&raw(None, None)), None);
+}
+
+#[test]
 fn battery_prefers_windows_then_the_battery_service() {
     let ble = |battery: Option<u8>| {
         let mut n = node("A", "Bluetooth", "BTHLE");

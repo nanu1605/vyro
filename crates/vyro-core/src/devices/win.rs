@@ -22,10 +22,10 @@ use windows::Win32::Devices::DeviceAndDriverInstallation::{
     HCMNOTIFICATION,
 };
 use windows::Win32::Devices::DeviceQuery::{
-    DevCreateObjectQuery, DevFreeObjects, DevGetObjects, DevObjectTypeDevice,
-    DevObjectTypeDeviceContainer, DevQueryResultStateChange, DevQueryStateEnumCompleted,
-    DEVPROP_FILTER_EXPRESSION, DEVPROP_OPERATOR_EQUALS, DEV_OBJECT, DEV_OBJECT_TYPE,
-    DEV_QUERY_RESULT_ACTION_DATA, HDEVQUERY,
+    DevCreateObjectQuery, DevFreeObjects, DevGetObjects, DevObjectTypeAEP, DevObjectTypeDevice,
+    DevObjectTypeDeviceContainer, DevQueryFlagLocalize, DevQueryResultStateChange,
+    DevQueryStateEnumCompleted, DEVPROP_FILTER_EXPRESSION, DEVPROP_OPERATOR_EQUALS, DEV_OBJECT,
+    DEV_OBJECT_TYPE, DEV_QUERY_RESULT_ACTION_DATA, HDEVQUERY,
 };
 use windows::Win32::Devices::FunctionDiscovery::{
     PKEY_Device_ContainerId, PKEY_Device_FriendlyName,
@@ -34,12 +34,14 @@ use windows::Win32::Devices::Properties::{
     DEVPKEY_DeviceContainer_Category, DEVPKEY_DeviceContainer_FriendlyName,
     DEVPKEY_DeviceContainer_IsConnected, DEVPKEY_DeviceContainer_IsLocalMachine,
     DEVPKEY_DeviceContainer_IsNetworkDevice, DEVPKEY_DeviceContainer_IsNotInterestingForDisplay,
-    DEVPKEY_DeviceContainer_Manufacturer, DEVPKEY_Device_Class, DEVPKEY_Device_CompatibleIds,
-    DEVPKEY_Device_ContainerId, DEVPKEY_Device_DeviceDesc, DEVPKEY_Device_EnumeratorName,
-    DEVPKEY_Device_FriendlyName, DEVPKEY_Device_HardwareIds, DEVPKEY_Device_InstanceId,
-    DEVPKEY_Device_IsPresent, DEVPKEY_Device_ProblemCode, DEVPROPCOMPKEY, DEVPROPERTY, DEVPROPTYPE,
+    DEVPKEY_DeviceContainer_Manufacturer, DEVPKEY_Device_BusReportedDeviceDesc,
+    DEVPKEY_Device_Class, DEVPKEY_Device_CompatibleIds, DEVPKEY_Device_ContainerId,
+    DEVPKEY_Device_DeviceDesc, DEVPKEY_Device_EnumeratorName, DEVPKEY_Device_FriendlyName,
+    DEVPKEY_Device_HardwareIds, DEVPKEY_Device_InstanceId, DEVPKEY_Device_IsPresent,
+    DEVPKEY_Device_ProblemCode, DEVPKEY_NAME, DEVPROPCOMPKEY, DEVPROPERTY, DEVPROPTYPE,
     DEVPROP_STORE_SYSTEM, DEVPROP_TRUE, DEVPROP_TYPE_BOOLEAN, DEVPROP_TYPE_BYTE, DEVPROP_TYPE_GUID,
-    DEVPROP_TYPE_STRING, DEVPROP_TYPE_STRING_LIST, DEVPROP_TYPE_UINT32,
+    DEVPROP_TYPE_STRING, DEVPROP_TYPE_STRING_INDIRECT, DEVPROP_TYPE_STRING_LIST,
+    DEVPROP_TYPE_UINT16, DEVPROP_TYPE_UINT32,
 };
 use windows::Win32::Foundation::{CloseHandle, DEVPROPKEY, GENERIC_READ, HANDLE, PROPERTYKEY};
 use windows::Win32::Media::Audio::{
@@ -63,7 +65,8 @@ use windows::Win32::UI::Input::XboxController::{
 use windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore;
 
 use super::{
-    build, gatt_wanted, norm_guid, Devices, Raw, RawContainer, RawEndpoint, RawNode, RawPad,
+    build, gatt_wanted, norm_guid, plain_text, Devices, Raw, RawAep, RawContainer, RawEndpoint,
+    RawNode, RawPad,
 };
 use crate::live::dll::Library;
 
@@ -72,6 +75,25 @@ const DEVPKEY_BLUETOOTH_BATTERY: DEVPROPKEY = DEVPROPKEY {
     fmtid: GUID::from_u128(0x104e_a319_6ee2_4701_bd47_8ddb_f425_bbe5),
     pid: 2,
 };
+/// System.Devices.Aep.ContainerId, .IsPaired and .ProtocolId: a paired entry's device, and
+/// whether it is Bluetooth.
+const AEP_CONTAINER: DEVPROPKEY = DEVPROPKEY {
+    fmtid: GUID::from_u128(0xe7c3_fb29_caa7_4f47_8c8b_be59_b330_d4c5),
+    pid: 2,
+};
+const AEP_PAIRED: DEVPROPKEY = DEVPROPKEY {
+    fmtid: GUID::from_u128(0xa359_96ab_11cf_4935_8b61_a676_1081_ecdf),
+    pid: 16,
+};
+const AEP_PROTOCOL: DEVPROPKEY = DEVPROPKEY {
+    fmtid: GUID::from_u128(0x3b2c_e006_5e61_4fde_bab8_9b8a_ac9b_26df),
+    pid: 5,
+};
+/// Bluetooth and Bluetooth LE association protocols.
+const AEP_BLUETOOTH: [GUID; 2] = [
+    GUID::from_u128(0xe0cb_f06c_cd8b_4647_bb8a_263b_43f0_f974),
+    GUID::from_u128(0xbb7b_b05e_5972_42b5_94fc_76ea_a708_4d49),
+];
 /// The Battery Service: Windows gives each GATT service an interface class of its UUID.
 const BATTERY_SERVICE: GUID = GUID::from_u128(0x0000_180f_0000_1000_8000_0080_5f9b_34fb);
 const BATTERY_LEVEL: u16 = 0x2A19;
@@ -89,6 +111,7 @@ pub fn collect() -> Devices {
     let mut raw = Raw {
         containers,
         nodes,
+        aeps: aeps(),
         ..Raw::default()
     };
     raw.gatt = gatt_batteries(&gatt_wanted(&raw), &instances);
@@ -138,11 +161,15 @@ impl Props<'_> {
         )
     }
 
+    /// Text, and names Windows keeps as indirect strings (resolved by the localized query, or
+    /// their fallback text).
     fn string(&self, key: &DEVPROPKEY) -> Option<String> {
-        let w = self.wide(key, DEVPROP_TYPE_STRING)?;
-        let s = String::from_utf16_lossy(w.split(|c| *c == 0).next().unwrap_or(&[]));
-        let s = s.trim();
-        (!s.is_empty()).then(|| s.to_owned())
+        let w = self
+            .wide(key, DEVPROP_TYPE_STRING)
+            .or_else(|| self.wide(key, DEVPROP_TYPE_STRING_INDIRECT))?;
+        plain_text(&String::from_utf16_lossy(
+            w.split(|c| *c == 0).next().unwrap_or(&[]),
+        ))
     }
 
     fn strings(&self, key: &DEVPROPKEY) -> Vec<String> {
@@ -165,8 +192,16 @@ impl Props<'_> {
         Some(u32::from_le_bytes(b.get(..4)?.try_into().ok()?))
     }
 
-    fn byte(&self, key: &DEVPROPKEY) -> Option<u8> {
-        self.raw(key, DEVPROP_TYPE_BYTE).map(|b| b[0])
+    /// A small number stored as a byte, or a wider integer.
+    fn small(&self, key: &DEVPROPKEY) -> Option<u8> {
+        if let Some(b) = self.raw(key, DEVPROP_TYPE_BYTE) {
+            return Some(b[0]);
+        }
+        let wide = self
+            .raw(key, DEVPROP_TYPE_UINT16)
+            .and_then(|b| Some(u32::from(u16::from_le_bytes(b.get(..2)?.try_into().ok()?))))
+            .or_else(|| self.u32(key))?;
+        u8::try_from(wide).ok()
     }
 
     fn guid(&self, key: &DEVPROPKEY) -> Option<String> {
@@ -201,9 +236,16 @@ fn query(
     let mut count = 0u32;
     let mut objects: *mut DEV_OBJECT = std::ptr::null_mut();
     // SAFETY: valid key and filter arrays; the result is freed below.
-    if let Err(e) =
-        unsafe { DevGetObjects(kind, 0, Some(&wanted), filter, &mut count, &mut objects) }
-    {
+    if let Err(e) = unsafe {
+        DevGetObjects(
+            kind,
+            DevQueryFlagLocalize.0.unsigned_abs(),
+            Some(&wanted),
+            filter,
+            &mut count,
+            &mut objects,
+        )
+    } {
         log::debug!("devices: query {} failed: {e}", kind.0);
         return false;
     }
@@ -235,20 +277,73 @@ fn containers() -> Vec<RawContainer> {
         DEVPKEY_DeviceContainer_IsNetworkDevice,
         DEVPKEY_DeviceContainer_IsNotInterestingForDisplay,
         DEVPKEY_DeviceContainer_Category,
+        DEVPKEY_NAME,
+        DEVPKEY_BLUETOOTH_BATTERY,
     ];
     let mut out = Vec::new();
     query(DevObjectTypeDeviceContainer, &keys, None, |id, p| {
         out.push(RawContainer {
             id: id.to_owned(),
-            name: p.string(&DEVPKEY_DeviceContainer_FriendlyName),
+            name: p
+                .string(&DEVPKEY_DeviceContainer_FriendlyName)
+                .or_else(|| p.string(&DEVPKEY_NAME)),
             manufacturer: p.string(&DEVPKEY_DeviceContainer_Manufacturer),
             connected: p.bool(&DEVPKEY_DeviceContainer_IsConnected),
             local_machine: p.bool(&DEVPKEY_DeviceContainer_IsLocalMachine) == Some(true),
             network: p.bool(&DEVPKEY_DeviceContainer_IsNetworkDevice) == Some(true),
             hidden: p.bool(&DEVPKEY_DeviceContainer_IsNotInterestingForDisplay) == Some(true),
             categories: p.strings(&DEVPKEY_DeviceContainer_Category),
+            battery: p.small(&DEVPKEY_BLUETOOTH_BATTERY),
         });
     });
+    out
+}
+
+/// Paired Bluetooth devices as Settings lists them: their names, also while they are off.
+fn aeps() -> Vec<RawAep> {
+    let keys = [
+        DEVPKEY_NAME,
+        AEP_CONTAINER,
+        AEP_PAIRED,
+        AEP_PROTOCOL,
+        DEVPKEY_BLUETOOTH_BATTERY,
+    ];
+    let paired = DEVPROP_TRUE;
+    let mut out = Vec::new();
+    // One query per protocol, filtered as Windows' own Bluetooth selectors are: an unfiltered
+    // endpoint query would also search the network.
+    for protocol in AEP_BLUETOOTH {
+        let filter = [
+            DEVPROP_FILTER_EXPRESSION {
+                Operator: DEVPROP_OPERATOR_EQUALS,
+                Property: DEVPROPERTY {
+                    CompKey: comp(AEP_PROTOCOL),
+                    Type: DEVPROP_TYPE_GUID,
+                    BufferSize: u32::try_from(std::mem::size_of::<GUID>()).unwrap_or(16),
+                    Buffer: std::ptr::from_ref(&protocol).cast_mut().cast::<c_void>(),
+                },
+            },
+            DEVPROP_FILTER_EXPRESSION {
+                Operator: DEVPROP_OPERATOR_EQUALS,
+                Property: DEVPROPERTY {
+                    CompKey: comp(AEP_PAIRED),
+                    Type: DEVPROP_TYPE_BOOLEAN,
+                    BufferSize: 1,
+                    Buffer: std::ptr::from_ref(&paired).cast_mut().cast::<c_void>(),
+                },
+            },
+        ];
+        query(DevObjectTypeAEP, &keys, Some(&filter), |_, p| {
+            if p.bool(&AEP_PAIRED) == Some(false) {
+                return;
+            }
+            out.push(RawAep {
+                container: p.guid(&AEP_CONTAINER),
+                name: p.string(&DEVPKEY_NAME),
+                battery: p.small(&DEVPKEY_BLUETOOTH_BATTERY),
+            });
+        });
+    }
     out
 }
 
@@ -260,6 +355,8 @@ fn nodes() -> (Vec<RawNode>, HashMap<String, String>) {
         DEVPKEY_Device_EnumeratorName,
         DEVPKEY_Device_FriendlyName,
         DEVPKEY_Device_DeviceDesc,
+        DEVPKEY_NAME,
+        DEVPKEY_Device_BusReportedDeviceDesc,
         DEVPKEY_Device_HardwareIds,
         DEVPKEY_Device_CompatibleIds,
         DEVPKEY_Device_ProblemCode,
@@ -293,11 +390,13 @@ fn nodes() -> (Vec<RawNode>, HashMap<String, String>) {
                 enumerator: p.string(&DEVPKEY_Device_EnumeratorName),
                 name: p
                     .string(&DEVPKEY_Device_FriendlyName)
-                    .or_else(|| p.string(&DEVPKEY_Device_DeviceDesc)),
+                    .or_else(|| p.string(&DEVPKEY_Device_DeviceDesc))
+                    .or_else(|| p.string(&DEVPKEY_NAME)),
+                bus_name: p.string(&DEVPKEY_Device_BusReportedDeviceDesc),
                 hardware_ids: p.strings(&DEVPKEY_Device_HardwareIds),
                 compatible_ids: p.strings(&DEVPKEY_Device_CompatibleIds),
                 problem: p.u32(&DEVPKEY_Device_ProblemCode),
-                battery: p.byte(&DEVPKEY_BLUETOOTH_BATTERY),
+                battery: p.small(&DEVPKEY_BLUETOOTH_BATTERY),
             });
         });
         (ok, nodes, instances)

@@ -152,6 +152,8 @@ pub struct RawContainer {
     pub hidden: bool,
     /// Canonical categories, e.g. "Input.Mouse", "Audio.Headset".
     pub categories: Vec<String>,
+    /// The Bluetooth battery property, where Windows keeps it on the container.
+    pub battery: Option<u8>,
 }
 
 /// A present device node.
@@ -162,11 +164,22 @@ pub struct RawNode {
     pub class: Option<String>,
     /// Enumerator: "USB", "HID", "BTHENUM", "BTHLE", "SWD", ...
     pub enumerator: Option<String>,
+    /// Friendly name, else description, else display name.
     pub name: Option<String>,
+    /// The name the device reports on its bus (a USB product string).
+    pub bus_name: Option<String>,
     pub hardware_ids: Vec<String>,
     pub compatible_ids: Vec<String>,
     pub problem: Option<u32>,
     /// The Bluetooth battery property, 0–100.
+    pub battery: Option<u8>,
+}
+
+/// A paired Bluetooth device as Settings lists it (an association endpoint).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RawAep {
+    pub container: Option<String>,
+    pub name: Option<String>,
     pub battery: Option<u8>,
 }
 
@@ -208,6 +221,8 @@ pub struct RawPad {
 pub struct Raw {
     pub containers: Vec<RawContainer>,
     pub nodes: Vec<RawNode>,
+    /// Paired Bluetooth devices, for the names Settings shows.
+    pub aeps: Vec<RawAep>,
     pub endpoints: Vec<RawEndpoint>,
     /// Battery Service readings by container id.
     pub gatt: Vec<(String, u8)>,
@@ -232,6 +247,83 @@ pub fn key(s: &str) -> String {
     use sha2::{Digest, Sha256};
     let digest = Sha256::digest(norm_guid(s).as_bytes());
     digest[..6].iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Text Windows gave as a name. An indirect string it left unresolved
+/// ("@input.inf,%hid.mouse%;HID-compliant mouse") gives its fallback after the last ';'.
+pub fn plain_text(s: &str) -> Option<String> {
+    let s = s.trim();
+    let s = match s.strip_prefix('@') {
+        Some(rest) => rest.rsplit_once(';')?.1.trim(),
+        None => s,
+    };
+    (!s.is_empty()).then(|| s.to_owned())
+}
+
+/// Names Windows gives a function of a device, not the device: "HID-compliant mouse",
+/// "USB Composite Device", a Bluetooth service.
+fn generic(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    [
+        "hid-compliant",
+        "hid keyboard",
+        "usb input device",
+        "usb composite device",
+        "usb audio device",
+        "generic ",
+        "bluetooth low energy gatt",
+        "microsoft bluetooth",
+        "bluetooth le generic",
+        "avrcp transport",
+        "device information service",
+        "battery service",
+    ]
+    .iter()
+    .any(|w| n.starts_with(w))
+        || n.ends_with(" service")
+        || n.ends_with(" profile")
+}
+
+/// The name Settings shows, as far as Windows gives one: the device's own (its container),
+/// the paired Bluetooth entry, the product string on its bus, then the most specific function
+/// name (a Bluetooth device's own node before its services).
+fn known_name(c: &RawContainer, nodes: &[&RawNode], aep: Option<&RawAep>) -> Option<String> {
+    let own = |s: Option<&String>| s.filter(|s| !s.trim().is_empty()).cloned();
+    if let Some(n) = own(c.name.as_ref()).or_else(|| own(aep.and_then(|a| a.name.as_ref()))) {
+        return Some(n);
+    }
+    let specific = |s: &Option<String>| s.clone().filter(|s| !s.trim().is_empty() && !generic(s));
+    nodes
+        .iter()
+        .find_map(|n| specific(&n.bus_name))
+        .or_else(|| {
+            nodes
+                .iter()
+                .filter(|n| matches!(enumerator(n).as_str(), "BTHLE" | "BTHENUM"))
+                .find_map(|n| specific(&n.name))
+        })
+        .or_else(|| nodes.iter().find_map(|n| specific(&n.name)))
+}
+
+/// What a device without any name is called: its kind.
+fn kind_label(kind: DeviceKind) -> &'static str {
+    use DeviceKind as K;
+    match kind {
+        K::Keyboard => "Keyboard",
+        K::Mouse => "Mouse",
+        K::Input => "Keyboard and mouse",
+        K::Controller => "Controller",
+        K::Receiver => "Wireless receiver",
+        K::Headset => "Headset",
+        K::Headphones => "Headphones",
+        K::Speakers => "Speakers",
+        K::Microphone => "Microphone",
+        K::Camera => "Camera",
+        K::Printer => "Printer",
+        K::Phone => "Phone",
+        K::Storage => "Storage",
+        K::Other => "Device",
+    }
 }
 
 fn lower(s: Option<&String>) -> String {
@@ -279,6 +371,7 @@ fn has_word(name: &str, words: &[&str]) -> bool {
 /// What the device is. `None`: leave it out (a monitor, a USB hub).
 fn classify(
     c: &RawContainer,
+    name: &str,
     nodes: &[&RawNode],
     endpoints: &[&RawEndpoint],
 ) -> Option<DeviceKind> {
@@ -288,7 +381,7 @@ fn classify(
     if has("monitor") || nodes.iter().any(|n| enumerator(n) == "DISPLAY") {
         return None;
     }
-    let name = lower(c.name.as_ref());
+    let name = name.to_ascii_lowercase();
 
     if has_word(
         &name,
@@ -424,22 +517,37 @@ fn maker(s: Option<&String>) -> Option<String> {
     (!s.is_empty() && !s.starts_with('(')).then(|| s.to_owned())
 }
 
-fn node_battery(nodes: &[&RawNode]) -> Option<u8> {
-    nodes.iter().filter_map(|n| n.battery).find(|b| *b <= 100)
+/// Windows' own battery reading: on a node, the container or the paired entry.
+fn windows_battery(c: &RawContainer, nodes: &[&RawNode], aep: Option<&RawAep>) -> Option<u8> {
+    nodes
+        .iter()
+        .filter_map(|n| n.battery)
+        .chain(c.battery)
+        .chain(aep.and_then(|a| a.battery))
+        .find(|b| *b <= 100)
 }
 
 /// Bluetooth LE containers worth a Battery Service read: connected, and Windows has no
 /// battery reading of its own for them.
 pub fn gatt_wanted(raw: &Raw) -> Vec<String> {
     let groups = group(&raw.nodes);
+    let aeps = aeps(&raw.aeps);
     raw.containers
         .iter()
         .filter(|c| c.connected != Some(false) && !c.local_machine)
         .filter_map(|c| {
             let id = norm_guid(&c.id);
             let nodes = groups.get(&id)?;
-            (nodes.iter().any(|n| is_ble(n)) && node_battery(nodes).is_none()).then_some(id)
+            let windows = windows_battery(c, nodes, aeps.get(&id).copied());
+            (nodes.iter().any(|n| is_ble(n)) && windows.is_none()).then_some(id)
         })
+        .collect()
+}
+
+/// Paired entries by container.
+fn aeps(list: &[RawAep]) -> HashMap<String, &RawAep> {
+    list.iter()
+        .filter_map(|a| Some((norm_guid(a.container.as_deref()?), a)))
         .collect()
 }
 
@@ -473,6 +581,7 @@ fn pad_battery(p: &RawPad) -> Option<Battery> {
 /// The Devices tab's list.
 pub fn build(raw: &Raw) -> Devices {
     let groups = group(&raw.nodes);
+    let aeps = aeps(&raw.aeps);
     let gatt: HashMap<String, u8> = raw
         .gatt
         .iter()
@@ -502,21 +611,18 @@ pub fn build(raw: &Raw) -> Devices {
             continue;
         }
         let endpoints = by_container.get(&id).map_or(&[][..], Vec::as_slice);
-        let Some(kind) = classify(c, nodes, endpoints) else {
+        let aep = aeps.get(&id).copied();
+        let known = known_name(c, nodes, aep);
+        let Some(kind) = classify(c, known.as_deref().unwrap_or(""), nodes, endpoints) else {
             continue;
         };
         let conn = connection(c, nodes);
         let bluetooth = matches!(conn, Connection::Bluetooth | Connection::BluetoothLe);
         let connected = !bluetooth || c.connected != Some(false);
-        let name = c
-            .name
-            .clone()
-            .filter(|n| !n.trim().is_empty())
-            .or_else(|| nodes.iter().find_map(|n| n.name.clone()))
-            .unwrap_or_else(|| "Unknown device".into());
+        let name = known.unwrap_or_else(|| kind_label(kind).into());
         let battery = connected
             .then(|| {
-                node_battery(nodes)
+                windows_battery(c, nodes, aep)
                     .map(|p| (p, BatterySource::Windows))
                     .or_else(|| gatt.get(&id).map(|p| (*p, BatterySource::BluetoothLe)))
             })
@@ -731,6 +837,7 @@ fn sample_raw() -> Raw {
                 false,
             ),
         ],
+        aeps: Vec::new(),
         gatt: vec![("c8".into(), 17)],
         pads: vec![RawPad {
             slot: 0,
