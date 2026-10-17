@@ -1,0 +1,23 @@
+// The Vyro relay (1.4). Deployed by .github/workflows/relay.yml, by hand, into the owner's
+// Cloudflare account; `pnpm build:phone` (repository root) fills ./public first.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "vyro-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "Room" }]
+  },
+  // SQLite-backed, as the free plan requires.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    // Every request reaches the Worker, which adds the security headers to the app's files.
+    "run_worker_first": true
+  },
+  // No request logs: the relay keeps nothing it does not need.
+  "observability": { "enabled": false }
+}

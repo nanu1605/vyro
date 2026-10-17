@@ -1,0 +1,11 @@
+// The relay as the tests run it: the same Worker, with a stand-in for the phone app's files.
+{
+  "name": "vyro-relay-test",
+  "main": "../src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "Room" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  "assets": { "directory": "./assets", "binding": "ASSETS", "run_worker_first": true }
+}

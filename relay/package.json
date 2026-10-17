@@ -1,0 +1,22 @@
+{
+  "name": "vyro-relay",
+  "private": true,
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261002.1",
+    "typescript": "~6.0.3",
+    "vitest": "5.0.2",
+    "wrangler": "4.147.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "workerd"]
+  },
+  "packageManager": "pnpm@10.33.0"
+}

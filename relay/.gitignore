@@ -1,0 +1,4 @@
+node_modules/
+# The phone app, built by `pnpm build:phone` at the repository root.
+public/
+.wrangler/
