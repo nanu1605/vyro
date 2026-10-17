@@ -7,9 +7,14 @@
 //! in steps that already land in place, and the place saved afterwards (`widgets.rs`, on
 //! `Moved`) is the snapped one. The other widgets' rectangles are read once as the drag
 //! starts. Nothing runs outside a drag.
+//!
+//! Windows builds each step from the last one answered plus the mouse's movement, so snapping
+//! what it proposes would carry each snap into the next step: a slow drag never got further
+//! than the pull and a snapped widget stayed stuck (1.2's first field check). Each step is
+//! worked out from the pointer instead ([`follow`]), where the window was grabbed.
 
 #[cfg(windows)]
-pub use imp::{attach, smoke_snap};
+pub use imp::{attach, smoke_drag};
 
 /// A rectangle in physical screen px, as Windows gives it (right and bottom exclusive).
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -31,6 +36,45 @@ impl Rect {
             bottom: self.bottom + dy,
         }
     }
+
+    fn width(self) -> i32 {
+        self.right - self.left
+    }
+
+    fn height(self) -> i32 {
+        self.bottom - self.top
+    }
+}
+
+/// Where a window grabbed at `grab` (the pointer's place in it, as a share of its width and
+/// height, from its top left) goes with the pointer at `cursor`: the pointer's own place, never
+/// the step answered before.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn follow(cursor: (i32, i32), grab: (f64, f64), width: i32, height: i32) -> Rect {
+    let left = cursor.0 - (grab.0 * f64::from(width)).round() as i32;
+    let top = cursor.1 - (grab.1 * f64::from(height)).round() as i32;
+    Rect {
+        left,
+        top,
+        right: left + width,
+        bottom: top + height,
+    }
+}
+
+/// Where the pointer took hold of `r`, as [`follow`] wants it (0 to 1 on each axis).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn grab_of(cursor: (i32, i32), r: Rect) -> (f64, f64) {
+    let share = |at: i32, from: i32, size: i32| {
+        if size <= 0 {
+            0.5
+        } else {
+            (f64::from(at - from) / f64::from(size)).clamp(0.0, 1.0)
+        }
+    };
+    (
+        share(cursor.0, r.left, r.width()),
+        share(cursor.1, r.top, r.height()),
+    )
 }
 
 /// Where a widget dragged to `r` goes. On each axis on its own, the nearest of these within
@@ -93,23 +137,30 @@ fn nearest(moves: impl Iterator<Item = i32>, reach: i32) -> i32 {
 #[cfg(windows)]
 mod imp {
     use std::cell::RefCell;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
 
-    use tauri::{AppHandle, Manager, WebviewWindow};
+    use tauri::WebviewWindow;
     use windows::core::BOOL;
-    use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
+    use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
     use windows::Win32::Graphics::Gdi::{
         GetMonitorInfoW, MonitorFromRect, MONITORINFO, MONITOR_DEFAULTTONEAREST,
     };
     use windows::Win32::System::Threading::GetCurrentThreadId;
     use windows::Win32::UI::HiDpi::GetDpiForWindow;
-    use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_SHIFT};
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        GetKeyState, SendInput, INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_LEFTDOWN,
+        MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE, MOUSEINPUT, MOUSE_EVENT_FLAGS, VK_SHIFT,
+    };
     use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
     use windows::Win32::UI::WindowsAndMessaging::{
-        EnumThreadWindows, GetWindowRect, GetWindowTextW, IsWindowVisible, SendMessageW,
-        WM_ENTERSIZEMOVE, WM_EXITSIZEMOVE, WM_MOVING, WM_NCDESTROY,
+        EnumThreadWindows, GetCursorPos, GetWindowRect, GetWindowTextW, IsWindowVisible,
+        SetCursorPos, SetWindowPos, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER, WM_ENTERSIZEMOVE,
+        WM_EXITSIZEMOVE, WM_MOVING, WM_NCDESTROY,
     };
 
-    use super::{snap, Rect};
+    use super::{follow, grab_of, snap, Rect};
 
     /// The subclass's id on a widget window (tao's own is 0).
     const SUBCLASS_ID: usize = 0x5659_524f;
@@ -117,10 +168,21 @@ mod imp {
     const REACH: i32 = 10;
     const GAP: i32 = 8;
 
-    thread_local! {
-        /// The other widgets, read as a drag starts (the subclass runs on the main thread).
-        static OTHERS: RefCell<Vec<Rect>> = const { RefCell::new(Vec::new()) };
+    /// A drag under way: where the pointer took hold, and the other widgets.
+    struct Drag {
+        grab: Option<(f64, f64)>,
+        others: Vec<Rect>,
     }
+
+    thread_local! {
+        /// Read as a drag starts (the subclass runs on the main thread).
+        static DRAG: RefCell<Option<Drag>> = const { RefCell::new(None) };
+    }
+
+    /// For CI's smoke test: whether a widget is being dragged, and the last step Windows
+    /// proposed and the one answered.
+    static DRAGGING: AtomicBool = AtomicBool::new(false);
+    static LAST: Mutex<Option<(Rect, Rect)>> = Mutex::new(None);
 
     /// Snaps a widget window while it is dragged. Main thread (the window's own).
     pub fn attach(win: &WebviewWindow) {
@@ -143,13 +205,25 @@ mod imp {
         _data: usize,
     ) -> LRESULT {
         match msg {
-            WM_ENTERSIZEMOVE => OTHERS.with(|o| *o.borrow_mut() = others(hwnd)),
+            WM_ENTERSIZEMOVE => {
+                let grab = match (cursor(), window_rect(hwnd)) {
+                    (Some(c), Some(r)) => Some(grab_of(c, r)),
+                    _ => None,
+                };
+                let others = others(hwnd);
+                DRAG.with(|d| *d.borrow_mut() = Some(Drag { grab, others }));
+                DRAGGING.store(true, Ordering::SeqCst);
+            }
             WM_MOVING if lparam.0 != 0 => {
                 // SAFETY: Windows passes the proposed rectangle, to be changed in place.
                 let r = unsafe { &mut *(lparam.0 as *mut RECT) };
-                if let Some(to) = snapped(hwnd, *r) {
+                if let Some(to) = step(hwnd, *r) {
                     *r = to;
                 }
+            }
+            WM_EXITSIZEMOVE => {
+                DRAG.with(|d| *d.borrow_mut() = None);
+                DRAGGING.store(false, Ordering::SeqCst);
             }
             WM_NCDESTROY => {
                 // SAFETY: removes this subclass from the window going away.
@@ -163,17 +237,30 @@ mod imp {
         unsafe { DefSubclassProc(hwnd, msg, wparam, lparam) }
     }
 
-    /// Where a drag step to `r` goes, or None to leave it (Shift held, no monitor).
-    fn snapped(hwnd: HWND, r: RECT) -> Option<RECT> {
-        // SAFETY: reads the keyboard state of this thread's input.
-        if unsafe { GetKeyState(i32::from(VK_SHIFT.0)) } < 0 {
-            return None;
+    /// Where a drag step Windows proposed as `r` goes: under the pointer where it took hold,
+    /// snapped unless Shift is held. None leaves it (no drag recorded, no monitor).
+    fn step(hwnd: HWND, r: RECT) -> Option<RECT> {
+        let proposed = rect(r);
+        let to = DRAG.with(|d| {
+            let d = d.borrow();
+            let d = d.as_ref()?;
+            let free = match (d.grab, cursor()) {
+                (Some(grab), Some(c)) => follow(c, grab, proposed.width(), proposed.height()),
+                _ => proposed,
+            };
+            // SAFETY: reads the keyboard state of this thread's input.
+            if unsafe { GetKeyState(i32::from(VK_SHIFT.0)) } < 0 {
+                return Some(free);
+            }
+            let area = work_area(&r)?;
+            // SAFETY: reads the window's DPI.
+            let dpi = unsafe { GetDpiForWindow(hwnd) }.max(96) as i32;
+            let px = |logical: i32| logical * dpi / 96;
+            Some(snap(free, area, &d.others, px(REACH), px(GAP)))
+        })?;
+        if let Ok(mut last) = LAST.lock() {
+            *last = Some((proposed, to));
         }
-        let area = work_area(&r)?;
-        // SAFETY: reads the window's DPI.
-        let dpi = unsafe { GetDpiForWindow(hwnd) }.max(96) as i32;
-        let px = |logical: i32| logical * dpi / 96;
-        let to = OTHERS.with(|o| snap(rect(r), area, &o.borrow(), px(REACH), px(GAP)));
         Some(RECT {
             left: to.left,
             top: to.top,
@@ -189,6 +276,20 @@ mod imp {
             right: r.right,
             bottom: r.bottom,
         }
+    }
+
+    fn cursor() -> Option<(i32, i32)> {
+        let mut p = POINT::default();
+        // SAFETY: reads the pointer's place (physical px: the app is per-monitor DPI aware).
+        unsafe { GetCursorPos(&mut p) }.ok().map(|()| (p.x, p.y))
+    }
+
+    fn window_rect(hwnd: HWND) -> Option<Rect> {
+        let mut r = RECT::default();
+        // SAFETY: reads a window's rectangle.
+        unsafe { GetWindowRect(hwnd, &mut r) }
+            .ok()
+            .map(|()| rect(r))
     }
 
     /// The work area (the screen less the taskbar) of the monitor nearest `r`.
@@ -217,10 +318,8 @@ mod imp {
             // SAFETY: `data` is the `Found` below, alive for the whole enumeration.
             let found = unsafe { &mut *(data.0 as *mut Found) };
             if hwnd != found.me && is_widget(hwnd) {
-                let mut r = RECT::default();
-                // SAFETY: reads a window's rectangle.
-                if unsafe { GetWindowRect(hwnd, &mut r) }.is_ok() {
-                    found.rects.push(rect(r));
+                if let Some(r) = window_rect(hwnd) {
+                    found.rects.push(r);
                 }
             }
             true.into()
@@ -252,67 +351,168 @@ mod imp {
         }
     }
 
-    /// CI's smoke test (`smoke.rs`): plays a drag's messages to the widget's window, as Windows'
-    /// move loop sends them. A step 4 px from the work area's corner must come back flush with
-    /// it; one 40 px away must come back as it was. Runs on the smoke test's thread.
-    pub fn smoke_snap(app: &AppHandle, label: &str) -> String {
-        let Some(hwnd) = app.get_webview_window(label).and_then(|w| w.hwnd().ok()) else {
-            return "failed: no widget window".into();
+    fn mouse(flags: MOUSE_EVENT_FLAGS) -> bool {
+        let input = INPUT {
+            r#type: INPUT_MOUSE,
+            Anonymous: INPUT_0 {
+                mi: MOUSEINPUT {
+                    dwFlags: flags,
+                    ..Default::default()
+                },
+            },
         };
-        let mut now = RECT::default();
-        // SAFETY: reads the widget window's rectangle and DPI.
-        let (dpi, read) = unsafe {
-            (
-                GetDpiForWindow(hwnd).max(96) as i32,
-                GetWindowRect(hwnd, &mut now),
-            )
-        };
-        if read.is_err() {
-            return "failed: the widget window's rectangle could not be read".into();
+        // SAFETY: one mouse input, sized as the call wants.
+        unsafe { SendInput(&[input], std::mem::size_of::<INPUT>() as i32) == 1 }
+    }
+
+    /// Puts the pointer at a place, with a mouse move there for whoever has the mouse.
+    fn point(x: i32, y: i32) {
+        // SAFETY: moves the pointer; a move of nothing makes Windows report where it is.
+        unsafe {
+            let _ = SetCursorPos(x, y);
         }
-        let Some(area) = work_area(&now) else {
+        mouse(MOUSEEVENTF_MOVE);
+        std::thread::sleep(Duration::from_millis(12));
+    }
+
+    fn wait(limit: Duration, done: impl Fn() -> bool) -> bool {
+        let since = Instant::now();
+        while !done() {
+            if since.elapsed() >= limit {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        true
+    }
+
+    fn last() -> Option<(Rect, Rect)> {
+        LAST.lock().ok().and_then(|l| *l)
+    }
+
+    /// CI's smoke test (`smoke.rs`): drags the widget with the mouse, as a person would, on its
+    /// own thread. The widget must be unlocked and on top of every window. It is put 150 px from
+    /// the work area's corner and pressed in its middle; moved slowly to 5 px from the corner,
+    /// it must snap flush; moved on 30 px, 1 px at a time, it must follow the pointer out of the
+    /// snap; released, it must stay where it was last put.
+    pub fn smoke_drag(hwnd: HWND) -> String {
+        let Some(now) = window_rect(hwnd) else {
+            return "failed: the widget window's rectangle could not be read".into();
+        };
+        let Some(area) = work_area(&RECT {
+            left: now.left,
+            top: now.top,
+            right: now.right,
+            bottom: now.bottom,
+        }) else {
             return "skipped: no monitor".into();
         };
-        let (w, h) = (now.right - now.left, now.bottom - now.top);
-        let at = |off: i32| RECT {
-            left: area.left + off * dpi / 96,
-            top: area.top + off * dpi / 96,
-            right: area.left + off * dpi / 96 + w,
-            bottom: area.top + off * dpi / 96 + h,
+        // SAFETY: reads the widget window's DPI.
+        let dpi = unsafe { GetDpiForWindow(hwnd) }.max(96) as i32;
+        let px = |logical: i32| logical * dpi / 96;
+        let (x0, y0) = (area.left + px(150), area.top + px(150));
+        // SAFETY: moves a window of this process; it is not resized, raised or activated.
+        let placed = unsafe {
+            SetWindowPos(
+                hwnd,
+                None,
+                x0,
+                y0,
+                0,
+                0,
+                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+            )
         };
-        let (mut close, mut far) = (at(4), at(40));
-        let asked_far = far;
-        // SAFETY: the messages Windows' move loop sends, to a window of this process; each
-        // rectangle outlives its (synchronous) SendMessage. The window is not moved.
-        unsafe {
-            SendMessageW(hwnd, WM_ENTERSIZEMOVE, None, None);
-            SendMessageW(
-                hwnd,
-                WM_MOVING,
-                None,
-                Some(LPARAM(&mut close as *mut RECT as isize)),
-            );
-            SendMessageW(
-                hwnd,
-                WM_MOVING,
-                None,
-                Some(LPARAM(&mut far as *mut RECT as isize)),
-            );
-            SendMessageW(hwnd, WM_EXITSIZEMOVE, None, None);
+        if let Err(e) = placed {
+            return format!("failed: the widget could not be put in place ({e})");
         }
-        if (close.left, close.top) != (area.left, area.top) {
+        if !wait(Duration::from_secs(2), || {
+            window_rect(hwnd).is_some_and(|r| (r.left, r.top) == (x0, y0))
+        }) {
+            return "failed: the widget did not go where it was put".into();
+        }
+        std::thread::sleep(Duration::from_millis(300));
+        let start = window_rect(hwnd).unwrap_or(now);
+        let (cx, cy) = (
+            start.left + start.width() / 2,
+            start.top + start.height() / 2,
+        );
+        if let Ok(mut l) = LAST.lock() {
+            *l = None;
+        }
+        point(cx, cy);
+        if !mouse(MOUSEEVENTF_LEFTDOWN) {
+            return "skipped: this desktop refuses mouse input".into();
+        }
+        if !wait(Duration::from_secs(3), || DRAGGING.load(Ordering::SeqCst)) {
+            mouse(MOUSEEVENTF_LEFTUP);
+            return "failed: pressing the widget did not start a drag".into();
+        }
+        let result = (|| {
+            // Towards the corner, 2 px a step, until the widget is 5 px from it.
+            let (dx, dy) = (area.left + px(5) - start.left, area.top + px(5) - start.top);
+            let steps = dx.abs().max(dy.abs()) / 2;
+            for k in 1..=steps {
+                point(cx + dx * k / steps, cy + dy * k / steps);
+            }
+            std::thread::sleep(Duration::from_millis(250));
+            let Some((_, near)) = last() else {
+                return "failed: Windows asked nothing of the widget while it was dragged".into();
+            };
+            if (near.left, near.top) != (area.left, area.top) {
+                return format!(
+                    "failed: 5 px from the corner the widget went to {},{} (the corner is {},{})",
+                    near.left, near.top, area.left, area.top
+                );
+            }
+            // On, 1 px a step, well out of reach of the corner.
+            let (ax, ay) = (cx + dx, cy + dy);
+            let on = px(30);
+            for k in 1..=on {
+                point(ax + k, ay + k);
+            }
+            std::thread::sleep(Duration::from_millis(250));
+            let Some((proposed, away)) = last() else {
+                return "failed: no step answered".into();
+            };
+            let want = (area.left + px(5) + on, area.top + px(5) + on);
+            if ((away.left - want.0).abs(), (away.top - want.1).abs()) > (1, 1) {
+                return format!(
+                    "failed: moved on from the corner, the widget went to {},{} (the pointer \
+                     was at {},{})",
+                    away.left, away.top, want.0, want.1
+                );
+            }
+            // Whether Windows built its last step from the snapped one (the cause of the
+            // field check's stuck widgets), for the record.
+            let carried = (proposed.left, proposed.top) != (away.left, away.top);
+            format!(
+                "passed{}",
+                if carried {
+                    " (Windows carried the snapped place into each step)"
+                } else {
+                    ""
+                }
+            )
+        })();
+        mouse(MOUSEEVENTF_LEFTUP);
+        let ended = wait(Duration::from_secs(2), || !DRAGGING.load(Ordering::SeqCst));
+        if !result.starts_with("passed") {
+            return result;
+        }
+        if !ended {
+            return "failed: the drag did not end when the mouse was let go".into();
+        }
+        let (Some((_, put)), Some(end)) = (last(), window_rect(hwnd)) else {
+            return "failed: the widget's place could not be read".into();
+        };
+        if (end.left, end.top) != (put.left, put.top) {
             return format!(
-                "failed: a widget 4 px from the corner went to {},{} (the corner is {},{})",
-                close.left, close.top, area.left, area.top
+                "failed: let go, the widget went to {},{} (it was put at {},{})",
+                end.left, end.top, put.left, put.top
             );
         }
-        if far != asked_far {
-            return format!(
-                "failed: a widget 40 px from the corner moved to {},{}",
-                far.left, far.top
-            );
-        }
-        "passed".into()
+        result
     }
 }
 
@@ -381,6 +581,85 @@ mod tests {
             snap(at(405, 600, 220, 104), AREA, &[a], 10, 8),
             at(405, 600, 220, 104)
         );
+    }
+
+    #[test]
+    fn a_widget_follows_the_pointer_where_it_was_grabbed() {
+        let r = at(100, 200, 220, 104);
+        let grab = grab_of((210, 252), r);
+        assert_eq!(grab, (0.5, 0.5));
+        assert_eq!(follow((310, 352), grab, 220, 104), at(200, 300, 220, 104));
+        // Grabbed outside (it can't be, but never more than its own size away).
+        assert_eq!(grab_of((0, 400), r), (0.0, 1.0));
+    }
+
+    /// Windows' move loop as it works: each step it proposes is the last one answered moved by
+    /// the mouse's movement. The pointer took hold of `start` at `grab`; `answer` is the
+    /// window's answer to a proposal, with the pointer's place. Returns each step's place.
+    fn drag(
+        start: Rect,
+        grab: (f64, f64),
+        moves: &[(i32, i32)],
+        answer: impl Fn(Rect, (i32, i32)) -> Rect,
+    ) -> Vec<Rect> {
+        let mut cursor = (
+            start.left + (grab.0 * f64::from(start.width())).round() as i32,
+            start.top + (grab.1 * f64::from(start.height())).round() as i32,
+        );
+        let mut last = start;
+        let mut out = Vec::new();
+        for &(dx, dy) in moves {
+            cursor = (cursor.0 + dx, cursor.1 + dy);
+            last = answer(last.moved(dx, dy), cursor);
+            out.push(last);
+        }
+        out
+    }
+
+    #[test]
+    fn a_snapped_widget_comes_free_when_dragged_slowly_away() {
+        // Flush with the screen's left edge and in line with a neighbour above, then 1 px at a
+        // time rightwards for 30 px, as a slow hand drags.
+        let start = at(0, 500, 220, 104);
+        let neighbour = at(0, 300, 220, 192);
+        let moves = [(1, 0); 30];
+        let grab = (0.5, 0.5);
+        let followed = drag(start, grab, &moves, |p, c| {
+            snap(
+                follow(c, grab, p.width(), p.height()),
+                AREA,
+                &[neighbour],
+                10,
+                8,
+            )
+        });
+        // Held by the edge for 10 px, then with the pointer.
+        assert_eq!(followed[9].left, 0);
+        assert_eq!(followed[10].left, 11);
+        assert_eq!(followed.last().unwrap().left, 30);
+        // The way 1.2's first build answered, snapping what Windows proposed: each answer was
+        // carried into the next proposal, so the widget never got away (the field check).
+        let carried = drag(start, grab, &moves, |p, _| {
+            snap(p, AREA, &[neighbour], 10, 8)
+        });
+        assert!(carried.iter().all(|r| r.left == 0), "{carried:?}");
+    }
+
+    #[test]
+    fn a_widget_dragged_off_its_neighbour_comes_free() {
+        // 8 px beside a neighbour, tops in line; dragged away down and right, slowly.
+        let a = at(400, 300, 220, 104);
+        let start = at(628, 300, 220, 104);
+        let moves = [(1, 1); 40];
+        let grab = (0.3, 0.6);
+        let followed = drag(start, grab, &moves, |p, c| {
+            snap(follow(c, grab, p.width(), p.height()), AREA, &[a], 10, 8)
+        });
+        let end = *followed.last().unwrap();
+        assert_eq!((end.left, end.top), (668, 340));
+        let carried = drag(start, grab, &moves, |p, _| snap(p, AREA, &[a], 10, 8));
+        let stuck = *carried.last().unwrap();
+        assert_eq!((stuck.left, stuck.top), (628, 300), "stuck the old way");
     }
 
     #[test]

@@ -95,7 +95,14 @@
   const views = $derived(laptop ? VIEWS.filter((v) => v.id !== 'gpu') : VIEWS);
   // A laptop has no card to show on its own.
   const view = $derived<View>(laptop && picked === 'gpu' ? 'pc' : picked);
-  const parts = $derived(hw ? (laptop ? buildLaptop : buildPc)({ hw, snap, drives, shapes, cardKey }) : []);
+  // Board fan headers seen turning this session (only ever grows, so the case fans keep their
+  // places): a header that never turns has no fan on it, or its fans run from a hub.
+  let spunFans = $state<ReadonlySet<number>>(new Set());
+  $effect(() => {
+    const now = (snap?.fans ?? []).flatMap((f, i) => ((f.rpm ?? 0) > 0 && !spunFans.has(i) ? [i] : []));
+    if (now.length) spunFans = new Set([...spunFans, ...now]);
+  });
+  const parts = $derived(hw ? (laptop ? buildLaptop : buildPc)({ hw, snap, drives, shapes, cardKey, spunFans }) : []);
   const gpus = $derived(parts.filter((p) => p.kind === 'gpu'));
   const gpuPart = $derived(gpus[Math.min(gpuPick, gpus.length - 1)] ?? null);
   const shown = $derived(view === 'gpu' ? (gpuPart ? [gpuPart] : []) : parts);
@@ -689,13 +696,20 @@
     min-height: 22rem;
     padding: 0.5rem;
   }
+  /* As tall as the window allows below the bar (1.2: a short, wide view cut the case off); the
+     scene frames the whole model for whatever shape this is. */
   .canvas-wrap {
     position: relative;
     container-type: inline-size;
-    aspect-ratio: 4 / 3;
-    max-height: min(70vh, 38rem);
+    height: clamp(22rem, calc(100dvh - 14rem), 64rem);
     width: 100%;
     overflow: hidden;
+  }
+  @media (max-width: 900px) {
+    .canvas-wrap {
+      height: auto;
+      aspect-ratio: 4 / 3;
+    }
   }
   .canvas-wrap :global(canvas) {
     display: block;

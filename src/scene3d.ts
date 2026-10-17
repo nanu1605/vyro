@@ -17,7 +17,9 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { corners, fitDistance } from './camfit';
 import type { GpuShape } from './gpuspecs';
+import { laptopAirflow, towerAirflow } from './airflow';
 import { CASE, heatColor, LAPTOP, LID, LID_OPEN, type Part } from './pcmodel';
 
 export type SceneView = 'pc' | 'gpu' | 'laptop';
@@ -201,17 +203,6 @@ function shadowTexture(): THREE.CanvasTexture {
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, 256, 256);
-  });
-}
-
-/** A soft round dot for the airflow. */
-function dotTexture(): THREE.CanvasTexture {
-  return canvasTexture(32, 32, (ctx) => {
-    const g = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
-    g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 32, 32);
   });
 }
 
@@ -643,7 +634,8 @@ export function createScene(canvas: HTMLCanvasElement, view: SceneView, pal: Sce
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.minDistance = view === 'gpu' ? 200 : laptop ? 260 : 450;
-  controls.maxDistance = view === 'gpu' ? 900 : laptop ? 1400 : 1800;
+  const farthest = view === 'gpu' ? 900 : laptop ? 1400 : 1800;
+  controls.maxDistance = farthest;
   controls.autoRotateSpeed = 0.35;
 
   const textures: THREE.Texture[] = [];
@@ -666,6 +658,7 @@ export function createScene(canvas: HTMLCanvasElement, view: SceneView, pal: Sce
 
   const world = new THREE.Group();
   const deco = new THREE.Group();
+  const glassPanel = new THREE.Group();
   scene.add(world, deco);
   let built = new Map<string, Built>();
   let spin = new Map<string, number>();
@@ -706,7 +699,9 @@ export function createScene(canvas: HTMLCanvasElement, view: SceneView, pal: Sce
   function buildCase(): void {
     const [W, H, D] = CASE;
     const t = 5;
-    const shell = mat(pal.light ? 0xe4e8ee : 0x16191f, { metalness: 0.55, roughness: 0.42 });
+    // Powder-coated steel, matte: glossier, the inside caught the room's ceiling light from
+    // above and the whole interior turned white (1.2's first field check).
+    const shell = mat(pal.light ? 0xe4e8ee : 0x16191f, { metalness: 0.3, roughness: 0.8 });
     deco.add(boxMesh([W, H, t], shell, [W / 2, H / 2, -t / 2])); // behind the board
     deco.add(boxMesh([W, t, D], shell, [W / 2, H + t / 2, D / 2])); // top
     deco.add(boxMesh([W, t, D], shell, [W / 2, -t / 2, D / 2])); // floor
@@ -726,22 +721,29 @@ export function createScene(canvas: HTMLCanvasElement, view: SceneView, pal: Sce
     deco.add(boxMesh([1.5, 110, 26], mat(0x0b0d10), [1, 380, 14]));
     // The PSU shroud: a plate over the bottom with a smoked window towards the glass.
     deco.add(boxMesh([W, 4, D], shell, [W / 2, 100, D / 2]));
-    const smoke = new THREE.MeshPhysicalMaterial({ color: 0x0c0f14, metalness: 0, roughness: 0.15, transparent: true, opacity: 0.45, clearcoat: 1 });
+    const smoke = new THREE.MeshStandardMaterial({ color: 0x0c0f14, metalness: 0, roughness: 0.35, transparent: true, opacity: 0.55, envMapIntensity: 0.3 });
     deco.add(boxMesh([W - 4, 96, 2], smoke, [W / 2, 50, D - 3]));
     deco.add(boxMesh([W * 0.86, 1.2, 1.5], decoRgb(), [W / 2, 102.4, D - 6]));
-    // Tempered glass on the open side: reflections, barely tinted.
-    const glass = new THREE.MeshPhysicalMaterial({
-      color: 0xffffff,
+    // Tempered glass on the open side, in a thin dark frame; its reflections kept faint so the
+    // parts show through. Gone under the thermal map, which is about the parts.
+    const pane = new THREE.MeshPhysicalMaterial({
+      color: 0x9fb3c8,
       metalness: 0,
-      roughness: 0.04,
+      roughness: 0.05,
       transparent: true,
-      opacity: pal.light ? 0.1 : 0.12,
-      clearcoat: 1,
-      clearcoatRoughness: 0.05,
-      envMapIntensity: 1.6,
+      opacity: 0.04,
+      envMapIntensity: 0.25,
       depthWrite: false,
     });
-    deco.add(boxMesh([W - 6, H - 6, 3], glass, [W / 2, H / 2, D + 1.5]));
+    glassPanel.add(boxMesh([W - 6, H - 6, 2], pane, [W / 2, H / 2, D + 1.5]));
+    const frame = mat(pal.light ? 0xc9cfd8 : 0x0d1014, { metalness: 0.3, roughness: 0.75 });
+    glassPanel.add(
+      boxMesh([W, 5, 3], frame, [W / 2, H - 2.5, D + 1.5]),
+      boxMesh([W, 5, 3], frame, [W / 2, 2.5, D + 1.5]),
+      boxMesh([5, H, 3], frame, [2.5, H / 2, D + 1.5]),
+      boxMesh([5, H, 3], frame, [W - 2.5, H / 2, D + 1.5]),
+    );
+    deco.add(glassPanel);
     // Sleeved cables: the board's 24-pin into the shroud, the CPU's 8-pin out the back.
     const sleeve = mat(0xffffff, { map: keep(sleeveTexture()), roughness: 0.85 });
     deco.add(tube([new THREE.Vector3(262, 300, 14), new THREE.Vector3(305, 296, 50), new THREE.Vector3(310, 160, 52), new THREE.Vector3(300, 102, 50)], 7, sleeve));
@@ -889,6 +891,10 @@ export function createScene(canvas: HTMLCanvasElement, view: SceneView, pal: Sce
   camera.position.copy(home.pos);
   controls.target.copy(home.target);
   controls.update();
+  /** The way the camera looks at the model from home (from the model towards the camera). */
+  const homeDir = home.pos.clone().sub(home.target).normalize();
+  /** Nobody has turned, zoomed or focused the view since it was last framed. */
+  let atHome = true;
 
   /** A camera move under way. */
   let flight: { p0: THREE.Vector3; t0: THREE.Vector3; p1: THREE.Vector3; t1: THREE.Vector3; start: number; ms: number } | null = null;
@@ -898,7 +904,50 @@ export function createScene(canvas: HTMLCanvasElement, view: SceneView, pal: Sce
     invalidate();
   }
 
-  let fitted = false;
+  /** The model's bounds with the parts lifted out by `e` (0 together, 1 exploded): the case or
+   * the laptop's base and every part, not the shadow or the airflow. */
+  function modelBox(e: number): THREE.Box3 {
+    const box = new THREE.Box3();
+    for (const c of deco.children) if (c !== shadow && c !== flow?.mesh) box.expandByObject(c);
+    for (const b of built.values()) {
+      const was = b.root.position.clone();
+      b.root.position.copy(b.base).addScaledVector(b.explode, e);
+      b.root.updateMatrixWorld(true);
+      box.expandByObject(b.root);
+      b.root.position.copy(was);
+      b.root.updateMatrixWorld(true);
+    }
+    return box;
+  }
+
+  /** Frames the whole model for the canvas's shape (1.2: a wide view used to cut the case's top
+   * and bottom off). Home is where every corner fits; a camera still at home goes there, by
+   * `move`, keeping the way it looks while the view turns by itself. */
+  function frameModel(move: 'jump' | 'fly' | 'none'): void {
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    const box = modelBox(opts.explode ? 1 : 0);
+    if (w === 0 || h === 0 || box.isEmpty()) return;
+    const target = box.getCenter(new THREE.Vector3());
+    const turned = atHome && !flight ? camera.position.clone().sub(controls.target).normalize() : homeDir;
+    const dist = (dir: THREE.Vector3) => fitDistance(corners(box), target, dir, camera.up, camera.fov, w / h);
+    home.target.copy(target);
+    home.pos.copy(target).addScaledVector(homeDir, dist(homeDir));
+    controls.maxDistance = Math.max(farthest, home.pos.distanceTo(target) * 1.6);
+    if (!atHome || focused) return;
+    const pos = target.clone().addScaledVector(turned, dist(turned));
+    if (flight) {
+      flight.p1.copy(home.pos);
+      flight.t1.copy(home.target);
+    } else if (move === 'fly') fly(pos, target.clone(), 700);
+    else if (move === 'jump') {
+      camera.position.copy(pos);
+      controls.target.copy(target);
+      controls.update();
+    }
+  }
+
+  let shape = '';
   let flown = false;
   function size(): boolean {
     const w = canvas.clientWidth;
@@ -910,14 +959,10 @@ export function createScene(canvas: HTMLCanvasElement, view: SceneView, pal: Sce
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
     }
-    // First draw: step back on a narrow view so the whole case (or card) fits across.
-    if (!fitted) {
-      fitted = true;
-      const k = Math.max(1, 1.25 / camera.aspect);
-      home.pos.sub(home.target).multiplyScalar(k).add(home.target);
-      if (!flight) camera.position.copy(home.pos);
-      else flight.p1.copy(home.pos);
-      controls.update();
+    // A new shape (the first draw, a resized window): frame the model again.
+    if (shape !== `${w}x${h}`) {
+      shape = `${w}x${h}`;
+      frameModel('jump');
     }
     return true;
   }
@@ -947,87 +992,157 @@ export function createScene(canvas: HTMLCanvasElement, view: SceneView, pal: Sce
 
   // ----- Airflow --------------------------------------------------------------------------------
 
-  const FLOW = 260;
-  let flow: { points: THREE.Points; lanes: THREE.CatmullRomCurve3[]; lane: Uint16Array; u: Float32Array; off: Float32Array; speed: Float32Array } | null = null;
-  const dot = keep(dotTexture());
-  function buildFlow(): void {
+  // Smoke lines as in a wind tunnel (1.2, after the first field check): the streamlines from
+  // `airflow.ts`, each a thin ribbon facing the camera, with streaks running along it at the fans'
+  // pace. Their colour goes from cool at the intakes to warm as the air takes up the CPU's and the
+  // GPU's heat (from the live readings). Built once per layout; a frame only moves a uniform.
+  const flowUniforms = {
+    uTime: { value: 0 },
+    uSpeed: { value: 120 },
+    uWidth: { value: 1.6 },
+    uViewport: { value: new THREE.Vector2(1, 1) },
+    uHeat: { value: new THREE.Vector2(0, 0) },
+    uOpacity: { value: 1 },
+    uCool: { value: new THREE.Color(0x4cc9f0) },
+    uWarm: { value: new THREE.Color(0xff8a4c) },
+    uHot: { value: new THREE.Color(0xff3b3b) },
+  };
+  let flow: { mesh: THREE.Mesh; mat: THREE.ShaderMaterial } | null = null;
+  function buildFlow(parts: readonly Part[]): void {
     if (flow) {
-      deco.remove(flow.points);
-      flow.points.geometry.dispose();
-      (flow.points.material as THREE.Material).dispose();
+      deco.remove(flow.mesh);
+      flow.mesh.geometry.dispose();
+      flow.mat.dispose();
       flow = null;
     }
     if (view === 'gpu') return;
-    const lanes: THREE.CatmullRomCurve3[] = [];
-    const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-    if (laptop) {
-      // In under the base, through the blowers and out of the back vents.
-      for (const x of [70, 290]) lanes.push(new THREE.CatmullRomCurve3([v(x, -30, 80), v(x, -4, 55), v(x, 11, 42), v(x, 11, 8), v(x, 13, -40)]));
-    } else {
-      // In at the front fans, across the board, out of the rear fan and the radiator.
-      const fans = [...built.entries()].filter(([id, b]) => b.spins.length && id.includes('fan'));
-      const intakes = fans.filter(([, b]) => b.base.x > CASE[0] / 2 && b.base.y > 110).map(([, b]) => b.base);
-      const exhaust = fans.find(([id, b]) => b.base.x < CASE[0] / 2 && b.base.y > 110 && !id.startsWith('radfan') && id !== 'cooler.fan')?.[1].base ?? v(14, 360, 110);
-      const top = built.has('radiator') ? v(235, 470, 110) : null;
-      for (const at of intakes.length ? intakes : [v(446, 330, 110)]) {
-        lanes.push(
-          new THREE.CatmullRomCurve3([v(at.x + 40, at.y, at.z), v(at.x - 40, at.y, at.z), v(260, (at.y + exhaust.y) / 2 + 20, 120), v(exhaust.x + 30, exhaust.y, exhaust.z), v(exhaust.x - 60, exhaust.y, exhaust.z)]),
-        );
-        if (top) lanes.push(new THREE.CatmullRomCurve3([v(at.x + 40, at.y, at.z), v(at.x - 60, at.y + 10, at.z), v(260, 420, 110), top]));
+    const lines = laptop ? laptopAirflow(parts) : towerAirflow(parts);
+    const n = lines.reduce((a, l) => a + l.points.length, 0);
+    if (n === 0) return;
+    const pos = new Float32Array(n * 6);
+    const tan = new Float32Array(n * 6);
+    const side = new Float32Array(n * 2);
+    const along = new Float32Array(n * 2);
+    const total = new Float32Array(n * 2);
+    const warmth = new Float32Array(n * 4);
+    const phase = new Float32Array(n * 2);
+    const index: number[] = [];
+    let v = 0;
+    lines.forEach((l, li) => {
+      const m = l.points.length;
+      const end = l.along[m - 1]!;
+      for (let i = 0; i < m; i++) {
+        const p = l.points[i]!;
+        const a = l.points[Math.max(0, i - 1)]!;
+        const b = l.points[Math.min(m - 1, i + 1)]!;
+        for (const sd of [-1, 1]) {
+          pos.set(p, v * 3);
+          tan.set([b[0] - a[0], b[1] - a[1], b[2] - a[2]], v * 3);
+          side[v] = sd;
+          along[v] = l.along[i]!;
+          total[v] = end;
+          warmth.set(l.heat[i]!, v * 2);
+          // Streaks out of step from line to line.
+          phase[v] = (li * 0.618034) % 1;
+          v++;
+        }
+        if (i < m - 1) index.push(v - 2, v - 1, v, v - 1, v + 1, v);
       }
-    }
+    });
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(FLOW * 3), 3));
-    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(FLOW * 3), 3));
-    const points = new THREE.Points(
-      geo,
-      new THREE.PointsMaterial({ size: laptop ? 3 : 5, map: dot, vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending }),
-    );
-    points.frustumCulled = false;
-    const lane = new Uint16Array(FLOW);
-    const u = new Float32Array(FLOW);
-    const off = new Float32Array(FLOW * 3);
-    const speed = new Float32Array(FLOW);
-    const spread = laptop ? 14 : 38;
-    for (let i = 0; i < FLOW; i++) {
-      lane[i] = i % lanes.length;
-      u[i] = Math.random();
-      off[i * 3] = (Math.random() - 0.5) * spread * 0.4;
-      off[i * 3 + 1] = (Math.random() - 0.5) * spread;
-      off[i * 3 + 2] = (Math.random() - 0.5) * spread;
-      speed[i] = 0.8 + Math.random() * 0.4;
-    }
-    flow = { points, lanes, lane, u, off, speed };
-    deco.add(points);
-    stepFlow(0);
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('tangent', new THREE.BufferAttribute(tan, 3));
+    geo.setAttribute('side', new THREE.BufferAttribute(side, 1));
+    geo.setAttribute('along', new THREE.BufferAttribute(along, 1));
+    geo.setAttribute('total', new THREE.BufferAttribute(total, 1));
+    geo.setAttribute('warmth', new THREE.BufferAttribute(warmth, 2));
+    geo.setAttribute('phase', new THREE.BufferAttribute(phase, 1));
+    geo.setIndex(index);
+    const mat = new THREE.ShaderMaterial({
+      uniforms: flowUniforms,
+      transparent: true,
+      depthWrite: false,
+      // A ribbon turns its back to the camera as often as not.
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      vertexShader: /* glsl */ `
+        uniform float uWidth;
+        uniform vec2 uViewport;
+        attribute vec3 tangent;
+        attribute float side;
+        attribute float along;
+        attribute float total;
+        attribute vec2 warmth;
+        attribute float phase;
+        varying float vSide;
+        varying float vAlong;
+        varying float vTotal;
+        varying vec2 vWarmth;
+        varying float vPhase;
+        void main() {
+          vec4 c = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          vec4 t = projectionMatrix * modelViewMatrix * vec4(position + normalize(tangent), 1.0);
+          vec2 dir = (t.xy / t.w - c.xy / c.w) * uViewport;
+          dir = length(dir) > 1e-6 ? normalize(dir) : vec2(1.0, 0.0);
+          // A strip uWidth pixels wide across the line, whatever the distance.
+          c.xy += vec2(-dir.y, dir.x) * side * uWidth / uViewport * c.w;
+          gl_Position = c;
+          vSide = side;
+          vAlong = along;
+          vTotal = total;
+          vWarmth = warmth;
+          vPhase = phase;
+        }`,
+      fragmentShader: /* glsl */ `
+        uniform float uTime;
+        uniform float uSpeed;
+        uniform vec2 uHeat;
+        uniform float uOpacity;
+        uniform vec3 uCool;
+        uniform vec3 uWarm;
+        uniform vec3 uHot;
+        varying float vSide;
+        varying float vAlong;
+        varying float vTotal;
+        varying vec2 vWarmth;
+        varying float vPhase;
+        void main() {
+          float core = 1.0 - smoothstep(0.35, 1.0, abs(vSide));
+          float ends = smoothstep(0.0, 30.0, vAlong) * smoothstep(0.0, 45.0, vTotal - vAlong);
+          // Streaks: a bright head with a tail behind it, running the way the air goes.
+          float s = fract((vAlong - uTime * uSpeed) / 110.0 + vPhase);
+          float streak = pow(s, 7.0);
+          float w = clamp(vWarmth.x * (0.3 + 0.7 * uHeat.x) + vWarmth.y * (0.3 + 0.7 * uHeat.y), 0.0, 1.0);
+          vec3 col = w < 0.6 ? mix(uCool, uWarm, w / 0.6) : mix(uWarm, uHot, (w - 0.6) / 0.4);
+          float a = (0.22 + 0.9 * streak) * core * ends * uOpacity;
+          gl_FragColor = vec4(col * (1.0 + 0.8 * streak), a);
+        }`,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 10;
+    flow = { mesh, mat };
+    deco.add(mesh);
+    stepFlow();
   }
-  const cool = new THREE.Color(0x4cc9f0);
-  const warm = new THREE.Color(0xff8a4c);
-  const tmp = new THREE.Color();
-  const tv = new THREE.Vector3();
-  function stepFlow(dt: number): void {
+  const viewport = new THREE.Vector2();
+  function stepFlow(): void {
     if (!flow) return;
-    const visible = opts.airflow && tint.size === 0;
-    flow.points.visible = visible;
-    if (!visible) return;
+    // Out of the way while the parts are lifted apart (the air's course is the assembled PC's).
+    const opacity = opts.airflow ? 1 - explodeE : 0;
+    flow.mesh.visible = opacity > 0.01;
+    if (!flow.mesh.visible) return;
     const rates = [...spin.values()].filter((r) => r > 0);
     const rate = rates.length ? rates.reduce((a, b) => a + b, 0) / rates.length : 0.35;
-    const pos = flow.points.geometry.getAttribute('position') as THREE.BufferAttribute;
-    const col = flow.points.geometry.getAttribute('color') as THREE.BufferAttribute;
-    for (let i = 0; i < FLOW; i++) {
-      let u = flow.u[i]! + dt * (0.05 + 0.12 * rate) * flow.speed[i]!;
-      if (u > 1) u -= 1;
-      flow.u[i] = u;
-      flow.lanes[flow.lane[i]!]!.getPoint(u, tv);
-      // Spread out in the middle of the run, together at the fans.
-      const s = Math.sin(u * Math.PI);
-      pos.setXYZ(i, tv.x + flow.off[i * 3]! * s, tv.y + flow.off[i * 3 + 1]! * s, tv.z + flow.off[i * 3 + 2]! * s);
-      tmp.copy(cool).lerp(warm, u);
-      const fade = Math.min(1, u * 6, (1 - u) * 6);
-      col.setXYZ(i, tmp.r * fade, tmp.g * fade, tmp.b * fade);
-    }
-    pos.needsUpdate = true;
-    col.needsUpdate = true;
+    flowUniforms.uTime.value = clock;
+    flowUniforms.uSpeed.value = 60 + 110 * rate;
+    flowUniforms.uOpacity.value = opacity;
+    renderer.getDrawingBufferSize(viewport);
+    flowUniforms.uViewport.value.copy(viewport);
+    flowUniforms.uWidth.value = 2.2 * renderer.getPixelRatio();
+    let gpu = 0;
+    for (const [id, h] of heat) if (id.startsWith('gpu')) gpu = Math.max(gpu, h);
+    flowUniforms.uHeat.value.set(heat.get('cpu') ?? 0, gpu);
   }
 
   // ----- Frames ---------------------------------------------------------------------------------
@@ -1036,6 +1151,7 @@ export function createScene(canvas: HTMLCanvasElement, view: SceneView, pal: Sce
   let interacting = false;
   controls.addEventListener('start', () => {
     interacting = true;
+    atHome = false;
     flight = null;
     controls.autoRotate = false;
   });
@@ -1050,7 +1166,7 @@ export function createScene(canvas: HTMLCanvasElement, view: SceneView, pal: Sce
     spinning() ||
     flight != null ||
     explodeE !== (opts.explode ? 1 : 0) ||
-    (maxFps > 0 && opts.airflow && flow != null && tint.size === 0) ||
+    (maxFps > 0 && opts.airflow && flow != null && explodeE < 1) ||
     (high() && (caseRgb.length + partRgb.length > 0 || controls.autoRotate));
 
   function frame(t: number): void {
@@ -1110,7 +1226,7 @@ export function createScene(canvas: HTMLCanvasElement, view: SceneView, pal: Sce
       }
     } else if (high() && !interacting && !focused && performance.now() - idleSince > 8000) controls.autoRotate = true;
     controls.update(dt);
-    stepFlow(dt);
+    stepFlow();
     if (hoverDirty) pickHover();
     if (size()) {
       if (composer) composer.render(dt);
@@ -1202,9 +1318,13 @@ export function createScene(canvas: HTMLCanvasElement, view: SceneView, pal: Sce
     controls.autoRotate = false;
     const b = id ? built.get(id) : null;
     if (!b) {
+      focused = null;
+      atHome = true;
+      frameModel('none');
       fly(home.pos.clone(), home.target.clone(), 900);
       return;
     }
+    atHome = false;
     const at = b.anchor.clone().addScaledVector(b.explode, explodeE);
     const dir = camera.position.clone().sub(controls.target).normalize();
     const dist = Math.max(controls.minDistance * 1.05, camera.position.distanceTo(controls.target) * 0.55);
@@ -1255,8 +1375,9 @@ export function createScene(canvas: HTMLCanvasElement, view: SceneView, pal: Sce
         built.set(p.id, b);
       }
       if (laptop) buildDeck();
-      buildFlow();
+      buildFlow(parts);
       glow();
+      frameModel('jump');
       // The first time: fly in from further out and lower, unless the profile keeps it calm.
       if (!flown && built.size) {
         flown = true;
@@ -1271,6 +1392,7 @@ export function createScene(canvas: HTMLCanvasElement, view: SceneView, pal: Sce
     },
     setTint(t) {
       tint = t;
+      glassPanel.visible = t.size === 0;
       const dim = new THREE.Color(DIM);
       for (const [id, b] of built) {
         const c = t.get(id);
@@ -1278,6 +1400,8 @@ export function createScene(canvas: HTMLCanvasElement, view: SceneView, pal: Sce
           if (c === 'dim') m.color.copy(dim);
           else if (c) m.color.set(c);
           else m.color.setHex(base);
+          // Under the map a part shows its colour, not the room reflected in its metal.
+          m.envMapIntensity = c ? 0.3 : 1;
         }
       }
       glow();
@@ -1303,7 +1427,11 @@ export function createScene(canvas: HTMLCanvasElement, view: SceneView, pal: Sce
         if (opts.quality !== 'high') controls.autoRotate = false;
       }
       if (laptop && was.xray !== opts.xray) buildDeck();
-      if (was.explode !== opts.explode) idleSince = performance.now();
+      if (was.explode !== opts.explode) {
+        idleSince = performance.now();
+        // Lifted apart the parts reach out of the case: frame them all.
+        frameModel('fly');
+      }
       invalidate();
     },
     setScreen(info) {

@@ -159,9 +159,9 @@ jobs:
           # The installed app through its real IPC (src-tauri/src/smoke.rs, after 1.1's first
           # field check): the pages' data commands answer, a desktop widget saved as the Widgets
           # page saves it opens and loads, stays over the desktop through Show desktop (1.1.1;
-          # skipped where the runner has no desktop to show), snaps to the screen's edge when
-          # dragged near it and lets clicks through when locked so (1.2), and quitting as the tray
-          # does ends the process.
+          # skipped where the runner has no desktop to show), snaps to the screen's corner when
+          # dragged near it with the mouse and follows the pointer out again, lets clicks through
+          # when locked so (1.2), and quitting as the tray does ends the process.
           $smoke = Join-Path $env:RUNNER_TEMP 'smoke.json'
           $env:VYRO_SMOKE = $smoke
           $app = Start-Process (Join-Path $dir 'vyro.exe') -PassThru

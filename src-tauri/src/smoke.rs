@@ -7,7 +7,8 @@
 //! does. [`smoke_report`] then checks that the widget's window opened, shows without having
 //! taken focus and loaded its page. On Windows it also checks that the widget stays over the
 //! desktop through Show desktop (`pin.rs`; skipped where the runner has no desktop to show),
-//! snaps when dragged near the screen's edge (`snap.rs`) and lets clicks through when locked so.
+//! snaps when dragged with the mouse near the screen's corner and follows the pointer out again
+//! (`snap.rs`), and lets clicks through when locked so.
 //! Then it writes the result and quits the way the tray's "Quit Vyro" does. A watchdog writes a
 //! failure and ends the process if any of that hangs, so CI fails rather than waits.
 
@@ -69,7 +70,8 @@ pub struct Facts {
 pub struct Checks {
     /// Show desktop with the widget behind windows (`pin.rs`).
     pub show_desktop: String,
-    /// A drag step near the work area's corner snaps to it (`snap.rs`).
+    /// Dragged with the mouse near the work area's corner, the widget snaps to it, and moved on
+    /// it follows the pointer out of the snap (`snap.rs`).
     pub snap: String,
     /// Locked with "Clicks pass through", the window lets the mouse through; unlocked, not.
     pub click_through: String,
@@ -266,7 +268,7 @@ pub async fn smoke_report(app: AppHandle, steps: Value) -> Result<(), String> {
 fn windows_checks(app: &AppHandle, label: &str) -> Checks {
     Checks {
         show_desktop: crate::pin::smoke_show_desktop(app, label),
-        snap: crate::snap::smoke_snap(app, label),
+        snap: snap_drag(app, label),
         click_through: click_through(app, label),
     }
 }
@@ -281,6 +283,57 @@ fn windows_checks(_app: &AppHandle, _label: &str) -> Checks {
     }
 }
 
+/// Changes the smoke widget through the store, as the Widgets page would.
+#[cfg(windows)]
+fn change(
+    app: &AppHandle,
+    edit: impl FnOnce(&mut crate::widgets::DesktopWidget),
+) -> Result<(), String> {
+    let store = app
+        .try_state::<crate::widgets::WidgetStore>()
+        .ok_or("widgets not loaded")?;
+    let mut cfg = store.get();
+    let w = cfg
+        .widgets
+        .iter_mut()
+        .find(|w| w.id == WIDGET)
+        .ok_or("the widget is gone")?;
+    edit(w);
+    crate::widgets::store_and_sync(app, cfg).map(|_| ())
+}
+
+#[cfg(windows)]
+fn wait_for(limit: Duration, done: impl Fn() -> bool) -> bool {
+    let since = Instant::now();
+    while !done() {
+        if since.elapsed() >= limit {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    true
+}
+
+/// Drags the widget with the mouse (`snap.rs`), on top of every window so that nothing covers
+/// it, as a widget on the "Always on top" layer.
+#[cfg(windows)]
+fn snap_drag(app: &AppHandle, label: &str) -> String {
+    use windows::Win32::UI::WindowsAndMessaging::{GetWindowLongPtrW, GWL_EXSTYLE, WS_EX_TOPMOST};
+
+    let Some(hwnd) = app.get_webview_window(label).and_then(|w| w.hwnd().ok()) else {
+        return "failed: no widget window".into();
+    };
+    if let Err(e) = change(app, |w| w.layer = crate::widgets::Layer::Top) {
+        return format!("failed: {e}");
+    }
+    // SAFETY: reads a window's extended style.
+    let on_top = || unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) } & WS_EX_TOPMOST.0 as isize != 0;
+    if !wait_for(Duration::from_secs(3), on_top) {
+        return "failed: the widget did not go on top of other windows".into();
+    }
+    crate::snap::smoke_drag(hwnd)
+}
+
 /// Locks the widget with "Clicks pass through" as the Widgets page would, and checks that its
 /// window lets the mouse through (tao's `WS_EX_TRANSPARENT`); then unlocks it and checks that
 /// it catches the mouse again.
@@ -293,43 +346,25 @@ fn click_through(app: &AppHandle, label: &str) -> String {
     let Some(hwnd) = app.get_webview_window(label).and_then(|w| w.hwnd().ok()) else {
         return "failed: no widget window".into();
     };
-    let Some(store) = app.try_state::<crate::widgets::WidgetStore>() else {
-        return "failed: widgets not loaded".into();
-    };
-    let set = |locked: bool| -> Result<(), String> {
-        let mut cfg = store.get();
-        let w = cfg
-            .widgets
-            .iter_mut()
-            .find(|w| w.id == WIDGET)
-            .ok_or("the widget is gone")?;
-        (w.locked, w.click_through) = (locked, true);
-        crate::widgets::store_and_sync(app, cfg).map(|_| ())
+    let set = |locked: bool| {
+        change(app, |w| {
+            (w.locked, w.click_through) = (locked, true);
+        })
     };
     // SAFETY: reads a window's extended style.
     let through =
         || unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) } & WS_EX_TRANSPARENT.0 as isize != 0;
-    let wait = |want: bool| {
-        let since = Instant::now();
-        while through() != want {
-            if since.elapsed() >= Duration::from_secs(3) {
-                return false;
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        }
-        true
-    };
     if let Err(e) = set(true) {
         return format!("failed: {e}");
     }
-    if !wait(true) {
+    if !wait_for(Duration::from_secs(3), through) {
         return "failed: locked with clicks passing through, the widget still catches the mouse"
             .into();
     }
     if let Err(e) = set(false) {
         return format!("failed: {e}");
     }
-    if !wait(false) {
+    if !wait_for(Duration::from_secs(3), || !through()) {
         return "failed: unlocked, the widget still lets clicks through".into();
     }
     "passed".into()

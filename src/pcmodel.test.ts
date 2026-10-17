@@ -111,10 +111,26 @@ describe('My PC layout', () => {
     const fans = bare.filter((p) => p.kind === 'fan' && p.id !== 'cooler.fan');
     expect(fans.map((p) => p.label)).toEqual(['Front fan', 'Front fan', 'Rear fan']);
     expect(fans.every((p) => p.fan!.rpm(snap) === null)).toBe(true);
-    // Reported fans take the places first.
-    const reported = byKind('fan').filter((p) => p.id.startsWith('fan.'));
-    expect(reported.length).toBeGreaterThan(0);
+    // Turning fans the board reports take the places first.
+    const turning = { ...snap, fans: snap.fans.map((f) => (f.name === 'System Fan 1' ? { ...f, rpm: 900 } : f)) };
+    const reported = buildPc({ hw: sampleHardware, snap: turning, cardKey }).filter((p) => p.kind === 'fan' && p.id.startsWith('fan.'));
+    expect(reported.map((p) => p.label)).toEqual(['System Fan 1']);
     expect(byKind('fan').filter((p) => p.id.startsWith('fan.') || p.id.startsWith('casefan.')).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('leaves the case fans’ places to slowly turning fans when the board’s headers read 0 RPM', () => {
+    // The field check's board: case fan headers with nothing on them (or the fans on a hub).
+    const others = snap.fans.filter((f) => f.kind !== 'fan' || /cpu/i.test(f.name));
+    const empty = [...others, { ...snap.fans.find((f) => f.kind === 'fan' && !/cpu/i.test(f.name))!, name: 'SYS_FAN1', rpm: 0 }, { ...snap.fans.find((f) => f.kind === 'fan' && !/cpu/i.test(f.name))!, name: 'SYS_FAN2', rpm: 0 }];
+    const parts = buildPc({ hw: sampleHardware, snap: { ...snap, fans: empty }, cardKey });
+    const front = parts.filter((p) => p.kind === 'fan' && p.id.startsWith('casefan.'));
+    expect(front.map((p) => p.label)).toEqual(['Front fan', 'Front fan', 'Rear fan']);
+    expect(front.every((p) => spinRate(p.fan!.rpm(snap)) === IDLE_SPIN)).toBe(true);
+    // Once a header has turned this session it keeps its place, even stopped (fan stop).
+    const sys1 = empty.findIndex((f) => f.name === 'SYS_FAN1');
+    const kept = buildPc({ hw: sampleHardware, snap: { ...snap, fans: empty }, cardKey, spunFans: new Set([sys1]) });
+    expect(kept.find((p) => p.id === `fan.${sys1}`)?.pos).toEqual(front[0]!.pos);
+    expect(kept.filter((p) => p.id.startsWith('casefan.')).length).toBe(2);
   });
 
   it('moves parts out of the case in the exploded view, the board stays', () => {

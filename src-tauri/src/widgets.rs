@@ -231,9 +231,17 @@ pub struct Area {
     pub h: f64,
 }
 
+/// A widget's place on the desktop, logical px: left, top, width, height.
+pub type Spot = (f64, f64, f64, f64);
+
+/// The space kept between widgets Vyro places, as when they snap (`snap.rs`).
+const SPACING: f64 = 8.0;
+
 /// Where a widget goes: its saved place while that is on a connected monitor (its middle at
-/// least), else down the right edge of the first monitor, one under the other.
-pub fn place(w: &DesktopWidget, size: (f64, f64), areas: &[Area], slot: usize) -> (f64, f64) {
+/// least). Else the first free spot down the right edge of the first monitor, one under the
+/// other with a small space, then the next column to the left; `taken` holds the other
+/// widgets' places. When the monitor is full, the top of its right edge.
+pub fn place(w: &DesktopWidget, size: (f64, f64), areas: &[Area], taken: &[Spot]) -> (f64, f64) {
     let (sw, sh) = size;
     if w.placed {
         let (cx, cy) = (f64::from(w.x) + sw / 2.0, f64::from(w.y) + sh / 2.0);
@@ -251,11 +259,30 @@ pub fn place(w: &DesktopWidget, size: (f64, f64), areas: &[Area], slot: usize) -
         h: 1080.0,
     });
     let margin = 24.0;
-    let y = a.y + margin + (slot as f64) * 40.0;
-    (
-        a.x + a.w - sw - margin,
-        y.min(a.y + a.h - sh - margin).max(a.y),
-    )
+    let right = a.x + a.w - sw - margin;
+    let mut x = right;
+    while x >= a.x + margin - 0.5 {
+        let mut y = a.y + margin;
+        while y + sh <= a.y + a.h - margin + 0.5 {
+            // The widgets in the way of this spot; below the lowest of them is the next try.
+            let below = taken
+                .iter()
+                .filter(|&&(tx, ty, tw, th)| {
+                    x < tx + tw + SPACING
+                        && tx < x + sw + SPACING
+                        && y < ty + th + SPACING
+                        && ty < y + sh + SPACING
+                })
+                .map(|&(_, ty, _, th)| ty + th + SPACING)
+                .fold(None, |m: Option<f64>, b| Some(m.map_or(b, |m| m.max(b))));
+            match below {
+                None => return (x, y),
+                Some(b) => y = b,
+            }
+        }
+        x -= sw + SPACING;
+    }
+    (right, a.y + margin)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -391,9 +418,26 @@ fn apply(handle: &AppHandle) {
         }
     }
     let monitors = areas(handle);
+    // Where the widgets are, so that a new one goes where none is.
+    let mut taken: Vec<(&str, Spot)> = want
+        .iter()
+        .filter(|w| w.placed)
+        .map(|w| {
+            let (sw, sh) = size(w);
+            (w.id.as_str(), (f64::from(w.x), f64::from(w.y), sw, sh))
+        })
+        .collect();
     let mut placed = Vec::new();
-    for (slot, x) in want.iter().enumerate() {
-        if let Some(pos) = open_or_update(handle, x, &monitors, slot) {
+    for x in &want {
+        let others: Vec<Spot> = taken
+            .iter()
+            .filter(|(id, _)| *id != x.id)
+            .map(|&(_, s)| s)
+            .collect();
+        if let Some(pos) = open_or_update(handle, x, &monitors, &others) {
+            let (sw, sh) = size(x);
+            taken.retain(|(id, _)| *id != x.id);
+            taken.push((x.id.as_str(), (pos.0, pos.1, sw, sh)));
             placed.push((x.id.clone(), pos));
         }
     }
@@ -418,11 +462,11 @@ fn open_or_update(
     app: &AppHandle,
     w: &DesktopWidget,
     monitors: &[Area],
-    slot: usize,
+    taken: &[Spot],
 ) -> Option<(f64, f64)> {
     let label = format!("{PREFIX}{}", w.id);
     let (sw, sh) = size(w);
-    let (x, y) = place(w, (sw, sh), monitors, slot);
+    let (x, y) = place(w, (sw, sh), monitors, taken);
     let moved = !w.placed || (x, y) != (f64::from(w.x), f64::from(w.y));
     let (top, bottom) = stacking(w.layer, crate::pin::desktop_shown());
     if let Some(win) = app.get_webview_window(&label) {
@@ -773,15 +817,17 @@ mod tests {
             h: 1040.0,
         }];
         let mut w = widget("a", "reading", &[]);
-        // New: down the right edge.
-        assert_eq!(place(&w, (220.0, 104.0), &one, 0), (1676.0, 24.0));
-        assert_eq!(place(&w, (220.0, 104.0), &one, 2), (1676.0, 104.0));
+        // New: at the top of the right edge.
+        assert_eq!(place(&w, (220.0, 104.0), &one, &[]), (1676.0, 24.0));
         w.placed = true;
         (w.x, w.y) = (100, 200);
-        assert_eq!(place(&w, (220.0, 104.0), &one, 0), (100.0, 200.0));
+        assert_eq!(place(&w, (220.0, 104.0), &one, &[]), (100.0, 200.0));
+        // Saved places are kept even where another widget is.
+        let there = [(100.0, 200.0, 220.0, 104.0)];
+        assert_eq!(place(&w, (220.0, 104.0), &one, &there), (100.0, 200.0));
         // Its monitor was unplugged: back on the first one.
         (w.x, w.y) = (2500, 200);
-        assert_eq!(place(&w, (220.0, 104.0), &one, 0), (1676.0, 24.0));
+        assert_eq!(place(&w, (220.0, 104.0), &one, &[]), (1676.0, 24.0));
         // A second monitor on the left, at negative x.
         let two = [
             one[0],
@@ -793,7 +839,52 @@ mod tests {
             },
         ];
         (w.x, w.y) = (-1000, 300);
-        assert_eq!(place(&w, (220.0, 104.0), &two, 0), (-1000.0, 300.0));
+        assert_eq!(place(&w, (220.0, 104.0), &two, &[]), (-1000.0, 300.0));
+    }
+
+    #[test]
+    fn new_widgets_go_where_no_widget_is() {
+        let one = [Area {
+            x: 0.0,
+            y: 0.0,
+            w: 1920.0,
+            h: 1040.0,
+        }];
+        let overlap = |a: Spot, b: Spot| {
+            a.0 < b.0 + b.2 && b.0 < a.0 + a.2 && a.1 < b.1 + b.3 && b.1 < a.1 + a.3
+        };
+        // Three added at once (1.2's first field check: they were put 40 px apart, on top of
+        // each other): one under the other, 8 px apart.
+        let mut taken: Vec<Spot> = Vec::new();
+        for (kind, sources) in [
+            ("gauge", &["cpu.usage"][..]),
+            ("network", &[]),
+            ("top", &[]),
+        ] {
+            let w = widget("n", kind, sources);
+            let (sw, sh) = size(&w);
+            let (x, y) = place(&w, (sw, sh), &one, &taken);
+            let spot = (x, y, sw, sh);
+            assert!(
+                taken.iter().all(|&t| !overlap(spot, t)),
+                "{kind} at {spot:?}"
+            );
+            taken.push(spot);
+        }
+        assert_eq!(taken[0].1, 24.0);
+        assert_eq!(taken[1].1, 24.0 + taken[0].3 + 8.0);
+        // One the owner put at the top right is gone round, not covered.
+        let mine = (1650.0, 10.0, 260.0, 200.0);
+        let w = widget("n", "reading", &["cpu.temp"]);
+        let (x, y) = place(&w, (220.0, 104.0), &one, &[mine]);
+        assert!(!overlap((x, y, 220.0, 104.0), mine));
+        assert_eq!((x, y), (1676.0, 218.0));
+        // A full right edge: the next column to the left.
+        let column: Vec<Spot> = (0..9)
+            .map(|i| (1676.0, 24.0 + 112.0 * f64::from(i), 220.0, 104.0))
+            .collect();
+        let (x, y) = place(&w, (220.0, 104.0), &one, &column);
+        assert_eq!((x, y), (1676.0 - 228.0, 24.0));
     }
 
     #[test]

@@ -191,8 +191,12 @@ or actions, 0.3 moves `alerts.json` aside (to `alerts.json.bad`) and uses its de
   - a thermal map, coloured by how close each part is to its Health limits.
 
   Fans spin at their reported speed; a fan with no reading turns slowly and says "Speed not
-  reported". Hover a part to name it, click it for its details, double-click to fly to it.
-  "Explode" pulls the parts apart, "Airflow" shows the air moving through the case, and on a
+  reported" (a board fan header that has never turned counts as no reading: it is empty, or its
+  fans run from a hub). The view fills the window and frames the whole PC at any size. Hover a
+  part to name it, click it for its details, double-click to fly to it. "Explode" pulls the
+  parts apart. "Airflow" draws the air through the case as a wind tunnel's smoke lines: in at
+  the front fans, round the graphics card and the RAM, out through the rear fan and the
+  radiator, warming from blue to orange as it passes the CPU's cooler and the GPU (1.2). On a
   laptop "See inside" makes the keyboard see-through. Vyro tells a laptop from a desktop by
   the firmware's chassis type (Settings → My PC → Model corrects it). If the GPU does not look
   like your card, you can correct it. The models are Vyro's own, with no brand logos. The 3-D
@@ -231,8 +235,9 @@ remove it. "Desktop widgets" in the tray icon's menu shows or hides them all, an
 when Vyro starts.
 
 - **Moving.** Drag an unlocked widget; Vyro remembers where it is. It snaps to the edges of the
-  screen and to other widgets, beside them with a small gap or in line with them; hold Shift to
-  place it freely (1.2).
+  screen and to other widgets, beside them with a small gap or in line with them, and comes
+  away as soon as you drag on; hold Shift to place it freely (1.2). A new widget goes where no
+  other widget is, down the right edge of the screen.
 - **Clicks pass through** (1.2): a locked widget can ignore the mouse, so clicks reach the
   window or the desktop under it. Unlocking it on the Widgets page makes it catch the mouse
   again.
@@ -293,8 +298,7 @@ Nothing on it changes the PC.
 | [`docs/diagnostics.md`](docs/diagnostics.md) | The diagnostics checks |
 | [`docs/field-check.md`](docs/field-check.md) | The owner's field check of 1.0 (P16–P27) on the reference PC, in one pass |
 | [`docs/field-check-1.1.md`](docs/field-check-1.1.md) | The field check of 1.1 (P28–P30): the new look, My PC and the laptop, desktop widgets |
-| [`docs/field-check-1.1.1.md`](docs/field-check-1.1.1.md) | The field check of 1.1.1: widgets behind windows through Show desktop |
-| [`docs/field-check-1.2.md`](docs/field-check-1.2.md) | The field check of 1.2: widgets that snap, let clicks through, and three new kinds |
+| [`docs/field-check-1.2.md`](docs/field-check-1.2.md) | The field check of 1.2: widgets through Show desktop, snapping, clicks passing through, three new kinds; My PC's view, glass, fans and airflow |
 
 `vyro-remote.exe` in the same artifact checks the service from the outside (state, connection,
 sensors; `--capture Game.exe` measures a running game for 15 s). The service logs to `%ProgramData%\Vyro\service.log`.

@@ -97,6 +97,8 @@ export interface PcInput {
   /** The owner's corrections by card key. */
   shapes?: Record<string, GpuShape>;
   cardKey: (g: { vendorId: number; deviceId: number; subsysId: number }) => string;
+  /** Board fan headers (by index) seen turning this session; else those turning now. */
+  spunFans?: ReadonlySet<number>;
 }
 
 const box = (part: Omit<Part, 'anchor' | 'labelled'> & { anchor?: Vec3; labelled?: boolean }): Part => ({
@@ -264,9 +266,11 @@ export function buildPc(input: PcInput): Part[] {
     }
   }
 
-  // Case fans: front, then rear, then low front. The ones the board reports take the places
+  // Case fans: front, then rear, then low front. The board's headers seen turning take the places
   // first; a tower almost always has two at the front and one at the back, so those are drawn
-  // either way, turning slowly with "Speed not reported" when nothing reads them.
+  // either way, turning slowly with "Speed not reported" when nothing reads them. A header that
+  // has never turned is empty, or its fans run from a hub: its 0 RPM stood the front fans still
+  // (1.2's first field check).
   const spots: Array<{ pos: Vec3; axis: 'x' | 'y' }> = [
     { pos: [446, 390, 110], axis: 'x' },
     { pos: [446, 265, 110], axis: 'x' },
@@ -285,8 +289,9 @@ export function buildPc(input: PcInput): Part[] {
       fan: { axis: s.axis, rpm },
     });
   let spot = 0;
+  const spun = (i: number) => input.spunFans?.has(i) ?? (fans[i]?.rpm ?? 0) > 0;
   for (const [i, f] of fans.entries()) {
-    if (i === pump || i === cpuFan || f.kind !== 'fan' || spot >= spots.length) continue;
+    if (i === pump || i === cpuFan || f.kind !== 'fan' || !spun(i) || spot >= spots.length) continue;
     parts.push(caseFan(`fan.${i}`, f.name, spots[spot++]!, rpmOf(i)));
   }
   const DEFAULT_SPOTS = 3;

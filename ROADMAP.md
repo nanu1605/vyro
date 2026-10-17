@@ -2075,13 +2075,13 @@ hid widgets set behind windows (decision 30).
         desktop, the smoke test reports "Show desktop: passed": the widget stayed over the shown
         desktop and went back when the main window came forward. It opened without taking
         focus. The installer is 11.41 MB.
-- [ ] Field check ([`docs/field-check-1.1.1.md`](docs/field-check-1.1.1.md)), then the owner's go
-      for the release.
+- [x] **Folded into 1.2.0** at the owner's request (2026-10-17): no release or field check of
+      its own. Its checks are section 1 of [`docs/field-check-1.2.md`](docs/field-check-1.2.md).
 
 ### 1.2.0 — widgets, next round
-The owner's pick while 1.1.1 waits for its field check (2026-10-17): widgets that are easier to
-live with (decision 31). Built on the same branch after 5536a64; 1.1.1 is released from
-5536a64 itself, so none of this goes into it.
+The owner's pick while 1.1.1 waited for its field check (2026-10-17): widgets that are easier
+to live with (decision 31). Built on the same branch after 5536a64. 1.1.1 is folded in, so the
+two ship together as one release (the owner's choice).
 - [x] Built (2026-10-17):
       - **Snapping** (`src-tauri/src/snap.rs`). A widget is dragged by Windows' move loop, which
         asks the window with `WM_MOVING` where each step goes. A window subclass on each widget
@@ -2127,7 +2127,74 @@ live with (decision 31). Built on the same branch after 5536a64; 1.1.1 is releas
 - [x] **CI** (run 39012201775 on 019d0a7): every job is green. On the Windows runner the smoke
       test reports "Show desktop: passed; snap: passed; click-through: passed". The installer is
       11.41 MB.
-- [ ] Field check ([`docs/field-check-1.2.md`](docs/field-check-1.2.md)), then the owner's go
+- [x] **Field check 1** (the owner's PC, 2026-10-17, test build `vyro-windows-019d0a7…`) found
+      six problems, all fixed:
+      1. **Widgets added together overlapped.**
+         - Cause: a new widget went down the right edge only 40 px below the last, while
+           widgets are 104 to 200 px tall.
+         - Fix: `widgets::place` now takes the other widgets' places and puts a new one in the
+           first free spot, 8 px under the last. A full column continues to the left. Saved
+           places are never moved.
+      2. **Snapped widgets stuck, alone or side by side.**
+         - Cause: Windows' move loop builds each step from the last answered rectangle plus
+           the mouse's movement. Snapping what it proposed carried each snap into the next
+           step, so a slow drag stayed within reach and was pulled back every time.
+         - Fix: each step is worked out from the pointer, where it grabbed the window
+           (`snap::follow`), then snapped. A widget comes away as soon as the pointer is out
+           of reach.
+         - Tested by modelling the move loop: the old way stays stuck, the new way comes free.
+      3. **The 3-D view was small and cut off the top and bottom of the case.**
+         - Cause: a 4:3 box capped at 70 % of the window's height gave a short, wide canvas.
+           The camera only stepped back for narrow views.
+         - Fix: the view fills the window below the bar. Home is fitted to the model's box at
+           its explode state for any shape (`camfit.ts`, tested at four aspects). The camera
+           follows a resize while it is still at home. Explode and "Reset view" frame again.
+      4. **The inside of the case looked white.**
+         - Cause: not the glass, as first thought. The case's steel was glossy (roughness 0.42)
+           and the PSU shroud's window had a clearcoat. Seen from above or square-on, they
+           mirrored the lighting room's ceiling light, which is far brighter than white.
+           Screenshots at the owner's angles showed the haze.
+         - Fix:
+           - The case is matte powder-coat. The shroud's window has no clearcoat.
+           - The glass is a faint pane in a dark frame, and is gone under the thermal map.
+           - Under the map, parts reflect less of the room, so their colours read.
+      5. **Only the top fans turned.**
+         - Cause: the board's case-fan headers read 0 RPM (empty, or the fans run from a hub)
+           and took the front and rear places as stopped fans. The browser preview's own
+           "System Fan 1" did the same.
+         - Fix: a header takes a place only once it has turned this session (`spunFans`, a
+           set that only grows). Otherwise the generic fans turn slowly with "Speed not
+           reported".
+      6. **Airflow should look like a wind tunnel's smoke lines.**
+         - New `airflow.ts` builds a flow field from the parts:
+           - jets in at the front fans;
+           - pulls out through the rear fan and the radiator (a radiator shares one pull, so
+             about two lines in five leave by the rear fan);
+           - a tower cooler's fan pushing through its fins;
+           - the card, the AIO block, the RAM and the PSU shroud as obstacles that the air
+             slides round.
+         - Streamlines are traced from rings over each intake (RK2, 3 mm steps). Each point
+           carries how much of the CPU's and the GPU's heat the air has taken up.
+         - The scene draws them as camera-facing ribbons in one draw call: faint smoke with
+           streaks running at the fans' pace, coloured cool to warm by that exposure times the
+           live heat.
+         - They are built once per layout; a frame only moves a uniform, which is cheaper than
+           the 260 dots before. They show in the PC view and under the thermal map, and fade
+           out while exploded.
+         - A laptop gets parallel lines through each blower.
+         - Tested: lines start at the intakes, never enter a part, mostly leave by an exhaust,
+           and only warm.
+      - **CI's snap check** had played made-up messages to the window, which could not show
+        finding 2. It now drags the widget with the mouse:
+        1. Put it on top of every window.
+        2. Press it with `SendInput`.
+        3. Move 2 px at a time to 5 px from the work area's corner: it must snap flush.
+        4. Move on 1 px at a time: it must follow the pointer out.
+        5. Release: it must stay put.
+
+        The log notes whether Windows carried the snapped place into each step.
+- [ ] CI on the fixes.
+- [ ] Field check 2 ([`docs/field-check-1.2.md`](docs/field-check-1.2.md)), then the owner's go
       for the release.
 
 ## Risks
