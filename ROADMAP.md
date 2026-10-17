@@ -2136,10 +2136,10 @@ two ship together as one release (the owner's choice).
            first free spot, 8 px under the last. A full column continues to the left. Saved
            places are never moved.
       2. **Snapped widgets stuck, alone or side by side.**
-         - Likely cause: Windows' move loop builds each step from the last answered rectangle
-           plus the mouse's movement. Snapping what it proposed would then carry each snap
-           into the next step, so a slow drag stays within reach and is pulled back every
-           time. CI's mouse drag now records which way Windows works (see the CI line).
+         - Cause (confirmed on Windows by CI's mouse drag, run 39022016985): Windows' move loop
+           builds each step from the last answered rectangle plus the mouse's movement.
+           Snapping what it proposed carried each snap into the next step, so a slow drag
+           stayed within reach and was pulled back every time.
          - Fix: each step is worked out from the pointer, where it grabbed the window
            (`snap::follow`), then snapped. A widget comes away as soon as the pointer is out
            of reach.
@@ -2200,7 +2200,10 @@ two ship together as one release (the owner's choice).
       drag snapped flush and came away with the pointer. The installer is 11.43 MB. That run's
       note on the move loop compared the last step, where both ways give the same place; it now
       compares the first step after the snap.
-- [ ] CI on the corrected note.
+- [x] **CI** (run 39022016985 on b4748f3): every job is green. The smoke test reports "snap:
+      passed (Windows built each step on the last one answered)". That confirms finding 2's
+      cause, and that the fix comes away from a snap with a real mouse drag. The app is the
+      same as f987a61's.
 - [ ] Field check 2 ([`docs/field-check-1.2.md`](docs/field-check-1.2.md)), then the owner's go
       for the release.
 
