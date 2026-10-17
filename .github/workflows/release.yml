@@ -131,7 +131,8 @@ jobs:
           HOST_REPO: ${{ steps.version.outputs.host }}
         run: |
           $msi = Get-Item target\release\bundle\msi\*.msi | Select-Object -First 1
-          if ($msi.Length -ge 20MB) { throw "installer is $([math]::Round($msi.Length / 1MB, 2)) MB, over the 20 MB budget" }
+          # Decision 28: under 60 MB from 1.1, as CI checks (this line still said 20 MB until 1.3).
+          if ($msi.Length -ge 60MB) { throw "installer is $([math]::Round($msi.Length / 1MB, 2)) MB, over the 60 MB budget" }
           $sig = (Get-Content -Raw "$($msi.FullName).sig").Trim()
           New-Item -ItemType Directory -Force release | Out-Null
           Copy-Item $msi.FullName release\

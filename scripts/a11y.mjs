@@ -2,7 +2,9 @@
 // widths and phone width, the main dialogs, the desktop widgets and the phone companion, plus keyboard focus
 // rings and reduced motion. Since 1.2 also: text stays inside every desktop widget (with the longest
 // names two GPUs give), and the Dashboard's cards pack without blank stretches or overlaps, their
-// text inside them in whole words even at their narrowest. Runs against the browser preview
+// text inside them in whole words even at their narrowest. Since 1.3 also: custom accents that are
+// hard to read as picked (navy on Midnight, pale yellow on Daylight), and Settings with the colour
+// wheel open. Runs against the browser preview
 // (sample data, two GPUs as on the owner's PC) of a finished build:
 //
 //   pnpm build && pnpm a11y
@@ -140,18 +142,18 @@ async function noSidewaysScroll(page, where) {
   if (extra > 1) problem(where, `scrolls sideways by ${extra} px`);
 }
 
-async function open(browser, url, { width, theme, motion = 'no-preference', init } = {}) {
+async function open(browser, url, { width, theme, motion = 'no-preference', init, accent = 'theme' } = {}) {
   const ctx = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: motion });
   await ctx.addInitScript(
-    ([t, extra]) => {
+    ([t, a, extra]) => {
       try {
-        localStorage.setItem('vyro.look', JSON.stringify({ theme: t, accent: 'theme', openOn: 'dashboard' }));
+        localStorage.setItem('vyro.look', JSON.stringify({ theme: t, accent: a, openOn: 'dashboard' }));
       } catch {
         /* the page works without it */
       }
       if (extra) Function(extra)();
     },
-    [theme, init ?? ''],
+    [theme, accent, init ?? ''],
   );
   const page = await ctx.newPage();
   const where = `${url.replace(BASE, '') || '/'} ${theme} ${width}px`;
@@ -181,6 +183,27 @@ async function sweepApp(browser, theme, width) {
       await page.getByRole('checkbox', { name: /^Show hidden/ }).check();
     }
     const where = `${t} · ${theme} ${width}px`;
+    await axe(page, where);
+    await noSidewaysScroll(page, where);
+  }
+  await ctx.close();
+}
+
+// --- Custom accents (1.3): colours text cannot take as picked. ----------------------------------
+
+async function sweepCustomAccent(browser, theme, accent, width) {
+  const { ctx, page } = await open(browser, BASE, { width, theme, accent });
+  await page.goto(`${BASE}/`);
+  await page.waitForTimeout(1200);
+  for (const t of ['Dashboard', 'Hardware', 'Devices', 'Settings']) {
+    await tab(page, t);
+    const where = `${t} · ${theme} with accent ${accent} ${width}px`;
+    if (t === 'Settings') {
+      // The colour wheel shows with a custom accent.
+      const wheel = page.getByRole('slider', { name: /hue and saturation/ });
+      await wheel.scrollIntoViewIfNeeded();
+      if ((await wheel.count()) === 0) problem(where, 'no colour wheel for a custom accent');
+    }
     await axe(page, where);
     await noSidewaysScroll(page, where);
   }
@@ -593,6 +616,12 @@ try {
       await sweepShell(browser, theme);
       await sweepWidgets(browser, theme);
     }
+    await Promise.all(
+      [1440, 390].flatMap((w) => [
+        sweepCustomAccent(browser, 'midnight', '#1a237e', w),
+        sweepCustomAccent(browser, 'daylight', '#fff59d', w),
+      ]),
+    );
     await sweepKeyboard(browser);
     await sweepMotion(browser);
   } finally {

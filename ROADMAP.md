@@ -30,7 +30,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 13 | Privilege split (P8) | **LocalSystem service `VyroService`** runs the whole engine (sensors, history, health, alerts) and serves it over `\\.\pipe\vyro-engine`; the app runs unelevated and falls back to an in-process engine without the privileged sensors when the service is missing | decided |
 | 14 | GPU visual | Own stylized parameterized **WebGL** model; no third-party photos; offline | decided |
 | 15 | 3-D renderer | **Three.js** bundled locally; render on demand only | decided |
-| 16 | Devices battery sources | BLE GATT 0x180F + PnP battery devnode property + XInput; vendor HID++ later | decided |
+| 16 | Devices battery sources | BLE GATT 0x180F + PnP battery devnode property + XInput; from 1.3 also Logitech HID++ (receivers and direct), PlayStation controllers' input reports and the HID Battery Strength value; other makers' dongles by request, once `vyro-inventory` names them | decided |
 | 17 | Open on Dashboard | Default on, with an "Open on: Dashboard / Last tab" setting | decided |
 | 18 | Fan / pump control | **Yes, the V2 flagship**, safety-gated (V2_PLAN "Hardware-control safety"); read-only by default; per-board allow-list | decided |
 | 19 | Remote / web companion | In V2 (P26): served by the desktop app (not the service) over plain HTTP on the LAN, off by default, QR + code pairing, hashed session tokens that expire, sign-out at once | default |
@@ -46,6 +46,8 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 29 | Navigation | A sidebar with grouped views replaces the tab strip (supersedes 26); the views and their ids stay | decided |
 | 30 | Widgets and Show desktop | "Behind windows" widgets stay in view through Show desktop (Win+D), as Rainmeter's "On desktop" skins do: a probe window detects it and the widgets go on top while it lasts; Vyro's windows are never put inside Explorer's (the owner, 2026-10-17) | decided |
 | 31 | Moving widgets and clicks | Widgets snap while dragged, in Windows' own move loop (`WM_MOVING`): to the work area's edges, beside another widget 8 px apart, or in line with it; Shift places freely. "Clicks pass through" works only while a widget is locked, so unlocking it on the Widgets page is always the way back (in the plan the owner approved, 2026-10-17) | decided |
+| 32 | Accent of any colour | A colour wheel (1.3): fills (gauges, graphs, the 3-D view, the logo, the share card's ring) show the colour as picked; text in the accent takes a shade of the same hue and chroma, lightened or darkened just to 4.5:1 on every surface of the theme. The GPU colour is the main one turned round the hue circle, away from warning hues (the owner, 2026-10-17) | decided |
+| 33 | Connect and Disconnect | Paired Bluetooth devices only (the owner's "all Bluetooth", 2026-10-17): audio through its audio connection as Settings does; any other device's link dropped by the Vyro service, and Connect asks Windows to reach it. Wired and receiver devices get no actions | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -2280,6 +2282,97 @@ two ship together as one release (the owner's choice).
       fast-forwarded to it, and Release run 39060120405 tagged `v1.2.0` and published the
       11.4 MB MSI, `latest.json` and checksums here and to `nanu1605/vyro-releases`. Its
       `latest.json` now offers 1.2.0 to installed copies (checksums verified).
+
+### 1.3.0 — devices by name, their batteries and connections; an accent of any colour
+The owner's requests after 1.2.0 (2026-10-17), with their choices: two releases (this one, then
+the phone app in 1.4), Connect and Disconnect for all Bluetooth devices, and an accent that
+auto-adjusts for text. Their devices: Bluetooth audio, a Logitech receiver, a game controller,
+another maker's dongle, and a USB condenser microphone.
+- [x] Built (2026-10-17):
+      - **Names** (the owner: "Settings shows the names, Vyro says Unknown device").
+        - Cause, shown by a new Windows test on CI's runner before the fix: 45 of 58 present
+          devices lost their name. The device query was asked for unlocalized properties, so
+          descriptions came back as unresolved indirect strings (type 25), friendly names came
+          back empty, and only plain strings were read. Only 3 containers had a name.
+        - Fix: localized queries; an unresolved indirect string gives its fallback text. More
+          sources: display names, the name a device reports on its bus (a USB product string)
+          and the paired Bluetooth entries Settings lists (two queries filtered by protocol and
+          pairing, so nothing searches the network).
+        - Order: the device's own name, its paired entry, its bus name, then the most specific
+          function name (a Bluetooth device's own node before its services); Windows' generic
+          function names are skipped. With nothing at all, the kind ("Mouse"), never "Unknown
+          device". The chosen name also decides the kind.
+        - The test (`names_match_device_manager`) now holds on every present device: the name
+          matches what Configuration Manager gives.
+      - **Batteries** (decision 16):
+        - Logitech HID++ 2.0 through Unifying, Bolt and Lightspeed receivers, or a device
+          connected directly. Each device paired to a receiver gets its own row ("Through USB
+          Receiver") with its own name, kind and battery: Unified Battery, Battery Status, or
+          Battery Voltage on Solaar's curve. One that answered earlier and sleeps now is listed
+          as "Asleep or off". Requests carry Vyro's software id; replies are read from both of
+          the receiver's HID++ collections, since its errors come back as short reports.
+        - PlayStation controllers: DualSense and DualShock 4 report their battery in their input
+          report over USB; over Bluetooth only once something else (Steam) has switched them to
+          the full report. Vyro never switches it: that breaks some games' input.
+        - The standard HID Battery Strength value, from a feature report.
+        - Windows' own reading is also taken from the container and the paired entry.
+        - XInput slots match their controller by vendor and product (XInput 1.4's capabilities
+          by number, as SDL reads them), so two different controllers each get their battery.
+        - Batteries say whether they are charging; a low battery on its charger is no warning.
+        - `vyro-inventory` lists every HID collection by vendor and product: the line that names
+          a dongle whose battery is still missing.
+      - **Connect and Disconnect** (decision 33): a button on each paired Bluetooth device.
+        - Audio (headphones, earbuds, speakers, also while off): the Bluetooth audio driver's
+          one-shot reconnect and disconnect, reached from the device's audio endpoint, as
+          Settings does; unelevated, in the app.
+        - Any other device: Connect asks Windows to reach it (an uncached service lookup through
+          the WinRT Bluetooth API pages it); Disconnect drops its link at the radio
+          (`IOCTL_BTH_DISCONNECT_DEVICE`), done by the service. IPC protocol 14:
+          `BluetoothDisconnect { id }` with the list's hashed id; the service looks the device up
+          again, refuses anything but a paired Bluetooth device and takes one action per device
+          every 5 s. No address crosses the pipe.
+        - The tab says what became of it from the listings that follow: connected,
+          disconnected, came back by itself, or didn't connect ("turn it on, or press a button").
+      - **Accent of any colour** (decision 32): a Custom choice with a colour wheel in Settings →
+        Appearance (hue and saturation on the wheel, brightness on a slider, a hex field, the
+        last six colours; the thumb is a keyboard slider). Dragging previews on the page;
+        letting go saves.
+        - Fills (gauges, sparklines, desktop widgets' dials, the 3-D view, the logo, the share
+          card's ring) show the colour as picked (`--accent-cpu-fill`, `--accent-gpu-fill`).
+        - Text in the accent takes a shade of the same hue and chroma, lightened or darkened
+          (OKLCH) just to 4.5:1 on every surface of the theme; the picker shows that shade when
+          it differs, and warns near amber and red.
+        - The GPU colour is the main one turned round the hue circle, away from warning hues; a
+          grey keeps the theme's own.
+        - Saved as `#rrggbb`; an older version reads it as an unknown name and uses the theme's
+          own accent. The overlay's "App" colour takes the custom accent's Midnight shade.
+      - **Release workflow**: its installer limit said 20 MB; decision 28 and CI allow 60 MB.
+      - Version 1.3.0.
+- [x] Checks:
+      - Rust: name order, indirect strings, HID++ requests and replies, Unified Battery, Battery
+        Status and Voltage (the curve), DualSense and DualShock 4 reports, receiver rows,
+        Bluetooth addresses, Connect and Disconnect per device, the action throttle, IPC 14 (its
+        wire shape, and a round trip: a malformed id and a second action in a row refused), the
+        custom accent in the settings.
+      - Windows CI: every device name matches Configuration Manager's; the HID collections are
+        described and a battery read ends in time; the installed app lists devices and the
+        service refuses to disconnect a device that does not exist (smoke test).
+      - Front end: OKLCH and HSV round trips; for 24 hues × 4 chromas × 5 lightnesses (and pure
+        red and blue, navy, black, white, pale yellow, grey) on all six themes, the accent text
+        reaches 4.5:1 on every surface, text on its tints 7:1, and fills keep the colour picked.
+        The accessibility sweep adds navy on Midnight and pale yellow on Daylight on four views,
+        with the colour wheel open.
+      - Budget: the phone companion's start bundle 32 → 34 kB (it shows the PC's accent, now any
+        colour, so it carries the colour maths).
+- [ ] CI on the pushed commit, then field check 1.3 ([`docs/field-check-1.3.md`](docs/field-check-1.3.md))
+      and the owner's go for the release.
+
+### 1.4.0 — the phone app, from anywhere (planned)
+The owner's choices (2026-10-17): an installable web app on Android and iOS (no stores), reaching
+the PC from any network through a Vyro relay on Cloudflare Workers in the owner's free account,
+end-to-end encrypted so the relay cannot read the readings. It supersedes decision 19's "LAN
+only" (a new decision 34 when it is built). Planned after 1.3 ships; the owner creates the
+Cloudflare account and adds its token to the repository's secrets.
 
 ## Risks
 

@@ -195,6 +195,8 @@ export interface CardPalette {
   muted: string;
   accent: string;
   second: string;
+  /** The score ring: the accent as picked (1.3); text uses `accent` and `second`. */
+  ring: [string, string];
   track: string;
   glow: [string, string];
   /** Light theme: transparent cards get a light halo instead of a dark shadow. */
@@ -245,8 +247,8 @@ export function paint(ctx: CanvasRenderingContext2D, ops: Op[], size: CardSize, 
       ctx.arc(op.cx, op.cy, op.r, start, start + sweep);
       ctx.stroke();
       const grad = ctx.createLinearGradient(op.cx - op.r, op.cy, op.cx + op.r, op.cy);
-      grad.addColorStop(0, p.accent);
-      grad.addColorStop(1, p.second);
+      grad.addColorStop(0, p.ring[0]);
+      grad.addColorStop(1, p.ring[1]);
       ctx.strokeStyle = grad;
       ctx.beginPath();
       ctx.arc(op.cx, op.cy, op.r, start, start + (sweep * Math.max(0, Math.min(100, op.value))) / 100);

@@ -22,7 +22,10 @@ interface Palette {
   tick: string;
   text: string;
   muted: string;
+  /** Text in the accent (the readable shade). */
   accent: string;
+  /** The arc: the accent as picked (1.3). */
+  fill: string;
   warn: string;
   hot: string;
   font: string;
@@ -37,6 +40,7 @@ function readPalette(el: Element): Palette {
     text: v('--text', '#e6edf3'),
     muted: v('--muted', '#8b98a8'),
     accent: v('--accent', '#4cc9f0'),
+    fill: v('--accent-fill', '') || v('--accent', '#4cc9f0'),
     warn: v('--warn', '#f5b942'),
     hot: v('--hot', '#ff5d5d'),
     font: v('--font-num', 'system-ui, sans-serif'),
@@ -138,15 +142,15 @@ export class Gauge {
     if (value != null && frac > 0.002) {
       const end = START + frac * SWEEP;
       const grad = ctx.createConicGradient(START, cx, cy);
-      grad.addColorStop(0, p.accent);
-      grad.addColorStop(0.75 * 0.6, p.accent);
+      grad.addColorStop(0, p.fill);
+      grad.addColorStop(0.75 * 0.6, p.fill);
       grad.addColorStop(0.75 * 0.85, p.warn);
       grad.addColorStop(0.75, p.hot);
       // Past the sweep the gradient wraps back to START, where the round cap of a small arc
       // sits; return to the accent colour there.
       grad.addColorStop(0.8, p.hot);
-      grad.addColorStop(0.9, p.accent);
-      grad.addColorStop(1, p.accent);
+      grad.addColorStop(0.9, p.fill);
+      grad.addColorStop(1, p.fill);
       ctx.lineCap = 'round';
       ctx.strokeStyle = grad;
       // Soft halo, then the arc itself.

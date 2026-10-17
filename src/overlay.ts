@@ -3,7 +3,8 @@
 // `vyro_core::gaming::overlay` and `src-tauri/src/overlay.rs`.
 
 import { fmt } from './format';
-import { ACCENTS as APP_ACCENTS, theme as themeOf } from './themes';
+import { isHex } from './color';
+import { ACCENTS as APP_ACCENTS, customPair, theme as themeOf } from './themes';
 import type { FramePoint, GameSnapshot, OverlayMetric, OverlayMode, OverlayRow, SensorSnapshot } from './types';
 
 export type OverlayCorner = 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
@@ -62,9 +63,11 @@ export const ACCENTS: Record<Exclude<OverlayAccent, 'app'>, string> = {
 };
 
 /** The plate's colour. For `app`: the app accent's dark-theme shade, since the plate is always
- * dark; a light theme's own accent (made for white) gives way to cyan. */
+ * dark; a light theme's own accent (made for white) gives way to cyan; a custom accent takes
+ * the shade it reads in on Midnight. */
 export function plateColor(accent: OverlayAccent, look: { theme: string; accent: string }): string {
   if (accent !== 'app') return ACCENTS[accent] ?? ACCENTS.green;
+  if (isHex(look.accent)) return customPair(themeOf('midnight'), look.accent).text[0];
   const named = APP_ACCENTS.find((a) => a.id === look.accent);
   if (named) return named.dark[0];
   const t = themeOf(look.theme);

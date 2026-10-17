@@ -51,6 +51,7 @@
       muted: v['--muted']!,
       accent: v['--accent-cpu']!,
       second: v['--accent-gpu']!,
+      ring: [v['--accent-cpu-fill']!, v['--accent-gpu-fill']!],
       track: v['--gauge-track']!,
       glow: t.palette.glow,
       light: t.light,

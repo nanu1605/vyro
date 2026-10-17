@@ -23,7 +23,9 @@ BUDGETS = {
     # The app's window. 125 kB until 1.1; raised for the new frame (sidebar, top bar, live
     # rail, icons, motion; ROADMAP P28), with the palette and the heavy views still lazy.
     "index.html": 200_000,
-    "remote.html": 32_000,  # the phone companion (P26)
+    # The phone companion (P26). 32 kB until 1.3; raised for a custom accent's colour maths
+    # (color.ts: the page shows the PC's accent, any colour; ROADMAP 1.3.0).
+    "remote.html": 34_000,
 }
 
 REF = re.compile(r'<(?:script|link)\b[^>]*?\b(?:src|href)="/?(assets/[^"]+\.(?:js|css))"')

@@ -206,7 +206,7 @@
     // scene whatever order the effects run in.
     const t = theme(prefs.theme);
     const v = tokens(t.id, prefs.accent);
-    const pal = { line: v['--line']!, board: v['--panel-edge']!, accent: v['--accent-cpu']!, bg: v['--panel']!, light: t.light };
+    const pal = { line: v['--line']!, board: v['--panel-edge']!, accent: v['--accent-cpu-fill']!, bg: v['--panel']!, light: t.light };
     const el = document.createElement('canvas');
     el.setAttribute('role', 'img');
     el.setAttribute(

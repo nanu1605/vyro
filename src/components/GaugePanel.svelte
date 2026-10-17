@@ -44,7 +44,7 @@
       spark.height = Math.round(height * dpr);
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const color = getComputedStyle(spark).getPropertyValue('--accent').trim() || '#4cc9f0';
+    const color = getComputedStyle(spark).getPropertyValue('--accent-fill').trim() || '#4cc9f0';
     drawSparkline(ctx, width, height, recent.values(), SPARK_POINTS, { color, min: 0, max: 100 });
   }
 

@@ -84,6 +84,13 @@
       kind: 'Look',
       run: () => void savePrefs({ accent: a.id }).catch(() => {}),
     })),
+    {
+      key: 'accent:custom',
+      label: 'Accent: Custom…',
+      hint: prefs.accent.startsWith('#') ? `in use: ${prefs.accent}` : 'any colour, on a colour wheel',
+      kind: 'Look',
+      run: () => onsection('settings', 'appearance'),
+    },
   ]);
 
   let query = $state('');

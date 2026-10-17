@@ -106,8 +106,8 @@
     <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
       <defs>
         <linearGradient id="vyro-mark" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="var(--accent)" />
-          <stop offset="1" stop-color="var(--accent-gpu)" />
+          <stop offset="0" stop-color="var(--accent-fill)" />
+          <stop offset="1" stop-color="var(--accent-gpu-fill)" />
         </linearGradient>
       </defs>
       <rect x="1" y="1" width="30" height="30" rx="9" fill="url(#vyro-mark)" opacity="0.18" />

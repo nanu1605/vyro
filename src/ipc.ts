@@ -6,7 +6,7 @@ import { listen } from '@tauri-apps/api/event';
 import { evaluate } from './curve';
 import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
-import { savedLook, type AccentId, type OpenOn, type ThemeId } from './themes';
+import { savedLook, type AccentChoice, type OpenOn, type ThemeId } from './themes';
 import { EMPTY as NO_WIDGETS, type Widgets } from './widgets';
 import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Control, Dashboard, DeviceInfo, Devices, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
@@ -378,7 +378,7 @@ export interface AppSettings {
   games: GameAutomation;
   /** Colours (P25). */
   theme: ThemeId;
-  accent: AccentId;
+  accent: AccentChoice;
   /** Which tab the window opens on, at launch and from the tray. */
   openOn: OpenOn;
   /** My PC (P23): 3-D or the flat plan, and the owner's GPU shapes by card key. */

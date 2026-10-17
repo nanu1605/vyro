@@ -39,17 +39,55 @@ named!(Theme {
     Daylight = "daylight",
 });
 
-named!(
-    /// `Theme`: the theme's own accent.
-    Accent {
-        Theme = "theme",
-        Cyan = "cyan",
-        Blue = "blue",
-        Violet = "violet",
-        Magenta = "magenta",
-        Green = "green",
+/// `Theme`: the theme's own accent. `Custom`: any colour (1.3), kept as `#rrggbb` in lowercase;
+/// the page works out the shade text takes from it. An older version reads a colour as an
+/// unknown name and falls back to `Theme`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "String", into = "String")]
+pub enum Accent {
+    #[default]
+    Theme,
+    Cyan,
+    Blue,
+    Violet,
+    Magenta,
+    Green,
+    Custom(String),
+}
+
+impl From<String> for Accent {
+    fn from(s: String) -> Self {
+        match s.as_str() {
+            "theme" => Self::Theme,
+            "cyan" => Self::Cyan,
+            "blue" => Self::Blue,
+            "violet" => Self::Violet,
+            "magenta" => Self::Magenta,
+            "green" => Self::Green,
+            _ if is_colour(&s) => Self::Custom(s.to_ascii_lowercase()),
+            _ => Self::Theme,
+        }
     }
-);
+}
+
+impl From<Accent> for String {
+    fn from(a: Accent) -> Self {
+        match a {
+            Accent::Theme => "theme".into(),
+            Accent::Cyan => "cyan".into(),
+            Accent::Blue => "blue".into(),
+            Accent::Violet => "violet".into(),
+            Accent::Magenta => "magenta".into(),
+            Accent::Green => "green".into(),
+            Accent::Custom(c) => c,
+        }
+    }
+}
+
+/// `#rrggbb`.
+fn is_colour(s: &str) -> bool {
+    s.len() == 7 && s.starts_with('#') && s.bytes().skip(1).all(|b| b.is_ascii_hexdigit())
+}
 
 named!(
     /// Which tab the window opens on, at launch and when opened from the tray.
@@ -132,6 +170,28 @@ mod tests {
             assert_eq!(serde_json::from_str::<Accent>(&json).unwrap(), a, "{json}");
         }
         assert_eq!(serde_json::to_string(&OpenOn::Last).unwrap(), "\"last\"");
+    }
+
+    /// 1.3: any colour, kept as `#rrggbb` in lowercase; anything else that is not a name falls
+    /// back to the theme's own.
+    #[test]
+    fn a_custom_accent_is_any_colour() {
+        let a: Accent = serde_json::from_str("\"#1A237E\"").unwrap();
+        assert_eq!(a, Accent::Custom("#1a237e".into()));
+        assert_eq!(serde_json::to_string(&a).unwrap(), "\"#1a237e\"");
+        for bad in [
+            "\"#12345\"",
+            "\"#1234567\"",
+            "\"#gg0000\"",
+            "\"1a237e\"",
+            "\"red\"",
+        ] {
+            assert_eq!(
+                serde_json::from_str::<Accent>(bad).unwrap(),
+                Accent::Theme,
+                "{bad}"
+            );
+        }
     }
 }
 

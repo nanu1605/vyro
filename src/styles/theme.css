@@ -17,6 +17,11 @@
   --accent-cpu: #4cc9f0;
   --accent-gpu: #7ee787;
   --accent: var(--accent-cpu);
+  /* A custom accent exactly as picked (1.3), for gauges, graphs, the 3-D view and the logo;
+     text keeps --accent, a shade that stays readable. The named accents are the same colour. */
+  --accent-cpu-fill: var(--accent-cpu);
+  --accent-gpu-fill: var(--accent-gpu);
+  --accent-fill: var(--accent-cpu-fill);
   /* The accent as a fill behind text and as a border (selected tab, card edge). */
   --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--panel));
   --accent-line: color-mix(in srgb, var(--accent) 55%, var(--line));

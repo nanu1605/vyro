@@ -174,8 +174,11 @@ or actions, 0.3 moves `alerts.json` aside (to `alerts.json.bad`) and uses its de
   down.
 - **Themes.** Settings → Appearance offers Midnight, AMOLED, Cyber, Glass, Minimal and
   Daylight, each with its own accent or one of five more; the accent colours the sidebar,
-  buttons, switches and the 3-D model. OK, warning and problem colours keep their meaning in
-  every theme, and every theme meets WCAG AA contrast. A thin line along the top bar shows the
+  buttons, switches and the 3-D model. **Custom** (1.3) takes any colour from a colour wheel
+  (or typed as `#rrggbb`): gauges, graphs and the 3-D model show it as picked, and text in the
+  accent takes a lighter or darker shade of it where the colour alone would be hard to read.
+  OK, warning and problem colours keep their meaning in every theme, and every theme and
+  accent meets WCAG AA contrast. A thin line along the top bar shows the
   PC's state: idle, gaming, warning or critical. Critical pulses four times, then holds; it
   does not pulse with reduced motion. Vyro opens on the Dashboard, or on the last view if you
   choose.
@@ -209,11 +212,16 @@ or actions, 0.3 moves `alerts.json` aside (to `alerts.json.bad`) and uses its de
   view uses WebGL only while the view is shown, at 60 frames a second (30 with "calmer"
   animation, still with it off), and a flat 2-D plan is there instead if you prefer.
 - **Devices.** A tab after Displays lists keyboards, mice, controllers, headsets and other
-  USB and Bluetooth devices, each once, with how it connects. It shows the battery where the
-  device reports one (Bluetooth, Bluetooth LE and Xbox controllers; 2.4 GHz receivers usually
-  do not). It also lists the sound outputs and inputs, with the defaults. The list updates
-  within a second when a device arrives or leaves. Device names stay on this PC: they are not
-  put in reports, cards or the history.
+  USB and Bluetooth devices, each once, by the name Windows Settings shows (1.3), with how it
+  connects. It shows the battery, and whether it is charging, where the device reports it:
+  Bluetooth and Bluetooth LE, Xbox controllers, PlayStation controllers on a cable, and
+  Logitech devices, each device on a Logitech receiver in its own row (1.3). Other makers'
+  2.4 GHz receivers keep it to their own software; `vyro-inventory` names the dongle so its
+  protocol can be added. Paired Bluetooth devices have **Connect** and **Disconnect** (1.3):
+  audio devices as Windows Settings does; other devices through the Vyro service, and they may
+  connect again by themselves as soon as they are used. It also lists the sound outputs and
+  inputs, with the defaults. The list updates within a second when a device arrives or leaves.
+  Device names stay on this PC: they are not put in reports, cards or the history.
 - **Share card.** In Hardware: a picture of your PC's specs and Performance Score, in 16:9,
   square or story size. It is saved to `Pictures\Vyro` or copied to the clipboard, and never
   shows the computer's name or serial numbers.
@@ -305,6 +313,7 @@ Nothing on it changes the PC.
 | [`docs/field-check.md`](docs/field-check.md) | The owner's field check of 1.0 (P16–P27) on the reference PC, in one pass |
 | [`docs/field-check-1.1.md`](docs/field-check-1.1.md) | The field check of 1.1 (P28–P30): the new look, My PC and the laptop, desktop widgets |
 | [`docs/field-check-1.2.md`](docs/field-check-1.2.md) | The field check of 1.2: widgets through Show desktop, snapping, clicks passing through, three new kinds; My PC's view, glass, fans and airflow; text inside every widget; the Dashboard's packing |
+| [`docs/field-check-1.3.md`](docs/field-check-1.3.md) | The field check of 1.3: device names, wireless batteries, Bluetooth Connect and Disconnect, the colour wheel |
 
 `vyro-remote.exe` in the same artifact checks the service from the outside (state, connection,
 sensors; `--capture Game.exe` measures a running game for 15 s). The service logs to `%ProgramData%\Vyro\service.log`.

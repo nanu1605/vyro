@@ -10,7 +10,9 @@
   import type { GameAutomation, OverlayMetric, Profile } from '../types';
   import { checkNow, install, update } from '../updates.svelte';
   import { fmtDateTime } from '../format';
-  import { ACCENTS as ACCENT_LIST, THEMES, accentPair, theme as themeOf } from '../themes';
+  import { ACCENTS as ACCENT_LIST, THEMES, accentPair, accentFills, applyLook, theme as themeOf } from '../themes';
+  import { isHex } from '../color';
+  import ColorWheel from './ColorWheel.svelte';
   import type { BackendStatus, SensorSnapshot, SensorTree, TempUnit } from '../types';
 
   interface Props {
@@ -22,6 +24,15 @@
 
   let autostart = $state<boolean | null>(null);
   const look = $derived(themeOf(prefs.theme));
+  /** A custom accent (1.3): the colour in use, or where the wheel starts from. */
+  const custom = $derived(isHex(prefs.accent));
+  let lastCustom = $state<string | null>(null);
+  $effect(() => {
+    if (isHex(prefs.accent)) lastCustom = prefs.accent;
+  });
+  const customColour = $derived(custom ? prefs.accent : (lastCustom ?? accentFills(look, prefs.accent)[0]));
+  const previewAccent = (hex: string) => applyLook({ theme: prefs.theme, accent: hex as `#${string}`, openOn: prefs.openOn });
+  const saveAccent = (hex: string) => void save('Accent', () => savePrefs({ accent: hex as `#${string}` }));
   let tree = $state.raw<SensorTree | null>(null);
   let error = $state<string | null>(null);
 
@@ -175,7 +186,15 @@
             <span>{a.name}</span>
           </label>
         {/each}
+        <label class="check">
+          <input type="radio" name="accent" checked={custom} onchange={() => saveAccent(customColour)} />
+          <span class="dot custom" aria-hidden="true" style:background={customColour}></span>
+          <span>Custom</span>
+        </label>
       </div>
+      {#if custom}
+        <ColorWheel value={prefs.accent} theme={look} onpreview={previewAccent} oncommit={saveAccent} />
+      {/if}
     </fieldset>
     <fieldset>
       <legend>Open on</legend>

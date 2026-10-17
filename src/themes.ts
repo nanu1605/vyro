@@ -2,11 +2,15 @@
 // view and canvas reads the same tokens; OK / warning / problem keep their meaning in every
 // theme and only change shade to keep contrast (themes.test.ts checks WCAG AA for each pair).
 
+import { isHex, readableOn, toLch, fromLch, over } from './color';
 import type { SensorSnapshot } from './types';
 
 export type ThemeId = 'midnight' | 'amoled' | 'cyber' | 'glass' | 'minimal' | 'daylight';
 /** `theme`: the theme's own accent. */
 export type AccentId = 'theme' | 'cyan' | 'blue' | 'violet' | 'magenta' | 'green';
+/** Any colour (1.3), as `#rrggbb`: fills show it as picked, text a shade that stays readable. */
+export type CustomAccent = `#${string}`;
+export type AccentChoice = AccentId | CustomAccent;
 /** Which tab the window opens on, at launch and when opened from the tray. */
 export type OpenOn = 'dashboard' | 'last';
 /** The page's state, shown by the header rail and the background wash. */
@@ -218,10 +222,54 @@ export const DEFAULT_ACCENT: AccentId = 'theme';
 
 export const theme = (id: string): Theme => THEMES.find((t) => t.id === id) ?? THEMES[0]!;
 
-/** The accent pair (main, second) for a theme and accent choice. */
+/** Every surface text sits on in a theme, made opaque (Glass cards over the bare page and both
+ * washes): what a custom accent's text shade must be readable on. */
+export function textSurfaces(t: Theme): Array<[string, string]> {
+  const p = t.palette;
+  const under = [p.bg, ...p.glow.filter((g) => g !== 'transparent')];
+  return [
+    ['bg', p.bg],
+    ['panel', p.panel],
+    ['panel-edge', p.panelEdge],
+    ...under.flatMap((u, i): Array<[string, string]> => [
+      [`card/${i}`, over(p.card, u)],
+      [`card-top/${i}`, over(p.cardTop, u)],
+    ]),
+  ];
+}
+
+/** OKLCH hues that read as a warning (reds, oranges, ambers): a custom GPU colour avoids them,
+ * and the picker says when the main colour is among them. */
+export const nearWarning = (hex: string): boolean => {
+  const { c, h } = toLch(hex);
+  return c > 0.05 && (h < 100 || h > 345);
+};
+
+/** A custom accent on a theme: the colours as picked (fills) and the shades text takes. The GPU
+ * colour is the main one turned round the hue circle (away from warning hues); a grey keeps
+ * the theme's own second colour. */
+export function customPair(t: Theme, hex: string): { fill: [string, string]; text: [string, string] } {
+  const x = toLch(hex);
+  let second = t.accent[1];
+  if (x.c >= 0.03) {
+    const hue = [-75, 75, 150, -150].map((d) => (x.h + d + 360) % 360).find((h) => !(h < 100 || h > 345));
+    second = fromLch({ ...x, h: hue ?? (x.h + 180) % 360 });
+  }
+  const on = textSurfaces(t).map(([, c]) => c);
+  return { fill: [hex, second], text: [readableOn(hex, on), readableOn(second, on)] };
+}
+
+/** The accent pair (main, second) for a theme and accent choice, as text takes it. */
 export function accentPair(t: Theme, accent: string): [string, string] {
+  if (isHex(accent)) return customPair(t, accent).text;
   const a = ACCENTS.find((x) => x.id === accent);
   return a ? (t.light ? a.light : a.dark) : t.accent;
+}
+
+/** The accent pair as fills show it: the colour picked for a custom accent, else the same as
+ * [`accentPair`]. */
+export function accentFills(t: Theme, accent: string): [string, string] {
+  return isHex(accent) ? customPair(t, accent).fill : accentPair(t, accent);
 }
 
 /** The CSS variables for a theme and accent. */
@@ -229,6 +277,7 @@ export function tokens(themeId: string, accent: string): Record<string, string> 
   const t = theme(themeId);
   const p = t.palette;
   const [main, second] = accentPair(t, accent);
+  const [mainFill, secondFill] = accentFills(t, accent);
   return {
     '--bg': p.bg,
     '--panel': p.panel,
@@ -240,6 +289,9 @@ export function tokens(themeId: string, accent: string): Record<string, string> 
     '--muted': p.muted,
     '--accent-cpu': main,
     '--accent-gpu': second,
+    // Gauges, graphs and the 3-D view: a custom accent exactly as picked (1.3).
+    '--accent-cpu-fill': mainFill,
+    '--accent-gpu-fill': secondFill,
     '--ok': p.ok,
     '--warn': p.warn,
     '--hot': p.hot,
@@ -262,7 +314,7 @@ const LOOK_KEY = 'vyro.look';
 
 export interface Look {
   theme: ThemeId;
-  accent: AccentId;
+  accent: AccentChoice;
   openOn: OpenOn;
 }
 
@@ -275,7 +327,10 @@ export function savedLook(): Look {
     if (!v || typeof v !== 'object') return fallback;
     return {
       theme: THEMES.some((t) => t.id === v.theme) ? v.theme! : fallback.theme,
-      accent: v.accent === 'theme' || ACCENTS.some((a) => a.id === v.accent) ? v.accent! : fallback.accent,
+      accent:
+        v.accent === 'theme' || ACCENTS.some((a) => a.id === v.accent) || isHex(String(v.accent))
+          ? v.accent!
+          : fallback.accent,
       openOn: v.openOn === 'last' ? 'last' : 'dashboard',
     };
   } catch {
@@ -323,39 +378,5 @@ export function uiState(snap: Pick<SensorSnapshot, 'health' | 'game'> | null): U
   return 'idle';
 }
 
-// WCAG 2 contrast, for the tests and the theme picker's swatches.
-
-type Rgba = [number, number, number, number];
-
-/** `#rrggbb` or `rgb(r g b / a%)`; `transparent` is fully clear. */
-export function parseColor(c: string): Rgba {
-  if (c === 'transparent') return [0, 0, 0, 0];
-  const hex = /^#([0-9a-f]{6})$/i.exec(c);
-  if (hex) {
-    const n = parseInt(hex[1]!, 16);
-    return [(n >> 16) & 255, (n >> 8) & 255, n & 255, 1];
-  }
-  const rgb = /^rgb\((\d+) (\d+) (\d+)(?: \/ (\d+)%)?\)$/.exec(c);
-  if (rgb) return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3]), rgb[4] != null ? Number(rgb[4]) / 100 : 1];
-  throw new Error(`unknown colour ${c}`);
-}
-
-/** `top` over an opaque `under`. */
-export function over(top: string, under: string): string {
-  const [r, g, b, a] = parseColor(top);
-  const [r2, g2, b2] = parseColor(under);
-  const mix = (x: number, y: number) => Math.round(x * a + y * (1 - a));
-  return `#${[mix(r, r2), mix(g, g2), mix(b, b2)].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
-}
-
-function luminance(c: string): number {
-  const [r, g, b] = parseColor(c).map((v, i) => (i < 3 ? v / 255 : v)) as Rgba;
-  const lin = (v: number) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
-  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-}
-
-/** Contrast ratio of two opaque colours, 1–21. */
-export function contrast(a: string, b: string): number {
-  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p) as [number, number];
-  return (x + 0.05) / (y + 0.05);
-}
+// WCAG 2 contrast and colour maths live in color.ts; the tests and swatches import them here too.
+export { contrast, over, parseColor } from './color';

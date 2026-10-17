@@ -103,7 +103,7 @@
       <span class="label">{first?.label ?? '—'}</span>
       <span class="value {first ? level(first) : 'na'}"><b>{fmt(first?.value, first?.digits ?? 0)}</b><small>{first?.value == null ? '' : first.unit}</small></span>
     </div>
-    <Spark ts={snap?.ts ?? 0} series={[{ value: first?.value, color: 'var(--accent)' }]} max={first?.unit === '%' ? 100 : undefined} label="{first?.label ?? 'Reading'}, last minute" />
+    <Spark ts={snap?.ts ?? 0} series={[{ value: first?.value, color: 'var(--accent-fill)' }]} max={first?.unit === '%' ? 100 : undefined} label="{first?.label ?? 'Reading'}, last minute" />
   {:else if w.kind === 'stack'}
     <ul>
       {#each rows as r (r.id)}
@@ -127,7 +127,7 @@
     <Spark
       ts={snap?.ts ?? 0}
       series={[
-        { value: net?.downMbps, color: 'var(--accent)' },
+        { value: net?.downMbps, color: 'var(--accent-fill)' },
         { value: net?.upMbps, color: 'var(--muted)' },
       ]}
       label="Download and upload, last minute"
@@ -139,7 +139,7 @@
         <span class="value"><b>{fmt(game.fps)}</b><small>FPS</small></span>
       </div>
       <span class="sub">1% low {fmt(game.low1Fps)} · {fmt(game.frameMs, 1)} ms a frame</span>
-      <Spark ts={snap?.ts ?? 0} series={[{ value: game.fps, color: 'var(--accent)' }]} label="Frame rate, last minute" />
+      <Spark ts={snap?.ts ?? 0} series={[{ value: game.fps, color: 'var(--accent-fill)' }]} label="Frame rate, last minute" />
     {:else}
       <span class="label">Game FPS</span>
       <span class="value na"><b>—</b></span>
@@ -267,8 +267,8 @@
     stroke: var(--gauge-track);
   }
   .dial .value {
-    stroke: var(--accent);
-    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 55%, transparent));
+    stroke: var(--accent-fill);
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent-fill) 55%, transparent));
     transition: stroke-dasharray 0.8s var(--ease-out);
   }
   .dial .value.warn {

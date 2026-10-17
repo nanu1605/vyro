@@ -3,7 +3,7 @@
   // same network. Read-only: it shows the PC's readings and can only sign itself out.
   import { onMount } from 'svelte';
   import { fmt, fmtDate, fmtDateTime } from '../format';
-  import { applyLook, type AccentId, type ThemeId } from '../themes';
+  import { applyLook, type AccentChoice, type ThemeId } from '../themes';
   import type { RemoteInfo, RemoteView } from '../types';
   import { getInfo, getView, NotPaired, pair, signOut, stream } from './api';
   import { canonCode, codeFromHash, deviceName, driveRows, fanRows, notices, pageTitle, showCode, STALE_SECS, tempRows, tiles, type Level, type Row } from './companion';
@@ -82,7 +82,7 @@
   async function start(): Promise<void> {
     try {
       info = await getInfo();
-      applyLook({ theme: info.theme as ThemeId, accent: info.accent as AccentId, openOn: 'dashboard' });
+      applyLook({ theme: info.theme as ThemeId, accent: info.accent as AccentChoice, openOn: 'dashboard' });
       stage = 'live';
       void getView()
         .then(onView)

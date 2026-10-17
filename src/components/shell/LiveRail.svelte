@@ -50,13 +50,13 @@
       <span class="k">CPU</span>
       <span class="v"><b>{fmt(snap.cpu.usageTotal)}</b> %{#if snap.cpu.tempPackage != null}<i>{fmtTemp(snap.cpu.tempPackage)}</i>{/if}</span>
     </div>
-    <Spark ts={snap.ts} series={[{ value: snap.cpu.usageTotal, color: 'var(--accent-cpu)' }]} max={100} label="CPU use, last minute" />
+    <Spark ts={snap.ts} series={[{ value: snap.cpu.usageTotal, color: 'var(--accent-cpu-fill)' }]} max={100} label="CPU use, last minute" />
     {#if gpu}
       <div class="row">
         <span class="k">GPU</span>
         <span class="v"><b>{fmt(gpu.usage)}</b> %{#if gpu.tempEdge != null}<i>{fmtTemp(gpu.tempEdge)}</i>{/if}</span>
       </div>
-      <Spark ts={snap.ts} series={[{ value: gpu.usage, color: 'var(--accent-gpu)' }]} max={100} label="GPU use, last minute" />
+      <Spark ts={snap.ts} series={[{ value: gpu.usage, color: 'var(--accent-gpu-fill)' }]} max={100} label="GPU use, last minute" />
     {/if}
     <div class="row">
       <span class="k">Memory</span>
@@ -81,8 +81,8 @@
       <Spark
         ts={snap.ts}
         series={[
-          { value: net.downMbps, color: 'var(--accent-cpu)' },
-          { value: net.upMbps, color: 'var(--accent-gpu)' },
+          { value: net.downMbps, color: 'var(--accent-cpu-fill)' },
+          { value: net.upMbps, color: 'var(--accent-gpu-fill)' },
         ]}
         floor={1}
         label="Network traffic, last minute"

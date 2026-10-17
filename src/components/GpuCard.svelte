@@ -59,6 +59,7 @@
 <style>
   .engines {
     --accent: var(--accent-gpu);
+    --accent-fill: var(--accent-gpu-fill);
     display: grid;
     gap: 0.4rem;
     margin-bottom: 1rem;

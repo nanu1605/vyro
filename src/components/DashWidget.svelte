@@ -119,6 +119,7 @@
   }
   .gpu {
     --accent: var(--accent-gpu);
+    --accent-fill: var(--accent-gpu-fill);
     display: contents;
   }
   .tile-link {

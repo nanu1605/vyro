@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { ACCENTS, THEMES, accentPair, contrast, over, parseColor, tokens, uiState } from './themes';
+import { fromLch } from './color';
+import {
+  ACCENTS,
+  THEMES,
+  accentFills,
+  accentPair,
+  contrast,
+  customPair,
+  nearWarning,
+  over,
+  parseColor,
+  textSurfaces,
+  tokens,
+  uiState,
+} from './themes';
 import type { SensorSnapshot } from './types';
 import rust from '../src-tauri/src/look.rs?raw';
 
@@ -7,19 +21,21 @@ const AA = 4.5;
 const ACCENT_IDS = ['theme', ...ACCENTS.map((a) => a.id)];
 
 /** Every surface text sits on, made opaque (Glass cards over the bare page and both washes). */
-function surfaces(id: string): Array<[string, string]> {
-  const p = THEMES.find((t) => t.id === id)!.palette;
-  const under = [p.bg, ...p.glow.filter((g) => g !== 'transparent')];
-  return [
-    ['bg', p.bg],
-    ['panel', p.panel],
-    ['panel-edge', p.panelEdge],
-    ...under.flatMap((u, i): Array<[string, string]> => [
-      [`card/${i}`, over(p.card, u)],
-      [`card-top/${i}`, over(p.cardTop, u)],
-    ]),
-  ];
-}
+const surfaces = (id: string) => textSurfaces(THEMES.find((t) => t.id === id)!);
+
+/** Custom accents (1.3): a grid round the colour space, and the hard cases by name. */
+const CUSTOM = [
+  ...Array.from({ length: 24 }, (_, i) => i * 15).flatMap((h) =>
+    [0.04, 0.1, 0.16, 0.3].flatMap((c) => [0.15, 0.35, 0.55, 0.75, 0.95].map((l) => fromLch({ l, c, h }))),
+  ),
+  '#ff0000',
+  '#0000ff',
+  '#1a237e',
+  '#000000',
+  '#ffffff',
+  '#fff59d',
+  '#808080',
+];
 
 describe('themes', () => {
   it('give every theme and accent AA contrast for text and the colours used as text', () => {
@@ -55,6 +71,43 @@ describe('themes', () => {
         for (const bg of tints) expect(contrast(v['--text']!, bg), `${t.id}/${accent} on ${bg}`).toBeGreaterThanOrEqual(7);
       }
     }
+  });
+
+  it('give any custom accent AA text and readable tints, and show fills as picked', () => {
+    const misses: string[] = [];
+    const mix = (x: string, n: number, s: string) => over(`rgb(${parseColor(x).slice(0, 3).join(' ')} / ${n}%)`, s);
+    for (const t of THEMES) {
+      const on = surfaces(t.id);
+      for (const accent of CUSTOM) {
+        const v = tokens(t.id, accent);
+        if (v['--accent-cpu-fill'] !== accent) misses.push(`${t.id}/${accent}: fill ${v['--accent-cpu-fill']}`);
+        for (const name of ['--accent-cpu', '--accent-gpu']) {
+          for (const [where, bg] of on) {
+            const c = contrast(v[name]!, bg);
+            if (c < AA) misses.push(`${t.id}/${accent}: ${name} on ${where} ${c.toFixed(2)}`);
+          }
+        }
+        for (const bg of [mix(v['--accent-cpu']!, 16, v['--bg']!), mix(v['--accent-cpu']!, 16, v['--panel']!)]) {
+          const c = contrast(v['--text']!, bg);
+          if (c < 7) misses.push(`${t.id}/${accent}: text on tint ${c.toFixed(2)}`);
+        }
+      }
+    }
+    expect(misses.slice(0, 20)).toEqual([]);
+  });
+
+  it('give a custom accent a GPU colour away from the warning hues', () => {
+    for (const t of THEMES) {
+      for (const accent of CUSTOM) {
+        const [, second] = customPair(t, accent).fill;
+        if (second !== t.accent[1]) expect(nearWarning(second), `${t.id}/${accent} → ${second}`).toBe(false);
+      }
+    }
+    // Greys keep the theme's own second colour.
+    expect(accentFills(THEMES[0]!, '#808080')[1]).toBe(THEMES[0]!.accent[1]);
+    expect(nearWarning('#ff0000')).toBe(true);
+    expect(nearWarning('#4cc9f0')).toBe(false);
+    expect(nearWarning('#808080')).toBe(false);
   });
 
   it('keep warning colours apart from the accents', () => {

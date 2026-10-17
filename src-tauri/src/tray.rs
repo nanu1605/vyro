@@ -584,6 +584,11 @@ mod tests {
         assert_eq!(s.theme, Theme::Midnight);
         assert_eq!(s.accent, Accent::Blue);
         assert_eq!(s.open_on, OpenOn::Last);
+        // 1.3: a custom accent is kept, and written back as it was read.
+        let s: Settings = serde_json::from_str(r##"{"accent":"#1A237E"}"##).unwrap();
+        assert_eq!(s.accent, Accent::Custom("#1a237e".into()));
+        let back = serde_json::to_value(&s).unwrap();
+        assert_eq!(back["accent"], "#1a237e");
     }
 
     fn release(version: &str) -> Settings {
