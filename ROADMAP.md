@@ -2364,8 +2364,13 @@ another maker's dongle, and a USB condenser microphone.
         with the colour wheel open.
       - Budget: the phone companion's start bundle 32 → 34 kB (it shows the PC's accent, now any
         colour, so it carries the colour maths).
-- [ ] CI on the pushed commit, then field check 1.3 ([`docs/field-check-1.3.md`](docs/field-check-1.3.md))
-      and the owner's go for the release.
+- [x] **CI** (run 39070415024 on 294c5f1): every job green. On the Windows runner every device
+      name matches Configuration Manager's, the HID collections are read in time, and the smoke
+      test lists devices in 92 ms and has the service refuse a device that does not exist in
+      16 ms; Show desktop, snap and click-through pass. The accessibility sweep: 647 checks. The
+      installer is 11.48 MB.
+- [ ] Field check 1.3 ([`docs/field-check-1.3.md`](docs/field-check-1.3.md)), then the owner's go
+      for the release.
 
 ### 1.4.0 — the phone app, from anywhere (planned)
 The owner's choices (2026-10-17): an installable web app on Android and iOS (no stores), reaching

@@ -1,6 +1,6 @@
 # Field check: 1.3 (device names, wireless batteries, Bluetooth Connect and Disconnect, the colour wheel)
 
-Status: **not run yet.**
+Status: **not run yet.** Test build: `vyro-windows-294c5f1` (CI run 39070415024).
 
 1.3 answers the owner's requests after 1.2.0 (ROADMAP → 1.3.0 has how each part works):
 - devices named as Windows Settings names them, not "Unknown device";
