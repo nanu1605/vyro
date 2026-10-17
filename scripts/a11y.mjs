@@ -1,8 +1,9 @@
 // Accessibility sweep (P27): axe-core on every tab of the app in all six themes at two desktop
 // widths and phone width, the main dialogs, the desktop widgets and the phone companion, plus keyboard focus
 // rings and reduced motion. Since 1.2 also: text stays inside every desktop widget (with the longest
-// names two GPUs give), and the Dashboard's cards pack without blank stretches or overlaps. Runs
-// against the browser preview (sample data, two GPUs as on the owner's PC) of a finished build:
+// names two GPUs give), and the Dashboard's cards pack without blank stretches or overlaps, their
+// text inside them in whole words even at their narrowest. Runs against the browser preview
+// (sample data, two GPUs as on the owner's PC) of a finished build:
 //
 //   pnpm build && pnpm a11y
 //
@@ -86,12 +87,16 @@ const OWNER = [
   ['card', 12, 2, 'cores'], ['card', 4, 2, 'cpuSensors'], ['card', 4, 2, 'gpus'], ['card', 4, 2, 'memory'],
   ['card', 4, 2, 'power'], ['card', 4, 2, 'board'], ['card', 4, 2, 'self'],
 ];
-const DASH = {
-  version: 1,
-  active: 'owner',
-  layouts: [{ id: 'owner', name: 'Owner', preset: null, locked: false, widgets: OWNER.map(([kind, w, h, source], i) => ({ id: `w${i + 1}`, kind, w, h, source })) }],
-};
-const SEED_DASH = `localStorage.setItem('vyro.dashboard', ${JSON.stringify(JSON.stringify(DASH))})`;
+// Every card at its narrowest, 3 of 12 (1.2's second finding): in a window about half a screen
+// wide, each value in their lists broke a letter or two a line.
+const NARROW = [
+  ['card', 3, 2, 'cpuSensors'], ['card', 3, 2, 'self'], ['card', 3, 2, 'power'], ['card', 3, 2, 'board'],
+  ['card', 3, 2, 'gpus'], ['card', 3, 2, 'memory'], ['card', 3, 2, 'cores'], ['gauge', 3, 3, 'gpu.0'],
+  r3('gpu.0.hotspot'), r3('gpu.0.vram'), r3('power.system'), r3('fan.cpu'),
+];
+const layout = (id, name, widgets) => ({ id, name, preset: null, locked: false, widgets: widgets.map(([kind, w, h, source], i) => ({ id: `w${i + 1}`, kind, w, h, source })) });
+const seedDash = (active) =>
+  `localStorage.setItem('vyro.dashboard', ${JSON.stringify(JSON.stringify({ version: 1, active, layouts: [layout('owner', 'Owner', OWNER), layout('narrow', 'Narrow', NARROW)] }))})`;
 
 const problems = [];
 const problem = (where, what) => problems.push(`${where}: ${what}`);
@@ -313,52 +318,98 @@ async function sweepWidgets(browser, theme) {
 }
 
 /** Every text in the widget's face lies inside its card; text cut short with "…" counts by its box. */
-async function textInside(page, where) {
-  const out = await page.evaluate(() => {
-    const desk = document.querySelector('.desk');
-    if (!desk) return ['no widget face'];
-    const b = desk.getBoundingClientRect();
-    const box = { left: b.left + 1, right: b.right - 1, top: b.top + 1, bottom: b.bottom - 1 };
-    const cutBy = (el) => {
-      for (let e = el; e && e !== desk; e = e.parentElement) {
-        const s = getComputedStyle(e);
-        if (s.textOverflow === 'ellipsis' && s.overflowX !== 'visible') return e;
-      }
-      return null;
-    };
+async function textInside(page, where, sel = '.desk', what = 'the widget') {
+  const out = await page.evaluate((sel) => {
+    const faces = [...document.querySelectorAll(sel)];
+    if (!faces.length) return [`nothing at ${sel}`];
     const bad = [];
-    const walk = document.createTreeWalker(desk, NodeFilter.SHOW_TEXT);
-    for (let n = walk.nextNode(); n; n = walk.nextNode()) {
-      const text = n.textContent.trim();
-      const el = n.parentElement;
-      if (!text || !el || el.closest('.sr-only')) continue;
-      const clip = cutBy(el);
-      let rects;
-      if (clip) rects = [clip.getBoundingClientRect()];
-      else if (el instanceof SVGElement) rects = [el.getBoundingClientRect()];
-      else {
-        const r = document.createRange();
-        r.selectNodeContents(n);
-        rects = [...r.getClientRects()];
+    for (const desk of faces) {
+      const b = desk.getBoundingClientRect();
+      const box = { left: b.left + 1, right: b.right - 1, top: b.top + 1, bottom: b.bottom - 1 };
+      const name = faces.length > 1 ? `in "${desk.querySelector('h2')?.textContent ?? desk.textContent.trim().slice(0, 20)}" ` : '';
+      const cutBy = (el) => {
+        for (let e = el; e && e !== desk; e = e.parentElement) {
+          const s = getComputedStyle(e);
+          if (s.textOverflow === 'ellipsis' && s.overflowX !== 'visible') return e;
+        }
+        return null;
+      };
+      const walk = document.createTreeWalker(desk, NodeFilter.SHOW_TEXT);
+      for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+        const text = n.textContent.trim();
+        const el = n.parentElement;
+        if (!text || !el || el.closest('.sr-only') || !el.checkVisibility()) continue;
+        const clip = cutBy(el);
+        let rects;
+        if (clip) rects = [clip.getBoundingClientRect()];
+        else if (el instanceof SVGElement) rects = [el.getBoundingClientRect()];
+        else {
+          const r = document.createRange();
+          r.selectNodeContents(n);
+          rects = [...r.getClientRects()];
+        }
+        for (const r of rects) {
+          const past = Math.max(r.right - box.right, box.left - r.left, r.bottom - box.bottom, box.top - r.top);
+          if (r.width > 0 && past > 0.5) {
+            bad.push(`${name}"${text.slice(0, 32)}" is ${Math.ceil(past)} px past the edge`);
+            break;
+          }
+        }
       }
-      for (const r of rects) {
-        const past = Math.max(r.right - box.right, box.left - r.left, r.bottom - box.bottom, box.top - r.top);
-        if (r.width > 0 && past > 0.5) {
-          bad.push(`"${text.slice(0, 32)}" is ${Math.ceil(past)} px past the edge`);
-          break;
+    }
+    return bad;
+  }, sel);
+  checks++;
+  for (const b of out) problem(where, `text outside ${what}: ${b}`);
+}
+
+/** No word in a Dashboard widget is split across two lines (1.2: in narrow cards values broke a
+ * letter or two a line), unless the word alone is wider than its card. Breaks after "-" and "/"
+ * are the browser's own; a no-break space holds a word together like a letter. */
+async function wordsWhole(page, where) {
+  const out = await page.evaluate(() => {
+    const bad = [];
+    const r = document.createRange();
+    for (const cell of document.querySelectorAll('.dash-grid .dash-cell')) {
+      const name = cell.querySelector('h2')?.textContent ?? cell.textContent.trim().slice(0, 20);
+      // Its widget's own width, not the box the word is in: a box squeezed narrow is the fault.
+      const face = cell.querySelector(':scope > .card, :scope > .panel') ?? cell;
+      const fs = getComputedStyle(face);
+      const room = face.clientWidth - parseFloat(fs.paddingLeft) - parseFloat(fs.paddingRight);
+      const walk = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+      for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+        const el = n.parentElement;
+        if (!el || !n.data.trim() || el.closest('.sr-only') || !el.checkVisibility()) continue;
+        const s = n.data;
+        for (const m of s.matchAll(/[^ \t\n\r]+/g)) {
+          let prev = null;
+          let split = false;
+          for (let i = m.index; i < m.index + m[0].length; i++) {
+            r.setStart(n, i);
+            r.setEnd(n, i + 1);
+            const c = r.getBoundingClientRect();
+            if (!c.width) continue;
+            if (prev && c.top > prev.top + prev.height / 2 && !'-/–—'.includes(s[i - 1])) split = true;
+            prev = c;
+          }
+          if (!split) continue;
+          r.setStart(n, m.index);
+          r.setEnd(n, m.index + m[0].length);
+          const wide = [...r.getClientRects()].reduce((a, b) => a + b.width, 0);
+          if (wide <= room + 1) bad.push(`"${m[0].slice(0, 32)}" in "${name}" is split across lines`);
         }
       }
     }
     return bad;
   });
   checks++;
-  for (const b of out) problem(where, `text outside the widget: ${b}`);
+  for (const b of out) problem(where, b);
 }
 
 // --- The Dashboard's packing (1.2): the owner's layout at each width. ------------------------------
 
-async function sweepDashboard(browser, theme, width) {
-  const { ctx, page } = await open(browser, BASE, { width, theme, init: SEED_DASH });
+async function sweepDashboard(browser, theme, width, shows = 'owner') {
+  const { ctx, page } = await open(browser, BASE, { width, theme, init: seedDash(shows) });
   await page.goto(`${BASE}/`);
   await page.waitForTimeout(1200);
   // The preview always runs a game, and its profile hides the detail cards: keep yours.
@@ -366,7 +417,7 @@ async function sweepDashboard(browser, theme, width) {
   await page.getByRole('switch', { name: /^Switch profiles for games/ }).uncheck();
   await tab(page, 'Dashboard');
   await page.waitForTimeout(800);
-  const where = `Dashboard packing · ${theme} ${width}px`;
+  const where = `Dashboard (${shows}) · ${theme} ${width}px`;
   const found = await page.evaluate(() => {
     const bad = [];
     const cells = [...document.querySelectorAll('.dash-grid .dash-cell')];
@@ -401,6 +452,8 @@ async function sweepDashboard(browser, theme, width) {
   });
   checks++;
   for (const f of found) problem(where, f);
+  await textInside(page, where, '.dash-grid .dash-cell', 'its card');
+  await wordsWhole(page, where);
   await noSidewaysScroll(page, where);
   await ctx.close();
 }
@@ -535,6 +588,8 @@ try {
     for (const theme of ['midnight', 'daylight']) {
       await Promise.all(WIDTHS.map((w) => sweepDialogs(browser, theme, w)));
       await Promise.all([...WIDTHS, 800].map((w) => sweepDashboard(browser, theme, w)));
+      // The narrowest window that keeps 12 columns (cards 3 wide about 195 px), and a wider one.
+      await Promise.all([920, 1100].map((w) => sweepDashboard(browser, theme, w, 'narrow')));
       await sweepShell(browser, theme);
       await sweepWidgets(browser, theme);
     }

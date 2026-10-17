@@ -219,10 +219,6 @@ body {
 .dash-cell > :not(.dash-chrome) {
   flex: 1 1 auto;
 }
-/* A wide card lays its lists out in two or three columns (KV.svelte). */
-.dash-cell .card {
-  container-type: inline-size;
-}
 @media (max-width: 900px) {
   .dash-grid {
     grid-template-columns: repeat(6, minmax(0, 1fr));

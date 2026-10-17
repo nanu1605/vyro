@@ -28,11 +28,12 @@
     ]}
   />
   <h3>Budget</h3>
+  <!-- No-break spaces keep each limit whole when a narrow card wraps its label. -->
   <KV
     rows={[
-      ['Average CPU (< 1.5%)', budget(app?.cpuAvgPct, 1.5, `${fmt(app?.cpuAvgPct, 2)}%`)],
-      ['Peak memory (< 120 MB)', budget(app?.ramPeakMB, 120, `${fmt(app?.ramPeakMB)} MB`)],
-      ['Startup to first data (< 2 s)', budget(app?.startupMs != null ? app.startupMs / 1000 : null, 2, `${fmt(app?.startupMs != null ? app.startupMs / 1000 : null, 2)} s`)],
+      ['Average CPU (<\u00a01.5%)', budget(app?.cpuAvgPct, 1.5, `${fmt(app?.cpuAvgPct, 2)}%`)],
+      ['Peak memory (<\u00a0120\u00a0MB)', budget(app?.ramPeakMB, 120, `${fmt(app?.ramPeakMB)} MB`)],
+      ['Startup to first data (<\u00a02\u00a0s)', budget(app?.startupMs != null ? app.startupMs / 1000 : null, 2, `${fmt(app?.startupMs != null ? app.startupMs / 1000 : null, 2)} s`)],
     ]}
   />
   {#if app?.parts.length}

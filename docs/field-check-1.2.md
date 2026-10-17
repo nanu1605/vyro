@@ -1,8 +1,8 @@
 # Field check: 1.2 (widgets through Show desktop, snapping, clicks passing through, three new kinds; My PC fixes; text inside widgets and the Dashboard's packing)
 
 Status: **check 1 run on 2026-10-17, with six findings, all fixed. On the b4748f3 build the owner
-then found three more (widget text past the edge, the thread bars, blank cards), all fixed.
-Check 2 not run yet.**
+then found three more (widget text past the edge, the thread bars, blank cards), and on 0760929
+one more (values breaking in narrow cards), all fixed. Check 2 not run yet.**
 
 1.2 is one release that also carries 1.1.1, at the owner's request. ROADMAP → 1.1.1 and
 1.2.0 have how each part works. It adds to the desktop widgets:
@@ -19,6 +19,9 @@ After check 1 it also fixes:
 After the b4748f3 build it also fixes:
 - text running past a widget's edge (the clock with two GPU readings);
 - the Dashboard's thread bars filling half their card, and cards stretched into blank space.
+
+After the 0760929 build it also fixes:
+- values in narrow Dashboard cards breaking a letter or two a line.
 
 **Build.** Use the `vyro-windows-<commit>` artifact of the latest CI run on
 `claude/blissful-knuth-begnu5` (Actions → the run → Artifacts), version 1.2.0. Install the MSI
@@ -112,7 +115,8 @@ These retest check 1's findings 3 to 6.
 
 ## 6. Dashboard
 
-These retest the b4748f3 findings on your own layout, at your usual window size and maximised.
+These retest the b4748f3 and 0760929 findings on your own layout, at your usual window size and
+maximised.
 - **Logical processors:** the 16 bars run across the whole card, in one row on a wide card or
   in even rows on a narrow one. On CPU sensors, the per-core power reads 4 and 4.
 - **No blank cards:** each card is as tall as what it shows.
@@ -121,7 +125,10 @@ These retest the b4748f3 findings on your own layout, at your usual window size 
   - A row of reading tiles, or the two gauges, stays in line.
 - **GPUs:** the AMD graphics' card shows what it reports, then one line "Not reported: …"
   instead of rows of "—". Made 8 or 12 columns wide, the two GPUs sit side by side, and a card's
-  lists run in two or three columns.
+  lists run in columns, each value near its label.
+- **Narrow cards** (the 0760929 finding): make the window about half the screen, so cards 3
+  columns wide get narrow. In CPU sensors, Vyro itself, Power and Board, every label and value
+  reads in whole words. A value that doesn't fit beside its label sits under it, on the right.
 - **Editing:** "Edit layout" shows the same arrangement. Resize a card taller: it keeps that
   height and the cards under it move down. Move a card: the others close the gap.
 

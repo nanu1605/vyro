@@ -2249,6 +2249,26 @@ two ship together as one release (the owner's choice).
       new checks included. On the Windows runner the smoke test reports "Show desktop: passed;
       snap: passed (Windows built each step on the last one answered); click-through: passed".
       The installer is 11.43 MB.
+- [x] **The owner's finding on 0760929** (2026-10-17): in narrow Dashboard cards the lists' values
+      broke a letter or two a line ("69.3 / °C", "runn / ing", "5. / 4 / 6 / %").
+      - Cause: the list (`KV.svelte`) is a two-column grid. Its label column got the longest
+        label first, at least 7rem, and the value, which may break anywhere, got what was left:
+        about 38 px beside "Effective clock" and 15 px beside "Average CPU (< 1.5%)". A card 3
+        columns of 12 wide is about 195 px in a window about 920–1000 px wide. The checks above
+        ran where cards were wider, and measured space, not words.
+      - Fix: on the Dashboard each pair is its own row. The value sits on the right where it fits
+        beside its label, else whole on the next line. The browser decides each row, so nothing
+        is measured and changing readings follow.
+        - Wide cards set pairs side by side, as many as fit at 13rem or more. This replaces
+          finding 3's two or three a row, which left values far from their labels.
+        - Everywhere else the lists are unchanged: the Hardware page compares pixel for pixel.
+        - Vyro itself's budget limits keep together when a label wraps ("(< 1.5%)").
+      - Checks:
+        - every card kind 3 columns wide, at 920 and 1100 px;
+        - on that layout and the owner's: text stays inside every card, and no word is split
+          across lines unless it is wider than its card.
+
+        Run against the old code, these checks report 57 split words.
 - [ ] Field check 2 ([`docs/field-check-1.2.md`](docs/field-check-1.2.md)), then the owner's go
       for the release.
 
