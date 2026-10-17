@@ -1,10 +1,11 @@
 # Field check: 1.1 (P28 – P30) in one pass
 
-Status: **first pass (2026-10-16, `vyro-windows-123a938`) found four problems**: widgets did not
-appear, Hardware and Sensors waited forever, Quit did nothing, and scrolling was laggy. All four
-are fixed (ROADMAP → P31). Run sections 1–4 again with the new build. If the old build is still
-stuck, end it in Task Manager first. Second report (`vyro-windows-227e896`): the sidebar's
-highlight sat off the chosen view after widening a small window; fixed.
+Status: **passed (2026-10-17, `vyro-windows-d48c153`); 1.1.0 released.** It took three rounds:
+- The first pass (2026-10-16, `vyro-windows-123a938`) found four problems: widgets did not
+  appear, Hardware and Sensors waited forever, Quit did nothing, and scrolling was laggy.
+- The second report (`vyro-windows-227e896`): the sidebar's highlight sat off the chosen view
+  after widening a small window.
+- All were fixed (ROADMAP → P31) before the passing run.
 
 P28 to P30 are built on one branch, `claude/blissful-knuth-begnu5`, so one test build holds all
 three:

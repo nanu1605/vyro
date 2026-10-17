@@ -1968,7 +1968,9 @@ scene stay loaded on first use. Footprint as 1.0, plus what P29 and P30 measure 
         reach, My PC's tower and laptop, a Desktop widgets section; "header" is now the top bar.
       - `docs/footprint.md`: the 1.1 rows and what to measure; `docs/field-check-1.1.md`: one
         run sheet for P28–P30 (about two hours), with the defaults to confirm.
-- [ ] Field check (`docs/field-check-1.1.md`), then the owner's go for the release.
+- [x] Field check (`docs/field-check-1.1.md`), then the owner's go for the release: passed
+      (owner, 2026-10-17, test build `vyro-windows-d48c153`) after the two rounds of fixes
+      below; the defaults in the run sheet stand as built.
       - **First pass (owner, 2026-10-16, test build `vyro-windows-123a938`): four problems,
         fixed.**
         1. Widgets added on the Widgets page never appeared.
@@ -2010,6 +2012,12 @@ scene stay loaded on first use. Footprint as 1.0, plus what P29 and P30 measure 
         also waits for the views' and the sidebar's animations to end before each axe run.
         In one CI run axe caught a label mid-fade over the moving highlight, below 4.5:1 for a
         few frames in Midnight; every state at rest passes.
+- [x] **1.1.0 released** (2026-10-17): CI passed on d48c153 (Linux, Windows with the smoke
+      test, accessibility), the commit the owner checked. `main` fast-forwarded to it, and
+      Release run 39000976543 tagged `v1.1.0` and published the 11.4 MB MSI, `latest.json`
+      and checksums here and to `nanu1605/vyro-releases`. Its `latest.json` now offers 1.1.0
+      to installed copies (checksums verified). The 1.0 and 1.1 footprint figures and the
+      anti-cheat table are still to be written down from the owner's notes.
 
 ## Risks
 
