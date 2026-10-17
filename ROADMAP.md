@@ -2460,7 +2460,12 @@ field check; the relay built into releases for everyone, any other relay allowed
         px: 22 checks.
       - The accessibility sweep walks the relay's confirmation, a phone's pairing and the
         options in Settings.
-- [ ] CI on `claude/vyro-1.4`.
+- [x] **CI** (run 39077275048 on 089ce4b): every job green. The relay job tests the relay in
+      workerd and runs the end to end (22 checks) with the phone app's screens kept; the
+      accessibility sweep: 664 checks; the installed app's smoke test passes (Show desktop,
+      snap, click-through). The installer is 11.61 MB (1.3: 11.48 MB; rustls, ring and the
+      platform verifier were already in it). The build has no relay address until the
+      variable is set.
 - [ ] The owner: a Cloudflare account, the two secrets, the first `relay.yml` deploy (from this
       branch, for the field check), and `VYRO_RELAY_URL`.
 - [ ] Field check 1.4 ([`docs/field-check-1.4.md`](docs/field-check-1.4.md)), then 1.3.0's

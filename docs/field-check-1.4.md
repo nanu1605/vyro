@@ -1,6 +1,8 @@
 # Field check: 1.4 (the phone app, from anywhere)
 
-Status: **not run yet.**
+Status: **not run yet.** CI-green test build: `vyro-windows-089ce4b` (CI run 39077275048), with no
+relay built in: set the address in Settings → Remote → Options, or set `VYRO_RELAY_URL` first and
+use the next run's build.
 
 1.4 answers the owner's request for a phone app on Android and iPhone that shows the PC from
 any network (ROADMAP → 1.4.0, decision 34, [`remote.md`](remote.md)).
