@@ -2070,6 +2070,10 @@ hid widgets set behind windows (decision 30).
         into its own window, the check may see the desktop as lifted when it isn't. Then
         clicking the desktop can bring widgets over windows until an app is clicked. The field
         check covers the owner's setup.
+      - **CI** (run 39008538780 on 8ed55e9): every job is green. On the Windows runner's own
+        desktop, the smoke test reports "Show desktop: passed": the widget stayed over the shown
+        desktop and went back when the main window came forward. It opened without taking
+        focus. The installer is 11.41 MB.
 - [ ] Field check ([`docs/field-check-1.1.1.md`](docs/field-check-1.1.1.md)), then the owner's go
       for the release.
 
