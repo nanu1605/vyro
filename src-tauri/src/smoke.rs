@@ -4,8 +4,8 @@
 //!
 //! Once the main page has loaded, `smoke.js` calls the commands the pages call (hardware,
 //! system, sensors, widgets) through the real IPC, then saves a widget as the Widgets page
-//! does. [`smoke_report`] then checks that the widget's window opened, shows and loaded its
-//! page, and that it stays over the desktop through Show desktop (`pin.rs`; skipped where the
+//! does. [`smoke_report`] then checks that the widget's window opened, shows without having
+//! taken focus and loaded its page, and that it stays over the desktop through Show desktop (`pin.rs`; skipped where the
 //! runner has no desktop to show), writes the result and quits the way the tray's "Quit Vyro"
 //! does. A watchdog writes a failure and ends the process if any of that hangs, so CI fails
 //! rather than waits.
@@ -59,6 +59,8 @@ pub struct Facts {
     pub widget_window: bool,
     pub widget_visible: bool,
     pub widget_loaded: bool,
+    /// The widget took focus when it opened (it must not).
+    pub widget_focused: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -96,6 +98,9 @@ pub fn verdict(steps: &Value, facts: Facts, show_desktop: &str) -> Outcome {
         }
         if !facts.widget_loaded {
             failures.push("the widget's page did not load".into());
+        }
+        if facts.widget_focused {
+            failures.push("the widget took focus when it opened".into());
         }
     }
     if let Some(why) = show_desktop.strip_prefix("failed: ") {
@@ -201,6 +206,9 @@ pub async fn smoke_report(app: AppHandle, steps: Value) -> Result<(), String> {
             let window = app.get_webview_window(&label);
             let facts = Facts {
                 widget_window: window.is_some(),
+                widget_focused: window
+                    .as_ref()
+                    .is_some_and(|w| w.is_focused().unwrap_or(false)),
                 widget_visible: window.is_some_and(|w| w.is_visible().unwrap_or(false)),
                 widget_loaded: WIDGET_LOADED.load(Ordering::SeqCst),
             };
@@ -243,6 +251,7 @@ mod tests {
         widget_window: true,
         widget_visible: true,
         widget_loaded: true,
+        widget_focused: false,
     };
 
     #[test]
@@ -303,5 +312,14 @@ mod tests {
             "passed",
         );
         assert_eq!(o.failures, ["the widget's window is not shown"]);
+        let o = verdict(
+            &all_ok(),
+            Facts {
+                widget_focused: true,
+                ..SHOWN
+            },
+            "passed",
+        );
+        assert_eq!(o.failures, ["the widget took focus when it opened"]);
     }
 }

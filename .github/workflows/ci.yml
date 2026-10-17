@@ -189,7 +189,7 @@ jobs:
             (Get-Content probe.md -Raw).TrimEnd(),
             "| Installed | $dir; VyroService automatic, LocalSystem, restarts on failure |",
             "| PawnIO | $(if ($pawnio) { "installed ($($pawnio.DisplayVersion))" } else { 'not installed (the app then asks for it)' }) |",
-            "| App | $timings; the widget's window opened and loaded; Show desktop: $($result.show_desktop); Quit ended the app |",
+            "| App | $timings; the widget's window opened (without taking focus) and loaded; Show desktop: $($result.show_desktop); Quit ended the app |",
             '| Uninstalled | service and program files removed; history kept in %ProgramData%\Vyro |'
           ) -join "`n" | Add-Content $env:GITHUB_STEP_SUMMARY
 

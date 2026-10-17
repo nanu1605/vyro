@@ -2046,6 +2046,15 @@ hid widgets set behind windows (decision 30).
         (`IShellDispatch4::ToggleDesktop`). It checks that the widget stays visible and on top,
         presses it again, and checks that the widget goes back. On a runner with no desktop to
         show, it reports "skipped" in the step summary instead of failing.
+      - **Also fixed (from 1.1.0):** switching a widget between "Behind windows" and "On top"
+        hid it.
+        - Cause: widgets were shown with a bare `ShowWindow`, which tao never hears about. tao
+          hides a window it believes hidden whenever its flags change, as a layer switch does.
+        - Fix: they are shown through tao (`show()`). They are built unfocused, so tao shows
+          them with `SW_SHOWNOACTIVATE`.
+        - Found by the first CI run of the Show desktop test: the desktop was detected, and the
+          widget vanished as it was put on top.
+        - The smoke test now also fails if a new widget takes focus.
       - **Words:** the Widgets page and the README describe the new behaviour. Version 1.1.1.
       - **Not covered:** desktop "peek" (hovering the taskbar's corner) only makes windows
         see-through, and widgets stay where they are. With a wallpaper app that moves the icons

@@ -432,7 +432,10 @@ fn open_or_update(
     .build();
     match built {
         Ok(win) => {
-            show_without_focus(&win);
+            // Shown through tao, not with a bare ShowWindow: tao hides a window it believes
+            // hidden on its next change of flags (a layer switch, Show desktop). Built unfocused,
+            // tao shows it without activating it (SW_SHOWNOACTIVATE), so it takes no focus.
+            let _ = win.show();
             moved.then_some((x, y))
         }
         Err(e) => {
@@ -477,23 +480,6 @@ pub fn restack(app: &AppHandle) {
             stack(&win, stacking(w.layer, shown));
         }
     }
-}
-
-#[cfg(windows)]
-fn show_without_focus(window: &tauri::WebviewWindow) {
-    use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_SHOWNOACTIVATE};
-    let Ok(hwnd) = window.hwnd() else {
-        return;
-    };
-    // SAFETY: the handle belongs to a live window of this process, used on its UI thread.
-    unsafe {
-        let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-    }
-}
-
-#[cfg(not(windows))]
-fn show_without_focus(window: &tauri::WebviewWindow) {
-    let _ = window.show();
 }
 
 /// A widget window moved (dragged, or put back by Vyro): its place is saved once it has been

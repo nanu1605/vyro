@@ -33,6 +33,10 @@ The test build is the `vyro-windows-<commit>` artifact of the latest CI run on
 - **Hovering the corner of the taskbar** ("peek"): windows turn see-through. Widgets stay where
   they are. That is fine, and unchanged.
 - **On top** widgets stay over everything, as in 1.1.0.
+- **Switching** a widget between "Behind windows" and "On top" on the Widgets page: it stays
+  shown and moves under or over your windows. In 1.1.0 it disappeared.
+- **Adding a widget** while you type in another app: the widget appears and your typing carries
+  on (it takes no focus).
 
 ## 3. Explorer restarted
 
