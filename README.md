@@ -402,11 +402,11 @@ which counts the sensor service, the app and its WebView2 processes. Reference P
 
 | Metric | Target | 0.1.4 | 0.2.0 | 0.3.0 | 1.0.0 | 1.1.0 | 1.2.0 |
 |---|---|---|---|---|---|---|---|
-| CPU (average, window visible) | < 1.5 % | 0.68 % | 0.46 % | not re-measured | within target, not written down | within target, not written down | not reported |
-| RAM (private working set, window visible) | < 120 MB | 120 MB | 125 MB | not re-measured | within budget, not written down | within budget, not written down | not reported |
-| RAM peak | — | 132 MB after visiting every tab | 125–150 MB with History open | not re-measured | not written down | not written down | not reported |
-| RAM (closed to the tray) | — | ≈ 40 MB (service 33 MB, app 7 MB, WebView2 suspended) | not re-measured | not re-measured | not written down | not written down | not reported |
-| Startup to first data | < 2 s | 0.76 s | 1.02 s | not re-measured | within target, not written down | within target, not written down | not reported |
+| CPU (average, window visible) | < 1.5 % | 0.68 % | 0.46 % | not re-measured | within target, not written down | within target, not written down | not measured |
+| RAM (private working set, window visible) | < 120 MB | 120 MB | 125 MB | not re-measured | within budget, not written down | within budget, not written down | not measured |
+| RAM peak | — | 132 MB after visiting every tab | 125–150 MB with History open | not re-measured | not written down | not written down | not measured |
+| RAM (closed to the tray) | — | ≈ 40 MB (service 33 MB, app 7 MB, WebView2 suspended) | not re-measured | not re-measured | not written down | not written down | not measured |
+| Startup to first data | < 2 s | 0.76 s | 1.02 s | not re-measured | within target, not written down | within target, not written down | not measured |
 | Installer | < 60 MB (< 20 MB before 1.1) | 9.5 MB | 9.7 MB | 9.9 MB | 11.3 MB | 11.4 MB | 11.4 MB |
 
 In 0.2.0, of the visible figure, WebView2 takes 85 MB (five processes), the service 33 MB and
@@ -417,4 +417,5 @@ were not written down. 1.0.0 was measured at its field check (2026-10-16) by the
 [`docs/footprint.md`](docs/footprint.md), which also lists what each V2 feature costs and when.
 It was within the budgets there; the figures go into the table when they are written down.
 1.1.0 was checked the same way at its field check (2026-10-17), with the same caveat.
-1.2.0 was released without a field check report, so it has no footprint result yet.
+1.2.0's field check (2026-10-17) compared only the CPU with 1.1.0: in the tray with widgets
+showing, and on My PC with Airflow on. It was no higher; the figures were not written down.
