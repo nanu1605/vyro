@@ -24,7 +24,9 @@ bindings are the source of truth, failing sensor → `null`, static inventory on
   detection, per-board allow-list, failsafe, watchdog, restore-on-crash, control-event logging,
   read-only default). Decision 18 flips to **yes, safety-gated**.
 - **Remote/web companion is pulled into V2** (was V3). Kept LAN-only, opt-in, authenticated, and
-  sequenced **last** so its network attack surface never blocks the rest.
+  sequenced **last** so its network attack surface never blocks the rest. (Since 1.4, ROADMAP
+  decision 34: a phone app also reaches the PC from anywhere through a relay, encrypted end to
+  end and off by default; the PC still opens no port to the internet.)
 - **Most of the earlier "suggested backlog" is adopted** (benchmark, export/report, auto game
   profiles, themes, per-process net) — they appear in the roadmap, so they're in.
 - **The three confirmed ideas are retained and mapped in:** devices+battery → P22; the stylized 3-D
@@ -73,7 +75,7 @@ git switch -c v2 && git push -u origin v2
 | 16 | Devices battery sources | BLE GATT 0x180F + PnP battery devnode property + XInput; vendor HID++ later | decided |
 | 17 | Open-on-Dashboard | Default on, with "Open on: Dashboard / Last tab" setting | decided |
 | 18 | **Fan/pump control** | **Yes — V2 flagship**, safety-gated (roadmap §4.5/§26); read-only default; per-board allow-list | decided |
-| 19 | Remote / web companion | **In V2**, LAN-only, opt-in, authenticated, sequenced last (M12) | decided |
+| 19 | Remote / web companion | **In V2**, LAN-only, opt-in, authenticated, sequenced last (M12); "LAN-only" superseded in 1.4 by ROADMAP decision 34 (a relay, end to end encrypted) | decided |
 | 20 | Version at milestone merges | v0.2/0.3/0.4/0.5 per milestone; **v1.0** at M13 | decided |
 | 21 | Themes | Multi-theme + accent (Midnight/Cyber/Glass/Minimal/AMOLED/…); accessibility-preserving | decided |
 | 22 | **Performance Score** methodology | Observed-condition, **versioned fixed formula** (so history stays comparable); shows inputs; not hardware-prestige | open — needs formula sign-off |

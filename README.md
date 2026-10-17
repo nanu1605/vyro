@@ -7,9 +7,13 @@ app or library).
 - **Build spec:** [`PROJECT_PLAN.md`](PROJECT_PLAN.md) — what to build and why.
 - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — milestones, phase tracker, decision log.
 
-**Status:** 1.2. Live CPU, GPU, board, fan, voltage, RAM, storage and network sensors on
+**Status:** 1.4. Live CPU, GPU, board, fan, voltage, RAM, storage and network sensors on
 Windows (low-level ones through PawnIO, read by the Vyro Sensor Service), history, System
-Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 1.2:
+Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 1.4: a
+[phone app](#phone-app-from-anywhere-14) for Android and iPhone shows the PC's readings from any
+network, through the Vyro relay, encrypted end to end. 1.3 named every device as Windows
+Settings does, read the batteries of Logitech, PlayStation and Xbox wireless devices, added
+Connect and Disconnect for Bluetooth devices, and an accent of any colour. 1.2:
 [desktop widgets](#desktop-widgets-11-12) stay in view through Show desktop, snap to the
 screen's edges and to each other, can let clicks through, and come in three new kinds (Network,
 Game FPS, Top processes); My PC shows its airflow as smoke lines; and Dashboard cards pack
@@ -261,10 +265,36 @@ in the tray. Widgets behind your windows stay in view when you use Show desktop 
 back under your windows when you switch to one (1.1.1); "On top" keeps a widget over
 everything.
 
+## Phone app, from anywhere (1.4)
+
+**Off by default.** Settings → Remote → **From anywhere** lets your phone show this PC's
+readings on any network: at home, on mobile data, at work. It is an app you install from the
+browser, on Android and iPhone, with no app store. Like the companion below it is read-only.
+
+- **How it connects.** The PC keeps one connection to the Vyro relay, a small service on
+  Cloudflare, and the phone reaches it there: no port is opened on the PC, and no router is set
+  up. The PC sends readings only while a phone has the app open.
+- **Encrypted end to end.** Readings are sealed on the PC with a key only that phone has, and
+  opened on the phone. The relay cannot read them; it sees when the PC and a phone connect, from
+  which addresses, and how much they send. [`docs/remote.md`](docs/remote.md) has the details,
+  what to trust, and how to run a relay of your own.
+- **Pairing.** "Pair a phone" shows a QR code; scan it with the phone's camera.
+  - On Android or another computer, the app opens and pairs; install it from the browser's
+    menu, or its Install button.
+  - On iPhone, add it to the Home Screen first (Share → Add to Home Screen), open it there and
+    scan again: a Home Screen app keeps its own storage, apart from Safari's.
+  - The code lasts 10 minutes and works once. Up to 8 phones; each stays paired while it is used
+    at least once in the chosen time (30 days by default). Settings signs any phone out at once.
+- **The app** shows the same readings as the companion, from several PCs if you pair them, and
+  says when a PC is asleep or off. It opens without a network too, to show where things stand.
+- **Limits.** Networks that block `workers.dev` or allow the web only through a proxy cannot
+  reach the relay. The relay runs on Cloudflare's free plan, shared by everyone: past its
+  daily limit it pauses until midnight UTC. Alerts are not sent to phones yet.
+
 ## Phone companion (1.0)
 
-**Off by default.** Settings → Remote turns on a read-only page that a phone or another
-computer on your local network can open. It shows CPU, GPU, memory, drives, fans,
+**Off by default.** Settings → Remote → **On this network** turns on a read-only page that a
+phone or another computer on your local network can open. It shows CPU, GPU, memory, drives, fans,
 temperatures, power, FPS, the network, Health and active alerts, refreshed every second.
 Nothing on it changes the PC.
 
@@ -278,8 +308,9 @@ Nothing on it changes the PC.
   - Windows asks about the firewall the first time: allow Private networks only.
   - It is plain HTTP, not encrypted: HTTPS would need a self-signed certificate, which puts a
     warning on every phone. Use it on a network you trust.
-- **Never sent:** processes, serial numbers, IP or MAC addresses, user or device names, and
-  Health notes.
+- **Never sent:** processes, serial numbers, IP or MAC addresses, user names, device names
+  (as the Devices tab shows them), and Health notes. The page does show the PC's own name, as
+  the network already knows it.
 - **While it is on**, a "Remote" chip in the top bar shows how many devices are watching, and
   the tray tooltip says so.
 - **It runs in the app, not the service.** It answers only while Vyro runs (the tray counts),
@@ -314,6 +345,8 @@ Nothing on it changes the PC.
 | [`docs/field-check-1.1.md`](docs/field-check-1.1.md) | The field check of 1.1 (P28–P30): the new look, My PC and the laptop, desktop widgets |
 | [`docs/field-check-1.2.md`](docs/field-check-1.2.md) | The field check of 1.2: widgets through Show desktop, snapping, clicks passing through, three new kinds; My PC's view, glass, fans and airflow; text inside every widget; the Dashboard's packing |
 | [`docs/field-check-1.3.md`](docs/field-check-1.3.md) | The field check of 1.3: device names, wireless batteries, Bluetooth Connect and Disconnect, the colour wheel |
+| [`docs/remote.md`](docs/remote.md) | The phone app and the relay (1.4): how it connects and pairs, the encryption, what the relay sees, limits, running your own relay |
+| [`docs/field-check-1.4.md`](docs/field-check-1.4.md) | The field check of 1.4: the phone app from anywhere, on Android and iPhone |
 
 `vyro-remote.exe` in the same artifact checks the service from the outside (state, connection,
 sensors; `--capture Game.exe` measures a running game for 15 s). The service logs to `%ProgramData%\Vyro\service.log`.
@@ -400,8 +433,9 @@ background poller runs at 1 Hz (5 s while the window is hidden), isolates failin
 records history to SQLite (raw ≤ 30 min, 10 s ≤ 24 h, 1 min ≤ 7 days, ≤ 200 MB; the same
 file keeps the game replays) and emits the snapshot. The UI eases gauges toward each new value on a single `requestAnimationFrame` loop
 that sleeps when values settle or the window is hidden. The service never listens on the
-network: the optional phone companion is served by the app, as the signed-in user, and
-benchmarks run in the app too, so quitting Vyro always ends them.
+network: the optional phone companion is served by the app, as the signed-in user, the
+connection to the relay for the phone app is the app's too, and benchmarks run in the app, so
+quitting Vyro always ends them.
 
 ## Performance
 

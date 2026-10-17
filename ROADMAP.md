@@ -33,7 +33,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 16 | Devices battery sources | BLE GATT 0x180F + PnP battery devnode property + XInput; from 1.3 also Logitech HID++ (receivers and direct), PlayStation controllers' input reports and the HID Battery Strength value; other makers' dongles by request, once `vyro-inventory` names them | decided |
 | 17 | Open on Dashboard | Default on, with an "Open on: Dashboard / Last tab" setting | decided |
 | 18 | Fan / pump control | **Yes, the V2 flagship**, safety-gated (V2_PLAN "Hardware-control safety"); read-only by default; per-board allow-list | decided |
-| 19 | Remote / web companion | In V2 (P26): served by the desktop app (not the service) over plain HTTP on the LAN, off by default, QR + code pairing, hashed session tokens that expire, sign-out at once | default |
+| 19 | Remote / web companion | In V2 (P26): served by the desktop app (not the service) over plain HTTP on the LAN, off by default, QR + code pairing, hashed session tokens that expire, sign-out at once. Its "LAN only" is superseded by 34; the companion stays as it is | default |
 | 20 | Versions | 0.2 / 0.3 at milestone merges; **1.0** at M13, with M9–M12 in it (the owner, 2026-10-16: no 0.4 or 0.5) | decided |
 | 21 | Themes | Several themes + accent colour, accessibility preserved | decided |
 | 22 | Performance Score method | Formula v1 ([`docs/performance-score.md`](docs/performance-score.md)): nine observed inputs, fixed weights and breakpoints, versioned, inputs shown | decided (signed off 2026-10-15) |
@@ -48,6 +48,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 31 | Moving widgets and clicks | Widgets snap while dragged, in Windows' own move loop (`WM_MOVING`): to the work area's edges, beside another widget 8 px apart, or in line with it; Shift places freely. "Clicks pass through" works only while a widget is locked, so unlocking it on the Widgets page is always the way back (in the plan the owner approved, 2026-10-17) | decided |
 | 32 | Accent of any colour | A colour wheel (1.3): fills (gauges, graphs, the 3-D view, the logo, the share card's ring) show the colour as picked; text in the accent takes a shade of the same hue and chroma, lightened or darkened just to 4.5:1 on every surface of the theme. The GPU colour is the main one turned round the hue circle, away from warning hues (the owner, 2026-10-17) | decided |
 | 33 | Connect and Disconnect | Paired Bluetooth devices only (the owner's "all Bluetooth", 2026-10-17): audio through its audio connection as Settings does; any other device's link dropped by the Vyro service, and Connect asks Windows to reach it. Wired and receiver devices get no actions | decided |
+| 34 | Reach from anywhere | A phone app installed from the browser (no app stores) reaches the PC through the Vyro relay: a Cloudflare Worker, one Durable Object per PC, in the owner's free account, built into releases for everyone, with any other relay allowed in Settings (the owner, 2026-10-17). Readings sealed end to end (HKDF-SHA256 to an auth key and an AES-256-GCM key; a secret per phone that replaces the pairing link's); the relay keeps only hashes and sees metadata. Off by default; the PC opens no port. Supersedes 19's "LAN only" | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -2372,12 +2373,98 @@ another maker's dongle, and a USB condenser microphone.
 - [ ] Field check 1.3 ([`docs/field-check-1.3.md`](docs/field-check-1.3.md)), then the owner's go
       for the release.
 
-### 1.4.0 — the phone app, from anywhere (planned)
-The owner's choices (2026-10-17): an installable web app on Android and iOS (no stores), reaching
-the PC from any network through a Vyro relay on Cloudflare Workers in the owner's free account,
-end-to-end encrypted so the relay cannot read the readings. It supersedes decision 19's "LAN
-only" (a new decision 34 when it is built). Planned after 1.3 ships; the owner creates the
-Cloudflare account and adds its token to the repository's secrets.
+### 1.4.0 — the phone app, from anywhere
+The owner's request after 1.2.0 (2026-10-17): "a Vyro app for the phone, Android and iOS, to
+check the PC from anywhere, whatever network it is on". Their choices: an installable web app (no
+app stores), through a Vyro relay on Cloudflare Workers in their free account, end to end
+encrypted (decision 34); built on its own branch, `claude/vyro-1.4`, while 1.3 waits for its
+field check; the relay built into releases for everyone, any other relay allowed.
+- [x] Built (2026-10-17):
+      - **Relay** (`relay/`, its own package and lockfile so the app's jobs never install
+        Wrangler):
+        - A Worker with one SQLite-backed Durable Object per PC, on the WebSocket Hibernation
+          API with no timers: between messages it may sleep and costs nothing; `ping` is
+          answered without waking it.
+        - The PC connects to `/pc/<room>` (128 random bits), a phone to
+          `/phone/<room>/<phone>`. Keys go in `Sec-WebSocket-Protocol`; only their SHA-256 hashes
+          are kept. The first PC claims its room; a phone gets in only with a key the PC
+          registered. A refused socket is accepted and closed at once with 4403, which a browser
+          can read (it cannot read an HTTP refusal); through the hibernation API, since a plain
+          accept and close left workerd logging "Network connection lost".
+        - The PC's text messages are the only ones the relay reads: the phone list, answered
+          with `listed`. Signing a phone out, or a key change, closes its sockets at once
+          (4403, 4001). Data frames are opaque: 29 bytes to 64 KiB, `[phone][sealed]` from the
+          PC, delivered only to that phone, and back to the PC with the phone named.
+        - Limits: 8 phones, 2 sockets each; the PC 100 messages a second (bursts of 200), a
+          phone 5 (bursts of 20); a breach closes the socket. A room is forgotten 90 days after
+          its PC was last seen.
+        - It also serves the phone app, with a strict content policy (`default-src 'none'`,
+          sockets only to itself, no frames, no referrer).
+      - **Sealing**: each phone's secret gives, through HKDF-SHA256, a key the relay checks and an
+        AES-256-GCM key it never has. Frames are bound to the room, the phone and the direction.
+        The PC (RustCrypto) and the phone (WebCrypto) are checked against the same vectors,
+        which were checked once against OpenSSL.
+      - **Pairing**: the link `https://<relay>/#p=1.<room>.<phone>.<secret>` (the part after `#`
+        never reaches a server) lasts 10 minutes. The phone's first hello carries a secret of its
+        own, which replaces the link's, so the link works once; the phone keeps both until the
+        PC confirms. The PC shows a link only once the relay has the phone's key (the end-to-end
+        test found a phone that scanned at once refused).
+      - **PC** (`vyro_core::remote::relay`): one thread with tungstenite over rustls and the
+        Windows certificate store (rustls, ring and the platform verifier were already in the
+        app through the updater); keepalive every 30 s, dead after 75 s, reconnects 1 s to 60 s
+        with jitter, 5 minutes after the relay refused the PC's key. Views go only to phones
+        with the app open. `remote.json` version 2 keeps the room, the PC's key and the phones,
+        the secrets sealed with DPAPI; 1.3 reads it and ignores the relay. Phones watching
+        count with the local ones for the reading rate, the tray and the header chip.
+      - **Phone app** (`phone.html`, `src/phone/`, `pnpm build:phone` into `relay/public`, never
+        in the installer): pairing from the QR code (on iPhone, add to the Home Screen first,
+        since it keeps its own storage, then scan in the app: the browser's QR reader or jsQR,
+        loaded only then; or paste the link); several PCs, with a list that shows each one's
+        state; states for a PC asleep, a phone signed out, an expired code, a relay out of
+        reach, an older PC; a service worker keeps the app's files for opening offline; a
+        manifest and icons drawn from the app icon (`scripts/phone-icons.mjs`). The readings
+        are `src/remote/LiveView.svelte`, now shared with the local companion.
+      - **Settings → Remote**: From anywhere (a confirmation that says what the relay sees and
+        cannot, the state, Pair a phone with a QR code, Copy link and a countdown, Turn off) and
+        On this network (the companion as before); one list of devices, each marked "Anywhere"
+        or "This network"; Options: the relay's address, Start over on the relay.
+      - **Deploy**: `relay.yml`, by hand, on the owner's go, with `CLOUDFLARE_API_TOKEN` and
+        `CLOUDFLARE_ACCOUNT_ID`; builds carry the variable `VYRO_RELAY_URL`.
+      - **Records**: decision 34; [`docs/remote.md`](docs/remote.md) (how it works, what the
+        relay sees and does not, the trust points, limits, a relay of one's own); README.
+- Defaults: off; a pairing link lasts 10 minutes and works once; a phone stays paired while it is
+  used at least once in the chosen days (30 by default; the same choice as the companion); 8
+  phones.
+- Budget: the phone app's start 40 kB gzipped (31.6 kB as built). The relay on the free plan:
+  100,000 requests a day for everyone (WebSocket messages count 20 to 1), and one phone
+  watching is about 180 an hour.
+- Known limits: networks that block `*.workers.dev` or need a proxy; no alert notifications to
+  phones yet; the phone app's code comes from the relay (docs/remote.md, "Trust points").
+- [x] Checks:
+      - Rust: the vectors; addresses and messages; pairing, its link's single use, sliding
+        expiry, at most 8, saving and loading with sealed secrets, a 1.3 file; one connection's
+        conversation with test phones (rekeying, info, watch, views, sign-out, frames that do
+        not open); the client against a stand-in relay that drops it (it reconnects) and that
+        confirms the list.
+      - Relay, in workerd through Wrangler's test harness: headers; the first PC claims its
+        room, another key is refused, a reconnect replaces the old socket; only registered
+        phones get in and hear whether the PC is there; frames reach only their phone;
+        signing out and key changes close sockets; text, tiny frames and floods close them.
+      - Phone app (vitest): the vectors through WebCrypto; links and the stored PCs; the
+        connection with a fake relay (pairing and rekeying, a lost answer, an expired code,
+        asleep, signed out, an older PC, an unreachable relay, signing out).
+      - End to end (`scripts/relay-e2e.mjs`, also in CI): the relay in workerd, the companion
+        example as the PC, the phone app in Chromium: pairs and reads live readings, the same
+        link refused on a second phone, no frame between phone and relay readable, the PC list,
+        signed out from the PC, a PC gone shows as asleep, axe on every screen at 390 and 1440
+        px: 22 checks.
+      - The accessibility sweep walks the relay's confirmation, a phone's pairing and the
+        options in Settings.
+- [ ] CI on `claude/vyro-1.4`.
+- [ ] The owner: a Cloudflare account, the two secrets, the first `relay.yml` deploy (from this
+      branch, for the field check), and `VYRO_RELAY_URL`.
+- [ ] Field check 1.4 ([`docs/field-check-1.4.md`](docs/field-check-1.4.md)), then 1.3.0's
+      release merged in, and the owner's go for the release.
 
 ## Risks
 
