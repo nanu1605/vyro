@@ -10,4 +10,8 @@ percent: number | null,
 /**
  * XInput's level, when that is all there is.
  */
-level: BatteryLevel | null, source: BatterySource, };
+level: BatteryLevel | null, 
+/**
+ * On a charger and charging; `None` where the device does not say.
+ */
+charging: boolean | null, source: BatterySource, };

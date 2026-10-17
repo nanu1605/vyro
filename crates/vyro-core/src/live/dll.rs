@@ -35,4 +35,18 @@ impl Library {
         // SAFETY: caller guarantees `T` is the export's function pointer type.
         Some(unsafe { std::mem::transmute_copy(&f) })
     }
+
+    /// Looks up an export that has a number and no name.
+    ///
+    /// # Safety
+    /// As [`Library::get`].
+    pub unsafe fn ordinal<T: Copy>(&self, n: u16) -> Option<T> {
+        const { assert!(size_of::<T>() == size_of::<usize>()) };
+        // SAFETY: GetProcAddress takes an ordinal in place of a name: a "pointer" whose high
+        // bits are zero (MAKEINTRESOURCE).
+        let f =
+            unsafe { GetProcAddress(self.0, PCSTR(std::ptr::without_provenance(usize::from(n)))) }?;
+        // SAFETY: caller guarantees `T` is the export's function pointer type.
+        Some(unsafe { std::mem::transmute_copy(&f) })
+    }
 }

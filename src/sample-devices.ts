@@ -39,6 +39,14 @@ export const sampleDevices: Devices = {
     },
     {
       "default": true,
+      "device": "f4baf901d1b9",
+      "id": "f33422b95e3b",
+      "name": "Microphone (USB Audio Condenser Mic)",
+      "output": false,
+      "plugged": true
+    },
+    {
+      "default": false,
       "device": "7c1c97df17c0",
       "id": "ac0f09c0f8bf",
       "name": "Microphone (Arctis Nova 7)",
@@ -55,8 +63,43 @@ export const sampleDevices: Devices = {
       "kind": "keyboard",
       "manufacturer": "Razer",
       "name": "BlackWidow V3",
+      "parent": null,
       "problem": null,
       "wireless": false
+    },
+    {
+      "battery": {
+        "charging": true,
+        "level": null,
+        "percent": 46,
+        "source": "logitech"
+      },
+      "connected": true,
+      "connection": "receiver",
+      "id": "58f37e68fb59",
+      "kind": "keyboard",
+      "manufacturer": "Logitech",
+      "name": "G915 TKL",
+      "parent": "f28d5b0d6f8b",
+      "problem": null,
+      "wireless": true
+    },
+    {
+      "battery": {
+        "charging": false,
+        "level": null,
+        "percent": 82,
+        "source": "logitech"
+      },
+      "connected": true,
+      "connection": "receiver",
+      "id": "f2e4491be8a4",
+      "kind": "mouse",
+      "manufacturer": "Logitech",
+      "name": "G Pro X Superlight 2",
+      "parent": "f28d5b0d6f8b",
+      "problem": null,
+      "wireless": true
     },
     {
       "battery": null,
@@ -66,11 +109,13 @@ export const sampleDevices: Devices = {
       "kind": "mouse",
       "manufacturer": "Logitech",
       "name": "G502 HERO Gaming Mouse",
+      "parent": null,
       "problem": null,
       "wireless": false
     },
     {
       "battery": {
+        "charging": null,
         "level": null,
         "percent": 17,
         "source": "bluetoothLe"
@@ -81,11 +126,30 @@ export const sampleDevices: Devices = {
       "kind": "mouse",
       "manufacturer": "Logitech",
       "name": "MX Master 3S",
+      "parent": null,
       "problem": null,
       "wireless": true
     },
     {
       "battery": {
+        "charging": true,
+        "level": null,
+        "percent": 75,
+        "source": "playStation"
+      },
+      "connected": true,
+      "connection": "usb",
+      "id": "1f311134efe1",
+      "kind": "controller",
+      "manufacturer": "Sony",
+      "name": "DualSense Wireless Controller",
+      "parent": null,
+      "problem": null,
+      "wireless": true
+    },
+    {
+      "battery": {
+        "charging": null,
         "level": "medium",
         "percent": null,
         "source": "xinput"
@@ -96,6 +160,7 @@ export const sampleDevices: Devices = {
       "kind": "controller",
       "manufacturer": "Microsoft",
       "name": "Xbox Wireless Controller",
+      "parent": null,
       "problem": null,
       "wireless": true
     },
@@ -107,6 +172,7 @@ export const sampleDevices: Devices = {
       "kind": "receiver",
       "manufacturer": "Logitech",
       "name": "USB Receiver",
+      "parent": null,
       "problem": null,
       "wireless": true
     },
@@ -118,11 +184,13 @@ export const sampleDevices: Devices = {
       "kind": "headset",
       "manufacturer": "SteelSeries",
       "name": "Arctis Nova 7",
+      "parent": null,
       "problem": null,
       "wireless": false
     },
     {
       "battery": {
+        "charging": null,
         "level": null,
         "percent": 64,
         "source": "windows"
@@ -133,8 +201,21 @@ export const sampleDevices: Devices = {
       "kind": "headphones",
       "manufacturer": "Samsung",
       "name": "Galaxy Buds2 Pro",
+      "parent": null,
       "problem": null,
       "wireless": true
+    },
+    {
+      "battery": null,
+      "connected": true,
+      "connection": "usb",
+      "id": "f4baf901d1b9",
+      "kind": "microphone",
+      "manufacturer": null,
+      "name": "USB Audio Condenser Mic",
+      "parent": null,
+      "problem": null,
+      "wireless": false
     },
     {
       "battery": null,
@@ -144,6 +225,7 @@ export const sampleDevices: Devices = {
       "kind": "other",
       "manufacturer": null,
       "name": "AURA LED Controller",
+      "parent": null,
       "problem": null,
       "wireless": false
     },
@@ -155,6 +237,7 @@ export const sampleDevices: Devices = {
       "kind": "keyboard",
       "manufacturer": "Logitech",
       "name": "MX Keys",
+      "parent": null,
       "problem": null,
       "wireless": true
     }

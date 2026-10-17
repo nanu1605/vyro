@@ -115,6 +115,7 @@ pub fn collect() -> Devices {
         ..Raw::default()
     };
     raw.gatt = gatt_batteries(&gatt_wanted(&raw), &instances);
+    raw.hid = super::hid_win::batteries(&instances);
     raw.pads = pads();
     raw.endpoints = endpoints(&instances);
     build(&raw)
@@ -348,7 +349,7 @@ fn aeps() -> Vec<RawAep> {
 }
 
 /// Present device nodes, and each one's container by instance id (uppercase), which stays here.
-fn nodes() -> (Vec<RawNode>, HashMap<String, String>) {
+pub(super) fn nodes() -> (Vec<RawNode>, HashMap<String, String>) {
     let keys = [
         DEVPKEY_Device_ContainerId,
         DEVPKEY_Device_Class,
@@ -531,7 +532,7 @@ impl Drop for Closer {
 }
 
 /// Present interfaces of a class.
-fn interfaces(class: &GUID) -> Vec<String> {
+pub(super) fn interfaces(class: &GUID) -> Vec<String> {
     for _ in 0..3 {
         let mut len = 0u32;
         // SAFETY: size query for the whole system's present interfaces of `class`.
@@ -569,7 +570,7 @@ fn interfaces(class: &GUID) -> Vec<String> {
 }
 
 /// The device instance an interface belongs to.
-fn interface_instance(path: &str) -> Option<String> {
+pub(super) fn interface_instance(path: &str) -> Option<String> {
     let mut ty = DEVPROPTYPE::default();
     let mut buf = [0u16; 512];
     let mut size = u32::try_from(std::mem::size_of_val(&buf)).ok()?;
@@ -639,17 +640,39 @@ fn gatt_batteries(wanted: &[String], instances: &HashMap<String, String>) -> Vec
 
 type GetCapabilities = unsafe extern "system" fn(u32, u32, *mut XINPUT_CAPABILITIES) -> u32;
 type GetBattery = unsafe extern "system" fn(u32, u8, *mut XINPUT_BATTERY_INFORMATION) -> u32;
+type GetCapabilitiesEx = unsafe extern "system" fn(u32, u32, u32, *mut CapabilitiesEx) -> u32;
+
+/// XInput 1.4's capabilities with the controller's vendor and product, from the export it has
+/// by number only (108), as SDL reads it.
+#[repr(C)]
+#[derive(Default)]
+struct CapabilitiesEx {
+    caps: XINPUT_CAPABILITIES,
+    vendor: u16,
+    product: u16,
+    version: u16,
+    unknown1: u16,
+    unknown2: u32,
+}
+
+struct XInput {
+    caps: GetCapabilities,
+    battery: GetBattery,
+    caps_ex: Option<GetCapabilitiesEx>,
+}
 
 fn pads() -> Vec<RawPad> {
-    static API: OnceLock<Option<(GetCapabilities, GetBattery)>> = OnceLock::new();
-    let Some((caps, battery)) = *API.get_or_init(|| {
+    static API: OnceLock<Option<XInput>> = OnceLock::new();
+    let Some(api) = API.get_or_init(|| {
         let lib = Library::system32("xinput1_4.dll")?;
-        // SAFETY: the types match the documented XInput 1.4 signatures.
+        // SAFETY: the types match the documented XInput 1.4 signatures, and ordinal 108's as
+        // SDL uses it.
         unsafe {
-            Some((
-                lib.get(c"XInputGetCapabilities")?,
-                lib.get(c"XInputGetBatteryInformation")?,
-            ))
+            Some(XInput {
+                caps: lib.get(c"XInputGetCapabilities")?,
+                battery: lib.get(c"XInputGetBatteryInformation")?,
+                caps_ex: lib.ordinal(108),
+            })
         }
     }) else {
         return Vec::new();
@@ -658,14 +681,21 @@ fn pads() -> Vec<RawPad> {
         .filter_map(|slot| {
             let mut c = XINPUT_CAPABILITIES::default();
             // SAFETY: valid slot and out pointer; non-zero means nothing in the slot.
-            if unsafe { caps(slot, 0, &mut c) } != 0 {
+            if unsafe { (api.caps)(slot, 0, &mut c) } != 0 {
                 return None;
             }
+            let ids = api.caps_ex.and_then(|ex| {
+                let mut x = CapabilitiesEx::default();
+                // SAFETY: valid slot and out pointer; the first argument must be 1.
+                (unsafe { ex(1, slot, 0, &mut x) } == 0 && x.vendor != 0)
+                    .then_some((x.vendor, x.product))
+            });
             let mut b = XINPUT_BATTERY_INFORMATION::default();
             // SAFETY: as above; device type 0 is the gamepad itself.
-            let ok = unsafe { battery(slot, 0, &mut b) } == 0;
+            let ok = unsafe { (api.battery)(slot, 0, &mut b) } == 0;
             Some(RawPad {
                 slot,
+                ids,
                 wireless: c.Flags.contains(XINPUT_CAPS_WIRELESS),
                 battery_type: if ok { b.BatteryType.0 } else { 0xFF },
                 battery_level: b.BatteryLevel.0,

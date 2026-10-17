@@ -24,4 +24,8 @@ battery: Battery | null,
 /**
  * Device Manager problem code of a part of it (22 = disabled), while connected.
  */
-problem: number | null, };
+problem: number | null, 
+/**
+ * The receiver a device is paired to (its id), for devices reached through one.
+ */
+parent: string | null, };

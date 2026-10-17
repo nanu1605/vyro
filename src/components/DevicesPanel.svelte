@@ -97,15 +97,19 @@
             <li class:off={!d.connected}>
               <div class="what">
                 <b>{d.name}</b>
-                <span>{[KIND_LABEL[d.kind], connectionText(d), d.manufacturer].filter(Boolean).join(' · ')}</span>
+                <span>{[KIND_LABEL[d.kind], connectionText(d, data.devices), d.manufacturer].filter(Boolean).join(' · ')}</span>
               </div>
               <span class="state" class:ok={state === 'Connected'} class:bad={d.connected && state !== 'Connected'}>{state}</span>
-              <span class="battery {b.tone}" title={b.source ? `Battery ${b.text}, ${b.source}` : 'No battery reading'}>
+              <span
+                class="battery {b.tone}"
+                title={b.source ? `Battery ${b.text}${b.charging ? ', charging' : ''}, ${b.source}` : 'No battery reading'}
+              >
                 <span class="sr-only">Battery</span>
                 {#if b.pct != null}
                   <span class="bar" aria-hidden="true"><i style:width="{b.pct}%"></i></span>
                 {/if}
                 <span class="num">{b.text}</span>
+                {#if b.charging}<span class="charging">charging</span>{/if}
                 {#if b.source}<span class="sr-only">, {b.source}</span>{:else}<span class="sr-only">, not reported</span>{/if}
               </span>
             </li>
@@ -113,8 +117,8 @@
         </ul>
       {/each}
       <p class="note">
-        Battery shows where the device reports it to Windows, over Bluetooth LE or XInput; 2.4 GHz receivers keep it to
-        their own software. Monitors are on the Displays tab.
+        Battery shows where Windows, Bluetooth LE, XInput, a Logitech receiver or a PlayStation controller reports it;
+        other makers' 2.4 GHz receivers keep it to their own software. Monitors are on the Displays tab.
       </p>
     </Card>
 
@@ -283,6 +287,10 @@
     position: absolute;
     inset: 0 auto 0 0;
     background: currentColor;
+  }
+  .battery .charging {
+    color: var(--muted);
+    font-size: 0.72rem;
   }
   .battery.ok {
     color: var(--ok);

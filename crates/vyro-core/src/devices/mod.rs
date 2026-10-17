@@ -6,9 +6,14 @@
 //! Privacy: Bluetooth addresses and device paths never leave the collector. Ids are short hashes
 //! of the container id, and names stay on this PC (never in reports, cards or history).
 
+pub mod hid;
+#[cfg(windows)]
+mod hid_win;
 #[cfg(windows)]
 mod win;
 
+#[cfg(windows)]
+pub use hid_win::{collections as hid_collections, Collection as HidCollection};
 #[cfg(windows)]
 pub use win::{collect, watch};
 
@@ -51,6 +56,8 @@ pub enum Connection {
     Bluetooth,
     BluetoothLe,
     Network,
+    /// Paired to a wireless receiver: `parent` is the receiver.
+    Receiver,
     Other,
 }
 
@@ -65,6 +72,12 @@ pub enum BatterySource {
     BluetoothLe,
     /// XInput: four coarse levels.
     Xinput,
+    /// Logitech's own protocol (HID++), through its receiver or directly.
+    Logitech,
+    /// A PlayStation controller's input report.
+    PlayStation,
+    /// The standard HID Battery Strength value.
+    HidBattery,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -85,6 +98,8 @@ pub struct Battery {
     pub percent: Option<u8>,
     /// XInput's level, when that is all there is.
     pub level: Option<BatteryLevel>,
+    /// On a charger and charging; `None` where the device does not say.
+    pub charging: Option<bool>,
     pub source: BatterySource,
 }
 
@@ -107,6 +122,8 @@ pub struct DeviceInfo {
     pub battery: Option<Battery>,
     /// Device Manager problem code of a part of it (22 = disabled), while connected.
     pub problem: Option<u32>,
+    /// The receiver a device is paired to (its id), for devices reached through one.
+    pub parent: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -210,11 +227,28 @@ pub const PAD_DISCONNECTED: u8 = 0;
 pub struct RawPad {
     /// 0–3; shown as player 1–4.
     pub slot: u32,
+    /// Vendor and product, where XInput tells them.
+    pub ids: Option<(u16, u16)>,
     pub wireless: bool,
     /// `BATTERY_TYPE_*`.
     pub battery_type: u8,
     /// `BATTERY_LEVEL_*`: 0 empty … 3 full.
     pub battery_level: u8,
+}
+
+/// A battery read through a maker's own protocol, and behind a receiver the device itself.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RawHid {
+    /// The container of the receiver or device it was read through.
+    pub container: String,
+    /// `None`: that device itself; `Some(slot)`: a device paired to that receiver.
+    pub slot: Option<u8>,
+    pub name: Option<String>,
+    pub kind: Option<DeviceKind>,
+    /// Answered just now. False: it answered earlier this session and is now asleep or off.
+    pub awake: bool,
+    pub charge: Option<hid::Charge>,
+    pub source: BatterySource,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -226,6 +260,8 @@ pub struct Raw {
     pub endpoints: Vec<RawEndpoint>,
     /// Battery Service readings by container id.
     pub gatt: Vec<(String, u8)>,
+    /// Readings through makers' protocols.
+    pub hid: Vec<RawHid>,
     pub pads: Vec<RawPad>,
 }
 
@@ -574,7 +610,35 @@ fn pad_battery(p: &RawPad) -> Option<Battery> {
     Some(Battery {
         percent: None,
         level: Some(level),
+        charging: None,
         source: BatterySource::Xinput,
+    })
+}
+
+fn charge_battery(c: Option<hid::Charge>, source: BatterySource) -> Option<Battery> {
+    let c = c?;
+    let percent = c.percent.filter(|p| *p <= 100);
+    (percent.is_some() || c.level.is_some()).then_some(Battery {
+        percent,
+        level: if percent.is_some() { None } else { c.level },
+        charging: c.charging,
+        source,
+    })
+}
+
+/// A controller's vendor and product from its hardware ids: "VID_045E&PID_0B12" (USB and HID)
+/// or "VID&02045e_PID&0b13" (Bluetooth, with a two-digit source before the vendor).
+fn vid_pid(ids: &[String]) -> Option<(u16, u16)> {
+    let hex = |s: &str| u16::from_str_radix(s.get(..4)?, 16).ok();
+    ids.iter().find_map(|id| {
+        let id = id.to_ascii_uppercase();
+        let vid = if let Some(i) = id.find("VID_") {
+            hex(&id[i + 4..])?
+        } else {
+            hex(id.get(id.find("VID&")? + 6..)?)?
+        };
+        let at = id.find("PID_").or_else(|| id.find("PID&"))?;
+        Some((vid, hex(&id[at + 4..])?))
     })
 }
 
@@ -582,6 +646,12 @@ fn pad_battery(p: &RawPad) -> Option<Battery> {
 pub fn build(raw: &Raw) -> Devices {
     let groups = group(&raw.nodes);
     let aeps = aeps(&raw.aeps);
+    let direct: HashMap<String, &RawHid> = raw
+        .hid
+        .iter()
+        .filter(|h| h.slot.is_none() && h.awake)
+        .map(|h| (norm_guid(&h.container), h))
+        .collect();
     let gatt: HashMap<String, u8> = raw
         .gatt
         .iter()
@@ -625,15 +695,25 @@ pub fn build(raw: &Raw) -> Devices {
                 windows_battery(c, nodes, aep)
                     .map(|p| (p, BatterySource::Windows))
                     .or_else(|| gatt.get(&id).map(|p| (*p, BatterySource::BluetoothLe)))
+                    .map(|(p, source)| Battery {
+                        percent: Some(p),
+                        level: None,
+                        charging: None,
+                        source,
+                    })
+                    .or_else(|| {
+                        let h = direct.get(&id)?;
+                        charge_battery(h.charge, h.source)
+                    })
             })
-            .flatten()
-            .map(|(p, source)| Battery {
-                percent: Some(p),
-                level: None,
-                source,
-            });
+            .flatten();
         if connected && nodes.iter().any(|n| is_xinput(n)) {
-            xinput.push(devices.len());
+            let ids: Vec<String> = nodes
+                .iter()
+                .filter(|n| is_xinput(n))
+                .flat_map(|n| n.hardware_ids.iter().cloned())
+                .collect();
+            xinput.push((devices.len(), vid_pid(&ids)));
         }
         let problem = connected
             .then(|| nodes.iter().filter_map(|n| n.problem).find(|p| *p != 0))
@@ -649,23 +729,79 @@ pub fn build(raw: &Raw) -> Devices {
             connected,
             battery,
             problem,
+            parent: None,
         });
         listed.insert(id);
     }
 
-    // XInput says nothing about which device a slot is: one controller and one slot match;
-    // otherwise each slot is listed on its own.
+    // Devices paired to a receiver: each its own row, named as the device names itself.
+    for h in &raw.hid {
+        let (Some(slot), container) = (h.slot, norm_guid(&h.container)) else {
+            continue;
+        };
+        if !listed.contains(&container) {
+            continue;
+        }
+        let receiver = key(&container);
+        let maker = devices
+            .iter()
+            .find(|d| d.id == receiver)
+            .and_then(|d| d.manufacturer.clone());
+        let kind = h.kind.unwrap_or(DeviceKind::Other);
+        devices.push(DeviceInfo {
+            id: key(&format!("{container}#{slot}")),
+            name: h.name.clone().unwrap_or_else(|| kind_label(kind).into()),
+            kind,
+            manufacturer: maker,
+            connection: Connection::Receiver,
+            wireless: true,
+            connected: h.awake,
+            battery: if h.awake {
+                charge_battery(h.charge, h.source)
+            } else {
+                None
+            },
+            problem: None,
+            parent: Some(receiver),
+        });
+    }
+
+    // XInput names no device for a slot. Its vendor and product match one controller where only
+    // one has them; then one controller left and one slot left match; any other slot is listed
+    // on its own.
     let pads: Vec<&RawPad> = raw
         .pads
         .iter()
         .filter(|p| p.battery_type != PAD_DISCONNECTED)
         .collect();
-    if let ([i], [p]) = (xinput.as_slice(), pads.as_slice()) {
+    let mut taken = HashSet::new();
+    let mut left = Vec::new();
+    for p in pads {
+        let same: Vec<usize> = xinput
+            .iter()
+            .filter(|(i, ids)| p.ids.is_some() && *ids == p.ids && !taken.contains(i))
+            .map(|(i, _)| *i)
+            .collect();
+        if let [i] = same.as_slice() {
+            taken.insert(*i);
+            if devices[*i].battery.is_none() {
+                devices[*i].battery = pad_battery(p);
+            }
+        } else {
+            left.push(p);
+        }
+    }
+    let free: Vec<usize> = xinput
+        .iter()
+        .map(|(i, _)| *i)
+        .filter(|i| !taken.contains(i))
+        .collect();
+    if let ([i], [p]) = (free.as_slice(), left.as_slice()) {
         if devices[*i].battery.is_none() {
             devices[*i].battery = pad_battery(p);
         }
     } else {
-        for p in pads {
+        for p in left {
             devices.push(DeviceInfo {
                 id: format!("xinput-{}", p.slot),
                 name: format!("Controller · player {}", p.slot + 1),
@@ -680,6 +816,7 @@ pub fn build(raw: &Raw) -> Devices {
                 connected: true,
                 battery: pad_battery(p),
                 problem: None,
+                parent: None,
             });
         }
     }
@@ -750,6 +887,13 @@ fn sample_raw() -> Raw {
                 default,
             }
         };
+    let charge = |percent: u8, charging: bool| {
+        Some(hid::Charge {
+            percent: Some(percent),
+            level: None,
+            charging: Some(charging),
+        })
+    };
     let mut buds = n("c4", "Bluetooth", "BTHENUM");
     buds.battery = Some(64);
     let mut pad = n("c5", "HIDClass", "HID");
@@ -757,6 +901,16 @@ fn sample_raw() -> Raw {
         vec!["HID\\{00001812-0000-1000-8000-00805f9b34fb}_VID&02045e_PID&0b13&IG_00".into()];
     let mut keys = c("c6", "MX Keys", "Logitech", Some(false));
     keys.categories = vec!["Input.Keyboard".into()];
+    // A USB microphone whose container Windows leaves unnamed: its bus name is used.
+    let mic = RawContainer {
+        id: "c11".into(),
+        manufacturer: Some("(Generic USB Audio)".into()),
+        connected: Some(true),
+        ..RawContainer::default()
+    };
+    let mut mic_usb = n("c11", "USB", "USB");
+    mic_usb.bus_name = Some("USB Audio Condenser Mic".into());
+    mic_usb.name = Some("USB Composite Device".into());
     Raw {
         containers: vec![
             c("c1", "G502 HERO Gaming Mouse", "Logitech", Some(true)),
@@ -773,6 +927,8 @@ fn sample_raw() -> Raw {
                 "(Standard USB Host Controller)",
                 Some(true),
             ),
+            c("c10", "DualSense Wireless Controller", "Sony", Some(true)),
+            mic,
         ],
         nodes: vec![
             n("c1", "Mouse", "HID"),
@@ -794,7 +950,12 @@ fn sample_raw() -> Raw {
             n("c8", "Bluetooth", "BTHLE"),
             n("c9", "HIDClass", "HID"),
             n("c9", "USB", "USB"),
+            n("c10", "HIDClass", "HID"),
+            n("c10", "USB", "USB"),
+            mic_usb,
+            n("c11", "AudioEndpoint", "SWD"),
         ],
+        aeps: Vec::new(),
         endpoints: vec![
             e(
                 "e1",
@@ -810,7 +971,7 @@ fn sample_raw() -> Raw {
                 false,
                 Some("c3"),
                 AUDIO_ACTIVE,
-                true,
+                false,
             ),
             e(
                 "e3",
@@ -836,11 +997,48 @@ fn sample_raw() -> Raw {
                 8,
                 false,
             ),
+            e(
+                "e6",
+                "Microphone (USB Audio Condenser Mic)",
+                false,
+                Some("c11"),
+                AUDIO_ACTIVE,
+                true,
+            ),
         ],
-        aeps: Vec::new(),
         gatt: vec![("c8".into(), 17)],
+        hid: vec![
+            RawHid {
+                container: "c7".into(),
+                slot: Some(1),
+                name: Some("G Pro X Superlight 2".into()),
+                kind: Some(DeviceKind::Mouse),
+                awake: true,
+                charge: charge(82, false),
+                source: BatterySource::Logitech,
+            },
+            RawHid {
+                container: "c7".into(),
+                slot: Some(2),
+                name: Some("G915 TKL".into()),
+                kind: Some(DeviceKind::Keyboard),
+                awake: true,
+                charge: charge(46, true),
+                source: BatterySource::Logitech,
+            },
+            RawHid {
+                container: "c10".into(),
+                slot: None,
+                name: None,
+                kind: None,
+                awake: true,
+                charge: charge(75, true),
+                source: BatterySource::PlayStation,
+            },
+        ],
         pads: vec![RawPad {
             slot: 0,
+            ids: Some((0x045E, 0x0B13)),
             wireless: true,
             battery_type: 3,
             battery_level: 2,

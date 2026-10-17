@@ -73,6 +73,26 @@ fn devices() -> vyro_core::devices::Devices {
     vyro_core::devices::sample()
 }
 
+/// Every HID collection by vendor and product: what to send when a wireless device's battery is
+/// missing (its maker's protocol can then be added).
+#[cfg(windows)]
+fn hid() -> Vec<String> {
+    vyro_core::devices::hid_collections()
+        .iter()
+        .map(|c| {
+            format!(
+                "{:04x}:{:04x} page {:04x} usage {:04x}",
+                c.vendor, c.product, c.page, c.usage
+            )
+        })
+        .collect()
+}
+
+#[cfg(not(windows))]
+fn hid() -> Vec<String> {
+    Vec::new()
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     let show_serial = args.iter().any(|a| a == "--show-serial");
@@ -145,6 +165,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "drives": disks,
         "network": nets,
         "devices": devices(),
+        "hid": hid(),
         "pawnio": vyro_core::pawnio::status(),
         "log": log,
     }))?;

@@ -495,6 +495,7 @@ fn xinput_battery_matches_one_controller_and_lists_the_rest() {
     xi.hardware_ids = vec!["HID\\VID_045E&PID_0B13&IG_00".into()];
     let pad = |slot, battery_type, battery_level| RawPad {
         slot,
+        ids: None,
         wireless: true,
         battery_type,
         battery_level,
@@ -513,6 +514,7 @@ fn xinput_battery_matches_one_controller_and_lists_the_rest() {
         Some(Battery {
             percent: None,
             level: Some(BatteryLevel::Low),
+            charging: None,
             source: BatterySource::Xinput
         })
     );
@@ -551,6 +553,150 @@ fn xinput_battery_matches_one_controller_and_lists_the_rest() {
     with_pct.nodes[1].battery = Some(72);
     let b = build(&with_pct).devices[0].battery.clone().unwrap();
     assert_eq!((b.percent, b.source), (Some(72), BatterySource::Windows));
+}
+
+#[test]
+fn xinput_slots_match_controllers_by_vendor_and_product() {
+    assert_eq!(
+        vid_pid(&["HID\\VID_045E&PID_0B13&IG_00".into()]),
+        Some((0x045E, 0x0B13))
+    );
+    assert_eq!(
+        vid_pid(&["HID\\{00001812-0000-1000-8000-00805f9b34fb}_VID&02045e_PID&0b13&IG_00".into()]),
+        Some((0x045E, 0x0B13))
+    );
+    assert_eq!(vid_pid(&["ROOT\\THING".into()]), None);
+
+    let pad_node = |c: &str, id: &str| {
+        let mut n = node(c, "HIDClass", "HID");
+        n.hardware_ids = vec![id.into()];
+        n
+    };
+    let pad = |slot, ids, level| RawPad {
+        slot,
+        ids,
+        wireless: true,
+        battery_type: 2,
+        battery_level: level,
+    };
+    // Two different controllers and two slots: each slot finds its own.
+    let d = build(&Raw {
+        containers: vec![
+            container("x", "Xbox Wireless Controller"),
+            container("b", "8BitDo Ultimate"),
+        ],
+        nodes: vec![
+            pad_node("x", "HID\\VID_045E&PID_0B13&IG_00"),
+            pad_node("b", "HID\\VID_2DC8&PID_3106&IG_00"),
+        ],
+        pads: vec![
+            pad(0, Some((0x2DC8, 0x3106)), 1),
+            pad(1, Some((0x045E, 0x0B13)), 3),
+        ],
+        ..Raw::default()
+    })
+    .devices;
+    let level = |name: &str| {
+        d.iter()
+            .find(|x| x.name == name)
+            .and_then(|x| x.battery.as_ref())
+            .and_then(|b| b.level)
+    };
+    assert_eq!(d.len(), 2, "{d:?}");
+    assert_eq!(level("8BitDo Ultimate"), Some(BatteryLevel::Low));
+    assert_eq!(level("Xbox Wireless Controller"), Some(BatteryLevel::Full));
+}
+
+#[test]
+fn devices_behind_a_receiver_get_their_own_rows() {
+    let hid = |slot, name: &str, kind, awake, pct| RawHid {
+        container: "{R}".into(),
+        slot: Some(slot),
+        name: Some(name.into()),
+        kind: Some(kind),
+        awake,
+        charge: Some(hid::Charge {
+            percent: Some(pct),
+            level: None,
+            charging: Some(slot == 2),
+        }),
+        source: BatterySource::Logitech,
+    };
+    let mut receiver = container("r", "USB Receiver");
+    receiver.manufacturer = Some("Logitech".into());
+    let d = build(&Raw {
+        containers: vec![receiver],
+        nodes: vec![node("r", "USB", "USB"), node("r", "Mouse", "HID")],
+        hid: vec![
+            hid(1, "G Pro X Superlight 2", DeviceKind::Mouse, true, 82),
+            hid(2, "G915 TKL", DeviceKind::Keyboard, true, 46),
+            hid(3, "MX Anywhere 3", DeviceKind::Mouse, false, 70),
+        ],
+        ..Raw::default()
+    })
+    .devices;
+    let r = d.iter().find(|x| x.name == "USB Receiver").unwrap();
+    assert_eq!((r.kind, r.parent.as_deref()), (DeviceKind::Receiver, None));
+    let mouse = d.iter().find(|x| x.name == "G Pro X Superlight 2").unwrap();
+    assert_eq!(mouse.parent.as_deref(), Some(r.id.as_str()));
+    assert_eq!(
+        (
+            mouse.kind,
+            mouse.connection,
+            mouse.wireless,
+            mouse.connected
+        ),
+        (DeviceKind::Mouse, Connection::Receiver, true, true)
+    );
+    assert_eq!(mouse.manufacturer.as_deref(), Some("Logitech"));
+    let b = mouse.battery.clone().unwrap();
+    assert_eq!(
+        (b.percent, b.charging, b.source),
+        (Some(82), Some(false), BatterySource::Logitech)
+    );
+    let kb = d.iter().find(|x| x.name == "G915 TKL").unwrap();
+    assert_eq!(kb.battery.as_ref().and_then(|b| b.charging), Some(true));
+    // Seen earlier, asleep now: listed, not connected, no battery.
+    let asleep = d.iter().find(|x| x.name == "MX Anywhere 3").unwrap();
+    assert_eq!((asleep.connected, asleep.battery.clone()), (false, None));
+    // Ids are hashes too, and differ per slot.
+    assert!(d.iter().all(|x| x.id.len() == 12));
+    assert_ne!(mouse.id, kb.id);
+}
+
+#[test]
+fn a_maker_protocol_battery_comes_after_windows_and_the_battery_service() {
+    let raw = |windows: Option<u8>| {
+        let mut usb = node("p", "USB", "USB");
+        usb.battery = windows;
+        Raw {
+            containers: vec![container("p", "DualSense Wireless Controller")],
+            nodes: vec![usb, node("p", "HIDClass", "HID")],
+            hid: vec![RawHid {
+                container: "P".into(),
+                slot: None,
+                name: None,
+                kind: None,
+                awake: true,
+                charge: Some(hid::Charge {
+                    percent: Some(75),
+                    level: None,
+                    charging: Some(true),
+                }),
+                source: BatterySource::PlayStation,
+            }],
+            ..Raw::default()
+        }
+    };
+    let b = one(&raw(None)).battery.unwrap();
+    assert_eq!(
+        (b.percent, b.charging, b.source),
+        (Some(75), Some(true), BatterySource::PlayStation)
+    );
+    assert_eq!(
+        one(&raw(Some(40))).battery.unwrap().source,
+        BatterySource::Windows
+    );
 }
 
 #[test]
@@ -684,5 +830,17 @@ fn sample_shows_each_source() {
     assert_eq!(by("AURA LED Controller").manufacturer, None);
     assert_eq!(by("USB Receiver").kind, DeviceKind::Receiver);
     assert!(by("USB Receiver").wireless);
-    assert_eq!(s.audio.len(), 5);
+    assert_eq!(
+        by("G Pro X Superlight 2").battery.map(|b| b.source),
+        Some(BatterySource::Logitech)
+    );
+    assert_eq!(by("G915 TKL").battery.and_then(|b| b.charging), Some(true));
+    assert_eq!(
+        by("DualSense Wireless Controller")
+            .battery
+            .map(|b| b.source),
+        Some(BatterySource::PlayStation)
+    );
+    assert_eq!(by("USB Audio Condenser Mic").kind, DeviceKind::Microphone);
+    assert_eq!(s.audio.len(), 6);
 }

@@ -3,4 +3,4 @@
 /**
  * Where a battery reading came from.
  */
-export type BatterySource = "windows" | "bluetoothLe" | "xinput";
+export type BatterySource = "windows" | "bluetoothLe" | "xinput" | "logitech" | "playStation" | "hidBattery";

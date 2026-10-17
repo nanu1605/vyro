@@ -24,6 +24,7 @@ const CONNECTION_LABEL: Record<Connection, string> = {
   bluetooth: 'Bluetooth',
   bluetoothLe: 'Bluetooth LE',
   network: 'Network',
+  receiver: 'Through a receiver',
   other: '',
 };
 
@@ -31,6 +32,9 @@ export const SOURCE_LABEL: Record<BatterySource, string> = {
   windows: 'as Windows reports it',
   bluetoothLe: 'from the Bluetooth LE Battery Service',
   xinput: 'from XInput (four levels)',
+  logitech: "from Logitech's own protocol",
+  playStation: 'from the controller',
+  hidBattery: 'as the device reports it',
 };
 
 const GROUPS: Array<{ id: string; title: string; kinds: DeviceKind[] }> = [
@@ -46,15 +50,20 @@ export function grouped(list: DeviceInfo[]): Array<{ id: string; title: string; 
   );
 }
 
-/** "Bluetooth LE", "USB · wireless", "Wireless", ... */
-export function connectionText(d: DeviceInfo): string {
+/** "Bluetooth LE", "USB · wireless", "Through USB Receiver", ... */
+export function connectionText(d: DeviceInfo, all: DeviceInfo[] = []): string {
+  if (d.connection === 'receiver') {
+    const parent = all.find((x) => x.id === d.parent)?.name;
+    return parent ? `Through ${parent}` : CONNECTION_LABEL.receiver;
+  }
   if (d.connection === 'other') return d.wireless ? 'Wireless' : 'Wired';
   if (d.connection === 'usb' && d.wireless) return 'USB · wireless';
   return CONNECTION_LABEL[d.connection];
 }
 
 export function stateText(d: DeviceInfo): string {
-  if (!d.connected) return 'Not connected';
+  // A device behind a receiver that stopped answering is asleep or switched off.
+  if (!d.connected) return d.connection === 'receiver' ? 'Asleep or off' : 'Not connected';
   if (d.problem === 22) return 'Disabled';
   if (d.problem != null) return `Problem (code ${d.problem})`;
   return 'Connected';
@@ -80,24 +89,28 @@ export interface BatteryView {
   tone: Tone;
   /** Where the reading comes from, for the tooltip and screen readers. */
   source: string | null;
+  /** On a charger and charging. */
+  charging: boolean;
 }
 
 export function batteryView(d: DeviceInfo): BatteryView {
   const b = d.connected ? d.battery : null;
-  if (b == null) return { text: '—', pct: null, tone: 'none', source: null };
+  const none: BatteryView = { text: '—', pct: null, tone: 'none', source: null, charging: false };
+  if (b == null) return none;
   const source = SOURCE_LABEL[b.source];
+  const charging = b.charging === true;
   if (b.percent != null) {
     const p = Math.max(0, Math.min(100, b.percent));
-    return { text: `${p}%`, pct: p, tone: p < CRITICAL ? 'hot' : p < LOW ? 'warn' : 'ok', source };
+    return { text: `${p}%`, pct: p, tone: p < CRITICAL ? 'hot' : p < LOW ? 'warn' : 'ok', source, charging };
   }
-  if (b.level != null) return { ...LEVEL[b.level], source };
-  return { text: '—', pct: null, tone: 'none', source: null };
+  if (b.level != null) return { ...LEVEL[b.level], source, charging };
+  return none;
 }
 
-/** Connected devices whose battery is low, lowest first. */
+/** Connected devices whose battery is low and not charging, lowest first. */
 export function lowBattery(list: DeviceInfo[]): DeviceInfo[] {
   return list
-    .filter((d) => batteryView(d).tone === 'warn' || batteryView(d).tone === 'hot')
+    .filter((d) => !batteryView(d).charging && (batteryView(d).tone === 'warn' || batteryView(d).tone === 'hot'))
     .sort((a, b) => (batteryView(a).pct ?? 0) - (batteryView(b).pct ?? 0));
 }
 
