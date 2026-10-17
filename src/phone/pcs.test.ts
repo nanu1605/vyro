@@ -1,0 +1,69 @@
+import { describe, expect, it } from 'vitest';
+import { addPc, confirmNext, linkFrom, loadPcs, MAX_PCS, parseLink, removePc, savePcs, updatePc, type PairedPc } from './pcs';
+
+const ROOM = '00112233445566778899aabbccddeeff';
+const SECRET = 'A'.repeat(43);
+const NEXT = 'B'.repeat(43);
+const HASH = `#p=1.${ROOM}.0a1b2c3d.${SECRET}`;
+
+function memory(): Storage {
+  const m = new Map<string, string>();
+  return {
+    getItem: (k) => m.get(k) ?? null,
+    setItem: (k, v) => void m.set(k, v),
+    removeItem: (k) => void m.delete(k),
+    clear: () => m.clear(),
+    key: () => null,
+    get length() {
+      return m.size;
+    },
+  };
+}
+
+describe('pairing links', () => {
+  it('read the room, the phone and a 32-byte secret', () => {
+    expect(parseLink(HASH)).toEqual({ room: ROOM, phone: '0a1b2c3d', secret: SECRET });
+    for (const bad of [`#p=2.${ROOM}.0a1b2c3d.${SECRET}`, `#p=1.${ROOM}.0a1b2c3.${SECRET}`, `#p=1.${ROOM.toUpperCase()}.0a1b2c3d.${SECRET}`, `#p=1.${ROOM}.0a1b2c3d.${SECRET}A`, `#p=1.${ROOM}.0a1b2c3d`, '#pair=K7QM4XPA', '']) {
+      expect(parseLink(bad), bad).toBeNull();
+    }
+  });
+
+  it('a scanned link counts only for this relay', () => {
+    expect(linkFrom(`https://relay.example.dev/${HASH}`, 'https://relay.example.dev')).toMatchObject({ room: ROOM });
+    expect(linkFrom(`https://other.example.dev/${HASH}`, 'https://relay.example.dev')).toBe('elsewhere');
+    expect(linkFrom('not a link', 'https://relay.example.dev')).toBeNull();
+    expect(linkFrom('https://relay.example.dev/', 'https://relay.example.dev')).toBeNull();
+  });
+});
+
+describe('the paired PCs', () => {
+  it('keep the phone’s own secret until the PC takes it', () => {
+    let pcs = addPc([], parseLink(HASH)!, NEXT, 1);
+    expect(pcs[0]).toMatchObject({ secret: SECRET, next: NEXT, name: 'Your PC' });
+    pcs = confirmNext(pcs, ROOM);
+    expect(pcs[0]!.secret).toBe(NEXT);
+    expect(pcs[0]!.next).toBeUndefined();
+    pcs = updatePc(pcs, ROOM, { name: 'DESKTOP-7' });
+    // Paired again from a new link: one entry, its name kept.
+    pcs = addPc(pcs, parseLink(HASH)!, NEXT, 2);
+    expect(pcs).toHaveLength(1);
+    expect(pcs[0]!.name).toBe('DESKTOP-7');
+    expect(removePc(pcs, ROOM)).toEqual([]);
+  });
+
+  it('are saved, read back newest first, and damaged entries are dropped', () => {
+    const store = memory();
+    const a: PairedPc = { room: ROOM, phone: '0a1b2c3d', secret: SECRET, name: 'A', used: 1 };
+    const b: PairedPc = { ...a, room: 'f'.repeat(32), name: 'B', used: 5 };
+    savePcs([a, b, { ...a, room: 'nope' } as PairedPc], store);
+    expect(loadPcs(store).map((p) => p.name)).toEqual(['B', 'A']);
+    store.setItem('vyro.pcs', '{broken');
+    expect(loadPcs(store)).toEqual([]);
+  });
+
+  it('hold at most eight', () => {
+    let pcs: PairedPc[] = [];
+    for (let i = 0; i < MAX_PCS + 2; i++) pcs = addPc(pcs, { room: i.toString(16).padStart(32, '0'), phone: '00000001', secret: SECRET }, NEXT, i);
+    expect(pcs).toHaveLength(MAX_PCS);
+  });
+});

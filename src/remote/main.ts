@@ -2,6 +2,7 @@
 // nor its Tauri bridge.
 import { mount } from 'svelte';
 import '../styles/theme.css';
+import './page.css';
 import { applyLook, savedLook } from '../themes';
 import Remote from './Remote.svelte';
 

@@ -1,0 +1,139 @@
+/* The phone pages' frame (P26, 1.4): the local companion (remote.html) and the phone app
+   (phone.html) share it; their readings are src/remote/LiveView.svelte. */
+
+.page {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1.5rem, env(safe-area-inset-bottom));
+}
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  min-width: 0;
+  margin: 0;
+}
+.logo {
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+}
+.pc {
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live {
+  flex: none;
+  margin: 0;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--ok) 50%, var(--line));
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 0.78rem;
+}
+.live::before {
+  content: '';
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.4rem;
+  border-radius: 50%;
+  background: var(--ok);
+}
+.live.wait {
+  border-color: color-mix(in srgb, var(--warn) 50%, var(--line));
+}
+.live.wait::before {
+  background: var(--warn);
+}
+.tagline {
+  margin: 0.35rem 0 1rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+h1 {
+  margin: 0 0 0.6rem;
+  font-size: 1.25rem;
+}
+h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+p {
+  line-height: 1.45;
+}
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 0.8rem;
+}
+input {
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem;
+}
+button {
+  padding: 0.65rem 1rem;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--bg);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+button.ghost {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font-weight: 500;
+}
+.error {
+  margin: 0;
+  color: var(--hot);
+}
+.note.warn {
+  padding: 0.5rem 0.7rem;
+  border-left: 3px solid var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+}
+footer {
+  display: grid;
+  justify-items: start;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+footer p {
+  margin: 0;
+}
+.panel {
+  margin-bottom: 0.75rem;
+}

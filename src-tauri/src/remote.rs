@@ -10,6 +10,7 @@ use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
@@ -510,7 +511,7 @@ impl Remote {
             .iter()
             .map(|d| d.id.clone())
             .collect();
-        {
+        let generation = {
             let mut p = lock(&phones);
             // A phone id is 32 random bits; draw again in the unlikely case it is taken.
             let id = (0..8)
@@ -518,9 +519,12 @@ impl Remote {
                 .find(|id| p.id_free(id) && !lan.contains(&hex(id)))
                 .ok_or("No randomness available.")?;
             p.start_pairing(unix_now(), secret, id)?;
-        }
+            p.generation()
+        };
         if let Some(c) = lock(&self.client).as_ref() {
             c.nudge();
+            // The link works once the relay has the phone's key: show it then.
+            c.wait_listed(generation, Duration::from_secs(3));
         }
         Ok(())
     }

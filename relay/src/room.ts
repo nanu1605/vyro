@@ -50,14 +50,6 @@ function upgraded(client: WebSocket): Response {
   return new Response(null, { status: 101, webSocket: client, headers: { 'Sec-WebSocket-Protocol': PROTOCOL } });
 }
 
-/** Accepts only to close at once with `code`: a browser cannot read an HTTP refusal, but it can
- * read a close code, so the phone can tell "signed out" from "the network is down". */
-function refuse(code: number, reason: string): Response {
-  const { client, server } = pair();
-  server.accept();
-  server.close(code, reason);
-  return upgraded(client);
-}
 
 function unhex(s: string): Uint8Array {
   return Uint8Array.from({ length: s.length / 2 }, (_, i) => parseInt(s.slice(i * 2, i * 2 + 2), 16));
@@ -69,6 +61,16 @@ export class Room extends DurableObject {
   constructor(ctx: DurableObjectState, env: Cloudflare.Env) {
     super(ctx, env);
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+  }
+
+  /** Accepts only to close at once with `code`: a browser cannot read an HTTP refusal, but it can
+   * read a close code, so the phone can tell "signed out" from "the network is down". The socket
+   * is the runtime's to close (hibernation), with no role, so nothing else reaches it. */
+  private refuse(code: number, reason: string): Response {
+    const { client, server } = pair();
+    this.ctx.acceptWebSocket(server, ['refused']);
+    server.close(code, reason);
+    return upgraded(client);
   }
 
   override async fetch(req: Request): Promise<Response> {
@@ -108,7 +110,7 @@ export class Room extends DurableObject {
 
   private async pc(hash: string): Promise<Response> {
     const known = await this.ctx.storage.get<string>('pc');
-    if (known !== undefined && !same(known, hash)) return refuse(CLOSE.refused, 'This room belongs to another PC');
+    if (known !== undefined && !same(known, hash)) return this.refuse(CLOSE.refused, 'This room belongs to another PC');
     const now = Date.now();
     await this.ctx.storage.put(known === undefined ? { pc: hash, seen: now } : { seen: now });
     await this.ctx.storage.setAlarm(expiry(now));
@@ -125,7 +127,7 @@ export class Room extends DurableObject {
   private async phone(id: string, hash: string): Promise<Response> {
     const phones = (await this.ctx.storage.get<Phone[]>('phones')) ?? [];
     const known = phones.find((p) => p.id === id);
-    if (!known || !same(known.hash, hash)) return refuse(CLOSE.refused, 'This phone is not paired with this PC');
+    if (!known || !same(known.hash, hash)) return this.refuse(CLOSE.refused, 'This phone is not paired with this PC');
     const open = this.open(`phone:${id}`);
     for (const old of open.slice(0, Math.max(0, open.length - SOCKETS_PER_PHONE + 1))) {
       old.close(CLOSE.replaced, 'Replaced by a newer connection');
@@ -175,7 +177,8 @@ export class Room extends DurableObject {
     const { gone, rekeyed } = cutOff(before, c.list);
     for (const id of gone) for (const p of this.open(`phone:${id}`)) p.close(CLOSE.refused, 'Signed out');
     for (const id of rekeyed) for (const p of this.open(`phone:${id}`)) p.close(CLOSE.rekeyed, 'Key changed');
-    ws.send(JSON.stringify({ t: 'here', phones: this.here() }));
+    // `listed`: the list is in place, so a pairing link the PC shows from now on works.
+    ws.send(JSON.stringify({ t: 'here', phones: this.here(), listed: true }));
   }
 
   private gone(ws: WebSocket, code: number, reason: string): void {

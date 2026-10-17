@@ -72,6 +72,8 @@ struct Shared {
     nudge: (Mutex<bool>, Condvar),
     status: Mutex<(RelayState, Option<String>)>,
     watching: Mutex<Vec<String>>,
+    /// The phone list the relay last confirmed it has ([`Phones::generation`]).
+    listed: (Mutex<u64>, Condvar),
     hooks: RelayHooks,
 }
 
@@ -108,6 +110,7 @@ impl RelayClient {
             nudge: (Mutex::new(false), Condvar::new()),
             status: Mutex::new((RelayState::Connecting, None)),
             watching: Mutex::new(Vec::new()),
+            listed: (Mutex::new(0), Condvar::new()),
             hooks,
         });
         let s = Arc::clone(&shared);
@@ -147,6 +150,17 @@ impl RelayClient {
     /// Ids of the phones with the app open now.
     pub fn watching(&self) -> Vec<String> {
         lock(&self.shared.watching).clone()
+    }
+
+    /// Waits until the relay has the phone list of `generation` ([`Phones::generation`]), at
+    /// most `timeout`: a pairing link shown before would be refused. `false` when it did not.
+    pub fn wait_listed(&self, generation: u64, timeout: Duration) -> bool {
+        let (m, c) = &self.shared.listed;
+        let listed = lock(m);
+        let (listed, _) = c
+            .wait_timeout_while(listed, timeout, |l| *l < generation)
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *listed >= generation
     }
 
     pub fn set_session_days(&self, days: u32) {
@@ -421,6 +435,14 @@ fn talk(s: &Shared, ws: &mut Ws) -> Ended {
                 match msg {
                     Message::Text(t) => {
                         let fx = session.on_text(t.as_str());
+                        if let Some(g) = session.listed() {
+                            let (m, c) = &s.listed;
+                            let mut listed = lock(m);
+                            if g > *listed {
+                                *listed = g;
+                                c.notify_all();
+                            }
+                        }
                         apply(s, &session, fx);
                     }
                     Message::Binary(b) => {

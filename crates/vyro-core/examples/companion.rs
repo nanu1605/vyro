@@ -7,6 +7,14 @@
 //! cargo run -p vyro-core --example companion -- --bind 0.0.0.0     # reachable from a phone
 //! cargo run -p vyro-core --example companion -- --dist dist --port 8976 --theme daylight
 //! ```
+//!
+//! With `--relay`, it plays a PC reached through a relay instead (1.4), for the phone app
+//! (`pnpm build:phone`, then `pnpm --dir relay dev`): it prints a pairing link; Enter shows a new
+//! one, `out` signs every phone out, `q` quits.
+//!
+//! ```sh
+//! cargo run -p vyro-core --example companion -- --relay http://127.0.0.1:8787
+//! ```
 
 use std::io::BufRead;
 use std::net::Ipv4Addr;
@@ -14,7 +22,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use vyro_core::engine::{ClientPids, EngineApi, EngineConfig, LocalEngine};
-use vyro_core::remote::{net, Auth, Hooks, RemoteInfo, RemoteServer, ServerConfig};
+use vyro_core::remote::relay::proto::{pairing_link, relay_base};
+use vyro_core::remote::relay::{Phones, RelayClient, RelayHooks};
+use vyro_core::remote::{net, random, Auth, Hooks, RemoteInfo, RemoteServer, ServerConfig};
 use vyro_core::units::TempUnit;
 use vyro_core::{unix_now, PollerConfig, SimProvider};
 
@@ -25,8 +35,97 @@ fn arg(args: &[String], name: &str) -> Option<String> {
         .cloned()
 }
 
+fn info(theme: &str) -> RemoteInfo {
+    RemoteInfo {
+        pc: net::pc_name(),
+        version: env!("CARGO_PKG_VERSION").into(),
+        theme: theme.into(),
+        accent: "theme".into(),
+        unit: TempUnit::C,
+        ..Default::default()
+    }
+}
+
+fn engine(
+    publish: impl Fn(&vyro_core::SensorSnapshot) + Send + 'static,
+) -> Result<LocalEngine, String> {
+    let engine = LocalEngine::start(
+        EngineConfig {
+            data_dir: None,
+            poller: PollerConfig::default(),
+            fan_control: false,
+        },
+        vec![Box::new(SimProvider::new())],
+        ClientPids::default(),
+        move |snap: &vyro_core::SensorSnapshot| publish(snap),
+    )
+    .map_err(|e| e.to_string())?;
+    engine.set_visible(true);
+    Ok(engine)
+}
+
+/// A PC reached through a relay: prints `link: …` for each pairing and `state: …`,
+/// `watching: …` as they change (the end-to-end test reads them).
+fn relay(url: &str, theme: String) -> Result<(), String> {
+    let base = relay_base(url)?;
+    let (room, key) = random::<16>().zip(random::<32>()).ok_or("no randomness")?;
+    let phones = Arc::new(Mutex::new(Phones::fresh(room, key)));
+    let client = Arc::new(RelayClient::start(
+        base.clone(),
+        Arc::clone(&phones),
+        vyro_core::remote::DEFAULT_DAYS,
+        RelayHooks {
+            info: Box::new(move || info(&theme)),
+            saved: Box::new(|| println!("saved")),
+            watching: Box::new(|n| println!("watching: {n}")),
+            state: Box::new(|s| {
+                println!("state: {}", serde_json::to_string(&s).unwrap_or_default())
+            }),
+        },
+    )?);
+    let feed = Arc::clone(&client);
+    let engine = engine(move |snap| feed.publish(snap, TempUnit::C))?;
+    let show = || {
+        let (Some(secret), Some(id)) = (random::<32>(), random::<4>()) else {
+            return;
+        };
+        let mut p = vyro_core::lock(&phones);
+        if let Err(e) = p.start_pairing(unix_now(), secret, id) {
+            println!("{e}");
+            return;
+        }
+        let (generation, link) = (p.generation(), pairing_link(&base, p.room(), &id, &secret));
+        drop(p);
+        client.nudge();
+        // As the app does: the link once the relay has the phone's key.
+        client.wait_listed(generation, std::time::Duration::from_secs(10));
+        println!("link: {link}");
+    };
+    show();
+    println!("Enter: a new pairing link · out: sign every phone out · q: quit");
+    for line in std::io::stdin().lock().lines() {
+        match line.as_deref() {
+            Ok("q") | Err(_) => break,
+            Ok("out") => {
+                vyro_core::lock(&phones).sign_out_all();
+                client.nudge();
+                println!("signed out");
+            }
+            Ok(_) => show(),
+        }
+    }
+    engine.shutdown();
+    Ok(())
+}
+
 fn main() -> Result<(), String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(url) = arg(&args, "--relay") {
+        return relay(
+            &url,
+            arg(&args, "--theme").unwrap_or_else(|| "midnight".into()),
+        );
+    }
     let dist = PathBuf::from(arg(&args, "--dist").unwrap_or_else(|| "dist".into()));
     let port: u16 = arg(&args, "--port")
         .map_or(Ok(vyro_core::remote::DEFAULT_PORT), |p| p.parse())
@@ -43,17 +142,9 @@ fn main() -> Result<(), String> {
     }
 
     let auth = Arc::new(Mutex::new(Auth::default()));
-    let pc = net::pc_name();
     let hooks = Hooks {
         asset: Box::new(move |path| std::fs::read(dist.join(path)).ok()),
-        info: Box::new(move || RemoteInfo {
-            pc: pc.clone(),
-            version: env!("CARGO_PKG_VERSION").into(),
-            theme: theme.clone(),
-            accent: "theme".into(),
-            unit: TempUnit::C,
-            ..Default::default()
-        }),
+        info: Box::new(move || info(&theme)),
         saved: Box::new(|| {}),
         watching: Box::new(|n| println!("live views: {n}")),
     };
@@ -68,18 +159,7 @@ fn main() -> Result<(), String> {
         hooks,
     )?);
     let feed = Arc::clone(&server);
-    let engine = LocalEngine::start(
-        EngineConfig {
-            data_dir: None,
-            poller: PollerConfig::default(),
-            fan_control: false,
-        },
-        vec![Box::new(SimProvider::new())],
-        ClientPids::default(),
-        move |snap: &vyro_core::SensorSnapshot| feed.publish(snap, TempUnit::C),
-    )
-    .map_err(|e| e.to_string())?;
-    engine.set_visible(true);
+    let engine = engine(move |snap| feed.publish(snap, TempUnit::C))?;
 
     let host = if bind.is_unspecified() {
         net::lan_addresses(&net::local_addresses())

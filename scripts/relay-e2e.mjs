@@ -1,0 +1,247 @@
+// End to end through the relay (1.4): the relay Worker run locally (wrangler dev, workerd), a
+// PC played by the companion example with simulated readings, and the phone app in Chromium.
+//
+//   pnpm build:phone && pnpm --dir relay install && node scripts/relay-e2e.mjs
+//
+// It pairs a phone from the PC's link and reads live readings; finds the same link refused the
+// second time; checks that nothing on the wire between the phone and the relay is readable;
+// signs the phone out from the PC; shows a PC that went away as asleep; and runs axe on each
+// screen at phone and desktop width. Exits 1 on any failure. With SHOTS=<folder>, it also saves
+// a screenshot of each screen there.
+
+import { spawn } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright';
+
+const root = fileURLToPath(new URL('..', import.meta.url));
+const require = createRequire(import.meta.url);
+const AXE = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
+const PORT = 8787;
+const RELAY = `http://127.0.0.1:${PORT}`;
+const problems = [];
+let checks = 0;
+
+function problem(where, what) {
+  problems.push(`${where}: ${what}`);
+  console.error(`✗ ${where}: ${what}`);
+}
+
+function ok(where) {
+  checks++;
+  console.log(`✓ ${where}`);
+}
+
+const children = [];
+function run(cmd, args, opts = {}) {
+  const child = spawn(cmd, args, { cwd: root, stdio: ['pipe', 'pipe', 'pipe'], ...opts });
+  children.push(child);
+  return child;
+}
+
+function cleanup() {
+  for (const c of children) if (c.exitCode === null) c.kill('SIGTERM');
+}
+process.on('exit', cleanup);
+
+/** Lines a child prints, and a way to wait for one. */
+function lines(child, label) {
+  const seen = [];
+  const waiters = [];
+  let buf = '';
+  child.stdout.on('data', (d) => {
+    buf += d;
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      seen.push(line);
+      if (process.env.VERBOSE) console.log(`  [${label}] ${line}`);
+      for (const w of [...waiters]) {
+        const m = w.re.exec(line);
+        if (m) {
+          waiters.splice(waiters.indexOf(w), 1);
+          w.resolve(m);
+        }
+      }
+    }
+  });
+  child.stderr.on('data', (d) => process.env.VERBOSE && process.stderr.write(`  [${label}] ${d}`));
+  return {
+    seen,
+    wait(re, ms = 30_000) {
+      const old = seen.map((l) => re.exec(l)).find(Boolean);
+      if (old) return Promise.resolve(old);
+      return new Promise((resolve, reject) => {
+        const w = { re, resolve };
+        waiters.push(w);
+        setTimeout(() => {
+          if (waiters.includes(w)) reject(new Error(`${label}: no line matching ${re} in ${ms} ms`));
+        }, ms);
+      });
+    },
+    /** The next line matching `re` from now on. */
+    next(re, ms = 30_000) {
+      return new Promise((resolve, reject) => {
+        const w = { re, resolve };
+        waiters.push(w);
+        setTimeout(() => {
+          if (waiters.includes(w)) reject(new Error(`${label}: no new line matching ${re} in ${ms} ms`));
+        }, ms);
+      });
+    },
+  };
+}
+
+async function relayUp() {
+  for (let i = 0; i < 120; i++) {
+    try {
+      const r = await fetch(`${RELAY}/`);
+      if (r.ok) return;
+    } catch {
+      /* not yet */
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error('the relay did not start');
+}
+
+/** A PC (the companion example) on the relay; its pairing links and states come on stdout. */
+function startPc() {
+  const child = run('cargo', ['run', '-q', '-p', 'vyro-core', '--example', 'companion', '--', '--relay', RELAY]);
+  return { child, out: lines(child, 'pc'), say: (s) => child.stdin.write(`${s}\n`) };
+}
+
+async function axe(page, where) {
+  if (!(await page.evaluate(() => 'axe' in window))) await page.evaluate(AXE);
+  const found = await page.evaluate(async () =>
+    (await window.axe.run(document, { resultTypes: ['violations'] })).violations.map(
+      (v) => `${v.id} (${v.impact}): ${v.nodes.slice(0, 3).map((n) => n.target.join(' ')).join(' | ')}`,
+    ),
+  );
+  for (const f of found) problem(where, f);
+  const extra = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  if (extra > 1) problem(where, `scrolls sideways by ${extra} px`);
+  if (!found.length && extra <= 1) ok(`axe: ${where}`);
+}
+
+const SHOTS = process.env.SHOTS;
+
+/** axe at phone width, then at desktop width, then back. */
+async function axeBoth(page, where) {
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/${where.replace(/[^a-z0-9]+/gi, '-')}.png`, fullPage: true });
+  await axe(page, `${where} (390 px)`);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await axe(page, `${where} (1440 px)`);
+  await page.setViewportSize({ width: 390, height: 844 });
+}
+
+/** A phone: its own browser storage, with every WebSocket frame kept. */
+async function phone(browser, name) {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  const frames = [];
+  page.on('websocket', (ws) => {
+    ws.on('framesent', (f) => frames.push({ dir: 'sent', payload: f.payload }));
+    ws.on('framereceived', (f) => frames.push({ dir: 'received', payload: f.payload }));
+  });
+  page.on('pageerror', (e) => problem(name, `page error: ${e.message}`));
+  page.on('console', (m) => m.type() === 'error' && !/WebSocket|ERR_|status of 4/.test(m.text()) && problem(name, `console: ${m.text()}`));
+  return { ctx, page, frames };
+}
+
+async function seeText(page, text, where, ms = 20_000) {
+  try {
+    await page.getByText(text).first().waitFor({ timeout: ms });
+    ok(where);
+  } catch {
+    problem(where, `"${text}" never showed; the page says: ${(await page.locator('main').innerText().catch(() => '')).slice(0, 300)}`);
+  }
+}
+
+async function main() {
+  if (!existsSync(`${root}/relay/public/index.html`)) throw new Error('relay/public is empty: run `pnpm build:phone` first');
+  const wrangler = run(`${root}/relay/node_modules/.bin/wrangler`, ['dev', '--port', String(PORT), '--ip', '127.0.0.1', '--log-level', 'warn'], {
+    cwd: `${root}/relay`,
+    env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: 'true' },
+  });
+  lines(wrangler, 'relay');
+  await relayUp();
+  ok('the relay serves the phone app');
+
+  const pc = startPc();
+  const link1 = (await pc.out.wait(/^link: (.+)$/, 600_000))[1];
+  await pc.out.wait(/^state: "online"$/);
+  ok('the PC is on the relay');
+
+  const browser = await chromium.launch();
+  try {
+    // 1. Pair from the link and read.
+    const a = await phone(browser, 'phone A');
+    await a.page.goto(link1);
+    await seeText(a.page, 'Live', 'phone A pairs and reads live readings');
+    await a.page.getByRole('heading', { name: /^CPU/ }).first().waitFor({ timeout: 10_000 });
+    if (a.page.url().includes('#p=')) problem('phone A', 'the pairing link stayed in the address bar');
+    await pc.out.wait(/^watching: 1$/);
+    ok('the PC sees one phone watching');
+    await axeBoth(a.page, 'phone app, live readings');
+
+    // 2. The link works once.
+    const b = await phone(browser, 'phone B');
+    await b.page.goto(link1);
+    await seeText(b.page, 'That pairing code has expired', 'the same link on another phone is refused');
+    await axeBoth(b.page, 'phone app, expired code');
+
+    // 3. Nothing readable on the wire.
+    const plain = /"cpu"|"usage"|"temp"|"gpus"|DESKTOP|"pc":"(?!online)/;
+    for (const f of a.frames) {
+      const text = typeof f.payload === 'string' ? f.payload : Buffer.from(f.payload).toString('latin1');
+      if (typeof f.payload === 'string' && !/^(ping|pong|\{"t":"pc","online":(true|false)\})$/.test(f.payload)) {
+        problem('wire', `a text frame (${f.dir}) the relay could read: ${f.payload.slice(0, 80)}`);
+      } else if (typeof f.payload !== 'string' && plain.test(text)) {
+        problem('wire', `a binary frame (${f.dir}) with readable readings`);
+      }
+    }
+    const sealed = a.frames.filter((f) => typeof f.payload !== 'string').length;
+    if (sealed < 3) problem('wire', `only ${sealed} sealed frames seen`);
+    else ok(`${a.frames.length} frames between phone and relay, ${sealed} sealed, none readable`);
+
+    // 4. The list of PCs.
+    await a.page.getByRole('button', { name: 'PCs' }).click();
+    await seeText(a.page, 'Your PCs', 'the home screen lists the PC');
+    await a.page.locator('.pc-state.online').first().waitFor({ timeout: 10_000 }).then(() => ok('…as online'), () => problem('home', 'the PC is not shown online'));
+    await axeBoth(a.page, 'phone app, home');
+    await a.page.locator('.pc-row').first().click();
+    await seeText(a.page, 'Live', 'opening it again reads live');
+
+    // 5. Signed out from the PC.
+    pc.say('out');
+    await seeText(a.page, 'Signed out of', 'a phone signed out on the PC is told at once');
+    await axeBoth(a.page, 'phone app, signed out');
+
+    // 6. The PC goes away.
+    pc.say('');
+    const link2 = (await pc.out.next(/^link: (.+)$/))[1];
+    const c = await phone(browser, 'phone C');
+    await c.page.goto(link2);
+    await seeText(c.page, 'Live', 'a new link pairs another phone');
+    pc.child.kill('SIGTERM');
+    await seeText(c.page, 'is asleep or off', 'a PC that went away shows as asleep', 30_000);
+    await axeBoth(c.page, 'phone app, PC asleep');
+  } finally {
+    await browser.close();
+  }
+}
+
+main()
+  .catch((e) => problem('run', e.message))
+  .finally(() => {
+    cleanup();
+    if (problems.length) {
+      console.error(`\nRelay end to end: ${problems.length} problem(s) in ${checks + problems.length} checks.`);
+      process.exit(1);
+    }
+    console.log(`\nRelay end to end: ${checks} checks passed.`);
+    process.exit(0);
+  });

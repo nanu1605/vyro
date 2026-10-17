@@ -3,7 +3,8 @@
 //! Between the PC and the relay, JSON text the relay reads:
 //! - PC → relay: `{"t":"phones","list":[{"id","hash"}]}`: the phones let in; replaces the list,
 //!   and the relay closes the sockets of phones that left it or whose key changed.
-//! - relay → PC: `{"t":"here","phones":[…]}`: the phones connected now.
+//! - relay → PC: `{"t":"here","phones":[…]}`: the phones connected now; with `"listed":true`
+//!   when it answers a list, which is then in place.
 //!
 //! Data, binary, never opened by the relay: `[phone id: 4 bytes][sealed frame]` (see
 //! [`super::seal`]). Inside a sealed frame, JSON:
@@ -40,6 +41,9 @@ pub fn phones_message(list: &[Allowed]) -> String {
 pub enum FromRelay {
     Here {
         phones: Vec<String>,
+        /// The answer to a list: the relay has it.
+        #[serde(default)]
+        listed: bool,
     },
     #[serde(other)]
     Other,

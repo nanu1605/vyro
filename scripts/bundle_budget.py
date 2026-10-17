@@ -4,7 +4,7 @@
     python3 scripts/bundle_budget.py           # report
     python3 scripts/bundle_budget.py --check   # also fail when a page is over its budget
 
-Run after `pnpm build`. A page's start cost is every script, preloaded module and stylesheet its
+Run after `pnpm build` and `pnpm build:phone`. A page's start cost is every script, preloaded module and stylesheet its
 HTML names. Lazy chunks (tabs and cards loaded on first view, the 3-D scene) are listed but not
 budgeted: they cost nothing until used. Writes a Markdown table to $GITHUB_STEP_SUMMARY in CI.
 """
@@ -15,17 +15,21 @@ import re
 import sys
 from pathlib import Path
 
-DIST = Path(__file__).resolve().parent.parent / "dist"
+ROOT = Path(__file__).resolve().parent.parent
+DIST = ROOT / "dist"
 
 # Bytes, gzipped. Raise one only on purpose, in the same change as what needs it, and say why
 # in the ROADMAP.
 BUDGETS = {
     # The app's window. 125 kB until 1.1; raised for the new frame (sidebar, top bar, live
     # rail, icons, motion; ROADMAP P28), with the palette and the heavy views still lazy.
-    "index.html": 200_000,
+    "dist/index.html": 200_000,
     # The phone companion (P26). 32 kB until 1.3; raised for a custom accent's colour maths
     # (color.ts: the page shows the PC's accent, any colour; ROADMAP 1.3.0).
-    "remote.html": 34_000,
+    "dist/remote.html": 34_000,
+    # The phone app (1.4), served by the relay: the companion's readings plus pairing, the relay
+    # link and its sealing (WebCrypto). The QR reader for scanning loads only when scanning.
+    "relay/public/index.html": 40_000,
 }
 
 REF = re.compile(r'<(?:script|link)\b[^>]*?\b(?:src|href)="/?(assets/[^"]+\.(?:js|css))"')
@@ -36,10 +40,11 @@ def gz(path: Path) -> int:
 
 
 def page(name: str) -> tuple[int, int, list[str]]:
-    html = (DIST / name).read_text(encoding="utf-8")
+    path = ROOT / name
+    html = path.read_text(encoding="utf-8")
     files = sorted(set(REF.findall(html)))
-    raw = sum((DIST / f).stat().st_size for f in files)
-    return raw, sum(gz(DIST / f) for f in files), files
+    raw = sum((path.parent / f).stat().st_size for f in files)
+    return raw, sum(gz(path.parent / f) for f in files), [str(Path(name).parent / f) for f in files]
 
 
 def kb(n: int) -> str:
@@ -48,8 +53,9 @@ def kb(n: int) -> str:
 
 def main() -> int:
     check = "--check" in sys.argv[1:]
-    if not (DIST / "index.html").exists():
-        print("dist/ is missing: run `pnpm build` first", file=sys.stderr)
+    missing = [n for n in BUDGETS if not (ROOT / n).exists()]
+    if missing:
+        print(f"{', '.join(missing)} missing: run `pnpm build` and `pnpm build:phone` first", file=sys.stderr)
         return 2
     lines = ["| Page | Start files | Raw | Gzipped | Budget |", "|---|---:|---:|---:|---:|"]
     over = []
@@ -65,7 +71,7 @@ def main() -> int:
             over.append(f"{name}: {kb(packed)} gzipped, over its {kb(budget)} budget")
     lazy = sorted(
         (p for p in (DIST / "assets").iterdir() if p.suffix == ".js"
-         and f"assets/{p.name}" not in start),
+         and f"dist/assets/{p.name}" not in start),
         key=lambda p: p.stat().st_size,
         reverse=True,
     )

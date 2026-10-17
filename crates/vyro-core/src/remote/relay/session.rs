@@ -30,6 +30,8 @@ pub struct Effects {
 pub struct Session {
     /// The phone list last sent to the relay.
     sent: Option<u64>,
+    /// The phone list the relay last confirmed it has.
+    listed: Option<u64>,
     here: BTreeSet<String>,
     watching: BTreeSet<String>,
     /// The view last sent to the watching phones.
@@ -73,11 +75,21 @@ impl Session {
         })
     }
 
+    /// The phone list the relay has (its generation, [`Phones::generation`]).
+    pub fn listed(&self) -> Option<u64> {
+        self.listed
+    }
+
     /// A text message from the relay.
     pub fn on_text(&mut self, text: &str) -> Effects {
-        let Ok(FromRelay::Here { phones }) = serde_json::from_str::<FromRelay>(text) else {
+        let Ok(FromRelay::Here { phones, listed }) = serde_json::from_str::<FromRelay>(text) else {
             return Effects::default();
         };
+        // The relay answers lists in the order they were sent, and its answer to the latest one
+        // comes last, so `listed` may lag a list just sent, never run ahead of it.
+        if listed {
+            self.listed = self.sent;
+        }
         self.here = phones.into_iter().collect();
         let before = self.watching.len();
         let here = &self.here;

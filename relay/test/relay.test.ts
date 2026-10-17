@@ -97,7 +97,7 @@ async function pc(r: string, k: Uint8Array): Promise<Sock> {
 
 async function register(p: Sock, phones: Array<{ id: string; auth: Uint8Array }>): Promise<void> {
   p.ws.send(JSON.stringify({ t: 'phones', list: phones.map((x) => ({ id: x.id, hash: sha(x.auth) })) }));
-  expect(await p.json()).toMatchObject({ t: 'here' });
+  expect(await p.json()).toMatchObject({ t: 'here', listed: true });
 }
 
 describe("the phone app's files", () => {

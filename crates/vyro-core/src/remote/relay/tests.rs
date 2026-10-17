@@ -354,8 +354,11 @@ fn pairing_over_the_relay_then_reading() {
     assert_eq!(phone.read(&outs[0]).unwrap()["view"]["ts"], 2);
     assert!(s.views(&p, 2, r#"{"ts":2}"#).is_empty(), "each view once");
 
-    // The relay says the phone left.
+    // The relay says the phone left; this is not an answer to a list.
     assert!(s.on_text(r#"{"t":"here","phones":[]}"#).watching);
+    assert_eq!(s.listed(), None);
+    let _ = s.on_text(r#"{"t":"here","phones":[],"listed":true}"#);
+    assert_eq!(s.listed(), Some(p.generation()));
     assert!(s.views(&p, 3, r#"{"ts":3}"#).is_empty());
 }
 
