@@ -840,4 +840,89 @@ mod tests {
         }
         println!("{}", serde_json::to_string_pretty(&d).unwrap_or_default());
     }
+
+    /// A node's name as Device Manager shows it: Configuration Manager returns it localized.
+    fn cm_name(instance: &str) -> Option<String> {
+        use windows::Win32::Devices::DeviceAndDriverInstallation::{
+            CM_Get_DevNode_PropertyW, CM_Locate_DevNodeW, CM_LOCATE_DEVNODE_NORMAL,
+        };
+        let id = HSTRING::from(instance);
+        let mut node = 0u32;
+        // SAFETY: valid out pointer and NUL-terminated id.
+        if unsafe { CM_Locate_DevNodeW(&mut node, PCWSTR(id.as_ptr()), CM_LOCATE_DEVNODE_NORMAL) }
+            != CR_SUCCESS
+        {
+            return None;
+        }
+        [DEVPKEY_Device_FriendlyName, DEVPKEY_Device_DeviceDesc]
+            .iter()
+            .find_map(|key| {
+                let mut ty = DEVPROPTYPE::default();
+                let mut buf = [0u16; 512];
+                let mut size = u32::try_from(std::mem::size_of_val(&buf)).unwrap_or(0);
+                // SAFETY: the buffer holds `size` bytes.
+                let cr = unsafe {
+                    CM_Get_DevNode_PropertyW(
+                        node,
+                        key,
+                        &mut ty,
+                        Some(buf.as_mut_ptr().cast()),
+                        &mut size,
+                        0,
+                    )
+                };
+                (cr == CR_SUCCESS && ty == DEVPROP_TYPE_STRING).then(|| {
+                    String::from_utf16_lossy(buf.split(|c| *c == 0).next().unwrap_or(&[]))
+                        .trim()
+                        .to_owned()
+                })
+            })
+            .filter(|s| !s.is_empty())
+    }
+
+    /// Every present node's name is the one Device Manager shows, so a name the query leaves out
+    /// or unresolved fails here (1.3: "Unknown device" where Settings names the device).
+    #[test]
+    fn names_match_device_manager() {
+        let keys = [
+            DEVPKEY_Device_FriendlyName,
+            DEVPKEY_Device_DeviceDesc,
+            DEVPKEY_Device_IsPresent,
+        ];
+        let mut checked = 0;
+        let mut wrong = Vec::new();
+        assert!(query(DevObjectTypeDevice, &keys, None, |id, p| {
+            if p.bool(&DEVPKEY_Device_IsPresent) != Some(true) {
+                return;
+            }
+            let Some(want) = cm_name(id) else {
+                return;
+            };
+            checked += 1;
+            let got = p
+                .string(&DEVPKEY_Device_FriendlyName)
+                .or_else(|| p.string(&DEVPKEY_Device_DeviceDesc));
+            if got.as_deref() != Some(want.as_str()) {
+                let ty = |k: &DEVPROPKEY| {
+                    p.0.iter()
+                        .find(|x| same(&x.CompKey.Key, k))
+                        .map(|x| x.Type.0)
+                };
+                wrong.push(format!(
+                    "{want:?}: query gave {got:?} (types {:?} / {:?})",
+                    ty(&DEVPKEY_Device_FriendlyName),
+                    ty(&DEVPKEY_Device_DeviceDesc)
+                ));
+            }
+        }));
+        let named = containers().iter().filter(|c| c.name.is_some()).count();
+        println!("{checked} nodes checked; {named} containers named");
+        assert!(checked > 0);
+        assert!(
+            wrong.is_empty(),
+            "{} of {checked} names differ from Device Manager's:\n{}",
+            wrong.len(),
+            wrong.join("\n")
+        );
+    }
 }
