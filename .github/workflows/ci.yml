@@ -178,6 +178,7 @@ jobs:
             throw "app smoke test failed: $($result.failures -join '; ')"
           }
           $timings = ($result.steps | ForEach-Object { "$($_.name) $($_.ms) ms" }) -join ', '
+          Write-Host "App smoke test: $timings; Show desktop: $($result.show_desktop)"
 
           Msi '/x' "$env:RUNNER_TEMP\uninstall.log"
           if (Get-Service VyroService -ErrorAction SilentlyContinue) { throw 'VyroService is still registered' }
