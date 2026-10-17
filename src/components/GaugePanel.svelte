@@ -91,7 +91,7 @@
     <span class="spark-label">60 s</span>
     <canvas class="spark" bind:this={spark} aria-hidden="true"></canvas>
   </div>
-  {#if detail}<p class="detail">{detail}</p>{/if}
+  {#if detail}<p class="detail" title={detail}>{detail}</p>{/if}
 </section>
 
 <style>
@@ -125,10 +125,15 @@
     height: 2.5rem;
     min-width: 0;
   }
+  /* One line (1.2), so the two gauges side by side stay one height. */
   .detail {
+    max-width: 100%;
     margin: 0;
+    overflow: hidden;
     color: var(--muted);
     font-size: 0.8rem;
     text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>

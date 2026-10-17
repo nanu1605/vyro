@@ -2204,6 +2204,47 @@ two ship together as one release (the owner's choice).
       passed (Windows built each step on the last one answered)". That confirms finding 2's
       cause, and that the fix comes away from a snap with a real mouse drag. The app is the
       same as f987a61's.
+- [x] **The owner's findings on b4748f3** (2026-10-17, their PC at about 2000 px wide, with two
+      GPUs: an RTX 5060 Ti and the Ryzen's AMD graphics):
+      1. **The clock widget's readings ran past its edge.**
+         - Cause: the two readings sat on one line with nowhere to break. With two GPUs the
+           labels gain "(GPU 1)", so the line was about 290 px in a 260 px widget.
+         - Fix: one reading a row, the name cut with "…" when long and the value on the right.
+           The window is 100 px tall plus 20 a reading, in `widgets::size` and `widgetSize`
+           alike.
+         - The other kinds got the same care:
+           - a network rate from 1000 Mbps shows in Gbps;
+           - a dial's long number gets smaller, and its label is cut to fit;
+           - a large reading stays on one line.
+      2. **The Logical processors bars filled only the left half of their card.**
+         - Cause: `auto-fill` kept the empty tracks, so 16 bars took the first 16 of about 30.
+         - Fix: `balancedColumns` (`packing.ts`) lays them across the card in even rows, at most
+           7rem each and centred. 16 threads on a wide card are one row of 16. The CPU sensors'
+           per-core power is split the same way: 8 cores read 4 and 4, not 7 and 1.
+      3. **Other cards wasted space.**
+         - Cause: each Dashboard row was as tall as its tallest card, and every card stretched
+           to it. Two GPUs made the GPU card about 860 px, so CPU sensors (180 px of
+           readings), Memory and Power were mostly blank.
+         - Fix: the grid's rows are a quarter rem. `pack` (`packing.ts`) gives each widget as
+           many rows as it is tall, never fewer than its h asks for, and places it in order
+           where it sits highest (`skyline`, tested), so the next card moves up into the room a
+           short one leaves.
+           - Tiles and gauges keep one height: one-line labels, and the sub line's room kept
+             even when empty. A row of them stays in line.
+           - The editor packs the same way.
+         - The GPU card leaves out what a GPU doesn't report and names it once ("Not reported:
+           hotspot, memory temp, …"): the AMD graphics' card drops eight empty lines. Two GPUs
+           sit side by side on a wide card.
+         - On a wide card, the label and value lists run two or three pairs a row.
+         - On the owner's layout the page is 320 px shorter, with no blank card.
+      - The browser preview now has the processor's graphics as a second GPU, as the owner's
+        PC does. The accessibility sweep checks, on the owner's layout at four widths:
+        - text stays inside every widget, including the longest names two GPUs give;
+        - no two Dashboard widgets overlap;
+        - no card has blank space under its content;
+        - the thread bars span their card.
+
+        Run against the old code, these checks report every finding above.
 - [ ] Field check 2 ([`docs/field-check-1.2.md`](docs/field-check-1.2.md)), then the owner's go
       for the release.
 

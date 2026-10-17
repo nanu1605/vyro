@@ -1,6 +1,8 @@
 // Accessibility sweep (P27): axe-core on every tab of the app in all six themes at two desktop
 // widths and phone width, the main dialogs, the desktop widgets and the phone companion, plus keyboard focus
-// rings and reduced motion. Runs against the browser preview (sample data) of a finished build:
+// rings and reduced motion. Since 1.2 also: text stays inside every desktop widget (with the longest
+// names two GPUs give), and the Dashboard's cards pack without blank stretches or overlaps. Runs
+// against the browser preview (sample data, two GPUs as on the owner's PC) of a finished build:
 //
 //   pnpm build && pnpm a11y
 //
@@ -45,6 +47,51 @@ const WIDGETS = {
   ],
 };
 const SEED_WIDGETS = `localStorage.setItem('vyro.widgets', ${JSON.stringify(JSON.stringify(WIDGETS))})`;
+// The longest texts each kind shows: the second GPU's readings ("GPU hotspot (GPU 2)"), a dial
+// on a rate in the hundreds, a clock with two GPU readings (1.2's finding: past the edge).
+const LONG = {
+  version: 1,
+  shown: true,
+  widgets: [
+    DESK('clock2', 'clock', ['gpu.1.temp', 'gpu.0.hotspot'], 'app'),
+    DESK('gauge2', 'gauge', ['net.down'], 'app'),
+    DESK('reading2', 'reading', ['gpu.1.vram'], 'app'),
+    DESK('stack2', 'stack', ['gpu.1.usage', 'gpu.1.temp', 'gpu.0.hotspot', 'gpu.1.clock', 'gpu.0.vram', 'cpu.power'], 'app'),
+    DESK('graph2', 'graph', ['gpu.1.clock'], 'app'),
+    DESK('clock3', 'clock', ['gpu.0.hotspot'], 'glass'),
+  ],
+};
+const SEED_LONG = `localStorage.setItem('vyro.widgets', ${JSON.stringify(JSON.stringify(LONG))})`;
+
+/** A widget window's size, logical px: `widgetSize` in src/widgets.ts at 100 %. */
+function deskSize(w) {
+  const n = Math.max(1, w.sources.length);
+  return {
+    gauge: [200, 200],
+    graph: [300, 150],
+    stack: [250, 52 + 36 * n],
+    clock: [260, 100 + 20 * w.sources.length],
+    network: [280, 150],
+    game: [260, 150],
+    top: [260, 200],
+  }[w.kind] ?? [220, 104];
+}
+
+// The owner's Dashboard (1.2's finding): the thread bars across the top, then six cards of very
+// different heights side by side.
+const r3 = (source) => ['reading', 3, 1, source];
+const OWNER = [
+  ['gauge', 6, 3, 'cpu'], ['gauge', 6, 3, 'gpu.0'],
+  r3('cpu.temp'), r3('cpu.power'), r3('gpu.0.temp'), r3('gpu.0.hotspot'), r3('gpu.0.vram'), r3('mem.used'), r3('power.system'), r3('fan.cpu'),
+  ['card', 12, 2, 'cores'], ['card', 4, 2, 'cpuSensors'], ['card', 4, 2, 'gpus'], ['card', 4, 2, 'memory'],
+  ['card', 4, 2, 'power'], ['card', 4, 2, 'board'], ['card', 4, 2, 'self'],
+];
+const DASH = {
+  version: 1,
+  active: 'owner',
+  layouts: [{ id: 'owner', name: 'Owner', preset: null, locked: false, widgets: OWNER.map(([kind, w, h, source], i) => ({ id: `w${i + 1}`, kind, w, h, source })) }],
+};
+const SEED_DASH = `localStorage.setItem('vyro.dashboard', ${JSON.stringify(JSON.stringify(DASH))})`;
 
 const problems = [];
 const problem = (where, what) => problems.push(`${where}: ${what}`);
@@ -239,34 +286,123 @@ async function markOnSelected(page, where) {
 // --- Desktop widget windows (P30, 1.2): each kind at its window's size, and a widget's menu. --
 
 async function sweepWidgets(browser, theme) {
-  const sizes = {
-    gauge1: [200, 200],
-    reading1: [220, 104],
-    graph1: [300, 150],
-    stack1: [250, 268],
-    clock1: [260, 120],
-    network1: [280, 150],
-    game1: [260, 150],
-    top1: [260, 200],
-  };
-  for (const w of WIDGETS.widgets) {
-    const [width, height] = sizes[w.id];
-    const { ctx, page } = await open(browser, `${BASE}/#widget=${w.id}`, { width, theme, init: SEED_WIDGETS });
-    await page.setViewportSize({ width, height });
-    await page.goto(`${BASE}/#widget=${w.id}`);
-    await page.waitForTimeout(1200);
-    const at = (what) => `Widget ${w.kind} (${w.style})${what} · ${theme}`;
-    // Glass shows the desktop through, which no check can see: its text is drawn with a shadow
-    // for any wallpaper, so contrast is left to the field check.
-    if (w.style === 'glass') await page.addStyleTag({ content: ':root.widget body { background: #1b2433 }' });
-    await axe(page, at(''));
-    if (w.id === 'gauge1') {
-      await page.mouse.click(width / 2, height / 2, { button: 'right' });
-      await page.getByRole('menu').waitFor();
-      await axe(page, at(', menu'));
+  for (const [set, seed] of [
+    [WIDGETS, SEED_WIDGETS],
+    [LONG, SEED_LONG],
+  ]) {
+    for (const w of set.widgets) {
+      const [width, height] = deskSize(w);
+      const { ctx, page } = await open(browser, `${BASE}/#widget=${w.id}`, { width, theme, init: seed });
+      await page.setViewportSize({ width, height });
+      await page.goto(`${BASE}/#widget=${w.id}`);
+      await page.waitForTimeout(1200);
+      const at = (what) => `Widget ${w.kind} ${w.id} (${w.style})${what} · ${theme}`;
+      // Glass shows the desktop through, which no check can see: its text is drawn with a shadow
+      // for any wallpaper, so contrast is left to the field check.
+      if (w.style === 'glass') await page.addStyleTag({ content: ':root.widget body { background: #1b2433 }' });
+      await axe(page, at(''));
+      await textInside(page, at(''));
+      if (w.id === 'gauge1') {
+        await page.mouse.click(width / 2, height / 2, { button: 'right' });
+        await page.getByRole('menu').waitFor();
+        await axe(page, at(', menu'));
+      }
+      await ctx.close();
     }
-    await ctx.close();
   }
+}
+
+/** Every text in the widget's face lies inside its card; text cut short with "…" counts by its box. */
+async function textInside(page, where) {
+  const out = await page.evaluate(() => {
+    const desk = document.querySelector('.desk');
+    if (!desk) return ['no widget face'];
+    const b = desk.getBoundingClientRect();
+    const box = { left: b.left + 1, right: b.right - 1, top: b.top + 1, bottom: b.bottom - 1 };
+    const cutBy = (el) => {
+      for (let e = el; e && e !== desk; e = e.parentElement) {
+        const s = getComputedStyle(e);
+        if (s.textOverflow === 'ellipsis' && s.overflowX !== 'visible') return e;
+      }
+      return null;
+    };
+    const bad = [];
+    const walk = document.createTreeWalker(desk, NodeFilter.SHOW_TEXT);
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+      const text = n.textContent.trim();
+      const el = n.parentElement;
+      if (!text || !el || el.closest('.sr-only')) continue;
+      const clip = cutBy(el);
+      let rects;
+      if (clip) rects = [clip.getBoundingClientRect()];
+      else if (el instanceof SVGElement) rects = [el.getBoundingClientRect()];
+      else {
+        const r = document.createRange();
+        r.selectNodeContents(n);
+        rects = [...r.getClientRects()];
+      }
+      for (const r of rects) {
+        const past = Math.max(r.right - box.right, box.left - r.left, r.bottom - box.bottom, box.top - r.top);
+        if (r.width > 0 && past > 0.5) {
+          bad.push(`"${text.slice(0, 32)}" is ${Math.ceil(past)} px past the edge`);
+          break;
+        }
+      }
+    }
+    return bad;
+  });
+  checks++;
+  for (const b of out) problem(where, `text outside the widget: ${b}`);
+}
+
+// --- The Dashboard's packing (1.2): the owner's layout at each width. ------------------------------
+
+async function sweepDashboard(browser, theme, width) {
+  const { ctx, page } = await open(browser, BASE, { width, theme, init: SEED_DASH });
+  await page.goto(`${BASE}/`);
+  await page.waitForTimeout(1200);
+  // The preview always runs a game, and its profile hides the detail cards: keep yours.
+  await tab(page, 'Settings');
+  await page.getByRole('switch', { name: /^Switch profiles for games/ }).uncheck();
+  await tab(page, 'Dashboard');
+  await page.waitForTimeout(800);
+  const where = `Dashboard packing · ${theme} ${width}px`;
+  const found = await page.evaluate(() => {
+    const bad = [];
+    const cells = [...document.querySelectorAll('.dash-grid .dash-cell')];
+    if (cells.length < 10) bad.push(`only ${cells.length} widgets shown`);
+    const boxes = cells.map((c) => ({ c, r: c.getBoundingClientRect(), name: c.querySelector('h2')?.textContent ?? c.textContent.trim().slice(0, 20) }));
+    // No two widgets on top of each other.
+    for (let i = 0; i < boxes.length; i++)
+      for (let j = i + 1; j < boxes.length; j++) {
+        const [a, b] = [boxes[i].r, boxes[j].r];
+        if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) bad.push(`"${boxes[i].name}" and "${boxes[j].name}" overlap`);
+      }
+    // A card taller than its layout size is so for its content: no blank stretch under it.
+    for (const { c, name } of boxes) {
+      const card = c.querySelector(':scope > .card, :scope > .panel');
+      if (!card || !card.lastElementChild) continue;
+      const min = parseFloat(getComputedStyle(c).minHeight) || 0;
+      if (c.offsetHeight <= min + 1) continue;
+      const cs = getComputedStyle(card);
+      const blank = card.getBoundingClientRect().bottom - parseFloat(cs.paddingBottom) - parseFloat(cs.borderBottomWidth) - card.lastElementChild.getBoundingClientRect().bottom;
+      if (blank > 2) bad.push(`"${name}" has ${Math.round(blank)} px of blank under its content`);
+    }
+    // The thread bars span their card (or are at their widest).
+    const ul = document.querySelector('.dash-grid .cores');
+    const lis = ul ? [...ul.children] : [];
+    if (lis.length) {
+      const u = ul.getBoundingClientRect();
+      const span = Math.max(...lis.map((l) => l.getBoundingClientRect().right)) - Math.min(...lis.map((l) => l.getBoundingClientRect().left));
+      const widest = lis[0].getBoundingClientRect().width >= 7 * parseFloat(getComputedStyle(document.documentElement).fontSize) - 1;
+      if (span < u.width * 0.9 && !widest) bad.push(`the thread bars fill ${Math.round((span / u.width) * 100)} % of their card`);
+    } else bad.push('no thread bars');
+    return bad;
+  });
+  checks++;
+  for (const f of found) problem(where, f);
+  await noSidewaysScroll(page, where);
+  await ctx.close();
 }
 
 // --- The phone companion, served the API's answers. --------------------------------------------
@@ -398,6 +534,7 @@ try {
     }
     for (const theme of ['midnight', 'daylight']) {
       await Promise.all(WIDTHS.map((w) => sweepDialogs(browser, theme, w)));
+      await Promise.all([...WIDTHS, 800].map((w) => sweepDashboard(browser, theme, w)));
       await sweepShell(browser, theme);
       await sweepWidgets(browser, theme);
     }

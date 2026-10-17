@@ -19,6 +19,9 @@ describe('desktop widgets', () => {
     expect(widgetSize({ kind: 'gauge', sources: ['a'], scale: 150 })).toEqual([300, 300]);
     expect(widgetSize({ kind: 'stack', sources: ['a', 'b', 'c'], scale: 100 })).toEqual([250, 160]);
     expect(widgetSize({ kind: 'reading', sources: [], scale: 50 })).toEqual([110, 52]);
+    // The clock: a row for each reading under the time and date (1.2).
+    expect(widgetSize({ kind: 'clock', sources: [], scale: 100 })).toEqual([260, 100]);
+    expect(widgetSize({ kind: 'clock', sources: ['cpu.temp', 'gpu.0.temp'], scale: 100 })).toEqual([260, 140]);
     expect(widgetSize({ kind: 'network', sources: [], scale: 100 })).toEqual([280, 150]);
     expect(widgetSize({ kind: 'game', sources: [], scale: 100 })).toEqual([260, 150]);
     expect(widgetSize({ kind: 'top', sources: ['proc.cpu'], scale: 100 })).toEqual([260, 200]);

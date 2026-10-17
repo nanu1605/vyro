@@ -3,7 +3,7 @@
 // on non-Windows hosts).
 
 import { simGame } from './sim-game';
-import type { HealthReport, SensorSnapshot, Status, SubsystemHealth } from './types';
+import type { GpuSnapshot, HealthReport, SensorSnapshot, Status, SubsystemHealth } from './types';
 
 /** Every field present and unavailable, mirroring what the Rust side serializes. */
 export function emptySnapshot(ts: number): SensorSnapshot {
@@ -265,10 +265,43 @@ export function simHealth(s: SensorSnapshot): HealthReport {
 
 const rank = (s: Status) => ({ fail: 3, warn: 2, ok: 1, unknown: 0 })[s];
 
-/** Emits a simulated snapshot immediately and then every `intervalMs`. Returns a stop function. */
+/** The processor's own graphics, as many desktops have beside their card: it reports little. */
+export function simIgpu(s: SensorSnapshot): GpuSnapshot {
+  const busy = Math.min(4, s.cpu.usageTotal ?? 0) / 2;
+  return {
+    name: 'AMD Radeon(TM) Graphics',
+    vendor: 'AMD',
+    integrated: true,
+    usage: busy,
+    engine: { graphics3d: busy, decode: 0, encode: 0, compute: 0, copy: 0, tensor: null, raytrace: null },
+    mhzCore: 600,
+    mhzMem: 2800,
+    tempEdge: (s.cpu.tempPackage ?? 50) - 6,
+    tempHotspot: null,
+    tempMem: null,
+    vramUsedMB: 40,
+    vramTotalMB: 512,
+    powerW: null,
+    powerLimitW: null,
+    voltageV: null,
+    fanPct: null,
+    fanRpm: null,
+    pcieGen: null,
+    pcieWidth: null,
+    throttleThermal: null,
+    throttlePowerLimit: null,
+    throttleReasons: [],
+  };
+}
+
+/** Emits a simulated snapshot immediately and then every `intervalMs`. Returns a stop function.
+ * The preview's PC also has the processor's graphics (1.2), as the owner's has: two GPUs. */
 export function startSim(cb: (s: SensorSnapshot) => void, intervalMs = 1000): () => void {
   const st = initialSimState();
-  const tick = () => cb(nextSnapshot(st, Math.floor(Date.now() / 1000), 1000 / intervalMs));
+  const tick = () => {
+    const s = nextSnapshot(st, Math.floor(Date.now() / 1000), 1000 / intervalMs);
+    cb({ ...s, gpu: [...s.gpu, simIgpu(s)] });
+  };
   tick();
   const id = setInterval(tick, intervalMs);
   return () => clearInterval(id);

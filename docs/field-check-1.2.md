@@ -1,6 +1,8 @@
-# Field check: 1.2 (widgets through Show desktop, snapping, clicks passing through, three new kinds; My PC fixes)
+# Field check: 1.2 (widgets through Show desktop, snapping, clicks passing through, three new kinds; My PC fixes; text inside widgets and the Dashboard's packing)
 
-Status: **check 1 run on 2026-10-17, with six findings, all fixed. Check 2 not run yet.**
+Status: **check 1 run on 2026-10-17, with six findings, all fixed. On the b4748f3 build the owner
+then found three more (widget text past the edge, the thread bars, blank cards), all fixed.
+Check 2 not run yet.**
 
 1.2 is one release that also carries 1.1.1, at the owner's request. ROADMAP → 1.1.1 and
 1.2.0 have how each part works. It adds to the desktop widgets:
@@ -14,9 +16,13 @@ After check 1 it also fixes:
 - My PC's 3-D view: its size, the white haze, front case fans standing still, and airflow,
   which now shows as wind-tunnel smoke lines.
 
+After the b4748f3 build it also fixes:
+- text running past a widget's edge (the clock with two GPU readings);
+- the Dashboard's thread bars filling half their card, and cards stretched into blank space.
+
 **Build.** Use the `vyro-windows-<commit>` artifact of the latest CI run on
 `claude/blissful-knuth-begnu5` (Actions → the run → Artifacts), version 1.2.0. Install the MSI
-over what you have. It takes about 30 minutes.
+over what you have. It takes about 40 minutes.
 
 ## Before you start
 
@@ -62,7 +68,7 @@ These retest check 1's findings 1 and 2.
 - **Unlock it on the Widgets page:** the widget catches the mouse again, and can be dragged and
   right-clicked. While the widget is unlocked, the switch is greyed out.
 
-## 4. The new kinds
+## 4. The new kinds, and text inside every widget
 
 Add one of each from the gallery.
 - **Network:** during a download, the down figure and its line rise, with the adapter's name
@@ -71,6 +77,13 @@ Add one of each from the gallery.
   With no game, it shows "No game running".
 - **Top processes:** a browser shows as one row with "×N". "Busiest by" switches between CPU,
   Memory and GPU.
+- **Text inside** (the b4748f3 finding): on each widget, nothing runs past its edge. A name too
+  long for the room ends in "…".
+  - A clock with "GPU temp (GPU 1)" and "GPU hotspot (GPU 1)" shows them one a row, the values
+    on the right.
+  - A stack, a gauge and a reading of your second GPU (the processor's graphics) also show in
+    full or end in "…".
+  - Try 150 % and 50 % sizes too.
 
 ## 5. My PC
 
@@ -97,7 +110,22 @@ These retest check 1's findings 3 to 6.
 - **Laptop** (Settings → My PC → Model → Laptop, if you want to look): it is framed whole, and
   the airflow runs through each blower and out of the back.
 
-## 6. Footprint
+## 6. Dashboard
+
+These retest the b4748f3 findings on your own layout, at your usual window size and maximised.
+- **Logical processors:** the 16 bars run across the whole card, in one row on a wide card or
+  in even rows on a narrow one. On CPU sensors, the per-core power reads 4 and 4.
+- **No blank cards:** each card is as tall as what it shows.
+  - CPU sensors is short, and Power and Board sit right under it.
+  - Memory's card ends after its timings, and Vyro itself sits under it.
+  - A row of reading tiles, or the two gauges, stays in line.
+- **GPUs:** the AMD graphics' card shows what it reports, then one line "Not reported: …"
+  instead of rows of "—". Made 8 or 12 columns wide, the two GPUs sit side by side, and a card's
+  lists run in two or three columns.
+- **Editing:** "Edit layout" shows the same arrangement. Resize a card taller: it keeps that
+  height and the cards under it move down. Move a card: the others close the gap.
+
+## 7. Footprint
 
 - With widgets showing and Vyro in the tray, Task Manager's CPU for Vyro at rest is the same as
   with 1.1. Snapping only runs during a drag.

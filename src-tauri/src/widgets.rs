@@ -190,7 +190,8 @@ pub fn size(w: &DesktopWidget) -> (f64, f64) {
         "gauge" => (200.0, 200.0),
         "graph" => (300.0, 150.0),
         "stack" => (250.0, 52.0 + 36.0 * w.sources.len().max(1) as f64),
-        "clock" => (260.0, 120.0),
+        // The time and date, then one row a reading (1.2).
+        "clock" => (260.0, 100.0 + 20.0 * w.sources.len() as f64),
         "network" => (280.0, 150.0),
         "game" => (260.0, 150.0),
         "top" => (260.0, 200.0),
@@ -806,6 +807,12 @@ mod tests {
         assert_eq!(size(&widget("n", "network", &[])), (280.0, 150.0));
         assert_eq!(size(&widget("g", "game", &[])), (260.0, 150.0));
         assert_eq!(size(&widget("t", "top", &["proc.cpu"])), (260.0, 200.0));
+        assert_eq!(size(&widget("c", "clock", &[])), (260.0, 100.0));
+        assert_eq!(
+            size(&widget("c", "clock", &["cpu.temp", "gpu.0.temp"])),
+            (260.0, 140.0),
+            "a row for each reading"
+        );
     }
 
     #[test]

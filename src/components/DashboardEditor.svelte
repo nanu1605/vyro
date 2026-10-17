@@ -25,6 +25,7 @@
   } from '../dashboard-edit';
   import type { WidgetKind } from '../dashboard';
   import { getSensorTree } from '../ipc';
+  import { pack } from '../packing';
   import type { Dashboard, Layout, SensorSnapshot, SensorTree, Widget } from '../types';
 
   interface Props {
@@ -235,7 +236,7 @@
   Drag a widget to move it and its corner to resize it, or use its menu. {layout.widgets.length} of {MAX_WIDGETS} widgets.
 </p>
 
-<div class="dash-grid editing">
+<div class="dash-grid editing" use:pack>
   {#each layout.widgets as w, i (w.id)}
     {@const t = title(w)}
     <div
@@ -246,6 +247,7 @@
       style:--w={w.w}
       style:--wn={narrowSpan(w.w)}
       style:--h={w.h}
+      style:--span0={23 * w.h}
       role="group"
       aria-label="{t}, {i + 1} of {layout.widgets.length}"
       ondragover={(e) => onDragOver(e, w)}

@@ -91,7 +91,7 @@ export function widgetSize(w: Pick<DesktopWidget, 'kind' | 'sources' | 'scale'>)
         : w.kind === 'stack'
           ? [250, 52 + 36 * Math.max(1, w.sources.length)]
           : w.kind === 'clock'
-            ? [260, 120]
+            ? [260, 100 + 20 * w.sources.length]
             : w.kind === 'network'
               ? [280, 150]
               : w.kind === 'game'

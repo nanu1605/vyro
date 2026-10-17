@@ -184,6 +184,8 @@ or actions, 0.3 moves `alerts.json` aside (to `alerts.json.bad`) and uses its de
 
   Up to 12 layouts can be saved, with a picker. Seven presets ship: Default, Gaming, Work,
   Streaming, Benchmark, Monitoring and Minimal. A layout can be locked, and a preset reset.
+  Each widget is as tall as it needs (at least the size you gave it), and the next one moves up
+  into the room a short card leaves, so no card stretches into blank space (1.2).
 - **My PC.** Your PC in 3-D, with three views:
   - your PC: a tower with glass, lit fans, your cooler, RAM sticks, GPU, drives and cables;
     or, on a laptop, the laptop with its lid open, heat pipes and blower fans (1.1);
@@ -221,7 +223,7 @@ widgets:
 - **Reading:** one reading, large.
 - **Graph:** one reading and its last minute.
 - **Stack:** up to six readings, one under the other, with bars.
-- **Clock:** the time and date, with two readings.
+- **Clock:** the time and date, with up to two readings, one a row.
 - **Network** (1.2): download and upload, and their last minute.
 - **Game FPS** (1.2): the running game's frame rate, 1% low and frame time, and the last
   minute; "No game running" otherwise.
@@ -298,7 +300,7 @@ Nothing on it changes the PC.
 | [`docs/diagnostics.md`](docs/diagnostics.md) | The diagnostics checks |
 | [`docs/field-check.md`](docs/field-check.md) | The owner's field check of 1.0 (P16–P27) on the reference PC, in one pass |
 | [`docs/field-check-1.1.md`](docs/field-check-1.1.md) | The field check of 1.1 (P28–P30): the new look, My PC and the laptop, desktop widgets |
-| [`docs/field-check-1.2.md`](docs/field-check-1.2.md) | The field check of 1.2: widgets through Show desktop, snapping, clicks passing through, three new kinds; My PC's view, glass, fans and airflow |
+| [`docs/field-check-1.2.md`](docs/field-check-1.2.md) | The field check of 1.2: widgets through Show desktop, snapping, clicks passing through, three new kinds; My PC's view, glass, fans and airflow; text inside every widget; the Dashboard's packing |
 
 `vyro-remote.exe` in the same artifact checks the service from the outside (state, connection,
 sensors; `--capture Game.exe` measures a running game for 15 s). The service logs to `%ProgramData%\Vyro\service.log`.

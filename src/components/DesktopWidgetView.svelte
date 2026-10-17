@@ -38,9 +38,22 @@
   const frac = $derived(first?.value != null ? Math.max(0, Math.min(1, first.value / top)) : 0);
   const R = 78;
   const ARC = (270 / 360) * 2 * Math.PI * R;
+  // Text that stays inside (1.2): a long number gets smaller, and so does a reading's.
+  const firstText = $derived(fmt(first?.value, first?.digits ?? 0));
+  const bigPx = $derived(firstText.length <= 5 ? 44 : Math.round((44 * 5) / firstText.length));
+  /** The dial's label, cut with "…" to the width under the dial (the full one is its aria-label). */
+  const dialLabel = $derived(cut(first?.label ?? '—', 21));
+  function cut(s: string, n: number): string {
+    return s.length <= n ? s : `${s.slice(0, n - 1).trimEnd()}…`;
+  }
 
   // Network: the adapter with the default route, as the Dashboard's readings use.
   const net = $derived(snap?.network.find((n) => n.primary && n.connected) ?? snap?.network.find((n) => n.connected) ?? null);
+  /** A rate in Mbps, or Gbps from 1000 Mbps, so both fit side by side. */
+  const rate = (mbps: number | null | undefined) =>
+    mbps == null ? { v: fmt(null), u: '' } : mbps >= 1000 ? { v: fmt(mbps / 1000, 2), u: 'Gbps' } : { v: fmt(mbps, 1), u: 'Mbps' };
+  const down = $derived(rate(net?.downMbps));
+  const up = $derived(rate(net?.upMbps));
 
   // Game: while Vyro measures one.
   const game = $derived(snap?.game && snap.game.state === 'capturing' ? snap.game : null);
@@ -75,13 +88,15 @@
         stroke-dasharray="{ARC * frac} 999"
         transform="rotate(135 100 104)"
       />
-      <text x="100" y="98" class="big">{fmt(first?.value, first?.digits ?? 0)}</text>
+      <text x="100" y="98" class="big" style:font-size="{bigPx}px">{firstText}</text>
       <text x="100" y="134" class="unit">{first?.unit ?? ''}</text>
-      <text x="100" y="178" class="label">{first?.label ?? '—'}</text>
+      <text x="100" y="178" class="label">{dialLabel}</text>
     </svg>
   {:else if w.kind === 'reading'}
     <span class="label">{first?.label ?? '—'}</span>
-    <span class="value {first ? level(first) : 'na'}"><b>{fmt(first?.value, first?.digits ?? 0)}</b><small>{first?.value == null ? '' : first.unit}</small></span>
+    <span class="value {first ? level(first) : 'na'}" class:long={firstText.length > 6}
+      ><b>{firstText}</b><small>{first?.value == null ? '' : first.unit}</small></span
+    >
     {#if first?.sub}<span class="sub">{first.sub}</span>{/if}
   {:else if w.kind === 'graph'}
     <div class="head">
@@ -106,12 +121,8 @@
   {:else if w.kind === 'network'}
     <span class="label">{net?.adapter ?? 'Not connected'}</span>
     <div class="pair">
-      <span class="down"
-        ><i aria-hidden="true">↓</i><span class="sr-only">Download</span><b>{fmt(net?.downMbps, 1)}</b><small>{net?.downMbps == null ? '' : 'Mbps'}</small></span
-      >
-      <span class="up"
-        ><i aria-hidden="true">↑</i><span class="sr-only">Upload</span><b>{fmt(net?.upMbps, 1)}</b><small>{net?.upMbps == null ? '' : 'Mbps'}</small></span
-      >
+      <span class="down"><i aria-hidden="true">↓</i><span class="sr-only">Download</span><b>{down.v}</b><small>{down.u}</small></span>
+      <span class="up"><i aria-hidden="true">↑</i><span class="sr-only">Upload</span><b>{up.v}</b><small>{up.u}</small></span>
     </div>
     <Spark
       ts={snap?.ts ?? 0}
@@ -151,9 +162,15 @@
     <span class="time">{time}</span>
     <span class="date">{date}</span>
     {#if rows.length}
-      <span class="line">
-        {#each rows as r, i (r.id)}{#if i}<i aria-hidden="true">·</i>{/if}<span class={level(r)}>{r.label} <b>{fmt(r.value, r.digits)}</b> {r.value == null ? '' : r.unit}</span>{/each}
-      </span>
+      <!-- One reading a row (1.2): a long name is cut short, never past the edge. -->
+      <ul class="readings">
+        {#each rows as r (r.id)}
+          <li class={level(r)}>
+            <span class="label">{r.label}</span>
+            <span class="num"><b>{fmt(r.value, r.digits)}</b> <small>{r.value == null ? '' : r.unit}</small></span>
+          </li>
+        {/each}
+      </ul>
     {/if}
   {/if}
   <span class="sr-only">{kindOf(w.kind).name} widget</span>
@@ -204,11 +221,17 @@
   .glass .date {
     color: #c5ced8;
   }
+  .value {
+    white-space: nowrap;
+  }
   .value b {
     font-family: var(--font-num);
     font-size: 2.2rem;
     font-weight: 650;
     line-height: 1.05;
+  }
+  .value.long b {
+    font-size: 1.7rem;
   }
   .value small,
   .num small {
@@ -349,6 +372,7 @@
     margin-top: 0.15rem;
   }
   .pair > span {
+    min-width: 0;
     white-space: nowrap;
   }
   .pair i {
@@ -423,19 +447,17 @@
     color: var(--muted);
     font-size: 0.8rem;
   }
-  .line {
-    margin-top: 0.5rem;
-    font-size: 0.78rem;
+  .readings {
+    align-self: stretch;
+    gap: 0.1rem;
+    margin-top: 0.4rem;
   }
-  .line > span {
-    white-space: nowrap;
+  .readings li {
+    grid-template-rows: auto;
+    height: auto;
   }
-  .line i {
-    margin: 0 0.4rem;
-    color: var(--muted);
-    font-style: normal;
-  }
-  .line b {
+  .readings .num b {
     font-family: var(--font-num);
+    font-size: 0.9rem;
   }
 </style>

@@ -19,14 +19,16 @@
   );
 </script>
 
+<!-- One line each, the sub line kept even when empty (1.2): tiles side by side are one height, so a
+     row of them stays in line on the Dashboard's packed grid. -->
 <div class="panel tile lift {level}">
   <span class="label">
-    {label}
+    <span class="name" title={label}>{label}</span>
     <!-- Not by colour alone: the level is also written out. -->
     {#if level === 'warn'}<span class="lvl">high</span>{:else if level === 'hot'}<span class="lvl">very high</span>{/if}
   </span>
   <span class="value">{fmt(value, digits)}<small>{value == null ? '' : unit}</small></span>
-  {#if sub}<span class="sub">{sub}</span>{/if}
+  <span class="sub" title={sub ?? undefined}>{sub ?? '\u00a0'}</span>
 </div>
 
 <style>
@@ -37,12 +39,25 @@
     padding: 0.75rem 0.9rem;
   }
   .label {
+    display: flex;
+    align-items: baseline;
+    min-width: 0;
     color: var(--muted);
     font-size: 0.72rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
   }
+  .name,
+  .sub {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .name {
+    min-width: 0;
+  }
   .value {
+    white-space: nowrap;
     font-family: var(--font-num);
     font-size: 1.45rem;
     font-weight: 600;
@@ -56,6 +71,7 @@
     font-weight: 500;
   }
   .lvl {
+    flex: none;
     margin-left: 0.35em;
     padding: 0 0.3em;
     border-radius: 4px;

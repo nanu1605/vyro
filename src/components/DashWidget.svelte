@@ -135,8 +135,11 @@
   .tile-link:hover :global(.tile) {
     border-color: var(--accent-gpu);
   }
+  /* Side by side when the card is wide enough for two (1.2). */
   .stack {
     display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+    align-items: start;
     gap: 0.75rem;
   }
 </style>

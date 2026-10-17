@@ -5,6 +5,7 @@
   import DashWidget from './DashWidget.svelte';
   import { activeLayout, DETAIL_CARDS, initial, narrowSpan, replaceLayout, shown } from '../dashboard';
   import { getDashboard, setDashboard } from '../ipc';
+  import { pack } from '../packing';
   import type { Dashboard, SensorSnapshot } from '../types';
 
   interface Props {
@@ -92,9 +93,9 @@
     <DashboardEditor {dash} {snap} {needs} {uiFps} {compact} oncancel={() => (editing = false)} onsave={done} />
   {/await}
 {:else}
-  <div class="dash-grid">
+  <div class="dash-grid" use:pack>
     {#each visible as w, i (w.id)}
-      <div class="dash-cell" style:--w={w.w} style:--wn={narrowSpan(w.w)} style:--h={w.h} style:--i={i}>
+      <div class="dash-cell" style:--w={w.w} style:--wn={narrowSpan(w.w)} style:--h={w.h} style:--span0={23 * w.h} style:--i={i}>
         <DashWidget widget={w} {snap} {active} {needs} {uiFps} {onselect} />
       </div>
     {/each}
