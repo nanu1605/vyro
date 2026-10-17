@@ -1,8 +1,9 @@
 # Field check: 1.2 (widgets through Show desktop, snapping, clicks passing through, three new kinds; My PC fixes; text inside widgets and the Dashboard's packing)
 
-Status: **check 1 run on 2026-10-17, with six findings, all fixed. On the b4748f3 build the owner
-then found three more (widget text past the edge, the thread bars, blank cards), and on 0760929
-one more (values breaking in narrow cards), all fixed. Check 2 not run yet.**
+Status: **1.2.0 released (2026-10-17) at the owner's go, after `vyro-windows-d7bbf18`.** Check 1
+(2026-10-17) found six problems, all fixed. On the b4748f3 build the owner then found three more
+(widget text past the edge, the thread bars, blank cards), and on 0760929 one more (values
+breaking in narrow cards), all fixed. Check 2's results were not reported.
 
 1.2 is one release that also carries 1.1.1, at the owner's request. ROADMAP → 1.1.1 and
 1.2.0 have how each part works. It adds to the desktop widgets:

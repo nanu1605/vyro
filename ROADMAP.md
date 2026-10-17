@@ -2273,8 +2273,14 @@ two ship together as one release (the owner's choice).
       narrow layout included. On the Windows runner the smoke test reports "Show desktop:
       passed; snap: passed (Windows built each step on the last one answered); click-through:
       passed". The installer is 11.42 MB.
-- [ ] Field check 2 ([`docs/field-check-1.2.md`](docs/field-check-1.2.md)), then the owner's go
-      for the release.
+- [x] The owner's go for the release (2026-10-17), after test build `vyro-windows-d7bbf18`.
+      Field check 2's results ([`docs/field-check-1.2.md`](docs/field-check-1.2.md)) were not
+      reported, so they are not recorded as passed.
+- [x] **1.2.0 released** (2026-10-17), with 1.1.1 in it: CI passed on 3442c7b (Linux, Windows
+      with the smoke test, accessibility), d7bbf18's code with records only. `main`
+      fast-forwarded to it, and Release run 39060120405 tagged `v1.2.0` and published the
+      11.4 MB MSI, `latest.json` and checksums here and to `nanu1605/vyro-releases`. Its
+      `latest.json` now offers 1.2.0 to installed copies (checksums verified).
 
 ## Risks
 
