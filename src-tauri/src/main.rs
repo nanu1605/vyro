@@ -160,6 +160,11 @@ fn main() {
             remote::start_remote_pairing,
             remote::cancel_remote_pairing,
             remote::sign_out_remote,
+            remote::set_relay_enabled,
+            remote::set_relay_url,
+            remote::start_relay_pairing,
+            remote::cancel_relay_pairing,
+            remote::reset_relay,
             share::save_share_card,
             share::reveal_card,
             updates::get_update_status,
@@ -175,6 +180,7 @@ fn main() {
             bench::stop_and_wait(handle, "Vyro quit.", std::time::Duration::from_secs(3));
             if let Some(remote) = handle.try_state::<remote::Remote>() {
                 remote.stop();
+                remote.stop_relay();
             }
             if let Some(engine) = handle.try_state::<Engine>() {
                 engine.shutdown();

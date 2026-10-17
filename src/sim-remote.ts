@@ -22,16 +22,18 @@ let status: RemoteStatus = {
       lastSeen: now() - 40,
       lastAddress: '192.168.1.31',
       watching: false,
+      anywhere: false,
     },
   ],
   watching: 0,
   pairing: null,
   firewall: 'unknown',
+  relay: { enabled: false, url: 'https://vyro-relay.example.workers.dev', custom: false, state: 'off', error: null, pairing: null, watching: 0 },
 };
 
 const listeners = new Set<(b: RemoteBrief) => void>();
 function changed(): RemoteStatus {
-  const brief = { running: status.running, watching: status.watching };
+  const brief = simRemoteBrief();
   for (const cb of listeners) cb(brief);
   return structuredClone(status);
 }
@@ -42,7 +44,8 @@ export function simRemoteStatus(): RemoteStatus {
 }
 
 export function simRemoteBrief(): RemoteBrief {
-  return { running: status.running, watching: status.watching };
+  const relay = status.relay.state;
+  return { running: status.running || relay !== 'off', watching: status.watching + status.relay.watching, relay };
 }
 
 export function onSimRemote(cb: (b: RemoteBrief) => void): () => void {

@@ -2,6 +2,9 @@
 //! `remote.json` (local app data, never roamed), the server's life, and the Settings commands.
 //! The server itself is `vyro_core::remote`; it runs here, as the signed-in user, never in the
 //! LocalSystem service.
+//!
+//! Reach from anywhere (1.4): the relay connection (`vyro_core::remote::relay`) runs here too,
+//! with the phones paired through it kept in the same file (their secrets sealed with DPAPI).
 
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
@@ -10,10 +13,14 @@ use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
-use vyro_core::remote::auth::{Auth, Stored, STORED_VERSION};
+use vyro_core::remote::auth::{hex, Auth, Stored, STORED_VERSION};
+use vyro_core::remote::relay::proto::{pairing_link, relay_base};
+use vyro_core::remote::relay::{
+    Phones, RelayClient, RelayHooks, RelayPairing, RelayState, RelayStatus, StoredRelay,
+};
 use vyro_core::remote::{
-    firewall, net, qr, FirewallState, Hooks, RemoteBrief, RemoteInfo, RemoteServer, RemoteSettings,
-    RemoteStatus, ServerConfig, DAY_CHOICES, FILE, MIN_PORT,
+    firewall, net, qr, random, FirewallState, Hooks, RemoteBrief, RemoteInfo, RemoteServer,
+    RemoteSettings, RemoteStatus, ServerConfig, DAY_CHOICES, FILE, MIN_PORT,
 };
 use vyro_core::{files, lock, unix_now, SensorSnapshot};
 
@@ -23,6 +30,21 @@ use crate::tray::SettingsStore;
 /// closes, or the paired devices change.
 pub const REMOTE_EVENT: &str = "remote-status";
 
+/// The relay built into this build (`VYRO_RELAY_URL` when it was built), if any.
+fn built_in_relay() -> Option<String> {
+    option_env!("VYRO_RELAY_URL")
+        .filter(|u| !u.trim().is_empty())
+        .and_then(|u| relay_base(u).ok())
+}
+
+/// The owner's relay choices, kept with the phones in `remote.json`.
+#[derive(Debug, Clone, Default)]
+struct RelayChoice {
+    enabled: bool,
+    /// The owner's own relay; none: the built-in one.
+    url: Option<String>,
+}
+
 pub struct Remote {
     path: Option<PathBuf>,
     settings: Mutex<RemoteSettings>,
@@ -30,7 +52,16 @@ pub struct Remote {
     server: Mutex<Option<RemoteServer>>,
     /// Why it is not running although turned on (the port is taken, ...).
     error: Mutex<Option<String>>,
+    /// Live views on the local network.
     watching: AtomicU32,
+    relay: Mutex<RelayChoice>,
+    /// This PC's room and key on the relay, and its phones; made the first time it is turned on.
+    phones: Mutex<Option<Arc<Mutex<Phones>>>>,
+    client: Mutex<Option<RelayClient>>,
+    /// Why the relay is not used although turned on (no address, ...).
+    relay_error: Mutex<Option<String>>,
+    /// Phones with the app open, through the relay.
+    relay_watching: AtomicU32,
 }
 
 /// Reads `remote.json`; one that does not parse is set aside as `remote.bad.json` (see
@@ -81,61 +112,114 @@ fn emit(app: &AppHandle) {
     }
 }
 
+/// PC name, version, theme, accent and unit, as the companion and the phones show them.
+fn info(app: &AppHandle) -> RemoteInfo {
+    let s = app
+        .try_state::<SettingsStore>()
+        .map(|s| s.get())
+        .unwrap_or_default();
+    RemoteInfo {
+        pc: net::pc_name(),
+        version: app.package_info().version.to_string(),
+        theme: name_of(&s.theme),
+        accent: name_of(&s.accent),
+        unit: s.temperature_unit,
+        ..RemoteInfo::default()
+    }
+}
+
+/// Saves the paired devices and tells the window.
+fn saved(app: &AppHandle) {
+    if let Some(r) = app.try_state::<Remote>() {
+        r.save();
+    }
+    emit(app);
+}
+
+/// A phone watching, here or through the relay, keeps the readings at the window's rate.
+fn watching_changed(app: &AppHandle) {
+    if let (Some(r), Some(engine)) = (
+        app.try_state::<Remote>(),
+        app.try_state::<crate::engine::Engine>(),
+    ) {
+        engine.set_remote(r.brief().watching > 0);
+    }
+    emit(app);
+}
+
 fn hooks(app: &AppHandle) -> Hooks {
-    let (files, about, saved, watched) = (app.clone(), app.clone(), app.clone(), app.clone());
+    let (files, about, save, watched) = (app.clone(), app.clone(), app.clone(), app.clone());
     Hooks {
         asset: Box::new(move |path| asset(&files, path)),
-        info: Box::new(move || {
-            let s = about
-                .try_state::<SettingsStore>()
-                .map(|s| s.get())
-                .unwrap_or_default();
-            RemoteInfo {
-                pc: net::pc_name(),
-                version: about.package_info().version.to_string(),
-                theme: name_of(&s.theme),
-                accent: name_of(&s.accent),
-                unit: s.temperature_unit,
-                ..RemoteInfo::default()
-            }
-        }),
-        saved: Box::new(move || {
-            if let Some(r) = saved.try_state::<Remote>() {
-                r.save();
-            }
-            emit(&saved);
-        }),
+        info: Box::new(move || info(&about)),
+        saved: Box::new(move || saved(&save)),
         watching: Box::new(move |n| {
             if let Some(r) = watched.try_state::<Remote>() {
                 r.watching.store(n, Ordering::SeqCst);
             }
-            // A phone watching keeps the readings at the window's rate.
-            if let Some(engine) = watched.try_state::<crate::engine::Engine>() {
-                engine.set_remote(n > 0);
-            }
-            emit(&watched);
+            watching_changed(&watched);
         }),
     }
+}
+
+fn relay_hooks(app: &AppHandle) -> RelayHooks {
+    let (about, save, watched, state) = (app.clone(), app.clone(), app.clone(), app.clone());
+    RelayHooks {
+        info: Box::new(move || info(&about)),
+        saved: Box::new(move || saved(&save)),
+        watching: Box::new(move |n| {
+            if let Some(r) = watched.try_state::<Remote>() {
+                r.relay_watching.store(n, Ordering::SeqCst);
+            }
+            watching_changed(&watched);
+        }),
+        state: Box::new(move |_| emit(&state)),
+    }
+}
+
+/// A fresh place on the relay: a random room and key.
+fn fresh_phones() -> Result<Phones, String> {
+    let (room, key) = random::<16>()
+        .zip(random::<32>())
+        .ok_or("No randomness available.")?;
+    Ok(Phones::fresh(room, key))
 }
 
 impl Remote {
     pub fn load(app: &AppHandle) -> Self {
         let path = app.path().app_local_data_dir().ok().map(|d| d.join(FILE));
         let stored = path.as_deref().map(read).unwrap_or_default();
+        let now = unix_now();
+        let relay = stored.relay.unwrap_or_default();
+        let phones = Phones::load(&relay, now).map(|p| Arc::new(Mutex::new(p)));
+        if phones.is_none() && !relay.room.is_empty() {
+            log::warn!("remote: the relay keys do not open on this account; they start afresh");
+        }
         Self {
             path,
             settings: Mutex::new(stored.settings.sanitized()),
-            auth: Arc::new(Mutex::new(Auth::new(stored.devices, unix_now()))),
+            auth: Arc::new(Mutex::new(Auth::new(stored.devices, now))),
             server: Mutex::new(None),
             error: Mutex::new(None),
             watching: AtomicU32::new(0),
+            relay: Mutex::new(RelayChoice {
+                enabled: relay.enabled,
+                url: relay.url.and_then(|u| relay_base(&u).ok()),
+            }),
+            phones: Mutex::new(phones),
+            client: Mutex::new(None),
+            relay_error: Mutex::new(None),
+            relay_watching: AtomicU32::new(0),
         }
     }
 
-    /// At launch: serves again if the owner left it on.
+    /// At launch: serves again, and reconnects to the relay, if the owner left them on.
     pub fn resume(&self, app: &AppHandle) {
         if lock(&self.settings).enabled {
             self.start(app);
+        }
+        if lock(&self.relay).enabled {
+            self.start_relay(app);
         }
     }
 
@@ -143,10 +227,20 @@ impl Remote {
         lock(&self.server).is_some()
     }
 
+    fn relay_state(&self) -> (RelayState, Option<String>) {
+        match lock(&self.client).as_ref() {
+            Some(c) => c.status(),
+            None => (RelayState::Off, lock(&self.relay_error).clone()),
+        }
+    }
+
     pub fn brief(&self) -> RemoteBrief {
+        let relay = self.relay_state().0;
         RemoteBrief {
-            running: self.running(),
-            watching: self.watching.load(Ordering::SeqCst),
+            running: self.running() || relay != RelayState::Off,
+            watching: self.watching.load(Ordering::SeqCst)
+                + self.relay_watching.load(Ordering::SeqCst),
+            relay,
         }
     }
 
@@ -154,10 +248,21 @@ impl Remote {
         let Some(path) = &self.path else {
             return;
         };
+        let choice = lock(&self.relay).clone();
+        let relay = match lock(&self.phones).as_ref() {
+            Some(p) => Some(lock(p).stored(choice.enabled, choice.url)),
+            None if choice.enabled || choice.url.is_some() => Some(StoredRelay {
+                enabled: choice.enabled,
+                url: choice.url,
+                ..StoredRelay::default()
+            }),
+            None => None,
+        };
         let stored = Stored {
             version: STORED_VERSION,
             settings: *lock(&self.settings),
             devices: lock(&self.auth).stored().to_vec(),
+            relay,
         };
         if let Err(e) = write(path, &stored) {
             log::warn!("remote: {e}");
@@ -231,6 +336,9 @@ impl Remote {
         if let Some(s) = lock(&self.server).as_ref() {
             s.set_session_days(session_days);
         }
+        if let Some(c) = lock(&self.client).as_ref() {
+            c.set_session_days(session_days);
+        }
         if moved && self.running() {
             self.stop();
             self.start(app);
@@ -262,7 +370,216 @@ impl Remote {
         if let Some(s) = lock(&self.server).as_ref() {
             s.close_device(id);
         }
+        if let Some(p) = lock(&self.phones).as_ref() {
+            let mut p = lock(p);
+            match id {
+                Some(id) => {
+                    p.sign_out(id);
+                }
+                None => p.sign_out_all(),
+            }
+        }
+        if let Some(c) = lock(&self.client).as_ref() {
+            c.nudge();
+        }
         self.save();
+    }
+
+    /// The relay to use: the owner's, else the built-in one.
+    fn relay_url(&self) -> Option<String> {
+        lock(&self.relay).url.clone().or_else(built_in_relay)
+    }
+
+    /// Connects to the relay; a failure (no address) is kept for Settings to show.
+    fn start_relay(&self, app: &AppHandle) {
+        let mut client = lock(&self.client);
+        if client.is_some() {
+            return;
+        }
+        let Some(base) = self.relay_url() else {
+            *lock(&self.relay_error) = Some(
+                "This build of Vyro has no relay. Enter your relay's address under Options.".into(),
+            );
+            return;
+        };
+        let phones = {
+            let mut slot = lock(&self.phones);
+            match slot.as_ref() {
+                Some(p) => Arc::clone(p),
+                None => match fresh_phones() {
+                    Ok(p) => {
+                        let p = Arc::new(Mutex::new(p));
+                        *slot = Some(Arc::clone(&p));
+                        p
+                    }
+                    Err(e) => {
+                        *lock(&self.relay_error) = Some(e);
+                        return;
+                    }
+                },
+            }
+        };
+        let days = lock(&self.settings).session_days;
+        match RelayClient::start(base, phones, days, relay_hooks(app)) {
+            Ok(c) => {
+                *client = Some(c);
+                *lock(&self.relay_error) = None;
+            }
+            Err(e) => {
+                log::warn!("remote: {e}");
+                *lock(&self.relay_error) = Some(e);
+            }
+        }
+    }
+
+    pub fn stop_relay(&self) {
+        let client = lock(&self.client).take();
+        if let Some(mut c) = client {
+            c.stop();
+        }
+        if let Some(p) = lock(&self.phones).as_ref() {
+            lock(p).cancel_pairing();
+        }
+        self.relay_watching.store(0, Ordering::SeqCst);
+    }
+
+    fn set_relay_enabled(&self, app: &AppHandle, on: bool) {
+        lock(&self.relay).enabled = on;
+        if on {
+            self.start_relay(app);
+        } else {
+            self.stop_relay();
+            *lock(&self.relay_error) = None;
+        }
+        self.save();
+        watching_changed(app);
+        log::info!(
+            "remote: reach from anywhere turned {}",
+            if on { "on" } else { "off" }
+        );
+    }
+
+    /// The owner's own relay (`None`: the built-in one). Phones paired through the old one
+    /// cannot reach the new one, so they are signed out.
+    fn set_relay_url(&self, app: &AppHandle, url: Option<&str>) -> Result<(), String> {
+        let url = match url.map(str::trim).filter(|u| !u.is_empty()) {
+            Some(u) => Some(relay_base(u)?),
+            None => None,
+        };
+        let before = self.relay_url();
+        lock(&self.relay).url = url;
+        if self.relay_url() != before {
+            let on = lock(&self.relay).enabled;
+            self.stop_relay();
+            if let Some(p) = lock(&self.phones).as_ref() {
+                lock(p).sign_out_all();
+            }
+            *lock(&self.relay_error) = None;
+            if on {
+                self.start_relay(app);
+            }
+        }
+        self.save();
+        Ok(())
+    }
+
+    /// Starts over on the relay: a new room and key, every phone signed out.
+    fn reset_relay(&self, app: &AppHandle) -> Result<(), String> {
+        let fresh = fresh_phones()?;
+        let on = lock(&self.relay).enabled;
+        self.stop_relay();
+        *lock(&self.phones) = Some(Arc::new(Mutex::new(fresh)));
+        *lock(&self.relay_error) = None;
+        if on {
+            self.start_relay(app);
+        }
+        self.save();
+        Ok(())
+    }
+
+    fn start_relay_pairing(&self) -> Result<(), String> {
+        if lock(&self.client).is_none() {
+            return Err("Turn on reach from anywhere first.".into());
+        }
+        let phones = lock(&self.phones)
+            .clone()
+            .ok_or("Turn on reach from anywhere first.")?;
+        let secret = random::<32>().ok_or("No randomness available.")?;
+        let lan: Vec<String> = lock(&self.auth)
+            .stored()
+            .iter()
+            .map(|d| d.id.clone())
+            .collect();
+        {
+            let mut p = lock(&phones);
+            // A phone id is 32 random bits; draw again in the unlikely case it is taken.
+            let id = (0..8)
+                .filter_map(|_| random::<4>())
+                .find(|id| p.id_free(id) && !lan.contains(&hex(id)))
+                .ok_or("No randomness available.")?;
+            p.start_pairing(unix_now(), secret, id)?;
+        }
+        if let Some(c) = lock(&self.client).as_ref() {
+            c.nudge();
+        }
+        Ok(())
+    }
+
+    fn cancel_relay_pairing(&self) {
+        if let Some(p) = lock(&self.phones).as_ref() {
+            lock(p).cancel_pairing();
+        }
+        if let Some(c) = lock(&self.client).as_ref() {
+            c.nudge();
+        }
+    }
+
+    fn relay_status(&self, now: i64) -> (RelayStatus, Vec<vyro_core::remote::RemoteDevice>) {
+        let choice = lock(&self.relay).clone();
+        let url = self.relay_url().unwrap_or_default();
+        let (state, error) = self.relay_state();
+        let watching = lock(&self.client)
+            .as_ref()
+            .map(RelayClient::watching)
+            .unwrap_or_default();
+        let (pairing, devices, pruned) = match lock(&self.phones).as_ref() {
+            Some(p) => {
+                let mut p = lock(p);
+                let pruned = p.prune(now);
+                let pairing =
+                    p.pairing(now)
+                        .filter(|_| !url.is_empty())
+                        .map(|(id, secret, expires)| {
+                            let link = pairing_link(&url, p.room(), &id, &secret);
+                            let (qr, qr_size) =
+                                qr::path(&link).map_or((None, 0), |(q, n)| (Some(q), n));
+                            RelayPairing {
+                                url: link,
+                                expires,
+                                qr,
+                                qr_size,
+                            }
+                        });
+                (pairing, p.devices(&watching), pruned)
+            }
+            None => (None, Vec::new(), false),
+        };
+        if pruned {
+            if let Some(c) = lock(&self.client).as_ref() {
+                c.nudge();
+            }
+            self.save();
+        }
+        let status = RelayStatus {
+            enabled: choice.enabled,
+            url,
+            custom: choice.url.is_some(),
+            state,
+            error,
+            pairing,
+            watching: u32::try_from(watching.len()).unwrap_or(u32::MAX),
+        };
+        (status, devices)
     }
 
     /// Settings → Remote. Reads the firewall's rules (a moment's work), so off the UI thread.
@@ -307,6 +624,9 @@ impl Remote {
             Ok(exe) if running => firewall::state(&exe),
             _ => FirewallState::Unknown,
         };
+        let (relay, phones) = self.relay_status(now);
+        let mut devices = devices;
+        devices.extend(phones);
         RemoteStatus {
             settings,
             running,
@@ -316,22 +636,30 @@ impl Remote {
             watching: self.watching.load(Ordering::SeqCst),
             pairing,
             firewall,
+            relay,
         }
     }
 }
 
-/// Feeds a reading to the live views, while the companion is on.
+/// Feeds a reading to the live views and the relay, while they are on.
 pub fn publish(app: &AppHandle, snap: &SensorSnapshot) {
     let Some(r) = app.try_state::<Remote>() else {
         return;
     };
     let server = lock(&r.server);
+    let client = lock(&r.client);
+    if server.is_none() && client.is_none() {
+        return;
+    }
+    let unit = app
+        .try_state::<SettingsStore>()
+        .map(|s| s.unit())
+        .unwrap_or_default();
     if let Some(s) = server.as_ref() {
-        let unit = app
-            .try_state::<SettingsStore>()
-            .map(|s| s.unit())
-            .unwrap_or_default();
         s.publish(snap, unit);
+    }
+    if let Some(c) = client.as_ref() {
+        c.publish(snap, unit);
     }
 }
 
@@ -403,6 +731,40 @@ pub fn get_remote_brief(remote: tauri::State<'_, Remote>) -> RemoteBrief {
     remote.brief()
 }
 
+#[tauri::command]
+pub async fn set_relay_enabled(app: AppHandle, enabled: bool) -> Result<RemoteStatus, String> {
+    change(app, move |app, r| {
+        r.set_relay_enabled(app, enabled);
+        Ok(())
+    })
+    .await
+}
+
+/// `url`: the owner's own relay; none or empty: the one built into Vyro.
+#[tauri::command]
+pub async fn set_relay_url(app: AppHandle, url: Option<String>) -> Result<RemoteStatus, String> {
+    change(app, move |app, r| r.set_relay_url(app, url.as_deref())).await
+}
+
+#[tauri::command]
+pub async fn start_relay_pairing(app: AppHandle) -> Result<RemoteStatus, String> {
+    change(app, |_, r| r.start_relay_pairing()).await
+}
+
+#[tauri::command]
+pub async fn cancel_relay_pairing(app: AppHandle) -> Result<RemoteStatus, String> {
+    change(app, |_, r| {
+        r.cancel_relay_pairing();
+        Ok(())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn reset_relay(app: AppHandle) -> Result<RemoteStatus, String> {
+    change(app, |app, r| r.reset_relay(app)).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -419,6 +781,7 @@ mod tests {
                 session_days: 7,
             },
             devices: Vec::new(),
+            relay: None,
         };
         write(&path, &stored).unwrap();
         assert_eq!(read(&path), stored);

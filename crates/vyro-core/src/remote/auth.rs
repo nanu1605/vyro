@@ -42,9 +42,12 @@ pub struct Stored {
     pub version: u32,
     pub settings: RemoteSettings,
     pub devices: Vec<StoredDevice>,
+    /// Reach from anywhere (1.4). Versions before 1.4 ignore it.
+    pub relay: Option<super::relay::StoredRelay>,
 }
 
-pub const STORED_VERSION: u32 = 1;
+/// 2: `relay` (1.4).
+pub const STORED_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Code {
@@ -330,6 +333,7 @@ impl Auth {
                 last_seen: d.last_seen,
                 last_address: d.last_address.clone(),
                 watching: watching.contains(&d.id),
+                anywhere: false,
             })
             .collect()
     }

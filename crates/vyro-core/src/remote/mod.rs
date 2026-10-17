@@ -99,6 +99,9 @@ pub struct RemoteDevice {
     pub last_address: Option<String>,
     /// Has a live view open now.
     pub watching: bool,
+    /// Paired through the relay (1.4), not on this network.
+    #[serde(default)]
+    pub anywhere: bool,
 }
 
 /// The current pairing code.
@@ -139,6 +142,8 @@ pub enum FirewallState {
 pub struct RemoteBrief {
     pub running: bool,
     pub watching: u32,
+    /// The relay connection (1.4).
+    pub relay: relay::RelayState,
 }
 
 /// Bytes from the system's secure random source.
@@ -165,6 +170,8 @@ pub struct RemoteStatus {
     pub watching: u32,
     pub pairing: Option<Pairing>,
     pub firewall: FirewallState,
+    /// Reach from anywhere (1.4).
+    pub relay: relay::RelayStatus,
 }
 
 /// `/api/info`: who is asking and how the owner reads the app.

@@ -15,4 +15,8 @@ lastAddress: string | null,
 /**
  * Has a live view open now.
  */
-watching: boolean, };
+watching: boolean, 
+/**
+ * Paired through the relay (1.4), not on this network.
+ */
+anywhere: boolean, };
