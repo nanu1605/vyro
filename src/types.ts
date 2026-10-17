@@ -81,6 +81,7 @@ export type { Battery } from './bindings/Battery';
 export type { BatteryLevel } from './bindings/BatteryLevel';
 export type { BatterySource } from './bindings/BatterySource';
 export type { Connection } from './bindings/Connection';
+export type { Control } from './bindings/Control';
 export type { DeviceInfo } from './bindings/DeviceInfo';
 export type { DeviceKind } from './bindings/DeviceKind';
 export type { Devices } from './bindings/Devices';

@@ -3,8 +3,8 @@
 //! nothing here runs and [`smoke_report`] refuses.
 //!
 //! Once the main page has loaded, `smoke.js` calls the commands the pages call (hardware,
-//! system, sensors, widgets) through the real IPC, then saves a widget as the Widgets page
-//! does. [`smoke_report`] then checks that the widget's window opened, shows without having
+//! system, sensors, devices, widgets) through the real IPC, asks to disconnect a device that does
+//! not exist (it must be refused at once), then saves a widget as the Widgets page does. [`smoke_report`] then checks that the widget's window opened, shows without having
 //! taken focus and loaded its page. On Windows it also checks that the widget stays over the
 //! desktop through Show desktop (`pin.rs`; skipped where the runner has no desktop to show),
 //! snaps when dragged with the mouse near the screen's corner and follows the pointer out again
@@ -27,11 +27,14 @@ use crate::widgets::PREFIX;
 const ENV: &str = "VYRO_SMOKE";
 /// The widget `smoke.js` saves.
 pub const WIDGET: &str = "smoke1";
-/// The commands `smoke.js` must report, in order.
-const STEPS: [&str; 5] = [
+/// The commands `smoke.js` must report, in order. `set_device_connected` passes when it refuses
+/// an unknown device at once (through the service, on the runner).
+const STEPS: [&str; 7] = [
     "get_hardware_id",
     "get_system_info",
     "get_sensor_tree",
+    "get_devices",
+    "set_device_connected",
     "get_widgets",
     "set_widgets",
 ];

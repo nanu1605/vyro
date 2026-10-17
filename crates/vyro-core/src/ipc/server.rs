@@ -332,6 +332,7 @@ impl Server {
             Request::RestoreFans => json(e.restore_fans()),
             Request::FanEvents => json(e.fan_events()),
             Request::SetFanProfile { profile } => json(e.set_fan_profile(profile)),
+            Request::BluetoothDisconnect { id } => json(e.bluetooth_disconnect(&id)),
         }
     }
 }

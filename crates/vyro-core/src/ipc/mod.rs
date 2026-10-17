@@ -43,8 +43,8 @@ pub use transport::{connect, default_endpoint, Conn, Listener};
 /// `AlertUsual`, `SensorSnapshot::alert_state`, `FanStatus::boost`. 11: Performance Score
 /// (P17): `PerformanceScore`. 12: benchmark runs (P20): `AddBenchmark`, `BenchmarkRuns`,
 /// `BenchmarkRun`, `DeleteBenchmark`. 13: diagnostics (P21): `RunDiagnostics`, `DiagnosticRuns`,
-/// `DiagnosticRun`, `DeleteDiagnostic`.
-pub const PROTOCOL_VERSION: u32 = 13;
+/// `DiagnosticRun`, `DeleteDiagnostic`. 14: Bluetooth Disconnect (1.3): `BluetoothDisconnect`.
+pub const PROTOCOL_VERSION: u32 = 14;
 /// Windows service name (installed by the MSI).
 pub const SERVICE_NAME: &str = "VyroService";
 /// Largest request the server accepts (alert rules are the biggest, a few KB).
@@ -191,6 +191,11 @@ pub enum Request {
     SetFanProfile {
         profile: Profile,
     },
+    /// A paired Bluetooth device, by the hashed id the device list gives it.
+    #[serde(rename_all = "camelCase")]
+    BluetoothDisconnect {
+        id: String,
+    },
 }
 
 /// The answer to a [`Request`]: the method's result as JSON, or an error message.
@@ -276,6 +281,12 @@ mod tests {
         // A change here breaks older clients: bump PROTOCOL_VERSION with it.
         let json = |v: &Request| serde_json::to_string(v).unwrap();
         assert_eq!(json(&Request::SensorTree), r#"{"method":"sensorTree"}"#);
+        assert_eq!(
+            json(&Request::BluetoothDisconnect {
+                id: "0a1b2c3d4e5f".into()
+            }),
+            r#"{"method":"bluetoothDisconnect","params":{"id":"0a1b2c3d4e5f"}}"#
+        );
         assert_eq!(
             json(&Request::SetPollInterval { millis: 500 }),
             r#"{"method":"setPollInterval","params":{"millis":500}}"#
@@ -372,7 +383,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&hello).unwrap(),
-            r#"{"protocol":13,"role":"snapshots","session":7,"pid":42,"visible":false}"#
+            r#"{"protocol":14,"role":"snapshots","session":7,"pid":42,"visible":false}"#
         );
         let reply: Reply = Err("nope".into());
         assert_eq!(serde_json::to_string(&reply).unwrap(), r#"{"Err":"nope"}"#);

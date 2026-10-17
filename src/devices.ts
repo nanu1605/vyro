@@ -1,6 +1,6 @@
 // Devices tab (P22): labels, groups and the battery view. Pure, so it is unit-tested.
 
-import type { Battery, BatterySource, Connection, DeviceInfo, DeviceKind, Devices } from './types';
+import type { Battery, BatterySource, Connection, Control, DeviceInfo, DeviceKind, Devices } from './types';
 
 export const KIND_LABEL: Record<DeviceKind, string> = {
   keyboard: 'Keyboard',
@@ -122,6 +122,37 @@ export function summary(d: Devices): string {
   if (on !== n) parts.push(`${on} connected`);
   if (batt > 0) parts.push(`${batt} with battery`);
   return parts.join(' · ');
+}
+
+/** The button a paired Bluetooth device gets (1.3): Connect while it is off, else Disconnect. */
+export function actionLabel(d: DeviceInfo): 'Connect' | 'Disconnect' | null {
+  if (d.control == null) return null;
+  return d.connected ? 'Disconnect' : 'Connect';
+}
+
+/** A Connect or Disconnect under way: what was asked and what the listings since showed. */
+export interface Pending {
+  want: boolean;
+  control: Control;
+  /** A listing since showed it disconnected. */
+  seenOff: boolean;
+  /** Long enough has passed for Windows to have done it. */
+  settled: boolean;
+  error: string | null;
+}
+
+/** What became of a Connect or Disconnect, from the latest listing; null while it may still
+ * happen. A device that drops its link can connect again by itself as soon as it is used. */
+export function outcome(p: Pending, now: DeviceInfo | undefined): string | null {
+  if (p.error) return p.error;
+  const on = now?.connected ?? false;
+  if (on === p.want) return p.want ? 'Connected' : 'Disconnected';
+  if (!p.want && p.seenOff) return 'It came back: the device connected again by itself';
+  if (!p.settled) return null;
+  if (p.want) return "Didn't connect: turn it on, or press a button on it";
+  return p.control === 'link'
+    ? 'Still connected: Windows may connect it again as soon as it is used'
+    : "Didn't disconnect";
 }
 
 /** Name of the listed device an audio endpoint belongs to. */

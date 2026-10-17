@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { batteryView, connectionText, grouped, lowBattery, ownerName, stateText, summary } from './devices';
+import {
+  actionLabel,
+  batteryView,
+  connectionText,
+  grouped,
+  lowBattery,
+  outcome,
+  ownerName,
+  stateText,
+  summary,
+  type Pending,
+} from './devices';
 import { sampleDevices } from './sample-devices';
 import type { DeviceInfo } from './types';
 
@@ -14,6 +25,7 @@ const dev = (over: Partial<DeviceInfo> = {}): DeviceInfo => ({
   battery: null,
   problem: null,
   parent: null,
+  control: null,
   ...over,
 });
 
@@ -41,6 +53,37 @@ describe('devices', () => {
     expect(stateText(dev({ connected: false }))).toBe('Not connected');
     expect(stateText(dev({ problem: 22 }))).toBe('Disabled');
     expect(stateText(dev({ problem: 43 }))).toBe('Problem (code 43)');
+  });
+
+  it('offers Connect or Disconnect to paired Bluetooth devices and says what became of it', () => {
+    expect(actionLabel(dev())).toBeNull();
+    const buds = dev({ connection: 'bluetooth', wireless: true, control: 'audio' });
+    expect(actionLabel(buds)).toBe('Disconnect');
+    expect(actionLabel({ ...buds, connected: false })).toBe('Connect');
+
+    const asked = (want: boolean, control: Pending['control'] = 'audio'): Pending => ({
+      want,
+      control,
+      seenOff: false,
+      settled: false,
+      error: null,
+    });
+    // Done as soon as a listing shows it; nothing to say yet before that.
+    expect(outcome(asked(false), { ...buds, connected: false })).toBe('Disconnected');
+    expect(outcome(asked(true), buds)).toBe('Connected');
+    expect(outcome(asked(false), buds)).toBeNull();
+    // Back by itself after a listing showed it off.
+    expect(outcome({ ...asked(false, 'link'), seenOff: true }, buds)).toMatch(/came back/);
+    // Given time and nothing changed.
+    expect(outcome({ ...asked(true), settled: true }, { ...buds, connected: false })).toMatch(/turn it on/);
+    expect(outcome({ ...asked(false, 'link'), settled: true }, buds)).toMatch(/as soon as it is used/);
+    expect(outcome({ ...asked(false), settled: true }, buds)).toBe("Didn't disconnect");
+    // An error says so at once.
+    expect(outcome({ ...asked(false), error: 'Not a paired Bluetooth device' }, buds)).toBe(
+      'Not a paired Bluetooth device',
+    );
+    // The preview sample has both kinds.
+    expect(new Set(sampleDevices.devices.map((d) => d.control).filter(Boolean))).toEqual(new Set(['audio', 'link']));
   });
 
   it('names the receiver a device is paired to, and calls a silent one asleep', () => {

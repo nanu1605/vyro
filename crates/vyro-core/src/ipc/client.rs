@@ -444,6 +444,10 @@ impl EngineApi for RemoteEngine {
         self.call(&Request::RestoreFans)
     }
 
+    fn bluetooth_disconnect(&self, id: &str) -> Result<(), String> {
+        self.call(&Request::BluetoothDisconnect { id: id.to_owned() })
+    }
+
     fn fan_events(&self) -> Result<Vec<FanEvent>, String> {
         self.call(&Request::FanEvents)
     }
@@ -609,6 +613,22 @@ mod tests {
         assert!(!remote.drives().unwrap().is_empty());
         // A real answer on an elevated Windows runner, `None` elsewhere: either way it arrives.
         assert!(remote.bitlocker_system_drive().is_ok());
+        // Bluetooth Disconnect: a malformed id is refused, and a device gets one action in a while.
+        assert_eq!(
+            remote.bluetooth_disconnect("../x").unwrap_err(),
+            "Not a paired Bluetooth device"
+        );
+        let first = remote.bluetooth_disconnect("0a1b2c3d4e5f");
+        assert!(
+            first
+                .as_ref()
+                .map_or_else(|e| e == "Not a paired Bluetooth device", |()| true),
+            "{first:?}"
+        );
+        assert_eq!(
+            remote.bluetooth_disconnect("0a1b2c3d4e5f").unwrap_err(),
+            "Wait a few seconds before trying again"
+        );
 
         // Capture: the game shows in the snapshots (simulated frames here, PresentMon or its
         // absence on Windows), and ends when the client leaves.

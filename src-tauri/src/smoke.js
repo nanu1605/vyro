@@ -17,9 +17,27 @@
       return null;
     }
   }
+  // A call that must be refused, with this reason, in time.
+  async function refused(name, args, reason) {
+    const t = performance.now();
+    const ms = () => Math.round(performance.now() - t);
+    try {
+      await timed(20000, invoke(name, args));
+      steps.push({ name, ok: false, ms: ms(), error: 'was not refused' });
+    } catch (e) {
+      const error = String(e?.message ?? e);
+      steps.push(error.includes(reason) ? { name, ok: true, ms: ms() } : { name, ok: false, ms: ms(), error });
+    }
+  }
   await step('get_hardware_id');
   await step('get_system_info');
   await step('get_sensor_tree');
+  await step('get_devices');
+  await refused(
+    'set_device_connected',
+    { id: '0a1b2c3d4e5f', control: 'link', connect: false },
+    'Not a paired Bluetooth device',
+  );
   const current = await step('get_widgets');
   const widget = {
     id: 'smoke1',

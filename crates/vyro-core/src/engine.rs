@@ -150,6 +150,10 @@ pub trait EngineApi: Send + Sync {
     fn fan_events(&self) -> Result<Vec<FanEvent>, String>;
     /// The P9c profile in use: its own fan settings apply, if it has any.
     fn set_fan_profile(&self, profile: Profile) -> Result<(), String>;
+    /// Drops a paired Bluetooth device's link at the radio (1.3), by the id the device list
+    /// gives it. The service does it (it may need administrator rights), at most once per
+    /// device in [`crate::devices::Throttle::GAP`], and only for a paired Bluetooth device.
+    fn bluetooth_disconnect(&self, id: &str) -> Result<(), String>;
     /// Stops polling and flushes history. Safe to call more than once.
     fn shutdown(&self);
 }
@@ -175,6 +179,7 @@ pub struct LocalEngine {
     gaming: Arc<Gaming>,
     fans: Arc<FanControl>,
     intel: Arc<Intel>,
+    bluetooth: crate::devices::Throttle,
 }
 
 impl LocalEngine {
@@ -228,6 +233,7 @@ impl LocalEngine {
             gaming,
             fans,
             intel,
+            bluetooth: crate::devices::Throttle::default(),
         })
     }
 
@@ -633,6 +639,26 @@ impl EngineApi for LocalEngine {
     fn set_fan_profile(&self, profile: Profile) -> Result<(), String> {
         self.intel.set_profile(profile);
         self.fans.set_profile(profile)
+    }
+
+    fn bluetooth_disconnect(&self, id: &str) -> Result<(), String> {
+        if id.len() != 12 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err("Not a paired Bluetooth device".into());
+        }
+        if !self.bluetooth.allow(id, std::time::Instant::now()) {
+            return Err("Wait a few seconds before trying again".into());
+        }
+        if Self::simulated() {
+            return Ok(());
+        }
+        #[cfg(windows)]
+        {
+            crate::devices::disconnect(id)
+        }
+        #[cfg(not(windows))]
+        {
+            Err("Bluetooth is not available here".into())
+        }
     }
 
     fn shutdown(&self) {

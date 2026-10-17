@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use tauri::State;
 use vyro_core::alerts::{AlertFired, AlertRule};
-use vyro_core::devices::Devices;
+use vyro_core::devices::{Control, Devices};
 use vyro_core::engine::{BackendStatus, EngineApi};
 use vyro_core::health::HealthEvent;
 use vyro_core::info::{
@@ -139,6 +139,42 @@ fn collect_devices() -> Devices {
 #[cfg(not(windows))]
 fn collect_devices() -> Devices {
     vyro_core::devices::sample()
+}
+
+/// Connects or disconnects a paired Bluetooth device (1.3), by the id and control the device
+/// list gave it. An audio device goes through its audio connection here, as Windows Settings
+/// does; Connect for any other device asks Windows to reach it; Disconnect for any other device
+/// goes to the engine (the service), which drops its link at the radio. Whether it worked shows
+/// in the next listing.
+#[tauri::command]
+pub async fn set_device_connected(
+    engine: State<'_, Engine>,
+    id: String,
+    control: Control,
+    connect: bool,
+) -> Result<(), String> {
+    if control == Control::Link && !connect {
+        return with_engine(&engine, move |e| e.bluetooth_disconnect(&id)).await;
+    }
+    tauri::async_runtime::spawn_blocking(move || device_control(&id, control, connect))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[cfg(windows)]
+fn device_control(id: &str, control: Control, connect: bool) -> Result<(), String> {
+    if std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1") {
+        return Ok(());
+    }
+    match control {
+        Control::Audio => vyro_core::devices::audio_connection(id, connect),
+        Control::Link => vyro_core::devices::reach(id),
+    }
+}
+
+#[cfg(not(windows))]
+fn device_control(_id: &str, _control: Control, _connect: bool) -> Result<(), String> {
+    Ok(())
 }
 
 /// Drives with full health data, read fresh by the engine (SMART needs the service or

@@ -2,9 +2,21 @@
   import { untrack } from 'svelte';
   import Card from './Card.svelte';
   import LoadState from './LoadState.svelte';
-  import { batteryView, connectionText, grouped, KIND_LABEL, lowBattery, ownerName, stateText, summary } from '../devices';
-  import { getDevices, onDevicesChanged } from '../ipc';
-  import type { Devices } from '../types';
+  import {
+    actionLabel,
+    batteryView,
+    connectionText,
+    grouped,
+    KIND_LABEL,
+    lowBattery,
+    outcome,
+    ownerName,
+    stateText,
+    summary,
+    type Pending,
+  } from '../devices';
+  import { getDevices, onDevicesChanged, setDeviceConnected } from '../ipc';
+  import type { DeviceInfo, Devices } from '../types';
 
   interface Props {
     /** The tab shows: read on opening and once a minute (battery) while it does. */
@@ -55,6 +67,47 @@
     };
   });
 
+  // Connect and Disconnect (1.3): what was asked of each device, until its outcome has shown a
+  // while. Windows reports the change through the hot-plug event; two later reads catch a device
+  // that is slow to answer, or connects again by itself.
+  let pending = $state<Record<string, Pending>>({});
+  /** When the request has had time to work, and when its outcome stops showing. */
+  const SETTLE_MS = 8000;
+  const SHOW_MS = 20_000;
+
+  $effect(() => {
+    if (!data) return;
+    for (const [id, p] of Object.entries(pending)) {
+      if (!p.want && data.devices.find((d) => d.id === id)?.connected === false && !p.seenOff) {
+        pending[id] = { ...p, seenOff: true };
+      }
+    }
+  });
+
+  async function act(d: DeviceInfo): Promise<void> {
+    const control = d.control;
+    const was = pending[d.id];
+    if (control == null || (was && !was.settled)) return;
+    const id = d.id;
+    const update = (patch: Partial<Pending>) => {
+      const cur = pending[id];
+      if (cur) pending[id] = { ...cur, ...patch };
+    };
+    const want = !d.connected;
+    pending[id] = { want, control, seenOff: false, settled: false, error: null };
+    try {
+      await setDeviceConnected(id, control, want);
+      setTimeout(load, 2500);
+    } catch (e) {
+      update({ error: String(e), settled: true });
+    }
+    setTimeout(() => {
+      update({ settled: true });
+      load();
+    }, SETTLE_MS);
+    setTimeout(() => delete pending[id], SHOW_MS);
+  }
+
   const groups = $derived(data ? grouped(data.devices) : []);
   const low = $derived(data ? lowBattery(data.devices) : []);
   const outputs = $derived(data?.audio.filter((a) => a.output) ?? []);
@@ -94,10 +147,16 @@
           {#each g.devices as d (d.id)}
             {@const b = batteryView(d)}
             {@const state = stateText(d)}
+            {@const label = actionLabel(d)}
+            {@const p = pending[d.id]}
+            {@const result = p ? outcome(p, d) : null}
             <li class:off={!d.connected}>
               <div class="what">
                 <b>{d.name}</b>
                 <span>{[KIND_LABEL[d.kind], connectionText(d, data.devices), d.manufacturer].filter(Boolean).join(' · ')}</span>
+                {#if label}
+                  <span class="outcome" role="status">{p ? (result ?? (p.want ? 'Connecting…' : 'Disconnecting…')) : ''}</span>
+                {/if}
               </div>
               <span class="state" class:ok={state === 'Connected'} class:bad={d.connected && state !== 'Connected'}>{state}</span>
               <span
@@ -111,6 +170,18 @@
                 <span class="num">{b.text}</span>
                 {#if b.charging}<span class="charging">charging</span>{/if}
                 {#if b.source}<span class="sr-only">, {b.source}</span>{:else}<span class="sr-only">, not reported</span>{/if}
+              </span>
+              <span class="act">
+                {#if label}
+                  <button
+                    type="button"
+                    onclick={() => void act(d)}
+                    disabled={p != null && result == null}
+                    aria-label="{label} {d.name}"
+                  >
+                    {label}
+                  </button>
+                {/if}
               </span>
             </li>
           {/each}
@@ -219,7 +290,7 @@
   }
   li {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto 7.5rem;
+    grid-template-columns: minmax(0, 1fr) auto minmax(7.5rem, auto) 6.5rem;
     align-items: center;
     gap: 0.4rem 1rem;
     padding: 0.55rem 0;
@@ -227,6 +298,25 @@
   }
   .endpoints li {
     grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .act {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .what .outcome {
+    color: var(--text);
+  }
+  .what .outcome:empty {
+    display: none;
+  }
+  /* A narrow window: battery and the button go under the name. */
+  @media (max-width: 640px) {
+    .devices li {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .devices .battery {
+      justify-content: flex-start;
+    }
   }
   .what {
     display: flex;

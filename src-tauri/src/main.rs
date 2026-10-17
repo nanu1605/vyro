@@ -104,6 +104,7 @@ fn main() {
             commands::get_hardware_id,
             commands::get_displays,
             commands::get_devices,
+            commands::set_device_connected,
             dashboard::get_dashboard,
             dashboard::set_dashboard,
             widgets::get_widgets,

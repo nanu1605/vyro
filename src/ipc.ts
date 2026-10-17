@@ -8,7 +8,7 @@ import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
 import { savedLook, type AccentId, type OpenOn, type ThemeId } from './themes';
 import { EMPTY as NO_WIDGETS, type Widgets } from './widgets';
-import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Dashboard, Devices, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Control, Dashboard, DeviceInfo, Devices, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -628,16 +628,39 @@ export async function getDisplays(): Promise<DisplayInfo[]> {
   return invoke<DisplayInfo[]>('get_displays');
 }
 
+/** The browser preview's Connect and Disconnect: each device's state, and who to tell. */
+const previewLinks = new Map<string, boolean>();
+const previewChanged = new Set<() => void>();
+
 /** Peripherals, wireless battery and sound devices (P22), read fresh. */
 export async function getDevices(): Promise<Devices> {
-  if (!inTauri) return (await import('./sample-devices')).sampleDevices;
+  if (!inTauri) {
+    const s = (await import('./sample-devices')).sampleDevices;
+    const connected = (d: DeviceInfo) => previewLinks.get(d.id) ?? d.connected;
+    return { ...s, devices: s.devices.map((d) => ({ ...d, connected: connected(d) })) };
+  }
   return invoke<Devices>('get_devices');
+}
+
+/** Connects or disconnects a paired Bluetooth device (1.3), by the id and control the list gave
+ * it. Whether it worked shows in the next listing. The browser preview pretends, after a moment. */
+export async function setDeviceConnected(id: string, control: Control, connect: boolean): Promise<void> {
+  if (!inTauri) {
+    await new Promise((r) => setTimeout(r, 600));
+    previewLinks.set(id, connect);
+    previewChanged.forEach((cb) => cb());
+    return;
+  }
+  return invoke('set_device_connected', { id, control, connect });
 }
 
 /** Fires once things settle after a device arrives, leaves, connects or disconnects. Starts
  * after the first `getDevices`. */
 export async function onDevicesChanged(cb: () => void): Promise<() => void> {
-  if (!inTauri) return () => {};
+  if (!inTauri) {
+    previewChanged.add(cb);
+    return () => previewChanged.delete(cb);
+  }
   return listen('devices-changed', () => cb());
 }
 

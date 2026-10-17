@@ -844,3 +844,82 @@ fn sample_shows_each_source() {
     assert_eq!(by("USB Audio Condenser Mic").kind, DeviceKind::Microphone);
     assert_eq!(s.audio.len(), 6);
 }
+
+#[test]
+fn bluetooth_addresses_come_from_the_device_node_only() {
+    assert_eq!(
+        bt_address("BTHENUM\\DEV_B0B44894CE4D\\7&1B2C3D&0&BLUETOOTHDEVICE_B0B44894CE4D"),
+        Some((0xB0B4_4894_CE4D, false))
+    );
+    assert_eq!(
+        bt_address("bthle\\dev_d02a3b1f4c77\\7&2a&0&d02a3b1f4c77"),
+        Some((0xD02A_3B1F_4C77, true))
+    );
+    // A service's node, the radio, a USB device and nonsense have none.
+    assert_eq!(
+        bt_address("BTHENUM\\{0000110B-0000-1000-8000-00805F9B34FB}_LOCALMFG&0002\\7&1&0&B0B44894CE4D_C00000000"),
+        None
+    );
+    assert_eq!(bt_address("BTH\\MS_BTHBRB\\7&1"), None);
+    assert_eq!(bt_address("USB\\VID_046D&PID_C539\\1"), None);
+    assert_eq!(bt_address("BTHLE\\DEV_ZZZZ\\1"), None);
+    assert_eq!(bt_address("BTHLE\\DEV_000000000000\\1"), None);
+}
+
+#[test]
+fn bluetooth_devices_get_connect_and_disconnect() {
+    let d = |nodes: Vec<RawNode>, endpoints: Vec<RawEndpoint>, name: &str| {
+        one(&Raw {
+            containers: vec![container("a", name)],
+            nodes,
+            endpoints,
+            ..Raw::default()
+        })
+        .control
+    };
+    // Audio goes through its audio connection, also while off and without endpoints.
+    assert_eq!(
+        d(
+            vec![node("a", "Bluetooth", "BTHENUM")],
+            vec![endpoint("e", Some("a"), true)],
+            "Speaker"
+        ),
+        Some(Control::Audio)
+    );
+    assert_eq!(
+        d(
+            vec![node("a", "Bluetooth", "BTHENUM")],
+            vec![],
+            "WH-1000XM4 Headphones"
+        ),
+        Some(Control::Audio)
+    );
+    // A Bluetooth mouse or controller: its link.
+    assert_eq!(
+        d(
+            vec![node("a", "Mouse", "HID"), node("a", "Bluetooth", "BTHLE")],
+            vec![],
+            "MX Master 3S"
+        ),
+        Some(Control::Link)
+    );
+    // Wired and receiver devices: nothing.
+    assert_eq!(
+        d(
+            vec![node("a", "Mouse", "HID"), node("a", "USB", "USB")],
+            vec![],
+            "G502"
+        ),
+        None
+    );
+}
+
+#[test]
+fn one_action_per_device_in_a_while() {
+    let t = Throttle::default();
+    let now = Instant::now();
+    assert!(t.allow("a", now));
+    assert!(!t.allow("a", now + Duration::from_secs(1)));
+    assert!(t.allow("b", now + Duration::from_secs(1)));
+    assert!(t.allow("a", now + Throttle::GAP));
+}

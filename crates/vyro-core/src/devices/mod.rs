@@ -6,6 +6,8 @@
 //! Privacy: Bluetooth addresses and device paths never leave the collector. Ids are short hashes
 //! of the container id, and names stay on this PC (never in reports, cards or history).
 
+#[cfg(windows)]
+mod control;
 pub mod hid;
 #[cfg(windows)]
 mod hid_win;
@@ -13,11 +15,15 @@ mod hid_win;
 mod win;
 
 #[cfg(windows)]
+pub use control::{audio as audio_connection, disconnect, reach};
+#[cfg(windows)]
 pub use hid_win::{collections as hid_collections, Collection as HidCollection};
 #[cfg(windows)]
 pub use win::{collect, watch};
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -80,6 +86,17 @@ pub enum BatterySource {
     HidBattery,
 }
 
+/// How Vyro can connect or disconnect a paired Bluetooth device (1.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Control {
+    /// Through its audio connection, as Windows Settings does.
+    Audio,
+    /// Connect asks Windows to reach it; Disconnect drops its link through the Vyro service.
+    Link,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -124,6 +141,8 @@ pub struct DeviceInfo {
     pub problem: Option<u32>,
     /// The receiver a device is paired to (its id), for devices reached through one.
     pub parent: Option<String>,
+    /// Connect and Disconnect, for a paired Bluetooth device.
+    pub control: Option<Control>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -642,6 +661,57 @@ fn vid_pid(ids: &[String]) -> Option<(u16, u16)> {
     })
 }
 
+/// A Bluetooth device's audio connection is what Settings connects and disconnects; anything
+/// else has only its link.
+fn control(kind: DeviceKind, endpoints: &[&RawEndpoint]) -> Control {
+    use DeviceKind as K;
+    if !endpoints.is_empty()
+        || matches!(
+            kind,
+            K::Headset | K::Headphones | K::Speakers | K::Microphone
+        )
+    {
+        Control::Audio
+    } else {
+        Control::Link
+    }
+}
+
+/// A paired Bluetooth device's address from its device node's instance id
+/// ("BTHENUM\DEV_B0B44894CE4D\…", "BTHLE\DEV_D02A3B1F4C77\…"), and whether it is LE.
+/// Its services' nodes have other ids.
+pub fn bt_address(instance: &str) -> Option<(u64, bool)> {
+    let id = instance.to_ascii_uppercase();
+    let (rest, le) = if let Some(r) = id.strip_prefix("BTHENUM\\DEV_") {
+        (r, false)
+    } else {
+        (id.strip_prefix("BTHLE\\DEV_")?, true)
+    };
+    let hex = rest.get(..12)?;
+    let addr = u64::from_str_radix(hex, 16).ok()?;
+    (addr != 0 && rest[12..].starts_with('\\')).then_some((addr, le))
+}
+
+/// At most one Connect or Disconnect per device in a while: the service's rule, so a stuck
+/// button cannot keep a radio busy.
+#[derive(Debug, Default)]
+pub struct Throttle(Mutex<HashMap<String, Instant>>);
+
+impl Throttle {
+    /// The service's gap between two actions on one device.
+    pub const GAP: Duration = Duration::from_secs(5);
+
+    pub fn allow(&self, id: &str, now: Instant) -> bool {
+        let mut last = crate::lock(&self.0);
+        last.retain(|_, at| now.saturating_duration_since(*at) < Self::GAP);
+        if last.contains_key(id) {
+            return false;
+        }
+        last.insert(id.to_owned(), now);
+        true
+    }
+}
+
 /// The Devices tab's list.
 pub fn build(raw: &Raw) -> Devices {
     let groups = group(&raw.nodes);
@@ -730,6 +800,7 @@ pub fn build(raw: &Raw) -> Devices {
             battery,
             problem,
             parent: None,
+            control: bluetooth.then(|| control(kind, endpoints)),
         });
         listed.insert(id);
     }
@@ -763,6 +834,7 @@ pub fn build(raw: &Raw) -> Devices {
             },
             problem: None,
             parent: Some(receiver),
+            control: None,
         });
     }
 
@@ -817,6 +889,7 @@ pub fn build(raw: &Raw) -> Devices {
                 battery: pad_battery(p),
                 problem: None,
                 parent: None,
+                control: None,
             });
         }
     }
