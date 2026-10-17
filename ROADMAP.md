@@ -2136,9 +2136,10 @@ two ship together as one release (the owner's choice).
            first free spot, 8 px under the last. A full column continues to the left. Saved
            places are never moved.
       2. **Snapped widgets stuck, alone or side by side.**
-         - Cause: Windows' move loop builds each step from the last answered rectangle plus
-           the mouse's movement. Snapping what it proposed carried each snap into the next
-           step, so a slow drag stayed within reach and was pulled back every time.
+         - Likely cause: Windows' move loop builds each step from the last answered rectangle
+           plus the mouse's movement. Snapping what it proposed would then carry each snap
+           into the next step, so a slow drag stays within reach and is pulled back every
+           time. CI's mouse drag now records which way Windows works (see the CI line).
          - Fix: each step is worked out from the pointer, where it grabbed the window
            (`snap::follow`), then snapped. A widget comes away as soon as the pointer is out
            of reach.
@@ -2192,8 +2193,14 @@ two ship together as one release (the owner's choice).
         4. Move on 1 px at a time: it must follow the pointer out.
         5. Release: it must stay put.
 
-        The log notes whether Windows carried the snapped place into each step.
-- [ ] CI on the fixes.
+        The result says how Windows built the first step after the snap: on the last one
+        answered, or from the pointer.
+- [x] **CI** (run 39021013011 on f987a61): every job is green. On the Windows runner the smoke
+      test reports "Show desktop: passed; snap: passed; click-through: passed": the real mouse
+      drag snapped flush and came away with the pointer. The installer is 11.43 MB. That run's
+      note on the move loop compared the last step, where both ways give the same place; it now
+      compares the first step after the snap.
+- [ ] CI on the corrected note.
 - [ ] Field check 2 ([`docs/field-check-1.2.md`](docs/field-check-1.2.md)), then the owner's go
       for the release.
 

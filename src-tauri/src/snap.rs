@@ -467,33 +467,37 @@ mod imp {
             }
             // On, 1 px a step, well out of reach of the corner.
             let (ax, ay) = (cx + dx, cy + dy);
+            point(ax + 1, ay + 1);
+            std::thread::sleep(Duration::from_millis(150));
+            // What Windows proposed for the first step after the snap tells how its move loop
+            // works (the cause of the field check's stuck widgets), for the record: one pixel on
+            // from the snapped place if it builds each step on the last one answered, or one
+            // pixel on from where the pointer put the widget.
+            let first = last().map(|(proposed, _)| (proposed.left, proposed.top));
+            let built = if first == Some((near.left + 1, near.top + 1)) {
+                "Windows built each step on the last one answered".to_owned()
+            } else if first == Some((area.left + px(5) + 1, area.top + px(5) + 1)) {
+                "Windows built each step from the pointer".to_owned()
+            } else {
+                format!("after the snap Windows proposed {first:?}")
+            };
             let on = px(30);
-            for k in 1..=on {
+            for k in 2..=on {
                 point(ax + k, ay + k);
             }
             std::thread::sleep(Duration::from_millis(250));
-            let Some((proposed, away)) = last() else {
+            let Some((_, away)) = last() else {
                 return "failed: no step answered".into();
             };
             let want = (area.left + px(5) + on, area.top + px(5) + on);
             if ((away.left - want.0).abs(), (away.top - want.1).abs()) > (1, 1) {
                 return format!(
                     "failed: moved on from the corner, the widget went to {},{} (the pointer \
-                     was at {},{})",
+                     was at {},{}; {built})",
                     away.left, away.top, want.0, want.1
                 );
             }
-            // Whether Windows built its last step from the snapped one (the cause of the
-            // field check's stuck widgets), for the record.
-            let carried = (proposed.left, proposed.top) != (away.left, away.top);
-            format!(
-                "passed{}",
-                if carried {
-                    " (Windows carried the snapped place into each step)"
-                } else {
-                    ""
-                }
-            )
+            format!("passed ({built})")
         })();
         mouse(MOUSEEVENTF_LEFTUP);
         let ended = wait(Duration::from_secs(2), || !DRAGGING.load(Ordering::SeqCst));
