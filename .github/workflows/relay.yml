@@ -1,0 +1,80 @@
+name: Relay
+
+# Deploys the Vyro relay (relay/: a Cloudflare Worker with one Durable Object per PC) and the
+# phone app it serves (phone.html, built into relay/public) to the owner's Cloudflare account.
+# By hand only, from the Actions tab ("Run workflow"), on the owner's go: the relay is shared by
+# every installed Vyro that reaches its PC from anywhere. Phones get the new app the next time
+# they open it; keep the sealed messages' version (PROTOCOL) able to talk to released apps.
+#
+# Needs, in the repository settings (Secrets and variables → Actions):
+#   secret   CLOUDFLARE_API_TOKEN    a token from the "Edit Cloudflare Workers" template
+#   secret   CLOUDFLARE_ACCOUNT_ID   the account's id (Workers & Pages → Overview, right side)
+# After the first deploy, set the variable VYRO_RELAY_URL to the address it prints, so builds
+# carry it (ci.yml, release.yml).
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to deploy (normally main)
+        required: true
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: relay-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Test and deploy the relay
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            relay/pnpm-lock.yaml
+      - name: Secrets are set
+        env:
+          HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          HAS_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != true ] || [ "$HAS_ACCOUNT" != true ]; then
+            echo "::error::Set the secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID first (see this file's header)"
+            exit 1
+          fi
+      - run: pnpm install --frozen-lockfile
+      - name: The phone app (relay/public)
+        run: pnpm build:phone
+      - run: pnpm --dir relay install --frozen-lockfile
+      - run: pnpm --dir relay check
+      - run: pnpm --dir relay test
+      - name: Deploy
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          pnpm --dir relay exec wrangler deploy | tee deploy.log
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -n 1)
+          {
+            echo "### Relay deployed"
+            echo
+            echo "From \`${{ inputs.ref }}\` ($(git rev-parse --short HEAD))."
+            if [ -n "$url" ]; then
+              echo
+              echo "Address: $url"
+              echo
+              echo "Builds carry it once the repository variable VYRO_RELAY_URL is set to it."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

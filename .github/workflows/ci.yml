@@ -47,6 +47,7 @@ jobs:
       - run: pnpm check
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm build:phone
       - name: Front-end size budget (what each page loads at start)
         run: python3 scripts/bundle_budget.py --check
       - name: Third-party notices match Cargo.lock
@@ -72,6 +73,46 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - name: axe-core on every tab, theme and width; dialogs; companion; keyboard; reduced motion
         run: pnpm a11y
+
+  relay:
+    name: Relay and phone app (Linux)
+    # Pinned for Playwright, as the accessibility job.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            relay/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:phone
+      - name: The relay's own packages (Wrangler, workerd)
+        run: pnpm --dir relay install --frozen-lockfile
+      - run: pnpm --dir relay check
+      - name: The relay in workerd, with PCs and phones played by sockets
+        run: pnpm --dir relay test
+      - name: Browser for the end-to-end run
+        run: pnpm exec playwright install --with-deps chromium
+      - name: The PC for it (the companion example, simulated readings)
+        run: cargo build -p vyro-core --example companion
+      - name: End to end - relay, PC and phone app; pairing, readings, nothing readable on the wire, axe
+        env:
+          SHOTS: shots
+        run: node scripts/relay-e2e.mjs
+      - name: Phone app screens
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phone-app-screens-${{ github.sha }}
+          path: shots/
+          if-no-files-found: ignore
+          retention-days: 14
 
   tauri-windows:
     name: Tauri app (Windows)
@@ -107,6 +148,9 @@ jobs:
         shell: pwsh
         run: ./scripts/fetch-presentmon.ps1
       - name: Build the app and the MSI installer
+        env:
+          # The relay built into the app (1.4); empty until the owner sets the variable.
+          VYRO_RELAY_URL: ${{ vars.VYRO_RELAY_URL }}
         run: pnpm tauri build
       - name: Installer size budget (spec §8, < 60 MB since 1.1)
         shell: pwsh

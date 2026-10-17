@@ -22,13 +22,16 @@ hand.
   Intel) from <https://github.com/GameTechDev/PresentMon>, licensed under MIT (text in
   `THIRD_PARTY_LICENSES.md`). The sensor service runs it to measure game frame rates.
 
-## Rust crates (323)
+## Rust crates (339)
 
 Compiled into `vyro.exe` for Windows. Full license texts are in each crate's source package (crates.io) and repository.
 
 | Package | Version | License | Source |
 |---|---|---|---|
 | adler2 | 2.0.1 | 0BSD OR MIT OR Apache-2.0 | https://github.com/oyvindln/adler2 |
+| aead | 0.5.2 | MIT OR Apache-2.0 | https://github.com/RustCrypto/traits |
+| aes | 0.8.4 | MIT OR Apache-2.0 | https://github.com/RustCrypto/block-ciphers |
+| aes-gcm | 0.10.3 | Apache-2.0 OR MIT | https://github.com/RustCrypto/AEADs |
 | aho-corasick | 1.1.5 | Unlicense OR MIT | https://github.com/BurntSushi/aho-corasick |
 | alloc-no-stdlib | 2.0.4 | BSD-3-Clause | https://github.com/dropbox/rust-alloc-no-stdlib |
 | alloc-stdlib | 0.2.4 | BSD-3-Clause | https://github.com/dropbox/rust-alloc-no-stdlib |
@@ -52,6 +55,7 @@ Compiled into `vyro.exe` for Windows. Full license texts are in each crate's sou
 | cfb | 0.7.3 | MIT | https://github.com/mdsteele/rust-cfb |
 | cfg-if | 1.0.5 | MIT OR Apache-2.0 | https://github.com/rust-lang/cfg-if |
 | chrono | 0.4.45 | MIT OR Apache-2.0 | https://github.com/chronotope/chrono |
+| cipher | 0.4.4 | MIT OR Apache-2.0 | https://github.com/RustCrypto/traits |
 | cookie | 0.18.2 | MIT OR Apache-2.0 | https://github.com/SergioBenitez/cookie-rs |
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 | https://github.com/RustCrypto/utils |
 | crc32fast | 1.5.2 | MIT OR Apache-2.0 | https://github.com/srijs/rust-crc32fast |
@@ -62,12 +66,14 @@ Compiled into `vyro.exe` for Windows. Full license texts are in each crate's sou
 | cssparser-macros | 0.6.1 | MPL-2.0 | https://github.com/servo/rust-cssparser |
 | ctor | 0.8.0 | Apache-2.0 OR MIT | https://github.com/mmastrac/rust-ctor |
 | ctor-proc-macro | 0.0.7 | Apache-2.0 OR MIT | https://github.com/mmastrac/rust-ctor |
+| ctr | 0.9.2 | MIT OR Apache-2.0 | https://github.com/RustCrypto/block-modes |
 | darling | 0.20.11 | MIT | https://github.com/TedDriggs/darling |
 | darling | 0.24.1 | MIT | https://github.com/TedDriggs/darling |
 | darling_core | 0.20.11 | MIT | https://github.com/TedDriggs/darling |
 | darling_core | 0.24.1 | MIT | https://github.com/TedDriggs/darling |
 | darling_macro | 0.20.11 | MIT | https://github.com/TedDriggs/darling |
 | darling_macro | 0.24.1 | MIT | https://github.com/TedDriggs/darling |
+| data-encoding | 2.11.1 | MIT | https://github.com/ia0/data-encoding |
 | defmt | 1.1.1 | MIT OR Apache-2.0 | https://github.com/knurling-rs/defmt |
 | defmt-macros | 1.1.1 | MIT OR Apache-2.0 | https://github.com/knurling-rs/defmt |
 | defmt-parser | 1.0.0 | MIT OR Apache-2.0 | https://github.com/knurling-rs/defmt |
@@ -110,12 +116,15 @@ Compiled into `vyro.exe` for Windows. Full license texts are in each crate's sou
 | getrandom | 0.2.17 | MIT OR Apache-2.0 | https://github.com/rust-random/getrandom |
 | getrandom | 0.3.4 | MIT OR Apache-2.0 | https://github.com/rust-random/getrandom |
 | getrandom | 0.4.3 | MIT OR Apache-2.0 | https://github.com/rust-random/getrandom |
+| ghash | 0.5.1 | Apache-2.0 OR MIT | https://github.com/RustCrypto/universal-hashes |
 | glob | 0.3.4 | MIT OR Apache-2.0 | https://github.com/rust-lang/glob |
 | hashbrown | 0.12.3 | MIT OR Apache-2.0 | https://github.com/rust-lang/hashbrown |
 | hashbrown | 0.17.1 | MIT OR Apache-2.0 | https://github.com/rust-lang/hashbrown |
 | hashlink | 0.12.2 | MIT OR Apache-2.0 | https://github.com/djc/hashlink |
 | heck | 0.5.0 | MIT OR Apache-2.0 | https://github.com/withoutboats/heck |
 | hex | 0.4.3 | MIT OR Apache-2.0 | https://github.com/KokaKiwi/rust-hex |
+| hkdf | 0.12.4 | MIT OR Apache-2.0 | https://github.com/RustCrypto/KDFs/ |
+| hmac | 0.12.1 | MIT OR Apache-2.0 | https://github.com/RustCrypto/MACs |
 | html5ever | 0.38.0 | MIT OR Apache-2.0 | https://github.com/servo/html5ever |
 | http | 1.5.0 | MIT OR Apache-2.0 | https://github.com/hyperium/http |
 | http-body | 1.1.0 | MIT | https://github.com/hyperium/http-body |
@@ -138,6 +147,7 @@ Compiled into `vyro.exe` for Windows. Full license texts are in each crate's sou
 | indexmap | 1.9.3 | Apache-2.0 OR MIT | https://github.com/bluss/indexmap |
 | indexmap | 2.14.2 | Apache-2.0 OR MIT | https://github.com/indexmap-rs/indexmap |
 | infer | 0.19.0 | MIT | https://github.com/bojand/infer |
+| inout | 0.1.4 | MIT OR Apache-2.0 | https://github.com/RustCrypto/utils |
 | ipnet | 2.12.2 | MIT OR Apache-2.0 | https://github.com/krisprice/ipnet |
 | itoa | 1.0.18 | MIT OR Apache-2.0 | https://github.com/dtolnay/itoa |
 | jiff | 0.2.37 | Unlicense OR MIT | https://github.com/BurntSushi/jiff |
@@ -168,6 +178,7 @@ Compiled into `vyro.exe` for Windows. Full license texts are in each crate's sou
 | nvml-wrapper | 0.13.0 | MIT OR Apache-2.0 | https://github.com/Cldfire/nvml-wrapper |
 | nvml-wrapper-sys | 0.10.0 | MIT OR Apache-2.0 | https://github.com/Cldfire/nvml-wrapper |
 | once_cell | 1.21.4 | MIT OR Apache-2.0 | https://github.com/matklad/once_cell |
+| opaque-debug | 0.3.1 | MIT OR Apache-2.0 | https://github.com/RustCrypto/utils |
 | option-ext | 0.2.0 | MPL-2.0 | https://github.com/soc/option-ext.git |
 | parking_lot | 0.12.5 | MIT OR Apache-2.0 | https://github.com/Amanieu/parking_lot |
 | parking_lot_core | 0.9.12 | MIT OR Apache-2.0 | https://github.com/Amanieu/parking_lot |
@@ -179,6 +190,7 @@ Compiled into `vyro.exe` for Windows. Full license texts are in each crate's sou
 | pin-project-lite | 0.2.17 | Apache-2.0 OR MIT | https://github.com/taiki-e/pin-project-lite |
 | plist | 1.10.1 | MIT | https://github.com/ebarnard/rust-plist/ |
 | png | 0.17.16 | MIT OR Apache-2.0 | https://github.com/image-rs/image-png |
+| polyval | 0.6.2 | Apache-2.0 OR MIT | https://github.com/RustCrypto/universal-hashes |
 | potential_utf | 0.1.6 | Unicode-3.0 | https://github.com/unicode-org/icu4x |
 | powerfmt | 0.2.0 | MIT OR Apache-2.0 | https://github.com/jhpratt/powerfmt |
 | ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 | https://github.com/cryptocorrosion/cryptocorrosion |
@@ -225,6 +237,7 @@ Compiled into `vyro.exe` for Windows. Full license texts are in each crate's sou
 | serialize-to-javascript | 0.1.2 | MIT OR Apache-2.0 | https://github.com/chippers/serialize-to-javascript |
 | serialize-to-javascript-impl | 0.1.2 | MIT OR Apache-2.0 | https://github.com/chippers/serialize-to-javascript |
 | servo_arc | 0.4.3 | MIT OR Apache-2.0 | https://github.com/servo/stylo |
+| sha1 | 0.10.7 | MIT OR Apache-2.0 | https://github.com/RustCrypto/hashes |
 | sha2 | 0.10.9 | MIT OR Apache-2.0 | https://github.com/RustCrypto/hashes |
 | simd-adler32 | 0.3.10 | MIT | https://github.com/mcountryman/simd-adler32 |
 | siphasher | 1.0.4 | MIT OR Apache-2.0 | https://github.com/jedisct1/rust-siphash |
@@ -283,6 +296,7 @@ Compiled into `vyro.exe` for Windows. Full license texts are in each crate's sou
 | try-lock | 0.2.5 | MIT | https://github.com/seanmonstar/try-lock |
 | ts-rs | 12.0.1 | MIT | https://github.com/Aleph-Alpha/ts-rs |
 | ts-rs-macros | 12.0.1 | MIT | https://github.com/Aleph-Alpha/ts-rs |
+| tungstenite | 0.28.0 | MIT OR Apache-2.0 | https://github.com/snapview/tungstenite-rs |
 | typeid | 1.0.3 | MIT OR Apache-2.0 | https://github.com/dtolnay/typeid |
 | typenum | 1.20.1 | MIT OR Apache-2.0 | https://github.com/paholg/typenum |
 | unic-char-property | 0.9.0 | MIT/Apache-2.0 | https://github.com/open-i18n/rust-unic/ |
@@ -292,9 +306,11 @@ Compiled into `vyro.exe` for Windows. Full license texts are in each crate's sou
 | unic-ucd-version | 0.9.0 | MIT/Apache-2.0 | https://github.com/open-i18n/rust-unic/ |
 | unicode-ident | 1.0.26 | (MIT OR Apache-2.0) AND Unicode-3.0 | https://github.com/dtolnay/unicode-ident |
 | unicode-segmentation | 1.13.3 | MIT OR Apache-2.0 | https://github.com/unicode-rs/unicode-segmentation |
+| universal-hash | 0.5.1 | MIT OR Apache-2.0 | https://github.com/RustCrypto/traits |
 | untrusted | 0.9.0 | ISC | https://github.com/briansmith/untrusted |
 | url | 2.5.8 | MIT OR Apache-2.0 | https://github.com/servo/rust-url |
 | urlpattern | 0.3.0 | MIT | https://github.com/denoland/rust-urlpattern |
+| utf-8 | 0.7.6 | MIT OR Apache-2.0 | https://github.com/SimonSapin/rust-utf8 |
 | utf8_iter | 1.0.4 | Apache-2.0 OR MIT | https://github.com/hsivonen/utf8_iter |
 | uuid | 1.26.1 | Apache-2.0 OR MIT | https://github.com/uuid-rs/uuid |
 | walkdir | 2.5.0 | Unlicense/MIT | https://github.com/BurntSushi/walkdir |
@@ -362,3 +378,4 @@ Bundled into the app's user interface.
 | @tauri-apps/api | 2.11.1 | Apache-2.0 OR MIT | git+https://github.com/tauri-apps/tauri.git |
 | three | 0.186.1 | MIT | https://github.com/mrdoob/three.js |
 | @lucide/svelte | 1.50.0 | ISC | https://github.com/lucide-icons/lucide.git |
+| jsqr | 1.4.0 | Apache-2.0 | https://github.com/cozmo/jsQR |

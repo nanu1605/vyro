@@ -20,9 +20,10 @@ LICENSES_OUT = ROOT / "THIRD_PARTY_LICENSES.md"
 FALLBACK_DIR = ROOT / "scripts" / "licenses"
 LICENSE_FILE = re.compile(r"^(LICEN[CS]E|COPYING|NOTICE|UNLICENSE)", re.I)
 TARGET = "x86_64-pc-windows-msvc"
-# npm packages whose code ends up in dist/ (the UI bundle). Svelte is a devDependency but its
-# runtime is compiled into the bundle.
-UI_PACKAGES = ["svelte", "@tauri-apps/api", "three", "@lucide/svelte"]
+# npm packages whose code ends up in dist/ (the UI bundle) or in the phone app the relay serves
+# (relay/public, 1.4: jsQR reads pairing codes). Svelte is a devDependency but its runtime is
+# compiled into both.
+UI_PACKAGES = ["svelte", "@tauri-apps/api", "three", "@lucide/svelte", "jsqr"]
 
 HEADER = """# Third-party notices
 

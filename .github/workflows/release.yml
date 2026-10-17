@@ -16,6 +16,8 @@ name: Release
 #   variable RELEASES_REPO                       a public repository for the downloads only
 #                                                (owner/name, created with a README)
 #   secret   RELEASES_TOKEN                      fine-grained token: Contents read and write on it
+# and, for reach from anywhere (1.4):
+#   variable VYRO_RELAY_URL                      the relay built into the app (relay.yml deploys it)
 # With RELEASES_REPO the installer and `latest.json` are also published there and installed
 # copies update from it (release downloads of a private repository need a sign-in); without
 # it they update from this repository's releases, which works only while it is public.
@@ -121,6 +123,8 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # The relay built into the app (1.4): Settings → Remote → From anywhere.
+          VYRO_RELAY_URL: ${{ vars.VYRO_RELAY_URL }}
         run: pnpm tauri build --config src-tauri/tauri.release.conf.json
 
       - name: Installer, update manifest and checksums
