@@ -4,7 +4,8 @@
 //! `#widget=<id>`; they share the app's WebView2 browser process. Readings reach them as
 //! `widget-sensors` events, also while the main window sits in the tray, and the engine keeps
 //! the window's poll rate for them. Dragging a widget moves its window; where it ends up is
-//! saved a moment after it stops.
+//! saved a moment after it stops. Widgets behind windows stay in view through Windows' Show
+//! desktop (Win+D): while the desktop shows they are kept on top (`pin.rs`, 1.1.1).
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -14,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, State, WebviewUrl,
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, State, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, Window, WindowEvent,
 };
 use vyro_core::{files, lock, SensorSnapshot};
@@ -372,6 +373,8 @@ fn apply(handle: &AppHandle) {
             placed.push((x.id.clone(), pos));
         }
     }
+    // Show desktop is watched for while a widget sits behind windows.
+    crate::pin::watch(handle, want.iter().any(|w| w.layer == Layer::Desktop));
     // New widgets: keep where they were put, so they come back there.
     if !placed.is_empty() {
         let mut cfg = store.get();
@@ -397,11 +400,10 @@ fn open_or_update(
     let (sw, sh) = size(w);
     let (x, y) = place(w, (sw, sh), monitors, slot);
     let moved = !w.placed || (x, y) != (f64::from(w.x), f64::from(w.y));
-    let top = w.layer == Layer::Top;
+    let (top, bottom) = stacking(w.layer, crate::pin::desktop_shown());
     if let Some(win) = app.get_webview_window(&label) {
         let _ = win.set_size(LogicalSize::new(sw, sh));
-        let _ = win.set_always_on_top(top);
-        let _ = win.set_always_on_bottom(!top);
+        stack(&win, (top, bottom));
         if moved {
             let _ = win.set_position(LogicalPosition::new(x, y));
         }
@@ -422,7 +424,7 @@ fn open_or_update(
     .minimizable(false)
     .skip_taskbar(true)
     .always_on_top(top)
-    .always_on_bottom(!top)
+    .always_on_bottom(bottom)
     .focused(false)
     .inner_size(sw, sh)
     .position(x, y)
@@ -436,6 +438,43 @@ fn open_or_update(
         Err(e) => {
             log::warn!("widgets: {e}");
             None
+        }
+    }
+}
+
+/// Whether a widget's window is kept (on top, at the bottom). "On top" always is on top;
+/// "Behind windows" sits at the bottom, and on top while Windows shows the desktop (Win+D), which
+/// would otherwise cover it (1.1.1).
+pub fn stacking(layer: Layer, desktop_shown: bool) -> (bool, bool) {
+    match layer {
+        Layer::Top => (true, false),
+        Layer::Desktop if desktop_shown => (true, false),
+        Layer::Desktop => (false, true),
+    }
+}
+
+fn stack(win: &WebviewWindow, (top, bottom): (bool, bool)) {
+    // One off before the other on: a window kept at the bottom is put back there on every move.
+    if top {
+        let _ = win.set_always_on_bottom(false);
+        let _ = win.set_always_on_top(true);
+    } else {
+        let _ = win.set_always_on_top(false);
+        let _ = win.set_always_on_bottom(bottom);
+    }
+}
+
+/// Show desktop began or ended (`pin.rs`): every widget window to its place in the stack. Main
+/// thread.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn restack(app: &AppHandle) {
+    let Some(store) = app.try_state::<WidgetStore>() else {
+        return;
+    };
+    let shown = crate::pin::desktop_shown();
+    for w in store.get().widgets {
+        if let Some(win) = app.get_webview_window(&format!("{PREFIX}{}", w.id)) {
+            stack(&win, stacking(w.layer, shown));
         }
     }
 }
@@ -651,6 +690,14 @@ mod tests {
                 .unwrap();
         assert_eq!((w.style, w.layer), (Style::Glass, Layer::Top));
         assert_eq!(serde_json::to_value(Layer::Top).unwrap(), "top");
+    }
+
+    #[test]
+    fn behind_windows_goes_on_top_only_while_the_desktop_shows() {
+        assert_eq!(stacking(Layer::Desktop, false), (false, true));
+        assert_eq!(stacking(Layer::Desktop, true), (true, false));
+        assert_eq!(stacking(Layer::Top, false), (true, false));
+        assert_eq!(stacking(Layer::Top, true), (true, false));
     }
 
     #[test]

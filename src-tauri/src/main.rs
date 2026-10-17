@@ -10,6 +10,7 @@ mod engine;
 mod gaming;
 mod look;
 mod overlay;
+mod pin;
 mod remote;
 mod share;
 mod smoke;

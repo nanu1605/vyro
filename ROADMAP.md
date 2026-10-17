@@ -44,6 +44,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 27 | Fans with no speed reading (My PC) | Turn slowly and say "Speed not reported"; a real 0 RPM stays still (the owner, 2026-10-16) | decided |
 | 28 | Installer size budget | **< 60 MB** from 1.1 (was < 20 MB, spec §8): "we have to make good software using good tools" (the owner, 2026-10-16). The window's start bundle budget goes from 125 to 200 kB gzipped | decided |
 | 29 | Navigation | A sidebar with grouped views replaces the tab strip (supersedes 26); the views and their ids stay | decided |
+| 30 | Widgets and Show desktop | "Behind windows" widgets stay in view through Show desktop (Win+D), as Rainmeter's "On desktop" skins do: a probe window detects it and the widgets go on top while it lasts; Vyro's windows are never put inside Explorer's (the owner, 2026-10-17) | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -1951,9 +1952,8 @@ scene stay loaded on first use. Footprint as 1.0, plus what P29 and P30 measure 
         (`Engine::set_widgets`, as the overlay does). Tray: "Desktop widgets" shows or hides them
         all. Their own capability (`capabilities/widgets.json`) allows only listening to events
         and dragging their own window.
-      - **Known limit.** Windows' Show desktop (Win+D) can hide widgets set behind windows until
-        a window is switched to; "On top" keeps a widget visible. Pinning to the desktop layer
-        itself (as Rainmeter does) is a later step.
+      - **Known limit (lifted in 1.1.1).** Windows' Show desktop (Win+D) could hide widgets set
+        behind windows until a window was switched to; "On top" kept a widget visible.
       - Accessibility sweep: the Widgets page in every theme at both widths, each kind's window
         and the widget menu; 411 checks clean. The page's chunk is 4.5 kB gzipped; the widget
         window shares the start bundle (139.1 kB of 200). Each widget is one more WebView2 view in
@@ -2018,6 +2018,42 @@ scene stay loaded on first use. Footprint as 1.0, plus what P29 and P30 measure 
       and checksums here and to `nanu1605/vyro-releases`. Its `latest.json` now offers 1.1.0
       to installed copies (checksums verified). The 1.0 and 1.1 footprint figures and the
       anti-cheat table are still to be written down from the owner's notes.
+
+### 1.1.1 — widgets stay in view through Show desktop
+The owner's pick after 1.1.0 (2026-10-17): remove P30's known limit, where Show desktop (Win+D)
+hid widgets set behind windows (decision 30).
+- [x] Built (2026-10-17):
+      - **How** (`src-tauri/src/pin.rs`, the way Rainmeter keeps "On desktop" skins):
+        - Show desktop lifts the window holding the desktop icons (`SHELLDLL_DefView`'s
+          parent: Progman on Windows 11 24H2, a WorkerW before) above every window that is not
+          always-on-top.
+        - Vyro keeps a hidden, disabled tool window, the probe, at the bottom of the stack. When
+          the icons' window is above the probe and the desktop is in front, Show desktop is on.
+        - Widgets behind windows then go on top. They go back under windows when an app comes
+          forward, or when the desktop drops back (Win+D again).
+        - Clicking the desktop doesn't lift it, so widgets don't jump over open windows.
+          Through Start, the taskbar, task switching or a click on a widget, the state holds.
+      - **When it runs:** a foreground-window hook, set only while a widget sits behind
+        windows, starts a check at once and six more 100 ms apart (the shell lifts the desktop
+        a little after). While the desktop shows, it checks every 100 ms. Nothing polls
+        otherwise.
+      - **Nothing is put inside Explorer's windows.** A cross-process parent shares input
+        between the two, so a busy Vyro could freeze the desktop.
+      - **Layers:** `widgets::stacking` turns the layer and the state into always-on-top or
+        always-on-bottom. One flag is cleared before the other is set, because tao keeps an
+        always-on-bottom window at the bottom of every move.
+      - **CI's smoke test** presses Show desktop through Explorer
+        (`IShellDispatch4::ToggleDesktop`). It checks that the widget stays visible and on top,
+        presses it again, and checks that the widget goes back. On a runner with no desktop to
+        show, it reports "skipped" in the step summary instead of failing.
+      - **Words:** the Widgets page and the README describe the new behaviour. Version 1.1.1.
+      - **Not covered:** desktop "peek" (hovering the taskbar's corner) only makes windows
+        see-through, and widgets stay where they are. With a wallpaper app that moves the icons
+        into its own window, the check may see the desktop as lifted when it isn't. Then
+        clicking the desktop can bring widgets over windows until an app is clicked. The field
+        check covers the owner's setup.
+- [ ] Field check ([`docs/field-check-1.1.1.md`](docs/field-check-1.1.1.md)), then the owner's go
+      for the release.
 
 ## Risks
 

@@ -226,8 +226,9 @@ remembers where it is. Right-click a widget to lock it, edit it or remove it. "D
 widgets" in the tray icon's menu shows or hides them all, and they come back when Vyro starts.
 
 Widgets follow your theme and accent, and update at your profile's rate while the window is
-in the tray. Windows' Show desktop (Win+D) can hide widgets that sit behind windows until you
-switch back to a window; choose "On top" to keep one in view.
+in the tray. Widgets behind your windows stay in view when you use Show desktop (Win+D) and go
+back under your windows when you switch to one (1.1.1); "On top" keeps a widget over
+everything.
 
 ## Phone companion (1.0)
 
@@ -280,6 +281,7 @@ Nothing on it changes the PC.
 | [`docs/diagnostics.md`](docs/diagnostics.md) | The diagnostics checks |
 | [`docs/field-check.md`](docs/field-check.md) | The owner's field check of 1.0 (P16–P27) on the reference PC, in one pass |
 | [`docs/field-check-1.1.md`](docs/field-check-1.1.md) | The field check of 1.1 (P28–P30): the new look, My PC and the laptop, desktop widgets |
+| [`docs/field-check-1.1.1.md`](docs/field-check-1.1.1.md) | The field check of 1.1.1: widgets behind windows through Show desktop |
 
 `vyro-remote.exe` in the same artifact checks the service from the outside (state, connection,
 sensors; `--capture Game.exe` measures a running game for 15 s). The service logs to `%ProgramData%\Vyro\service.log`.

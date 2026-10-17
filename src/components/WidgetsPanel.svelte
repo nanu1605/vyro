@@ -312,9 +312,9 @@
   </div>
 
   <p class="note foot">
-    Windows' Show desktop (Win+D) can hide widgets that sit behind windows until you switch back to a window; "On
-    top" keeps a widget over everything. Widgets read the same sensors as the app, at the profile's rate, also while the
-    window is in the tray.
+    Widgets behind windows stay under your windows, and stay in view when you use Show desktop (Win+D); "On top" keeps a
+    widget over everything. Widgets read the same sensors as the app, at the profile's rate, also while the window is in
+    the tray.
   </p>
   <p class="sr-only" role="status" aria-live="polite">{status}</p>
 </div>

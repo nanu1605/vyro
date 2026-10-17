@@ -5,8 +5,10 @@
 //! Once the main page has loaded, `smoke.js` calls the commands the pages call (hardware,
 //! system, sensors, widgets) through the real IPC, then saves a widget as the Widgets page
 //! does. [`smoke_report`] then checks that the widget's window opened, shows and loaded its
-//! page, writes the result and quits the way the tray's "Quit Vyro" does. A watchdog writes a
-//! failure and ends the process if any of that hangs, so CI fails rather than waits.
+//! page, and that it stays over the desktop through Show desktop (`pin.rs`; skipped where the
+//! runner has no desktop to show), writes the result and quits the way the tray's "Quit Vyro"
+//! does. A watchdog writes a failure and ends the process if any of that hangs, so CI fails
+//! rather than waits.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -67,11 +69,13 @@ pub struct Outcome {
     pub widget_window: bool,
     pub widget_visible: bool,
     pub widget_loaded: bool,
+    /// Show desktop with the widget behind windows: "passed", "skipped: …" or "failed: …".
+    pub show_desktop: String,
 }
 
-/// Passes when every expected step answered without an error and the widget's window opened,
-/// shows and loaded its page.
-pub fn verdict(steps: &Value, facts: Facts) -> Outcome {
+/// Passes when every expected step answered without an error, the widget's window opened, shows
+/// and loaded its page, and Show desktop did not fail (a skip is not a failure).
+pub fn verdict(steps: &Value, facts: Facts, show_desktop: &str) -> Outcome {
     let mut failures = Vec::new();
     let list = steps.as_array().map(Vec::as_slice).unwrap_or_default();
     for name in STEPS {
@@ -94,6 +98,9 @@ pub fn verdict(steps: &Value, facts: Facts) -> Outcome {
             failures.push("the widget's page did not load".into());
         }
     }
+    if let Some(why) = show_desktop.strip_prefix("failed: ") {
+        failures.push(format!("Show desktop: {why}"));
+    }
     Outcome {
         ok: failures.is_empty(),
         failures,
@@ -101,6 +108,7 @@ pub fn verdict(steps: &Value, facts: Facts) -> Outcome {
         widget_window: facts.widget_window,
         widget_visible: facts.widget_visible,
         widget_loaded: facts.widget_loaded,
+        show_desktop: show_desktop.to_owned(),
     }
 }
 
@@ -126,6 +134,7 @@ fn failed(why: &str) -> Outcome {
         widget_window: false,
         widget_visible: false,
         widget_loaded: false,
+        show_desktop: "not run".into(),
     }
 }
 
@@ -195,8 +204,21 @@ pub async fn smoke_report(app: AppHandle, steps: Value) -> Result<(), String> {
                 widget_visible: window.is_some_and(|w| w.is_visible().unwrap_or(false)),
                 widget_loaded: WIDGET_LOADED.load(Ordering::SeqCst),
             };
-            let outcome = verdict(&steps, facts);
-            log::info!("smoke: ok {} {:?}", outcome.ok, outcome.failures);
+            #[cfg(windows)]
+            let show_desktop = if facts.widget_loaded && facts.widget_visible {
+                crate::pin::smoke_show_desktop(&app, &label)
+            } else {
+                "skipped: the widget did not show".to_owned()
+            };
+            #[cfg(not(windows))]
+            let show_desktop = "skipped: not Windows".to_owned();
+            let outcome = verdict(&steps, facts, &show_desktop);
+            log::info!(
+                "smoke: ok {} {:?}; Show desktop {}",
+                outcome.ok,
+                outcome.failures,
+                outcome.show_desktop
+            );
             write(&outcome);
             app.exit(0);
         })
@@ -225,8 +247,24 @@ mod tests {
 
     #[test]
     fn passes_when_every_step_answers_and_the_widget_shows() {
-        let o = verdict(&all_ok(), SHOWN);
+        let o = verdict(&all_ok(), SHOWN, "passed");
         assert!(o.ok, "{:?}", o.failures);
+    }
+
+    #[test]
+    fn show_desktop_fails_the_run_only_when_it_failed() {
+        let skipped = verdict(&all_ok(), SHOWN, "skipped: no desktop shell");
+        assert!(skipped.ok, "{:?}", skipped.failures);
+        assert_eq!(skipped.show_desktop, "skipped: no desktop shell");
+        let failed = verdict(
+            &all_ok(),
+            SHOWN,
+            "failed: the widget did not stay over the shown desktop",
+        );
+        assert_eq!(
+            failed.failures,
+            ["Show desktop: the widget did not stay over the shown desktop"]
+        );
     }
 
     #[test]
@@ -234,18 +272,18 @@ mod tests {
         let mut steps = all_ok();
         steps[2] =
             json!({ "name": "get_sensor_tree", "ok": false, "error": "timed out after 20 s" });
-        let o = verdict(&steps, SHOWN);
+        let o = verdict(&steps, SHOWN, "passed");
         assert!(!o.ok);
         assert_eq!(o.failures, ["get_sensor_tree: timed out after 20 s"]);
 
-        let o = verdict(&json!([]), SHOWN);
+        let o = verdict(&json!([]), SHOWN, "passed");
         assert_eq!(o.failures.len(), STEPS.len());
-        assert!(!verdict(&Value::Null, SHOWN).ok);
+        assert!(!verdict(&Value::Null, SHOWN, "passed").ok);
     }
 
     #[test]
     fn the_widget_must_open_show_and_load() {
-        let o = verdict(&all_ok(), Facts::default());
+        let o = verdict(&all_ok(), Facts::default(), "passed");
         assert_eq!(o.failures, ["the widget's window did not open"]);
         let o = verdict(
             &all_ok(),
@@ -253,6 +291,7 @@ mod tests {
                 widget_loaded: false,
                 ..SHOWN
             },
+            "passed",
         );
         assert_eq!(o.failures, ["the widget's page did not load"]);
         let o = verdict(
@@ -261,6 +300,7 @@ mod tests {
                 widget_visible: false,
                 ..SHOWN
             },
+            "passed",
         );
         assert_eq!(o.failures, ["the widget's window is not shown"]);
     }
