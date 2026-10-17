@@ -1,10 +1,24 @@
 <script lang="ts">
-  // Settings → Remote (P26): turns the remote companion on and off, pairs devices with a QR code
-  // or a typed code, and lists the paired devices with a way to sign each out at once.
+  // Settings → Remote (P26, 1.4): reach this PC from anywhere through the Vyro relay, or from
+  // this network through the local companion; pairs phones and devices with a QR code (or a
+  // typed code on this network), and lists them with a way to sign each out at once.
   import { untrack } from 'svelte';
   import Card from './Card.svelte';
   import { fmtDate, fmtDateTime } from '../format';
-  import { cancelRemotePairing, getRemoteStatus, onRemote, setRemoteEnabled, setRemoteOptions, signOutRemote, startRemotePairing } from '../ipc';
+  import {
+    cancelRelayPairing,
+    cancelRemotePairing,
+    getRemoteStatus,
+    onRemote,
+    resetRelay,
+    setRelayEnabled,
+    setRelayUrl,
+    setRemoteEnabled,
+    setRemoteOptions,
+    signOutRemote,
+    startRelayPairing,
+    startRemotePairing,
+  } from '../ipc';
   import type { RemoteStatus } from '../types';
 
   interface Props {
@@ -17,12 +31,15 @@
 
   let status = $state.raw<RemoteStatus | null>(null);
   let confirming = $state(false);
+  let confirmingRelay = $state(false);
   let busy = $state(false);
   let error = $state<string | null>(null);
+  let copied = $state(false);
   let now = $state(Date.now() / 1000);
   // Typed in Options, until saved.
   let portDraft = $state<number | null>(null);
   let daysDraft = $state<number | null>(null);
+  let relayDraft = $state<string | null>(null);
 
   async function run(f: () => Promise<RemoteStatus>): Promise<boolean> {
     busy = true;
@@ -43,7 +60,7 @@
     untrack(() => void run(getRemoteStatus));
     let stop: (() => void) | null = null;
     let gone = false;
-    // A device paired, signed out or opened its view: show it.
+    // A device paired, signed out or opened its view; the relay connected: show it.
     void onRemote(() => {
       void getRemoteStatus()
         .then((s) => (status = s))
@@ -58,33 +75,42 @@
     };
   });
 
-  // The code's countdown; an expired code goes away.
+  // The codes' countdowns; an expired code goes away.
   $effect(() => {
-    const expires = status?.pairing?.expires;
-    if (expires == null) return;
+    const ends = [status?.pairing?.expires, status?.relay.pairing?.expires].filter((e): e is number => e != null);
+    if (!ends.length) return;
     now = Date.now() / 1000;
     const t = setInterval(() => {
       now = Date.now() / 1000;
-      if (now >= expires) void run(getRemoteStatus);
+      if (ends.some((e) => now >= e)) void run(getRemoteStatus);
     }, 1000);
     return () => clearInterval(t);
   });
 
-  const left = $derived.by(() => {
-    const s = Math.max(0, Math.round((status?.pairing?.expires ?? 0) - now));
+  const countdown = (expires: number | undefined) => {
+    const s = Math.max(0, Math.round((expires ?? 0) - now));
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+  const left = $derived(countdown(status?.pairing?.expires));
+  const relayLeft = $derived(countdown(status?.relay.pairing?.expires));
+  const lanOn = $derived(!!status?.settings.enabled);
+  const relayOn = $derived(!!status?.relay.enabled);
+  const phones = $derived(status?.devices.filter((d) => d.anywhere).length ?? 0);
+  const subtitle = $derived.by(() => {
+    if (!status) return null;
+    const parts = [
+      relayOn ? (status.relay.state === 'online' ? 'From anywhere' : 'From anywhere (connecting)') : null,
+      lanOn ? (status.running ? 'On this network' : 'On this network (not running)') : null,
+    ].filter(Boolean);
+    const watching = status.watching + status.relay.watching;
+    return parts.length ? `${parts.join(' · ')}${watching ? ` · ${watching} watching` : ''}` : 'Off';
   });
-  const subtitle = $derived(
-    !status
-      ? null
-      : !status.settings.enabled
-        ? 'Off'
-        : !status.running
-          ? 'Not running'
-          : status.watching
-            ? `On · ${status.watching} watching`
-            : 'On',
-  );
+  const RELAY_STATE: Record<string, string> = {
+    online: 'Connected to the relay.',
+    connecting: 'Connecting to the relay…',
+    unreachable: 'Can’t reach the relay right now; Vyro keeps trying.',
+    off: 'Not connected.',
+  };
   const FIREWALL: Record<string, string> = {
     ask: 'Windows will ask the first time a device connects: allow Private networks only.',
     allowed: 'Windows Firewall lets devices on this network reach Vyro.',
@@ -97,6 +123,20 @@
     if (await run(() => setRemoteEnabled(true))) confirming = false;
   }
 
+  async function turnOnRelay(): Promise<void> {
+    if (await run(() => setRelayEnabled(true))) confirmingRelay = false;
+  }
+
+  async function copyLink(url: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(url);
+      copied = true;
+      setTimeout(() => (copied = false), 2500);
+    } catch {
+      error = 'Could not copy the link.';
+    }
+  }
+
   async function saveOptions(): Promise<void> {
     if (!status) return;
     const port = portDraft ?? status.settings.port;
@@ -106,119 +146,236 @@
       daysDraft = null;
     }
   }
+
+  async function saveRelay(url: string | null): Promise<void> {
+    if (await run(() => setRelayUrl(url))) relayDraft = null;
+  }
 </script>
 
 <Card title="Remote" {subtitle} id="remote">
   {#if !status}
     <p class="note">Loading…</p>
-  {:else if !status.settings.enabled}
-    <p>See this PC’s readings on a phone or another computer on the same network.</p>
-    {#if !confirming}
-      <div class="actions">
-        <button type="button" onclick={() => (confirming = true)}>Turn on…</button>
-      </div>
-      <p class="note">Off: nothing listens on the network.</p>
-    {:else}
-      <div class="confirm" role="group" aria-labelledby="remote-before">
-        <p id="remote-before"><b>Before you turn it on</b></p>
-        <ul>
-          <li>Only devices on this local network can connect, and only after you pair them with a code shown here.</li>
-          <li>The page is read-only: nothing on it can change this PC.</li>
-          <li>
-            The connection is not encrypted: someone on the same network could watch the readings go by. Use it at home,
-            not on public Wi-Fi.
-          </li>
-          <li>Windows will ask whether Vyro may accept connections. Allow <b>Private networks</b> only.</li>
-          <li>It answers while Vyro runs, in the tray too.</li>
-        </ul>
-        <div class="actions">
-          <button type="button" class="primary" disabled={busy} onclick={() => void turnOn()}>Turn on</button>
-          <button type="button" onclick={() => (confirming = false)}>Cancel</button>
-        </div>
-      </div>
-    {/if}
   {:else}
-    {#if status.error}
-      <p class="err" role="alert">Not running: {status.error}. Pick another port in Options.</p>
-    {:else if status.running}
-      {#if status.urls.length}
-        <p>
-          Open on the other device:
-          {#each status.urls as u, i (u)}<code>{u}</code>{i < status.urls.length - 1 ? ' or ' : ''}{/each}
-        </p>
-      {:else}
-        <p>This PC has no local network address right now.</p>
-      {/if}
-      <p class="note">Local network only · not encrypted · read-only.</p>
-      {#if FIREWALL[status.firewall]}
-        <p class="note" class:warn={status.firewall === 'blocked'}>{FIREWALL[status.firewall]}</p>
-      {/if}
-    {/if}
-
-    {#if status.pairing}
-      <div class="pairing" role="group" aria-labelledby="remote-code">
-        {#if status.pairing.qr}
-          <svg class="qr" viewBox="0 0 {status.pairing.qrSize} {status.pairing.qrSize}" role="img" aria-label="QR code that opens the companion with this code">
-            <rect width={status.pairing.qrSize} height={status.pairing.qrSize} fill="#fff" />
-            <path d={status.pairing.qr} fill="#000" />
-          </svg>
-        {/if}
-        <div>
-          <p class="code" id="remote-code"><span class="sr-only">Pairing code </span>{status.pairing.code}</p>
-          <p class="note">
-            Scan it with the phone’s camera, or open the address above and type the code. It works for one device and
-            ends in <span role="timer">{left}</span>{status.pairing.triesLeft < 5 ? ` · ${status.pairing.triesLeft} tries left` : ''}.
-          </p>
+    <section class="part" aria-labelledby="remote-anywhere">
+      <h3 id="remote-anywhere">From anywhere</h3>
+      {#if !relayOn}
+        <p>See this PC’s readings on your phone from any network, in the Vyro app for Android and iPhone.</p>
+        {#if !confirmingRelay}
           <div class="actions">
-            <button type="button" disabled={busy} onclick={() => void run(cancelRemotePairing)}>Cancel</button>
+            <button type="button" onclick={() => (confirmingRelay = true)}>Turn on reach from anywhere…</button>
           </div>
-        </div>
-      </div>
-    {:else if status.running}
-      <div class="actions">
-        <button type="button" class="primary" disabled={busy || status.devices.length >= MAX_DEVICES} onclick={() => void run(startRemotePairing)}>
-          Pair a device
-        </button>
-      </div>
-      {#if status.devices.length >= MAX_DEVICES}
-        <p class="note">{MAX_DEVICES} devices are paired; sign one out to pair another.</p>
-      {/if}
-    {/if}
-
-    <h3>Paired devices</h3>
-    {#if status.devices.length}
-      <ul class="devices">
-        {#each status.devices as d (d.id)}
-          <li>
-            <div>
-              <span class="name">{d.name}</span>
-              {#if d.watching}<span class="watching">watching now</span>{/if}
-              <small>
-                Paired {fmtDate(d.paired)} · until {fmtDate(d.expires)}{d.lastSeen ? ` · last seen ${fmtDateTime(d.lastSeen)}` : ''}{d.lastAddress
-                  ? ` from ${d.lastAddress}`
-                  : ''}
-              </small>
+          <p class="note">Off: this PC connects to nothing for it.</p>
+        {:else}
+          <div class="confirm" role="group" aria-labelledby="relay-before">
+            <p id="relay-before"><b>Before you turn it on</b></p>
+            <ul>
+              <li>
+                This PC keeps one connection to the Vyro relay, a small service on Cloudflare, and your phones reach it
+                there. Nothing on this PC listens to the network for it.
+              </li>
+              <li>
+                The readings are encrypted on this PC and decrypted only on your phones: the relay cannot read them. It
+                sees when this PC and a phone connect, from which addresses, and how much they send.
+              </li>
+              <li>Only phones you pair here can connect, with a code that works once. Sign one out and it is cut off at once.</li>
+              <li>The phone app is read-only: nothing in it can change this PC.</li>
+            </ul>
+            {#if status.relay.url}
+              <p class="note">Relay: <code>{status.relay.url}</code></p>
+            {:else}
+              <p class="note warn">This build of Vyro has no relay built in. Enter your relay’s address under Options first.</p>
+            {/if}
+            <div class="actions">
+              <button type="button" class="primary" disabled={busy || !status.relay.url} onclick={() => void turnOnRelay()}>
+                Turn on reach from anywhere
+              </button>
+              <button type="button" onclick={() => (confirmingRelay = false)}>Cancel</button>
             </div>
-            <button type="button" disabled={busy} aria-label="Sign out {d.name}" onclick={() => void run(() => signOutRemote(d.id))}>
-              Sign out
+          </div>
+        {/if}
+      {:else}
+        <p role="status" class:warn-text={status.relay.state === 'unreachable'}>
+          {RELAY_STATE[status.relay.state] ?? ''}{status.relay.watching
+            ? ` ${status.relay.watching} phone${status.relay.watching === 1 ? '' : 's'} watching.`
+            : ''}
+        </p>
+        {#if status.relay.error}<p class="note warn">{status.relay.error}</p>{/if}
+        <p class="note">Encrypted end to end · read-only.</p>
+
+        {#if status.relay.pairing}
+          <div class="pairing" role="group" aria-labelledby="relay-code">
+            {#if status.relay.pairing.qr}
+              <svg
+                class="qr"
+                viewBox="0 0 {status.relay.pairing.qrSize} {status.relay.pairing.qrSize}"
+                role="img"
+                aria-label="QR code that pairs a phone with this PC"
+              >
+                <rect width={status.relay.pairing.qrSize} height={status.relay.pairing.qrSize} fill="#fff" />
+                <path d={status.relay.pairing.qr} fill="#000" />
+              </svg>
+            {/if}
+            <div>
+              <p id="relay-code"><b>Scan it with your phone’s camera</b></p>
+              <p class="note">
+                It opens the Vyro app in the phone’s browser and pairs it. On iPhone, add the app to the Home Screen when
+                it asks, then scan again from there. The code works once and ends in <span role="timer">{relayLeft}</span>.
+              </p>
+              <div class="actions">
+                <button type="button" disabled={busy} onclick={() => status?.relay.pairing && void copyLink(status.relay.pairing.url)}>
+                  {copied ? 'Copied' : 'Copy link'}
+                </button>
+                <button type="button" disabled={busy} onclick={() => void run(cancelRelayPairing)}>Cancel</button>
+              </div>
+              <p class="note">Send the link only to yourself: anyone who opens it first gets the pairing.</p>
+            </div>
+          </div>
+        {:else}
+          <div class="actions">
+            <button
+              type="button"
+              class="primary"
+              disabled={busy || phones >= MAX_DEVICES || status.relay.state !== 'online'}
+              onclick={() => void run(startRelayPairing)}
+            >
+              Pair a phone
             </button>
-          </li>
-        {/each}
-      </ul>
-      {#if status.devices.length > 1}
-        <div class="actions">
-          <button type="button" disabled={busy} onclick={() => void run(() => signOutRemote(null))}>Sign out all devices</button>
-        </div>
+            <button type="button" disabled={busy} onclick={() => void run(() => setRelayEnabled(false))}>Turn off</button>
+          </div>
+          {#if phones >= MAX_DEVICES}
+            <p class="note">{MAX_DEVICES} phones are paired; sign one out to pair another.</p>
+          {:else if status.relay.state !== 'online'}
+            <p class="note">Pairing needs the relay connection.</p>
+          {/if}
+        {/if}
       {/if}
-    {:else}
-      <p class="note">None yet.</p>
+    </section>
+
+    <section class="part" aria-labelledby="remote-lan">
+      <h3 id="remote-lan">On this network</h3>
+      {#if !lanOn}
+        <p>See this PC’s readings in the browser of a phone or another computer on the same network.</p>
+        {#if !confirming}
+          <div class="actions">
+            <button type="button" onclick={() => (confirming = true)}>Turn on…</button>
+          </div>
+          <p class="note">Off: nothing listens on the network.</p>
+        {:else}
+          <div class="confirm" role="group" aria-labelledby="remote-before">
+            <p id="remote-before"><b>Before you turn it on</b></p>
+            <ul>
+              <li>Only devices on this local network can connect, and only after you pair them with a code shown here.</li>
+              <li>The page is read-only: nothing on it can change this PC.</li>
+              <li>
+                The connection is not encrypted: someone on the same network could watch the readings go by. Use it at
+                home, not on public Wi-Fi.
+              </li>
+              <li>Windows will ask whether Vyro may accept connections. Allow <b>Private networks</b> only.</li>
+              <li>It answers while Vyro runs, in the tray too.</li>
+            </ul>
+            <div class="actions">
+              <button type="button" class="primary" disabled={busy} onclick={() => void turnOn()}>Turn on</button>
+              <button type="button" onclick={() => (confirming = false)}>Cancel</button>
+            </div>
+          </div>
+        {/if}
+      {:else}
+        {#if status.error}
+          <p class="err" role="alert">Not running: {status.error}. Pick another port in Options.</p>
+        {:else if status.running}
+          {#if status.urls.length}
+            <p>
+              Open on the other device:
+              {#each status.urls as u, i (u)}<code>{u}</code>{i < status.urls.length - 1 ? ' or ' : ''}{/each}
+            </p>
+          {:else}
+            <p>This PC has no local network address right now.</p>
+          {/if}
+          <p class="note">Local network only · not encrypted · read-only.</p>
+          {#if FIREWALL[status.firewall]}
+            <p class="note" class:warn={status.firewall === 'blocked'}>{FIREWALL[status.firewall]}</p>
+          {/if}
+        {/if}
+
+        {#if status.pairing}
+          <div class="pairing" role="group" aria-labelledby="remote-code">
+            {#if status.pairing.qr}
+              <svg class="qr" viewBox="0 0 {status.pairing.qrSize} {status.pairing.qrSize}" role="img" aria-label="QR code that opens the companion with this code">
+                <rect width={status.pairing.qrSize} height={status.pairing.qrSize} fill="#fff" />
+                <path d={status.pairing.qr} fill="#000" />
+              </svg>
+            {/if}
+            <div>
+              <p class="code" id="remote-code"><span class="sr-only">Pairing code </span>{status.pairing.code}</p>
+              <p class="note">
+                Scan it with the phone’s camera, or open the address above and type the code. It works for one device and
+                ends in <span role="timer">{left}</span>{status.pairing.triesLeft < 5 ? ` · ${status.pairing.triesLeft} tries left` : ''}.
+              </p>
+              <div class="actions">
+                <button type="button" disabled={busy} onclick={() => void run(cancelRemotePairing)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        {:else if status.running}
+          <div class="actions">
+            <button
+              type="button"
+              class="primary"
+              disabled={busy || status.devices.length - phones >= MAX_DEVICES}
+              onclick={() => void run(startRemotePairing)}
+            >
+              Pair a device
+            </button>
+            <button type="button" disabled={busy} onclick={() => void run(() => setRemoteEnabled(false))}>Turn off</button>
+          </div>
+          {#if status.devices.length - phones >= MAX_DEVICES}
+            <p class="note">{MAX_DEVICES} devices are paired; sign one out to pair another.</p>
+          {/if}
+        {:else}
+          <div class="actions">
+            <button type="button" disabled={busy} onclick={() => void run(() => setRemoteEnabled(false))}>Turn off</button>
+          </div>
+        {/if}
+      {/if}
+    </section>
+
+    {#if status.devices.length || lanOn || relayOn}
+      <h3>Paired devices</h3>
+      {#if status.devices.length}
+        <ul class="devices">
+          {#each status.devices as d (d.id)}
+            <li>
+              <div>
+                <span class="name">{d.name}</span>
+                <span class="via">{d.anywhere ? 'Anywhere' : 'This network'}</span>
+                {#if d.watching}<span class="watching">watching now</span>{/if}
+                <small>
+                  Paired {fmtDate(d.paired)} · until {fmtDate(d.expires)}{d.anywhere ? ', renewed each time it is used' : ''}{d.lastSeen
+                    ? ` · last seen ${fmtDateTime(d.lastSeen)}`
+                    : ''}{d.lastAddress ? ` from ${d.lastAddress}` : ''}
+                </small>
+              </div>
+              <button type="button" disabled={busy} aria-label="Sign out {d.name}" onclick={() => void run(() => signOutRemote(d.id))}>
+                Sign out
+              </button>
+            </li>
+          {/each}
+        </ul>
+        {#if status.devices.length > 1}
+          <div class="actions">
+            <button type="button" disabled={busy} onclick={() => void run(() => signOutRemote(null))}>Sign out all devices</button>
+          </div>
+        {/if}
+      {:else}
+        <p class="note">None yet.</p>
+      {/if}
     {/if}
 
     <details>
       <summary>Options</summary>
       <div class="options">
         <label>
-          <span>Port</span>
+          <span>Port on this network</span>
           <input
             type="number"
             min="1024"
@@ -235,16 +392,36 @@
         </label>
         <button type="button" disabled={busy || (portDraft == null && daysDraft == null)} onclick={() => void saveOptions()}>Save</button>
       </div>
-      <p class="note">A new length applies to devices paired from now on. A new port signs nobody out; open the new address.</p>
+      <p class="note">
+        A new length applies to devices paired from now on; phones paired from anywhere stay paired while they are used at
+        least once in it. A new port signs nobody out; open the new address.
+      </p>
+      <div class="options">
+        <label class="grow">
+          <span>Relay address</span>
+          <input
+            type="url"
+            placeholder="https://…"
+            value={relayDraft ?? (status.relay.custom ? status.relay.url : '')}
+            oninput={(e) => (relayDraft = e.currentTarget.value)}
+          />
+        </label>
+        <button type="button" disabled={busy || relayDraft == null} onclick={() => void saveRelay(relayDraft)}>Save</button>
+        {#if status.relay.custom}
+          <button type="button" disabled={busy} onclick={() => void saveRelay(null)}>Use Vyro’s relay</button>
+        {/if}
+      </div>
+      <p class="note">
+        Empty: Vyro’s own relay{status.relay.url && !status.relay.custom ? ` (${status.relay.url})` : ''}. To run your own,
+        see docs/remote.md. Phones paired through another relay are signed out when it changes.
+      </p>
+      {#if relayOn || phones}
+        <div class="actions">
+          <button type="button" disabled={busy} onclick={() => void run(resetRelay)}>Start over on the relay</button>
+        </div>
+        <p class="note">New keys for this PC on the relay; every phone paired from anywhere is signed out.</p>
+      {/if}
     </details>
-
-    <div class="actions">
-      <button type="button" disabled={busy} onclick={() => void run(() => setRemoteEnabled(false))}>Turn off</button>
-    </div>
-    <p class="note">
-      Turning it off closes the port and every connection at once. Devices stay paired until their pairing ends or you sign
-      them out.
-    </p>
   {/if}
   {#if error}<p class="err" role="alert">{error}</p>{/if}
 </Card>
@@ -271,6 +448,27 @@
     font-size: 0.8rem;
     overflow-wrap: anywhere;
     user-select: all;
+  }
+  .part + .part {
+    margin-top: 0.4rem;
+    padding-top: 0.2rem;
+    border-top: 1px solid var(--line);
+  }
+  .warn-text {
+    color: var(--text);
+    padding-left: 0.5rem;
+    border-left: 3px solid var(--warn);
+  }
+  .via {
+    margin-left: 0.4rem;
+    color: var(--muted);
+    font-size: 0.72rem;
+  }
+  .options .grow {
+    flex: 1 1 16rem;
+  }
+  .options .grow input {
+    width: 100%;
   }
   h3 {
     margin: 0.9rem 0 0.4rem;

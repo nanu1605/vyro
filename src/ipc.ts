@@ -790,6 +790,37 @@ export async function signOutRemote(id: string | null): Promise<RemoteStatus> {
   return invoke<RemoteStatus>('sign_out_remote', { id });
 }
 
+// Reach from anywhere (1.4): the relay connection and the phones paired through it.
+
+export async function setRelayEnabled(enabled: boolean): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simRelayEnabled(enabled);
+  return invoke<RemoteStatus>('set_relay_enabled', { enabled });
+}
+
+/** The owner's own relay; `null` or empty: the one built into Vyro. Phones paired through the
+ * old relay are signed out. */
+export async function setRelayUrl(url: string | null): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simRelayUrl(url);
+  return invoke<RemoteStatus>('set_relay_url', { url });
+}
+
+/** Opens a pairing; the status carries its link and QR code once the relay can take it. */
+export async function startRelayPairing(): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simRelayPairing();
+  return invoke<RemoteStatus>('start_relay_pairing');
+}
+
+export async function cancelRelayPairing(): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simRelayCancel();
+  return invoke<RemoteStatus>('cancel_relay_pairing');
+}
+
+/** New keys for this PC on the relay; every phone paired from anywhere is signed out. */
+export async function resetRelay(): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simRelayReset();
+  return invoke<RemoteStatus>('reset_relay');
+}
+
 // ---------------------------------------------------------------------------------------------
 // Desktop widgets (P30)
 // ---------------------------------------------------------------------------------------------

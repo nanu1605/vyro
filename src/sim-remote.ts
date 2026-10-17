@@ -1,5 +1,6 @@
-// Browser preview of Settings → Remote (P26): the companion as the app would report it, kept in
-// memory. The QR code is a real one for the sample address (made by `vyro_core::remote::qr`).
+// Browser preview of Settings → Remote (P26, 1.4): the companion and the relay as the app would
+// report them, kept in memory. The QR code is a real one for the sample address (made by
+// `vyro_core::remote::qr`); the preview shows it for the relay's link too.
 
 import type { RemoteBrief, RemoteStatus } from './types';
 
@@ -24,12 +25,24 @@ let status: RemoteStatus = {
       watching: false,
       anywhere: false,
     },
+    {
+      id: '5e6f7a8b',
+      name: 'iPhone · Safari',
+      paired: now() - 9 * DAY,
+      expires: now() + 29 * DAY,
+      lastSeen: now() - 3 * 3600,
+      lastAddress: null,
+      watching: false,
+      anywhere: true,
+    },
   ],
   watching: 0,
   pairing: null,
   firewall: 'unknown',
   relay: { enabled: false, url: 'https://vyro-relay.example.workers.dev', custom: false, state: 'off', error: null, pairing: null, watching: 0 },
 };
+
+const BUILT_IN = 'https://vyro-relay.example.workers.dev';
 
 const listeners = new Set<(b: RemoteBrief) => void>();
 function changed(): RemoteStatus {
@@ -63,7 +76,7 @@ export function simSetEnabled(on: boolean): RemoteStatus {
     watching,
     pairing: null,
     firewall: on ? 'ask' : 'unknown',
-    devices: status.devices.map((d) => ({ ...d, watching: on })),
+    devices: status.devices.map((d) => (d.anywhere ? d : { ...d, watching: on })),
   };
   return changed();
 }
@@ -95,6 +108,44 @@ export function simCancelPairing(): RemoteStatus {
 
 export function simSignOut(id: string | null): RemoteStatus {
   const devices = id ? status.devices.filter((d) => d.id !== id) : [];
-  status = { ...status, devices, watching: devices.some((d) => d.watching) ? 1 : 0 };
+  status = {
+    ...status,
+    devices,
+    watching: devices.some((d) => !d.anywhere && d.watching) ? 1 : 0,
+    relay: { ...status.relay, watching: devices.some((d) => d.anywhere && d.watching) ? 1 : 0 },
+  };
   return changed();
+}
+
+function relay(change: Partial<RemoteStatus['relay']>): RemoteStatus {
+  status = { ...status, relay: { ...status.relay, ...change } };
+  return changed();
+}
+
+export function simRelayEnabled(on: boolean): RemoteStatus {
+  const anywhere = status.devices.some((d) => d.anywhere);
+  status = { ...status, devices: status.devices.map((d) => (d.anywhere ? { ...d, watching: on } : d)) };
+  return relay({ enabled: on, state: on ? 'online' : 'off', error: null, pairing: null, watching: on && anywhere ? 1 : 0 });
+}
+
+export function simRelayUrl(url: string | null): RemoteStatus {
+  const u = url?.trim().replace(/\/+$/, '') ?? '';
+  if (u && !/^https:\/\/[a-z0-9.-]+(:\d{1,5})?$/i.test(u)) throw new Error('The relay’s address must start with https://');
+  status = { ...status, devices: status.devices.filter((d) => !d.anywhere) };
+  return relay({ url: u || BUILT_IN, custom: !!u, pairing: null, watching: 0 });
+}
+
+export function simRelayPairing(): RemoteStatus {
+  if (!status.relay.enabled) throw new Error('Turn on reach from anywhere first.');
+  const url = `${status.relay.url}/#p=1.00112233445566778899aabbccddeeff.0a1b2c3d.qXv3sN0aJ8rT2wYp5LmK7cZ1gH4dF6eB9uO0iR3tW2s`;
+  return relay({ pairing: { url, expires: now() + 600, qr: QR, qrSize: 37 } });
+}
+
+export function simRelayCancel(): RemoteStatus {
+  return relay({ pairing: null });
+}
+
+export function simRelayReset(): RemoteStatus {
+  status = { ...status, devices: status.devices.filter((d) => !d.anywhere) };
+  return relay({ pairing: null, watching: 0, error: null, state: status.relay.enabled ? 'online' : 'off' });
 }

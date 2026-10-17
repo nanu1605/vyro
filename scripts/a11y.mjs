@@ -4,7 +4,9 @@
 // names two GPUs give), and the Dashboard's cards pack without blank stretches or overlaps, their
 // text inside them in whole words even at their narrowest. Since 1.3 also: custom accents that are
 // hard to read as picked (navy on Midnight, pale yellow on Daylight), and Settings with the colour
-// wheel open. Runs against the browser preview
+// wheel open. Since 1.4 also: Settings → Remote's reach from anywhere (the relay's confirmation,
+// a phone's pairing code, the options). The phone app itself is swept by scripts/relay-e2e.mjs.
+// Runs against the browser preview
 // (sample data, two GPUs as on the owner's PC) of a finished build:
 //
 //   pnpm build && pnpm a11y
@@ -263,6 +265,16 @@ async function sweepDialogs(browser, theme, width) {
   await page.waitForTimeout(300);
   await axe(page, at('Remote pairing'));
   await noSidewaysScroll(page, at('Remote pairing'));
+  // Reach from anywhere (1.4): its confirmation, then pairing a phone, and the options.
+  await remote.getByRole('button', { name: 'Turn on reach from anywhere…' }).click();
+  await axe(page, at('Relay confirmation'));
+  await remote.getByRole('button', { name: 'Turn on reach from anywhere', exact: true }).click();
+  await remote.getByRole('button', { name: 'Pair a phone' }).click();
+  await remote.getByRole('img', { name: /pairs a phone/ }).waitFor();
+  await remote.getByText('Options', { exact: true }).click();
+  await page.waitForTimeout(300);
+  await axe(page, at('Relay pairing and options'));
+  await noSidewaysScroll(page, at('Relay pairing and options'));
   await ctx.close();
 }
 

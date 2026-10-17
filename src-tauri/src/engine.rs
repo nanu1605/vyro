@@ -221,9 +221,10 @@ fn sink(app: &AppHandle, shown: &Arc<AtomicBool>) -> impl Fn(&SensorSnapshot) + 
                 *last = Some(ids.into_iter().map(String::from).collect());
             }
         }
+        // On this network or from anywhere.
         let remote = app
             .try_state::<crate::remote::Remote>()
-            .is_some_and(|r| r.running());
+            .is_some_and(|r| r.brief().running);
         let tray = (
             snap.fan_control,
             remote,
