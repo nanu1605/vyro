@@ -2599,9 +2599,14 @@ show on the phone).
       protected processes, power requests, wake packets and addresses; the phone's link
       (stamps, requests, parts, refusals, a 1.4 PC); the end-to-end test drives the new tabs,
       a phone that may only look, the owner allowing control, Lock and End task.
-- [ ] CI green; field check 1.5 ([`docs/field-check-1.5.md`](docs/field-check-1.5.md)); 1.4.1
-      released first; the owner's go. Then the relay is deployed (`relay.yml`), which serves
-      the new phone app.
+- [x] **CI green** on a0f48c6 (run 39156961292): Linux, Windows with the installed-app smoke
+      test, the relay and phone app (end-to-end test included), accessibility. Test build
+      `vyro-windows-a0f48c6`. Locally: fmt, clippy (Linux and windows-gnu), 681 core tests,
+      209 frontend tests, 17 relay tests, the builds, the budgets, the phone app's end-to-end
+      test (44 checks) and the accessibility sweep (666 checks).
+- [ ] Field check 1.5 ([`docs/field-check-1.5.md`](docs/field-check-1.5.md)); 1.4.1 released
+      first; the owner's go. Then the relay is deployed (`relay.yml`), which serves the new
+      phone app.
 
 ## Risks
 
