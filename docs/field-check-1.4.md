@@ -1,9 +1,10 @@
 # Field check: 1.4 (the phone app, from anywhere)
 
 Status: **not run yet.** The relay is live at `https://vyro-relay.tanishqjain010.workers.dev` (Relay run 39099314796, 2026-10-18,
-from `claude/vyro-1.4` at e94322c). CI-green test build: `vyro-windows-089ce4b` (CI run
-39077275048), with no relay built in: set the address in Settings → Remote → Options, or set
-`VYRO_RELAY_URL` first and use the next run's build.
+from `claude/vyro-1.4` at e94322c). `VYRO_RELAY_URL` is set (2026-10-18), so builds from then on
+carry the relay; the test build is the first CI-green one after that (its summary says "Relay
+built in"). The earlier `vyro-windows-089ce4b` has none: there, set the address in Settings →
+Remote → Options.
 
 1.4 answers the owner's request for a phone app on Android and iPhone that shows the PC from
 any network (ROADMAP → 1.4.0, decision 34, [`remote.md`](remote.md)).

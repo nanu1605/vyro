@@ -152,6 +152,20 @@ jobs:
           # The relay built into the app (1.4); empty until the owner sets the variable.
           VYRO_RELAY_URL: ${{ vars.VYRO_RELAY_URL }}
         run: pnpm tauri build
+      - name: The relay address built in (1.4)
+        shell: pwsh
+        env:
+          VYRO_RELAY_URL: ${{ vars.VYRO_RELAY_URL }}
+        run: |
+          $url = $env:VYRO_RELAY_URL
+          if (-not $url) {
+            "Relay built in: none (the variable VYRO_RELAY_URL is not set)" |
+              Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
+            exit 0
+          }
+          $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes('target\release\vyro.exe'))
+          if (-not $text.Contains($url)) { throw "vyro.exe does not carry the relay address $url" }
+          "Relay built in: $url" | Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
       - name: Installer size budget (spec §8, < 60 MB since 1.1)
         shell: pwsh
         run: |

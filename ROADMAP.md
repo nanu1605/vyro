@@ -2471,7 +2471,8 @@ field check; the relay built into releases for everyone, any other relay allowed
 - [x] **The relay deployed** (Relay run 39099314796, 2026-10-18, from this branch at e94322c,
       for the field check): `https://vyro-relay.tanishqjain010.workers.dev`. The owner made the Cloudflare account and the two secrets;
       `relay.yml` went onto `main` (4c48e46, the same file) so that GitHub offers Run workflow.
-- [ ] The owner: the repository variable `VYRO_RELAY_URL` = that address, so builds carry it.
+- [x] The owner set the repository variable `VYRO_RELAY_URL` to that address (2026-10-18), so
+      CI and release builds carry it; CI's Windows job checks `vyro.exe` holds it.
 - [ ] Field check 1.4 ([`docs/field-check-1.4.md`](docs/field-check-1.4.md)), then 1.3.0's
       release merged in, and the owner's go for the release.
 
