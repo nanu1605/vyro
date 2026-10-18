@@ -212,3 +212,118 @@ fn a_bad_offer_is_refused() {
     };
     assert!(rtc::start("v=0\r\n", &none, Box::new(|_| {})).is_err());
 }
+
+// ---- Pictures ----
+
+use super::frames;
+
+#[test]
+fn the_sent_size_keeps_the_shape() {
+    assert_eq!(frames::fit(1920, 1080, 1280, 720), (1280, 720));
+    assert_eq!(frames::fit(2560, 1440, 1280, 720), (1280, 720));
+    assert_eq!(frames::fit(3440, 1440, 1280, 720), (1280, 534));
+    assert_eq!(frames::fit(1366, 768, 1280, 720), (1280, 718));
+    assert_eq!(frames::fit(1024, 768, 1280, 720), (960, 720));
+    assert_eq!(
+        frames::fit(800, 600, 1280, 720),
+        (800, 600),
+        "never larger than the monitor"
+    );
+    assert_eq!(frames::fit(0, 0, 1280, 720), (2, 2));
+    let (w, h) = frames::fit(1081, 1081, 1279, 1279);
+    assert!(w % 2 == 0 && h % 2 == 0);
+}
+
+#[test]
+fn bgra_becomes_nv12_at_the_sent_size() {
+    // 4×2 source: white | black halves, scaled to 2×2.
+    let mut src = Vec::new();
+    for _ in 0..2 {
+        for x in 0..4 {
+            let c = if x < 2 { 255 } else { 0 };
+            src.extend_from_slice(&[c, c, c, 255]);
+        }
+    }
+    let nv12 = frames::bgra_to_nv12(&src, 4, 2, 16, 2, 2);
+    assert_eq!(nv12.len(), 2 * 2 * 3 / 2);
+    assert_eq!(&nv12[..4], &[235, 16, 235, 16], "white and black luma");
+    assert_eq!(&nv12[4..], &[128, 128], "grey has neutral chroma");
+    // Pure red: low U, high V.
+    let red = [0u8, 0, 255, 255].repeat(4);
+    let nv12 = frames::bgra_to_nv12(&red, 2, 2, 8, 2, 2);
+    assert_eq!(nv12[0], 82);
+    assert!(nv12[4] < 128 && nv12[5] > 200, "{:?}", &nv12[4..]);
+    // A row pitch wider than the picture is honoured; a short buffer gives black, not a panic.
+    let padded: Vec<u8> = [[255u8, 255, 255, 255].repeat(2), vec![9; 8]]
+        .concat()
+        .repeat(2);
+    assert_eq!(
+        &frames::bgra_to_nv12(&padded, 2, 2, 16, 2, 2)[..4],
+        &[235; 4]
+    );
+    assert_eq!(frames::bgra_to_nv12(&[0; 3], 2, 2, 8, 2, 2), vec![0; 6]);
+}
+
+#[test]
+fn the_test_pattern_moves() {
+    let a = frames::test_pattern(64, 32, 0);
+    let b = frames::test_pattern(64, 32, 3);
+    assert_eq!(a.len(), 64 * 32 * 4);
+    assert_ne!(a, b);
+    assert_eq!(&a[..4], &[255, 255, 255, 255], "white bar first");
+}
+
+#[test]
+fn nal_units_and_parameter_sets() {
+    let k = keyframe(1);
+    assert_eq!(frames::nal_types(&k), [7, 8, 5]);
+    assert!(frames::is_keyframe(&k));
+    let p = vec![0, 0, 0, 1, 0x41, 0x9a, 0, 0, 1, 0x41, 1];
+    assert_eq!(frames::nal_types(&p), [1, 1]);
+    assert!(!frames::is_keyframe(&p));
+    let headers = k[..19].to_vec();
+    let idr = k[19..].to_vec();
+    assert_eq!(frames::nal_types(&idr), [5]);
+    assert_eq!(
+        frames::nal_types(&frames::with_headers(idr, &headers)),
+        [7, 8, 5]
+    );
+    assert_eq!(
+        frames::with_headers(p.clone(), &headers),
+        p,
+        "only keyframes"
+    );
+    assert_eq!(frames::with_headers(k.clone(), &headers), k, "not twice");
+}
+
+#[test]
+fn positions_land_on_the_shared_monitor() {
+    let primary = input::Rect {
+        left: 0,
+        top: 0,
+        width: 1920,
+        height: 1080,
+    };
+    // One monitor: the corners are the desktop's corners.
+    assert_eq!(input::absolute(0.0, 0.0, primary, primary), (0, 0));
+    assert_eq!(input::absolute(1.0, 1.0, primary, primary), (65535, 65535));
+    assert_eq!(input::absolute(0.5, 0.5, primary, primary), (32768, 32768));
+    // A second monitor to the left: the desktop starts at -2560.
+    let left = input::Rect {
+        left: -2560,
+        top: 0,
+        width: 2560,
+        height: 1440,
+    };
+    let desktop = input::Rect {
+        left: -2560,
+        top: 0,
+        width: 4480,
+        height: 1440,
+    };
+    assert_eq!(input::absolute(0.0, 0.0, primary, desktop), (37457, 0));
+    assert_eq!(input::absolute(0.0, 0.0, left, desktop), (0, 0));
+    let (x, y) = input::absolute(1.0, 1.0, primary, desktop);
+    assert_eq!(x, 65535);
+    assert_eq!(y, 49140, "the primary monitor is shorter");
+}

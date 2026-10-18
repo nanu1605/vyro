@@ -90,3 +90,27 @@ pub fn parse(msg: &str) -> Result<Input, String> {
         _ => Ok(i),
     }
 }
+
+/// A rectangle of the desktop, in pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Rect {
+    pub left: i32,
+    pub top: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
+/// Where (x, y), fractions of `monitor`, lands in the 0–65535 coordinates Windows uses for the
+/// whole desktop (`desktop`: every monitor together).
+pub fn absolute(x: f64, y: f64, monitor: Rect, desktop: Rect) -> (i32, i32) {
+    let px = f64::from(monitor.left) + x.clamp(0.0, 1.0) * f64::from(monitor.width - 1);
+    let py = f64::from(monitor.top) + y.clamp(0.0, 1.0) * f64::from(monitor.height - 1);
+    let span = |v: f64, start: i32, len: i32| {
+        let len = f64::from((len - 1).max(1));
+        (((v - f64::from(start)) * 65535.0 / len).round() as i32).clamp(0, 65535)
+    };
+    (
+        span(px, desktop.left, desktop.width),
+        span(py, desktop.top, desktop.height),
+    )
+}
