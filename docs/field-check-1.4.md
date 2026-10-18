@@ -1,7 +1,8 @@
 # Field check: 1.4 (the phone app, from anywhere)
 
-Status: **not run yet.** Test build: **`vyro-windows-d185506`** (CI run 39100838311, every job
-green, "Relay built in: https://vyro-relay.tanishqjain010.workers.dev"). The relay is live at `https://vyro-relay.tanishqjain010.workers.dev` (Relay run 39099314796, 2026-10-18,
+Status: **passed** (the owner, 2026-10-18; the PC and phones not reported). Test build:
+**`vyro-windows-d185506`** (CI run 39100838311, every job green, "Relay built in:
+https://vyro-relay.tanishqjain010.workers.dev"). The relay is live at `https://vyro-relay.tanishqjain010.workers.dev` (Relay run 39099314796, 2026-10-18,
 from `claude/vyro-1.4` at e94322c). `VYRO_RELAY_URL` is a repository variable (2026-10-18), so
 builds from then on carry the relay. Earlier builds have none (`vyro-windows-089ce4b`;
 `vyro-windows-362c8ac`, whose run did not see the variable yet): there, set the address in

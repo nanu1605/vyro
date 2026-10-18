@@ -2478,8 +2478,10 @@ field check; the relay built into releases for everyone, any other relay allowed
 - [x] **The field-check build**: CI run 39100838311 on d185506, every job green; its Windows
       job found the relay's address in `vyro.exe`. `vyro-windows-d185506`, installer 11.61 MB,
       installed-app smoke test passed.
-- [ ] Field check 1.4 ([`docs/field-check-1.4.md`](docs/field-check-1.4.md)), then 1.3.0's
-      release merged in, and the owner's go for the release.
+- [x] **Field check 1.4** ([`docs/field-check-1.4.md`](docs/field-check-1.4.md)) passed: the
+      owner, 2026-10-18, test build `vyro-windows-d185506` (the PC and phones not reported).
+- [ ] 1.3.0's release (after field check 1.3) merged into this branch, then the owner's go for
+      1.4.0.
 
 ## Risks
 
