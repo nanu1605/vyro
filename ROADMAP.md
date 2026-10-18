@@ -2468,8 +2468,10 @@ field check; the relay built into releases for everyone, any other relay allowed
       snap, click-through). The installer is 11.61 MB (1.3: 11.48 MB; rustls, ring and the
       platform verifier were already in it). The build has no relay address until the
       variable is set.
-- [ ] The owner: a Cloudflare account, the two secrets, the first `relay.yml` deploy (from this
-      branch, for the field check), and `VYRO_RELAY_URL`.
+- [x] **The relay deployed** (Relay run 39099314796, 2026-10-18, from this branch at e94322c,
+      for the field check): `https://vyro-relay.tanishqjain010.workers.dev`. The owner made the Cloudflare account and the two secrets;
+      `relay.yml` went onto `main` (4c48e46, the same file) so that GitHub offers Run workflow.
+- [ ] The owner: the repository variable `VYRO_RELAY_URL` = that address, so builds carry it.
 - [ ] Field check 1.4 ([`docs/field-check-1.4.md`](docs/field-check-1.4.md)), then 1.3.0's
       release merged in, and the owner's go for the release.
 

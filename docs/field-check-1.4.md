@@ -1,8 +1,9 @@
 # Field check: 1.4 (the phone app, from anywhere)
 
-Status: **not run yet.** CI-green test build: `vyro-windows-089ce4b` (CI run 39077275048), with no
-relay built in: set the address in Settings → Remote → Options, or set `VYRO_RELAY_URL` first and
-use the next run's build.
+Status: **not run yet.** The relay is live at `https://vyro-relay.tanishqjain010.workers.dev` (Relay run 39099314796, 2026-10-18,
+from `claude/vyro-1.4` at e94322c). CI-green test build: `vyro-windows-089ce4b` (CI run
+39077275048), with no relay built in: set the address in Settings → Remote → Options, or set
+`VYRO_RELAY_URL` first and use the next run's build.
 
 1.4 answers the owner's request for a phone app on Android and iPhone that shows the PC from
 any network (ROADMAP → 1.4.0, decision 34, [`remote.md`](remote.md)).
@@ -21,9 +22,10 @@ The relay has to be live first:
    - `CLOUDFLARE_ACCOUNT_ID`: the Account ID shown on Workers & Pages → Overview (right side).
 4. **The first deploy** (on your go): Actions → **Relay** → Run workflow, `ref`:
    `claude/vyro-1.4` (`relay.yml` is on `main` so that GitHub offers Run workflow). Its summary
-   shows the relay's address, `https://vyro-relay.<sub>.workers.dev`.
+   shows the relay's address, `https://vyro-relay.<sub>.workers.dev`. Done on 2026-10-18:
+   `https://vyro-relay.tanishqjain010.workers.dev`.
 5. **The address in builds.** Settings → Secrets and variables → Actions → Variables → New
-   repository variable `VYRO_RELAY_URL` = that address. Then the next CI run's
+   repository variable `VYRO_RELAY_URL` = `https://vyro-relay.tanishqjain010.workers.dev`. Then the next CI run's
    `vyro-windows-<commit>` artifact has it built in. (Without it, enter the address in Vyro:
    Settings → Remote → Options → Relay address.)
 
