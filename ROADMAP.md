@@ -2371,9 +2371,9 @@ another maker's dongle, and a USB condenser microphone.
       test lists devices in 92 ms and has the service refuse a device that does not exist in
       16 ms; Show desktop, snap and click-through pass. The accessibility sweep: 647 checks. The
       installer is 11.48 MB.
-- [ ] Field check 1.3 ([`docs/field-check-1.3.md`](docs/field-check-1.3.md)), on the 1.4 test
-      build `vyro-windows-d185506`: 1.3 is not released on its own but ships in 1.4.0
-      (decision 35).
+- [x] **Field check 1.3** ([`docs/field-check-1.3.md`](docs/field-check-1.3.md)) passed: the
+      owner, 2026-10-18, on the 1.4 test build `vyro-windows-d185506` (the PC not reported).
+      1.3 is not released on its own but ships in 1.4.0 (decision 35).
 
 ### 1.4.0 — the phone app, from anywhere
 The owner's request after 1.2.0 (2026-10-17): "a Vyro app for the phone, Android and iOS, to
@@ -2482,8 +2482,8 @@ field check; the relay built into releases for everyone, any other relay allowed
       installed-app smoke test passed.
 - [x] **Field check 1.4** ([`docs/field-check-1.4.md`](docs/field-check-1.4.md)) passed: the
       owner, 2026-10-18, test build `vyro-windows-d185506` (the PC and phones not reported).
-- [ ] Field check 1.3 on `vyro-windows-d185506` (1.3 ships in 1.4.0, decision 35), then the
-      owner's go for 1.4.0.
+- [x] **Field check 1.3** passed on `vyro-windows-d185506` (the owner, 2026-10-18; 1.3 ships in
+      1.4.0, decision 35), and the owner's go for 1.4.0 (2026-10-18).
 
 ## Risks
 

@@ -126,6 +126,20 @@ jobs:
           # The relay built into the app (1.4): Settings → Remote → From anywhere.
           VYRO_RELAY_URL: ${{ vars.VYRO_RELAY_URL }}
         run: pnpm tauri build --config src-tauri/tauri.release.conf.json
+      - name: The relay address built in (1.4)
+        shell: pwsh
+        env:
+          VYRO_RELAY_URL: ${{ vars.VYRO_RELAY_URL }}
+        run: |
+          $url = $env:VYRO_RELAY_URL
+          if (-not $url) {
+            "Relay built in: none (the variable VYRO_RELAY_URL is not set)" |
+              Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
+            exit 0
+          }
+          $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes('target\release\vyro.exe'))
+          if (-not $text.Contains($url)) { throw "vyro.exe does not carry the relay address $url" }
+          "Relay built in: $url" | Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
 
       - name: Installer, update manifest and checksums
         shell: pwsh
