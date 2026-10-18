@@ -1,9 +1,9 @@
 # Field check: 1.3 (device names, wireless batteries, Bluetooth Connect and Disconnect, the colour wheel)
 
-Status: **passed** (the owner, 2026-10-18; the PC not reported). Test build:
-**`vyro-windows-d185506`** (CI run 39100838311 on `claude/vyro-1.4`, version 1.4.0): 1.3 is not
-released on its own but ships in 1.4.0 (ROADMAP, decision 35), and that build carries all of it.
-(`vyro-windows-294c5f1`, the 1.3 branch's build, is no longer the one to check.)
+Status: **passed, released in 1.4.0** (the owner, 2026-10-18; the PC not reported). Test
+build: **`vyro-windows-d185506`** (CI run 39100838311 on `claude/vyro-1.4`, version 1.4.0): 1.3
+is not released on its own but ships in 1.4.0 (ROADMAP, decision 35), and that build carries all
+of it. (`vyro-windows-294c5f1`, the 1.3 branch's build, is no longer the one to check.)
 
 1.3 answers the owner's requests after 1.2.0 (ROADMAP → 1.3.0 has how each part works):
 - devices named as Windows Settings names them, not "Unknown device";
@@ -81,4 +81,4 @@ minutes.
 - **A check fails:** note what you saw, with your Windows version (from `winver`), and for a
   device its make and model. The fix goes on `claude/vyro-1.4`, and the checks it affects are
   run again.
-- **Release:** with 1.4.0 (field check 1.4's sheet), after the owner's go.
+- **Release:** with 1.4.0 (field check 1.4's sheet), after the owner's go. Done on 2026-10-18.

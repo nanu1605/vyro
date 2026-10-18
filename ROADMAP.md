@@ -2373,7 +2373,7 @@ another maker's dongle, and a USB condenser microphone.
       installer is 11.48 MB.
 - [x] **Field check 1.3** ([`docs/field-check-1.3.md`](docs/field-check-1.3.md)) passed: the
       owner, 2026-10-18, on the 1.4 test build `vyro-windows-d185506` (the PC not reported).
-      1.3 is not released on its own but ships in 1.4.0 (decision 35).
+      1.3 is not released on its own: it shipped in 1.4.0 (2026-10-18, decision 35).
 
 ### 1.4.0 — the phone app, from anywhere
 The owner's request after 1.2.0 (2026-10-17): "a Vyro app for the phone, Android and iOS, to
@@ -2484,6 +2484,14 @@ field check; the relay built into releases for everyone, any other relay allowed
       owner, 2026-10-18, test build `vyro-windows-d185506` (the PC and phones not reported).
 - [x] **Field check 1.3** passed on `vyro-windows-d185506` (the owner, 2026-10-18; 1.3 ships in
       1.4.0, decision 35), and the owner's go for 1.4.0 (2026-10-18).
+- [x] **1.4.0 released** (2026-10-18), with 1.3 in it: CI passed on 44dae6d (Linux, Windows with
+      the smoke test, the relay and phone app, accessibility), d185506's code with records, the
+      Release check of the relay address and a test-only change to the accessibility sweep.
+      `main` fast-forwarded to it. Relay run 39103627878 deployed the relay from `main` (the same
+      address), and Release run 39103740656 tagged `v1.4.0`, found the relay's address in
+      `vyro.exe` and published the 11.6 MB MSI, `latest.json` and checksums here and to
+      `nanu1605/vyro-releases`. Its `latest.json` now offers 1.4.0 to installed copies
+      (checksums verified).
 
 ## Risks
 

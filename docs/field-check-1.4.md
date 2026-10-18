@@ -1,8 +1,8 @@
 # Field check: 1.4 (the phone app, from anywhere)
 
-Status: **passed** (the owner, 2026-10-18; the PC and phones not reported). Test build:
-**`vyro-windows-d185506`** (CI run 39100838311, every job green, "Relay built in:
-https://vyro-relay.tanishqjain010.workers.dev"). The relay is live at `https://vyro-relay.tanishqjain010.workers.dev` (Relay run 39099314796, 2026-10-18,
+Status: **passed, released as 1.4.0** (the owner, 2026-10-18; the PC and phones not
+reported). Test build: **`vyro-windows-d185506`** (CI run 39100838311, every job green, "Relay
+built in: https://vyro-relay.tanishqjain010.workers.dev"). The relay is live at `https://vyro-relay.tanishqjain010.workers.dev` (Relay run 39099314796, 2026-10-18,
 from `claude/vyro-1.4` at e94322c). `VYRO_RELAY_URL` is a repository variable (2026-10-18), so
 builds from then on carry the relay. Earlier builds have none (`vyro-windows-089ce4b`;
 `vyro-windows-362c8ac`, whose run did not see the variable yet): there, set the address in
@@ -90,4 +90,4 @@ The relay has to be live first:
   again.
 - **Release:** after field check 1.3 passes on this build (1.3 ships in 1.4.0, ROADMAP decision
   35) and the owner's go: the branch goes into `main`, Relay is run on `main`, and the Release
-  workflow builds 1.4.0.
+  workflow builds 1.4.0. Done on 2026-10-18 (ROADMAP → 1.4.0).
