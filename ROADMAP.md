@@ -2503,6 +2503,13 @@ field check; the relay built into releases for everyone, any other relay allowed
       its 160 ms), and the sweep passed. If it fails there again, a longer wait is unlikely to
       help: look at what My PC's 3-D view does on CI's software GPU, or sweep most themes with
       the flat 2-D plan and the 3-D view once.
+- [x] **The relay client test on `main`** (2026-10-18): CI at the release record (7d74ba5, run
+      39105491819) failed it, though it had passed on the same commit on the branch. The client
+      sent a phone its first view before counting it as watching, so the test could read 0. Fixed
+      in 2a0e408: the phone's effects are applied before the answer is sent (a 50 ms pause made
+      the old order fail every time and the new one pass). CI green on `main` (run 39107861636).
+      It ships in the next release; the count only sets the reading rate, so 1.4.0's users are
+      not affected.
 
 ## Risks
 
