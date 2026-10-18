@@ -2429,7 +2429,9 @@ field check; the relay built into releases for everyone, any other relay allowed
         On this network (the companion as before); one list of devices, each marked "Anywhere"
         or "This network"; Options: the relay's address, Start over on the relay.
       - **Deploy**: `relay.yml`, by hand, on the owner's go, with `CLOUDFLARE_API_TOKEN` and
-        `CLOUDFLARE_ACCOUNT_ID`; builds carry the variable `VYRO_RELAY_URL`.
+        `CLOUDFLARE_ACCOUNT_ID`: Run workflow (once the file is on `main`; GitHub offers it
+        only from the default branch) or a pushed `relay-*` tag (any branch); builds carry the
+        variable `VYRO_RELAY_URL`.
       - **Records**: decision 34; [`docs/remote.md`](docs/remote.md) (how it works, what the
         relay sees and does not, the trust points, limits, a relay of one's own); README.
 - Defaults: off; a pairing link lasts 10 minutes and works once; a phone stays paired while it is

@@ -19,8 +19,10 @@ The relay has to be live first:
    Actions → New repository secret:
    - `CLOUDFLARE_API_TOKEN`: the token.
    - `CLOUDFLARE_ACCOUNT_ID`: the Account ID shown on Workers & Pages → Overview (right side).
-4. **The first deploy** (on your go): Actions → **Relay** → Run workflow, `ref`:
-   `claude/vyro-1.4`. Its summary shows the relay's address, `https://vyro-relay.<sub>.workers.dev`.
+4. **The first deploy** (on your go): a tag `relay-<date>` pushed on `claude/vyro-1.4` runs
+   Actions → **Relay** from that commit (Run workflow in the Actions tab appears only once
+   `relay.yml` is on `main`). Its summary shows the relay's address,
+   `https://vyro-relay.<sub>.workers.dev`.
 5. **The address in builds.** Settings → Secrets and variables → Actions → Variables → New
    repository variable `VYRO_RELAY_URL` = that address. Then the next CI run's
    `vyro-windows-<commit>` artifact has it built in. (Without it, enter the address in Vyro:
