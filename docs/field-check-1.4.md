@@ -88,5 +88,6 @@ The relay has to be live first:
 - **A check fails:** note what you saw, with the phone's model and system version and whether it
   was on Wi-Fi or mobile data. The fix goes on the branch, and the checks it affects are run
   again.
-- **Release:** after 1.3.0 is released and merged into this branch, and the owner's go: the
-  branch goes into `main`, Relay is run on `main`, and the Release workflow builds 1.4.0.
+- **Release:** after field check 1.3 passes on this build (1.3 ships in 1.4.0, ROADMAP decision
+  35) and the owner's go: the branch goes into `main`, Relay is run on `main`, and the Release
+  workflow builds 1.4.0.

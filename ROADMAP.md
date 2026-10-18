@@ -49,6 +49,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 32 | Accent of any colour | A colour wheel (1.3): fills (gauges, graphs, the 3-D view, the logo, the share card's ring) show the colour as picked; text in the accent takes a shade of the same hue and chroma, lightened or darkened just to 4.5:1 on every surface of the theme. The GPU colour is the main one turned round the hue circle, away from warning hues (the owner, 2026-10-17) | decided |
 | 33 | Connect and Disconnect | Paired Bluetooth devices only (the owner's "all Bluetooth", 2026-10-17): audio through its audio connection as Settings does; any other device's link dropped by the Vyro service, and Connect asks Windows to reach it. Wired and receiver devices get no actions | decided |
 | 34 | Reach from anywhere | A phone app installed from the browser (no app stores) reaches the PC through the Vyro relay: a Cloudflare Worker, one Durable Object per PC, in the owner's free account, built into releases for everyone, with any other relay allowed in Settings (the owner, 2026-10-17). Readings sealed end to end (HKDF-SHA256 to an auth key and an AES-256-GCM key; a secret per phone that replaces the pairing link's); the relay keeps only hashes and sees metadata. Off by default; the PC opens no port. Supersedes 19's "LAN only" | decided |
+| 35 | 1.3 ships in 1.4.0 | 1.3.0 is not released on its own: its changes (decisions 32 and 33, device names, wireless batteries) ship in 1.4.0, once field check 1.3 passes on the 1.4 test build (the owner, 2026-10-18). One update for installed copies instead of two; the 1.3 branch is neither merged nor released | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -2370,8 +2371,9 @@ another maker's dongle, and a USB condenser microphone.
       test lists devices in 92 ms and has the service refuse a device that does not exist in
       16 ms; Show desktop, snap and click-through pass. The accessibility sweep: 647 checks. The
       installer is 11.48 MB.
-- [ ] Field check 1.3 ([`docs/field-check-1.3.md`](docs/field-check-1.3.md)), then the owner's go
-      for the release.
+- [ ] Field check 1.3 ([`docs/field-check-1.3.md`](docs/field-check-1.3.md)), on the 1.4 test
+      build `vyro-windows-d185506`: 1.3 is not released on its own but ships in 1.4.0
+      (decision 35).
 
 ### 1.4.0 — the phone app, from anywhere
 The owner's request after 1.2.0 (2026-10-17): "a Vyro app for the phone, Android and iOS, to
@@ -2480,8 +2482,8 @@ field check; the relay built into releases for everyone, any other relay allowed
       installed-app smoke test passed.
 - [x] **Field check 1.4** ([`docs/field-check-1.4.md`](docs/field-check-1.4.md)) passed: the
       owner, 2026-10-18, test build `vyro-windows-d185506` (the PC and phones not reported).
-- [ ] 1.3.0's release (after field check 1.3) merged into this branch, then the owner's go for
-      1.4.0.
+- [ ] Field check 1.3 on `vyro-windows-d185506` (1.3 ships in 1.4.0, decision 35), then the
+      owner's go for 1.4.0.
 
 ## Risks
 

@@ -11,8 +11,8 @@ app or library).
 Windows (low-level ones through PawnIO, read by the Vyro Sensor Service), history, System
 Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 1.4: a
 [phone app](#phone-app-from-anywhere-14) for Android and iPhone shows the PC's readings from any
-network, through the Vyro relay, encrypted end to end. 1.3 named every device as Windows
-Settings does, read the batteries of Logitech, PlayStation and Xbox wireless devices, added
+network, through the Vyro relay, encrypted end to end. Also new in 1.4: every device named as
+Windows Settings names it, the batteries of Logitech, PlayStation and Xbox wireless devices,
 Connect and Disconnect for Bluetooth devices, and an accent of any colour. 1.2:
 [desktop widgets](#desktop-widgets-11-12) stay in view through Show desktop, snap to the
 screen's edges and to each other, can let clicks through, and come in three new kinds (Network,
@@ -178,7 +178,7 @@ or actions, 0.3 moves `alerts.json` aside (to `alerts.json.bad`) and uses its de
   down.
 - **Themes.** Settings → Appearance offers Midnight, AMOLED, Cyber, Glass, Minimal and
   Daylight, each with its own accent or one of five more; the accent colours the sidebar,
-  buttons, switches and the 3-D model. **Custom** (1.3) takes any colour from a colour wheel
+  buttons, switches and the 3-D model. **Custom** (1.4) takes any colour from a colour wheel
   (or typed as `#rrggbb`): gauges, graphs and the 3-D model show it as picked, and text in the
   accent takes a lighter or darker shade of it where the colour alone would be hard to read.
   OK, warning and problem colours keep their meaning in every theme, and every theme and
@@ -216,12 +216,12 @@ or actions, 0.3 moves `alerts.json` aside (to `alerts.json.bad`) and uses its de
   view uses WebGL only while the view is shown, at 60 frames a second (30 with "calmer"
   animation, still with it off), and a flat 2-D plan is there instead if you prefer.
 - **Devices.** A tab after Displays lists keyboards, mice, controllers, headsets and other
-  USB and Bluetooth devices, each once, by the name Windows Settings shows (1.3), with how it
+  USB and Bluetooth devices, each once, by the name Windows Settings shows (1.4), with how it
   connects. It shows the battery, and whether it is charging, where the device reports it:
   Bluetooth and Bluetooth LE, Xbox controllers, PlayStation controllers on a cable, and
-  Logitech devices, each device on a Logitech receiver in its own row (1.3). Other makers'
+  Logitech devices, each device on a Logitech receiver in its own row (1.4). Other makers'
   2.4 GHz receivers keep it to their own software; `vyro-inventory` names the dongle so its
-  protocol can be added. Paired Bluetooth devices have **Connect** and **Disconnect** (1.3):
+  protocol can be added. Paired Bluetooth devices have **Connect** and **Disconnect** (1.4):
   audio devices as Windows Settings does; other devices through the Vyro service, and they may
   connect again by themselves as soon as they are used. It also lists the sound outputs and
   inputs, with the defaults. The list updates within a second when a device arrives or leaves.

@@ -1,6 +1,9 @@
 # Field check: 1.3 (device names, wireless batteries, Bluetooth Connect and Disconnect, the colour wheel)
 
-Status: **not run yet.** Test build: `vyro-windows-294c5f1` (CI run 39070415024).
+Status: **not run yet.** Test build: **`vyro-windows-d185506`** (CI run 39100838311 on
+`claude/vyro-1.4`, version 1.4.0): 1.3 is not released on its own but ships in 1.4.0 (ROADMAP,
+decision 35), and that build carries all of it. (`vyro-windows-294c5f1`, the 1.3 branch's build,
+is no longer the one to check.)
 
 1.3 answers the owner's requests after 1.2.0 (ROADMAP → 1.3.0 has how each part works):
 - devices named as Windows Settings names them, not "Unknown device";
@@ -9,9 +12,9 @@ Status: **not run yet.** Test build: `vyro-windows-294c5f1` (CI run 39070415024)
 - Connect and Disconnect for paired Bluetooth devices;
 - an accent of any colour, from a colour wheel.
 
-**Build.** Use the `vyro-windows-<commit>` artifact of the latest CI run on
-`claude/blissful-knuth-begnu5` (Actions → the run → Artifacts), version 1.3.0. Install the MSI
-over what you have. It takes about 30 minutes.
+**Build.** `vyro-windows-d185506` (Actions → CI run 39100838311 → Artifacts), version 1.4.0. If it
+is installed already (field check 1.4 used it), there is nothing to install. It takes about 30
+minutes.
 
 ## Before you start
 
@@ -73,10 +76,9 @@ over what you have. It takes about 30 minutes.
 
 ## Recording results
 
-- **Passes:** ROADMAP → 1.3.0 gets "Field check 1.3 (`<PC>`, `<date>`, test build
+- **Passes:** ROADMAP → 1.3.0 and 1.4.0 get "Field check 1.3 (`<PC>`, `<date>`, test build
   `vyro-windows-<commit>`)".
 - **A check fails:** note what you saw, with your Windows version (from `winver`), and for a
-  device its make and model. The fix goes on the branch, and the checks it affects are run
-  again.
-- **Release:** after the owner's go, the branch goes into `main`, and the Release workflow
-  builds 1.3.0.
+  device its make and model. The fix goes on `claude/vyro-1.4`, and the checks it affects are
+  run again.
+- **Release:** with 1.4.0 (field check 1.4's sheet), after the owner's go.
