@@ -1,7 +1,8 @@
 # Field check: 1.5 (control from the phone)
 
-Status: **to do.** Test build: the `vyro-windows-<commit>` artifact of the latest green CI run
-on `claude/vyro-1.5`, version 1.5.0. Install the MSI over 1.4.1. About 40 minutes.
+Status: **to do.** Test build: **`vyro-windows-a0f48c6`** (CI run 39156961292, every job
+green), version 1.5.0, or the artifact of any later green run on `claude/vyro-1.5`. Install the
+MSI over 1.4.1. About 40 minutes.
 
 1.5 answers the owner's request to check and run anything Vyro does from the phone, shut the PC
 down from it, wake it, and see what runs on it (ROADMAP → 1.5.0, decision 36,
