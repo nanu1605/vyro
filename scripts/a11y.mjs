@@ -111,18 +111,20 @@ let checks = 0;
 // a fixed wait, and axe caught a label fading to muted over the moving highlight (4.2:1 for a few
 // frames in Midnight). Readouts easing to a new value (transitions outside the sidebar) restart
 // every second and are not waited for. In a later run axe caught Hardware's label muted with the
-// highlight still under it, on My PC, so the highlight must also sit on the selected view. After
-// 5 s axe checks the page as it is, and what still moved is logged. A contrast violation is
-// checked again a second later, and only one seen both times counts.
+// highlight still under it, on My PC, so the highlight must also sit on the selected view. On CI,
+// My PC can go over 5 s without drawing a frame (likely its 3-D view), every animation frozen part
+// way, so the wait is 15 s. After that axe checks the page as it is, and what still moved is
+// logged. A contrast violation is checked again a second later, and only one seen both times counts.
 async function settle(page, where) {
-  const until = Date.now() + 5000;
+  const limit = 15000;
+  const until = Date.now() + limit;
   for (;;) {
     const left = await page.evaluate(moving);
     const off = await page.evaluate(markOff);
     if (off > 1) left.push(`the highlight ${Math.round(off)} px off the selected view`);
     if (!left.length) return;
     if (Date.now() >= until) {
-      console.warn(`${where}: still moving after 5 s, checked as it is: ${left.join('; ')}`);
+      console.warn(`${where}: still moving after ${limit / 1000} s, checked as it is: ${left.join('; ')}`);
       return;
     }
     await page.waitForTimeout(100);
