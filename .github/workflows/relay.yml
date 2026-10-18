@@ -4,10 +4,10 @@ name: Relay
 # phone app it serves (phone.html, built into relay/public) to the owner's Cloudflare account.
 # By hand only, on the owner's go: the relay is shared by every installed Vyro that reaches its PC
 # from anywhere. Two ways to start it:
-#   - Actions → Relay → Run workflow, with the ref to deploy (GitHub offers this only once this
-#     file is on the default branch, main);
+#   - Actions → Relay → Run workflow, with the ref to deploy (GitHub offers this only for a file
+#     on the default branch, main, so this file is on main ahead of the release that needs it);
 #   - push a tag named relay-<anything> on the commit to deploy (git tag relay-<date> <commit>;
-#     git push origin relay-<date>): this works from any branch, as the first deploy did.
+#     git push origin relay-<date>).
 # Phones get the new app the next time they open it; keep the sealed messages' version (PROTOCOL)
 # able to talk to released apps.
 #
