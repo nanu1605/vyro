@@ -457,10 +457,12 @@ fn talk(s: &Shared, ws: &mut Ws) -> Ended {
                             let mut p = lock(&s.phones);
                             session.on_frame(&mut p, &b, &now)
                         };
+                        // Saved and counted before the phone hears back: a phone that has its
+                        // first view is already counted as watching.
+                        apply(s, &session, fx);
                         if let Err(e) = send(ws, outs) {
                             return Ended::Lost(e);
                         }
-                        apply(s, &session, fx);
                     }
                     Message::Close(frame) => {
                         let code = frame.map(|f| u16::from(f.code));
