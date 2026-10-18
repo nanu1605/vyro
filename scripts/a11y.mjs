@@ -110,31 +110,70 @@ let checks = 0;
 // see where they end, not a frame on the way. On CI's software GPU, leaving My PC delayed them past
 // a fixed wait, and axe caught a label fading to muted over the moving highlight (4.2:1 for a few
 // frames in Midnight). Readouts easing to a new value (transitions outside the sidebar) restart
-// every second and are not waited for.
-async function settle(page) {
-  await page
-    .waitForFunction(
-      () =>
-        document.getAnimations().every((a) => {
-          if (a.playState !== 'running' || a.effect?.getComputedTiming().endTime === Infinity) return true;
-          return a instanceof CSSTransition && !a.effect?.target?.closest?.('.sidebar');
-        }),
-      null,
-      { timeout: 5000, polling: 100 },
-    )
-    .catch(() => {});
+// every second and are not waited for. In a later run axe caught Hardware's label muted with the
+// highlight still under it, on My PC, so the highlight must also sit on the selected view. After
+// 5 s axe checks the page as it is, and what still moved is logged. A contrast violation is
+// checked again a second later, and only one seen both times counts.
+async function settle(page, where) {
+  const until = Date.now() + 5000;
+  for (;;) {
+    const left = await page.evaluate(moving);
+    const off = await page.evaluate(markOff);
+    if (off > 1) left.push(`the highlight ${Math.round(off)} px off the selected view`);
+    if (!left.length) return;
+    if (Date.now() >= until) {
+      console.warn(`${where}: still moving after 5 s, checked as it is: ${left.join('; ')}`);
+      return;
+    }
+    await page.waitForTimeout(100);
+  }
+}
+
+/** The finite animations still running, less transitions outside the sidebar: "type name on target at now/end ms". */
+function moving() {
+  return document
+    .getAnimations()
+    .filter((a) => a.playState === 'running' && a.effect?.getComputedTiming().endTime !== Infinity)
+    .filter((a) => !(a instanceof CSSTransition) || a.effect?.target?.closest?.('.sidebar'))
+    .map((a) => {
+      const t = a.effect?.target;
+      const on = t ? `${t.tagName.toLowerCase()}${t.id ? `#${t.id}` : ''}${[...t.classList].map((c) => `.${c}`).join('')}` : 'no element';
+      const name = a.transitionProperty ?? a.animationName ?? a.id;
+      const end = a.effect?.getComputedTiming().endTime ?? 0;
+      return `${a.constructor.name}${name ? ` ${name}` : ''} on ${on} at ${Math.round(a.currentTime)}/${Math.round(end)} ms`;
+    });
+}
+
+/** How far the sidebar's highlight is off the selected view, px; null where either is missing. */
+function markOff() {
+  const m = document.querySelector('.sidebar .mark')?.getBoundingClientRect();
+  const b = document.querySelector('.sidebar [role="tab"][aria-selected="true"]')?.getBoundingClientRect();
+  return m && b ? Math.max(Math.abs(m.top - b.top), Math.abs(m.height - b.height)) : null;
 }
 
 async function axe(page, where) {
-  await settle(page);
+  await settle(page, where);
   if (!(await page.evaluate(() => 'axe' in window))) await page.addScriptTag({ content: AXE });
-  const found = await page.evaluate(async () =>
-    (await window.axe.run(document, { resultTypes: ['violations'] })).violations.map(
-      (v) => `${v.id} (${v.impact}): ${v.nodes.slice(0, 3).map((n) => n.target.join(' ')).join(' | ')}`,
-    ),
-  );
+  const run = () =>
+    page.evaluate(async () =>
+      (await window.axe.run(document, { resultTypes: ['violations'] })).violations.map((v) => ({
+        id: v.id,
+        impact: v.impact,
+        nodes: v.nodes.map((n) => n.target.join(' ')),
+      })),
+    );
+  const found = await run();
+  const contrast = found.find((v) => v.id === 'color-contrast');
+  if (contrast) {
+    await page.waitForTimeout(1000);
+    await settle(page, where);
+    const again = (await run()).find((v) => v.id === 'color-contrast')?.nodes ?? [];
+    const gone = contrast.nodes.filter((n) => !again.includes(n));
+    if (gone.length) console.warn(`${where}: color-contrast gone a second later, not counted: ${gone.join(' | ')}`);
+    contrast.nodes = contrast.nodes.filter((n) => again.includes(n));
+  }
   checks++;
-  for (const f of found) problem(where, f);
+  for (const v of found) if (v.nodes.length) problem(where, `${v.id} (${v.impact}): ${v.nodes.slice(0, 3).join(' | ')}`);
 }
 
 async function noSidewaysScroll(page, where) {
@@ -314,11 +353,7 @@ async function sweepShell(browser, theme) {
 }
 
 async function markOnSelected(page, where) {
-  const off = await page.evaluate(() => {
-    const m = document.querySelector('.sidebar .mark')?.getBoundingClientRect();
-    const b = document.querySelector('.sidebar [role="tab"][aria-selected="true"]')?.getBoundingClientRect();
-    return m && b ? Math.max(Math.abs(m.top - b.top), Math.abs(m.height - b.height)) : Infinity;
-  });
+  const off = (await page.evaluate(markOff)) ?? Infinity;
   checks++;
   if (off > 1) problem(where, `the sidebar's highlight is ${Math.round(off)} px off the selected view`);
 }
