@@ -211,12 +211,7 @@ fn enumerate() -> Vec<Adapter> {
 }
 
 fn init_nvml() -> Option<Nvml> {
-    let nvml = Nvml::init()
-        .or_else(|_| {
-            Nvml::builder()
-                .lib_path(r"C:\Program Files\NVIDIA Corporation\NVSMI\nvml.dll".as_ref())
-                .init()
-        })
+    let nvml = crate::gpu_tune::load_nvml()
         .map_err(|e| log::info!("gpu: NVML unavailable: {e}"))
         .ok()?;
     log::info!(

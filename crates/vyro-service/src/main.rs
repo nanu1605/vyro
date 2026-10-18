@@ -140,6 +140,7 @@ pub fn run(
                 data_dir,
                 poller: PollerConfig::default(),
                 fan_control: true,
+                gpu_tune: true,
             },
             providers,
             clients,

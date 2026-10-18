@@ -24,6 +24,18 @@ pub fn stability_counts(since: i64) -> Option<crate::score::StabilityCounts> {
     }
 }
 
+/// Unexpected shutdowns, display driver resets and GPU hangs since `since` (GPU tuning's crash
+/// guard); none where the logs cannot be read.
+pub fn gpu_crashes(since: i64) -> Vec<(i64, crate::gpu_tune::CrashKind)> {
+    #[cfg(windows)]
+    return win::gpu_crashes(since);
+    #[cfg(not(windows))]
+    {
+        let _ = since;
+        Vec::new()
+    }
+}
+
 /// The active power plan's name, e.g. "Balanced" (a benchmark run's setup); `None` where it
 /// cannot be read.
 pub fn power_plan() -> Option<String> {

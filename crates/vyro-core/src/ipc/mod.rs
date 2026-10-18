@@ -27,6 +27,7 @@ use crate::changes::PcInventory;
 use crate::diag::DiagAppInfo;
 use crate::fan::FanConfig;
 use crate::gaming::{CaptureTarget, GameContext};
+use crate::gpu_tune::{Settings as TuneSettings, Trial, TuneConfig};
 use crate::profiles::Profile;
 use crate::HistoryRange;
 
@@ -44,7 +45,9 @@ pub use transport::{connect, default_endpoint, Conn, Listener};
 /// (P17): `PerformanceScore`. 12: benchmark runs (P20): `AddBenchmark`, `BenchmarkRuns`,
 /// `BenchmarkRun`, `DeleteBenchmark`. 13: diagnostics (P21): `RunDiagnostics`, `DiagnosticRuns`,
 /// `DiagnosticRun`, `DeleteDiagnostic`. 14: Bluetooth Disconnect (1.3): `BluetoothDisconnect`.
-pub const PROTOCOL_VERSION: u32 = 14;
+/// 15: GPU tuning (1.6): `GpuTuneStatus`, `SetGpuTune`, `RestoreGpu`, `GpuTuneEvents`,
+/// `SetGpuTuneProfile`, `GpuTrial`, `GpuTested`, and `SensorSnapshot::gpu_tune`.
+pub const PROTOCOL_VERSION: u32 = 15;
 /// Windows service name (installed by the MSI).
 pub const SERVICE_NAME: &str = "VyroService";
 /// Largest request the server accepts (alert rules are the biggest, a few KB).
@@ -195,6 +198,28 @@ pub enum Request {
     #[serde(rename_all = "camelCase")]
     BluetoothDisconnect {
         id: String,
+    },
+    GpuTuneStatus,
+    #[serde(rename_all = "camelCase")]
+    SetGpuTune {
+        config: TuneConfig,
+    },
+    RestoreGpu,
+    GpuTuneEvents,
+    #[serde(rename_all = "camelCase")]
+    SetGpuTuneProfile {
+        profile: Profile,
+    },
+    /// Settings on trial for the stability test (renewed while it runs); `None` ends it.
+    #[serde(rename_all = "camelCase")]
+    GpuTrial {
+        trial: Option<Trial>,
+    },
+    #[serde(rename_all = "camelCase")]
+    GpuTested {
+        settings: TuneSettings,
+        passed: bool,
+        note: String,
     },
 }
 
@@ -370,6 +395,18 @@ mod tests {
             }),
             r#"{"method":"setFanProfile","params":{"profile":"gaming"}}"#
         );
+        assert_eq!(
+            json(&Request::GpuTrial { trial: None }),
+            r#"{"method":"gpuTrial","params":{"trial":null}}"#
+        );
+        assert_eq!(
+            json(&Request::GpuTested {
+                settings: TuneSettings::STOCK,
+                passed: true,
+                note: String::new()
+            }),
+            r#"{"method":"gpuTested","params":{"settings":{"coreMhz":0,"memMhz":0,"powerPct":100},"passed":true,"note":""}}"#
+        );
         let set = json(&Request::SetFanConfig {
             config: FanConfig::default(),
         });
@@ -383,7 +420,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&hello).unwrap(),
-            r#"{"protocol":14,"role":"snapshots","session":7,"pid":42,"visible":false}"#
+            r#"{"protocol":15,"role":"snapshots","session":7,"pid":42,"visible":false}"#
         );
         let reply: Reply = Err("nope".into());
         assert_eq!(serde_json::to_string(&reply).unwrap(), r#"{"Err":"nope"}"#);

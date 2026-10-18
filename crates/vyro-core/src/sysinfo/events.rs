@@ -142,6 +142,70 @@ pub fn count_stability(
     c
 }
 
+/// XPath for the System log's crash events GPU tuning checks (1.6): unexpected shutdowns and
+/// display driver resets, of the last `secs` seconds.
+pub fn gpu_crash_query(secs: i64) -> String {
+    format!(
+        "*[System[((Provider[@Name='Microsoft-Windows-Kernel-Power'] and EventID=41) or \
+         (Provider[@Name='Display'] and EventID=4101) or \
+         (Provider[@Name='nvlddmkm'] and EventID=153)) and \
+         TimeCreated[timediff(@SystemTime) <= {}]]]",
+        secs.max(0) * 1000
+    )
+}
+
+/// XPath for the Application log's error reports of the last `secs` seconds (a GPU hang is a
+/// LiveKernelEvent report).
+pub fn error_report_query(secs: i64) -> String {
+    format!(
+        "*[System[Provider[@Name='Windows Error Reporting'] and EventID=1001 and \
+         TimeCreated[timediff(@SystemTime) <= {}]]]",
+        secs.max(0) * 1000
+    )
+}
+
+/// Decodes one rendered crash event for GPU tuning: when, and what.
+pub fn parse_gpu_crash(xml: &str) -> Option<(i64, crate::gpu_tune::CrashKind)> {
+    use crate::gpu_tune::CrashKind;
+    let provider = attr(xml, "Provider", "Name")?;
+    let id: u32 = text(xml, "EventID")?.parse().ok()?;
+    let ts = parse_utc(attr(xml, "TimeCreated", "SystemTime")?)?;
+    let p = provider
+        .strip_prefix("Microsoft-Windows-")
+        .unwrap_or(provider);
+    let kind = match (p, id) {
+        ("Kernel-Power", 41) => CrashKind::Shutdown,
+        ("Display", 4101) | ("nvlddmkm", 153) => CrashKind::DriverReset,
+        ("Windows Error Reporting", 1001) => {
+            // Unnamed data: bucket, type, event name, response, cab id, then P1 (the code).
+            let data = unnamed_data(xml);
+            let at = data.iter().position(|d| *d == "LiveKernelEvent")?;
+            let code = data.get(at + 3)?.to_ascii_lowercase();
+            if !matches!(code.as_str(), "141" | "117" | "1a8") {
+                return None;
+            }
+            CrashKind::GpuHang
+        }
+        _ => return None,
+    };
+    Some((ts, kind))
+}
+
+/// The text of every `<Data>` element without a name, in order.
+fn unnamed_data(xml: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut rest = xml;
+    while let Some(i) = rest.find("<Data>") {
+        let body = &rest[i + 6..];
+        let Some(end) = body.find("</Data>") else {
+            break;
+        };
+        out.push(body[..end].trim());
+        rest = &body[end..];
+    }
+    out
+}
+
 /// Decodes one rendered event.
 pub fn parse_event(xml: &str) -> Option<PowerEvent> {
     let provider = attr(xml, "Provider", "Name")?;
@@ -201,6 +265,62 @@ mod tests {
         let c = count_stability(events, since);
         assert_eq!((c.shutdowns, c.corrected, c.fatal), (0, 1, 1));
         assert!(stability_query(30 * 86_400).contains("timediff(@SystemTime) <= 2592000000"));
+    }
+
+    #[test]
+    fn gpu_crash_events() {
+        use crate::gpu_tune::CrashKind;
+        let ev = |provider: &str, id: u32, data: &str| {
+            format!(
+                "<Event><System><Provider Name='{provider}'/><EventID Qualifiers='0'>{id}</EventID>\
+                 <TimeCreated SystemTime='2026-10-01T10:00:00.0Z'/></System><EventData>{data}</EventData></Event>"
+            )
+        };
+        let at = parse_utc("2026-10-01T10:00:00Z").unwrap();
+        assert_eq!(
+            parse_gpu_crash(UNEXPECTED).map(|e| e.1),
+            Some(CrashKind::Shutdown)
+        );
+        assert_eq!(
+            parse_gpu_crash(&ev("Display", 4101, "<Data>nvlddmkm</Data>")),
+            Some((at, CrashKind::DriverReset))
+        );
+        assert_eq!(
+            parse_gpu_crash(&ev("nvlddmkm", 153, "")).map(|e| e.1),
+            Some(CrashKind::DriverReset)
+        );
+        let report = |code: &str| {
+            ev(
+                "Windows Error Reporting",
+                1001,
+                &format!(
+                    "<Data>1234</Data><Data>5</Data><Data>LiveKernelEvent</Data>\
+                     <Data>Not available</Data><Data>0</Data><Data>{code}</Data><Data>x</Data>"
+                ),
+            )
+        };
+        assert_eq!(
+            parse_gpu_crash(&report("141")).map(|e| e.1),
+            Some(CrashKind::GpuHang)
+        );
+        assert_eq!(
+            parse_gpu_crash(&report("117")).map(|e| e.1),
+            Some(CrashKind::GpuHang)
+        );
+        assert_eq!(
+            parse_gpu_crash(&report("ab")),
+            None,
+            "another live kernel event"
+        );
+        let app_crash = ev(
+            "Windows Error Reporting",
+            1001,
+            "<Data>1</Data><Data>5</Data><Data>APPCRASH</Data><Data>x</Data><Data>0</Data><Data>141</Data>",
+        );
+        assert_eq!(parse_gpu_crash(&app_crash), None);
+        assert_eq!(parse_gpu_crash(&ev("Display", 4100, "")), None);
+        assert!(gpu_crash_query(60).contains("EventID=4101"));
+        assert!(error_report_query(60).contains("<= 60000"));
     }
 
     #[test]

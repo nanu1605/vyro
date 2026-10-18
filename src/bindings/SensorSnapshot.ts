@@ -16,6 +16,7 @@ import type { PingSnapshot } from "./PingSnapshot";
 import type { PowerSnapshot } from "./PowerSnapshot";
 import type { ProcessSnapshot } from "./ProcessSnapshot";
 import type { StorageSnapshot } from "./StorageSnapshot";
+import type { TuneBrief } from "./TuneBrief";
 import type { VoltageReading } from "./VoltageReading";
 
 export type SensorSnapshot = { 
@@ -47,4 +48,8 @@ insights: InsightBrief,
  * Alert rules whose conditions hold (P18), with the profile and fan actions they ask
  * for.
  */
-alertState: AlertBrief, };
+alertState: AlertBrief, 
+/**
+ * Whether the GPU runs tuned (1.6), for the header chip and the tray.
+ */
+gpuTune: TuneBrief, };

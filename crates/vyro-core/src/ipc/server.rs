@@ -333,6 +333,17 @@ impl Server {
             Request::FanEvents => json(e.fan_events()),
             Request::SetFanProfile { profile } => json(e.set_fan_profile(profile)),
             Request::BluetoothDisconnect { id } => json(e.bluetooth_disconnect(&id)),
+            Request::GpuTuneStatus => json(e.gpu_tune_status()),
+            Request::SetGpuTune { config } => json(e.set_gpu_tune(config)),
+            Request::RestoreGpu => json(e.restore_gpu()),
+            Request::GpuTuneEvents => json(e.gpu_tune_events()),
+            Request::SetGpuTuneProfile { profile } => json(e.set_gpu_tune_profile(profile)),
+            Request::GpuTrial { trial } => json(e.gpu_trial(trial)),
+            Request::GpuTested {
+                settings,
+                passed,
+                note,
+            } => json(e.gpu_tested(settings, passed, note)),
         }
     }
 }

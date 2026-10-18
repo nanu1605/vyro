@@ -174,6 +174,7 @@ fn the_engine_starts_on_each_releases_data_folder() {
                 hidden_interval: Duration::from_secs(3600),
             },
             fan_control: false,
+            gpu_tune: false,
         };
         let engine = LocalEngine::start(
             cfg,

@@ -237,3 +237,12 @@ pub fn wide_array(w: &[u16]) -> String {
     let end = w.iter().position(|&c| c == 0).unwrap_or(w.len());
     String::from_utf16_lossy(&w[..end]).trim().to_owned()
 }
+
+/// `C:\Windows\System32` (from Windows, not the environment).
+pub fn system_dir() -> Option<std::path::PathBuf> {
+    use windows::Win32::System::SystemInformation::GetSystemDirectoryW;
+    let mut buf = [0u16; 260];
+    // SAFETY: the buffer's length is passed; the return value is the characters written.
+    let n = unsafe { GetSystemDirectoryW(Some(&mut buf)) } as usize;
+    (n > 0 && n < buf.len()).then(|| std::path::PathBuf::from(String::from_utf16_lossy(&buf[..n])))
+}

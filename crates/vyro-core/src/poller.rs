@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 
 use crate::alerts::{AlertEngine, Reading, TickInputs};
 use crate::fan::{self, controller::FanControl};
+use crate::gpu_tune::controller::TuneControl;
 use crate::health::{HealthEvent, HealthMonitor};
 use crate::history::History;
 use crate::intel::Intel;
@@ -78,6 +79,7 @@ pub struct Poller {
     health: Arc<Mutex<HealthMonitor>>,
     alerts: Option<Arc<Mutex<AlertEngine>>>,
     fans: Option<Arc<FanControl>>,
+    tune: Option<Arc<TuneControl>>,
     intel: Option<Arc<Intel>>,
     cfg: PollerConfig,
     /// `app.cpu` / `app.ram`: the footprint as sensors, for averages, peaks and history.
@@ -95,6 +97,7 @@ impl Poller {
             health: Arc::new(Mutex::new(HealthMonitor::new())),
             alerts: None,
             fans: None,
+            tune: None,
             intel: None,
             cfg,
             app_keys: None,
@@ -130,6 +133,13 @@ impl Poller {
     /// tray interval is capped so their sources stay fresh.
     pub fn with_fans(mut self, fans: Arc<FanControl>) -> Self {
         self.fans = Some(fans);
+        self
+    }
+
+    /// Checks the tuned GPU's temperatures every tick (1.6); while it runs tuned the tray
+    /// interval is capped as for fans.
+    pub fn with_tune(mut self, tune: Arc<TuneControl>) -> Self {
+        self.tune = Some(tune);
         self
     }
 
@@ -180,7 +190,9 @@ impl Poller {
             loop {
                 let interval = if visible {
                     self.cfg.interval
-                } else if self.fans.as_ref().is_some_and(|f| f.drives()) {
+                } else if self.fans.as_ref().is_some_and(|f| f.drives())
+                    || self.tune.as_ref().is_some_and(|t| t.brief().tuned)
+                {
                     self.cfg.hidden_interval.min(fan::controller::MAX_TICK)
                 } else {
                     self.cfg.hidden_interval
@@ -257,6 +269,10 @@ impl Poller {
         if let Some(fans) = &self.fans {
             fans.on_tick(|id| reg.get(id).and_then(|s| s.value));
             snap.fan_control = fans.brief();
+        }
+        if let Some(tune) = &self.tune {
+            tune.on_tick(&snap.gpu);
+            snap.gpu_tune = tune.brief();
         }
 
         let (cpu_key, ram_key) = *self.app_keys.get_or_insert_with(|| {

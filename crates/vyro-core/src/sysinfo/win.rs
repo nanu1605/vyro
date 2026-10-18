@@ -444,13 +444,39 @@ pub fn stability_counts(since: i64) -> Option<crate::score::StabilityCounts> {
     ok.then(|| events::count_stability(found, since))
 }
 
+/// Unexpected shutdowns, display driver resets and GPU hangs since `since` (Unix seconds), for
+/// GPU tuning's crash guard (1.6).
+pub fn gpu_crashes(since: i64) -> Vec<(i64, crate::gpu_tune::CrashKind)> {
+    let secs = crate::unix_now() - since;
+    let mut found = Vec::new();
+    system_log(&events::gpu_crash_query(secs), 200, |xml| {
+        found.extend(events::parse_gpu_crash(xml));
+    });
+    event_log(
+        "Application",
+        &events::error_report_query(secs),
+        200,
+        |xml| {
+            found.extend(events::parse_gpu_crash(xml));
+        },
+    );
+    found.retain(|(ts, _)| *ts >= since);
+    found.sort_by_key(|(ts, _)| *ts);
+    found
+}
+
 /// Renders up to `limit` events of the System log matching `xpath`, newest first. False when
 /// the log cannot be queried.
-fn system_log(xpath: &str, limit: usize, mut each: impl FnMut(&str)) -> bool {
+fn system_log(xpath: &str, limit: usize, each: impl FnMut(&str)) -> bool {
+    event_log("System", xpath, limit, each)
+}
+
+/// As [`system_log`], for any log.
+fn event_log(channel: &str, xpath: &str, limit: usize, mut each: impl FnMut(&str)) -> bool {
     let flags = EvtQueryChannelPath.0 | EvtQueryReverseDirection.0;
     // SAFETY: strings outlive the call; the returned handle is closed below.
     let Ok(query) =
-        (unsafe { EvtQuery(None, &HSTRING::from("System"), &HSTRING::from(xpath), flags) })
+        (unsafe { EvtQuery(None, &HSTRING::from(channel), &HSTRING::from(xpath), flags) })
     else {
         return false;
     };

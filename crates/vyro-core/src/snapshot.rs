@@ -39,6 +39,9 @@ pub struct SensorSnapshot {
     /// for.
     #[serde(default)]
     pub alert_state: crate::alerts::AlertBrief,
+    /// Whether the GPU runs tuned (1.6), for the header chip and the tray.
+    #[serde(default)]
+    pub gpu_tune: crate::gpu_tune::TuneBrief,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]

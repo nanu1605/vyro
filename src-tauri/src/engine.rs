@@ -345,6 +345,7 @@ fn start_local(app: &AppHandle, shown: &Arc<AtomicBool>) -> std::io::Result<Loca
             data_dir,
             poller: PollerConfig::default(),
             fan_control: false,
+            gpu_tune: false,
         },
         providers,
         clients,

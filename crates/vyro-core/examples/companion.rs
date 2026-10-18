@@ -56,6 +56,7 @@ fn engine(
             data_dir: None,
             poller: PollerConfig::default(),
             fan_control: false,
+            gpu_tune: false,
         },
         vec![Box::new(SimProvider::new())],
         ClientPids::default(),

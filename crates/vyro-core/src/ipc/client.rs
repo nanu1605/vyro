@@ -18,6 +18,7 @@ use crate::engine::EngineApi;
 use crate::fan::{FanConfig, FanEvent, FanStatus};
 use crate::gaming::replay::GameTimeline;
 use crate::gaming::{CaptureTarget, GameContext, GameSession};
+use crate::gpu_tune::{Settings as TuneSettings, Trial, TuneConfig, TuneEvent, TuneStatus};
 use crate::health::HealthEvent;
 use crate::history::WindowSeries;
 use crate::info::{DriveInfo, PawnIoStatus};
@@ -456,6 +457,38 @@ impl EngineApi for RemoteEngine {
         self.call(&Request::SetFanProfile { profile })
     }
 
+    fn gpu_tune_status(&self) -> Result<TuneStatus, String> {
+        self.call(&Request::GpuTuneStatus)
+    }
+
+    fn set_gpu_tune(&self, config: TuneConfig) -> Result<(), String> {
+        self.call(&Request::SetGpuTune { config })
+    }
+
+    fn restore_gpu(&self) -> Result<(), String> {
+        self.call(&Request::RestoreGpu)
+    }
+
+    fn gpu_tune_events(&self) -> Result<Vec<TuneEvent>, String> {
+        self.call(&Request::GpuTuneEvents)
+    }
+
+    fn set_gpu_tune_profile(&self, profile: Profile) -> Result<(), String> {
+        self.call(&Request::SetGpuTuneProfile { profile })
+    }
+
+    fn gpu_trial(&self, trial: Option<Trial>) -> Result<(), String> {
+        self.call(&Request::GpuTrial { trial })
+    }
+
+    fn gpu_tested(&self, settings: TuneSettings, passed: bool, note: String) -> Result<(), String> {
+        self.call(&Request::GpuTested {
+            settings,
+            passed,
+            note,
+        })
+    }
+
     /// Stops reconnecting; the service keeps running.
     fn shutdown(&self) {
         self.shared.stop.store(true, Ordering::SeqCst);
@@ -502,6 +535,7 @@ mod tests {
                         hidden_interval: Duration::from_millis(10),
                     },
                     fan_control: false,
+                    gpu_tune: false,
                 },
                 vec![Box::new(SimProvider::with_seed(9))],
                 ClientPids::default(),

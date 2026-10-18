@@ -16,6 +16,7 @@ pub mod engine;
 pub mod fan;
 pub mod files;
 pub mod gaming;
+pub mod gpu_tune;
 pub mod health;
 pub mod history;
 pub mod hwid;

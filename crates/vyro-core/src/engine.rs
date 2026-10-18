@@ -17,6 +17,10 @@ use crate::fan::controller::{self, FanControl, SimDevice};
 use crate::fan::{FanCapability, FanConfig, FanEvent, FanStatus};
 use crate::gaming::replay::{self, GameTimeline};
 use crate::gaming::{CaptureTarget, GameContext, GameProvider, GameSession, Gaming};
+use crate::gpu_tune::controller::{self as tune, TuneControl};
+use crate::gpu_tune::{
+    Settings as TuneSettings, Trial, TuneCapability, TuneConfig, TuneEvent, TuneStatus,
+};
 use crate::health::{self, HealthEvent};
 use crate::history::WindowSeries;
 use crate::info::{DriveInfo, PawnIoStatus};
@@ -154,6 +158,20 @@ pub trait EngineApi: Send + Sync {
     /// gives it. The service does it (it may need administrator rights), at most once per
     /// device in [`crate::devices::Throttle::GAP`], and only for a paired Bluetooth device.
     fn bluetooth_disconnect(&self, id: &str) -> Result<(), String>;
+    /// GPU tuning (1.6): the card, what its driver allows, the presets and what runs now.
+    fn gpu_tune_status(&self) -> Result<TuneStatus, String>;
+    /// Validates, saves and applies GPU tuning settings.
+    fn set_gpu_tune(&self, config: TuneConfig) -> Result<(), String>;
+    /// "Return GPU to stock", until a preset is applied again.
+    fn restore_gpu(&self) -> Result<(), String>;
+    /// GPU tuning log, newest last (kept across restarts where there is a history store).
+    fn gpu_tune_events(&self) -> Result<Vec<TuneEvent>, String>;
+    /// The P9c profile in use: its own preset applies, if it has one.
+    fn set_gpu_tune_profile(&self, profile: Profile) -> Result<(), String>;
+    /// Puts settings on trial for the stability test (renewed while it runs), or ends it.
+    fn gpu_trial(&self, trial: Option<Trial>) -> Result<(), String>;
+    /// How a stability test went; settings that passed are kept as tested.
+    fn gpu_tested(&self, settings: TuneSettings, passed: bool, note: String) -> Result<(), String>;
     /// Stops polling and flushes history. Safe to call more than once.
     fn shutdown(&self);
 }
@@ -166,6 +184,8 @@ pub struct EngineConfig {
     pub poller: PollerConfig,
     /// Drive fans (the service only; the app's fallback engine never does).
     pub fan_control: bool,
+    /// Tune the GPU (the service only).
+    pub gpu_tune: bool,
 }
 
 /// The engine running in this process.
@@ -178,6 +198,7 @@ pub struct LocalEngine {
     clients: ClientPids,
     gaming: Arc<Gaming>,
     fans: Arc<FanControl>,
+    tune: Arc<TuneControl>,
     intel: Arc<Intel>,
     bluetooth: crate::devices::Throttle,
 }
@@ -203,6 +224,7 @@ impl LocalEngine {
         let alerts = Arc::new(Mutex::new(AlertEngine::new(rules)));
         let gaming = Gaming::new(Gaming::default_launch(), dir, history.clone());
         let fans = Arc::new(Self::start_fans(cfg.fan_control, dir, history.clone()));
+        let tune = Arc::new(Self::start_tune(cfg.gpu_tune, dir, history.clone()));
         let intel = Intel::new(Arc::clone(&registry), history.clone(), unix_now());
         intel.set_alert_sensors(lock(&alerts).usual_sensors(), unix_now());
         intel.set_score_sources(Self::score_sources());
@@ -218,6 +240,7 @@ impl LocalEngine {
             )
             .with_alerts(Arc::clone(&alerts))
             .with_fans(Arc::clone(&fans))
+            .with_tune(Arc::clone(&tune))
             .with_intel(Arc::clone(&intel));
         if let Some(history) = &history {
             poller = poller.with_history(Arc::clone(history));
@@ -232,9 +255,60 @@ impl LocalEngine {
             clients,
             gaming,
             fans,
+            tune,
             intel,
             bluetooth: crate::devices::Throttle::default(),
         })
+    }
+
+    /// GPU tuning: the simulated card in simulation, the real one only in the service and only
+    /// where `gpu_tune::open_device` finds a card it tunes.
+    fn start_tune(
+        wanted: bool,
+        dir: Option<&std::path::Path>,
+        history: Option<Arc<Mutex<History>>>,
+    ) -> TuneControl {
+        if Self::simulated() {
+            return TuneControl::start(
+                Box::new(crate::gpu_tune::controller::SimDevice::new()),
+                tune::Options::memory(),
+            );
+        }
+        if !wanted {
+            return TuneControl::unavailable(TuneCapability::Unavailable {
+                reason: "GPU tuning runs in the Vyro service".into(),
+            });
+        }
+        let events = history.map(|h| -> tune::EventSink {
+            Box::new(move |ev: &TuneEvent| {
+                if let Err(e) = lock(&h).log_events(crate::gpu_tune::EVENT_KIND, ev.ts, &[ev]) {
+                    log::warn!("gpu tuning events: {e}");
+                }
+            })
+        });
+        #[cfg(windows)]
+        match crate::gpu_tune::open_device() {
+            Ok(dev) => TuneControl::start(
+                dev,
+                tune::Options {
+                    dir: dir.map(Path::to_path_buf),
+                    events,
+                    crashes: Box::new(crate::sysinfo::gpu_crashes),
+                    check_every: tune::CHECK_EVERY,
+                },
+            ),
+            Err(cap) => {
+                log::info!("gpu tuning: not possible: {cap:?}");
+                TuneControl::unavailable(cap)
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (dir, events);
+            TuneControl::unavailable(TuneCapability::Unavailable {
+                reason: "GPU tuning needs Windows".into(),
+            })
+        }
     }
 
     /// The fan controller: the simulated chip in simulation, the real one only in the service
@@ -299,6 +373,7 @@ impl LocalEngine {
     /// for the duration (the service forwards the power events).
     pub fn set_suspended(&self, on: bool) {
         self.fans.set_suspended(on);
+        self.tune.set_suspended(on);
     }
 
     /// The score's inputs outside the history: the CPU's brand, the drives and the event log
@@ -661,9 +736,45 @@ impl EngineApi for LocalEngine {
         }
     }
 
+    fn gpu_tune_status(&self) -> Result<TuneStatus, String> {
+        Ok(self.tune.status())
+    }
+
+    fn set_gpu_tune(&self, config: TuneConfig) -> Result<(), String> {
+        self.tune.set_config(config)
+    }
+
+    fn restore_gpu(&self) -> Result<(), String> {
+        self.tune.restore()
+    }
+
+    /// From the history store, else this run's.
+    fn gpu_tune_events(&self) -> Result<Vec<TuneEvent>, String> {
+        let stored = self.history.as_ref().and_then(|h| {
+            lock(h)
+                .events::<TuneEvent>(crate::gpu_tune::EVENT_KIND, tune::RECENT_EVENTS as i64)
+                .inspect_err(|e| log::warn!("gpu tuning events: {e}"))
+                .ok()
+        });
+        Ok(stored.unwrap_or_else(|| self.tune.events()))
+    }
+
+    fn set_gpu_tune_profile(&self, profile: Profile) -> Result<(), String> {
+        self.tune.set_profile(profile)
+    }
+
+    fn gpu_trial(&self, trial: Option<Trial>) -> Result<(), String> {
+        self.tune.trial(trial)
+    }
+
+    fn gpu_tested(&self, settings: TuneSettings, passed: bool, note: String) -> Result<(), String> {
+        self.tune.tested(settings, passed, &note)
+    }
+
     fn shutdown(&self) {
-        // Fans first: they go back to the BIOS while the sensors still run.
+        // Fans and the GPU first: back to the BIOS and to stock while the sensors still run.
         self.fans.shutdown();
+        self.tune.shutdown();
         self.gaming.stop();
         if let Some(poller) = lock(&self.poller).take() {
             poller.stop();
@@ -733,6 +844,7 @@ mod tests {
             data_dir: Some(dir.path().join("data")),
             poller: fast(),
             fan_control: false,
+            gpu_tune: false,
         };
         let engine = LocalEngine::start(
             cfg,
