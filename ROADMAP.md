@@ -2545,8 +2545,12 @@ first) and 1.7 (the PC's screen on the phone), each with its own field check.
       starts at launch instead of with the Devices tab. A strip on the Dashboard ("Low battery:
       MX Master 3S 17%", and N more) opens Devices, which has a dot (amber, red when critical)
       while any battery is low. The preview shows both.
-- [ ] CI green on this branch; field check 1.4.1
-      ([`docs/field-check-1.4.1.md`](docs/field-check-1.4.1.md)); the owner's go.
+- [x] **CI green** on 72a2571 (run 39154275785): Linux, Windows with the installed-app smoke
+      test, the relay and phone app, accessibility. Test build `vyro-windows-72a2571`. Locally:
+      fmt, clippy (Linux and windows-gnu), 666 core tests, 206 frontend tests, the builds, the
+      budgets and the accessibility sweep (665 checks).
+- [ ] Field check 1.4.1 ([`docs/field-check-1.4.1.md`](docs/field-check-1.4.1.md)); the owner's
+      go.
 
 ## Risks
 

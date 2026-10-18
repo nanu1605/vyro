@@ -1,7 +1,8 @@
 # Field check: 1.4.1 (Connect and Disconnect, low batteries)
 
-Status: **to do.** Test build: the `vyro-windows-<commit>` artifact of the latest green CI run
-on `claude/vyro-1.4.1`, version 1.4.1. Install the MSI over 1.4.0. About 20 minutes.
+Status: **to do.** Test build: **`vyro-windows-72a2571`** (CI run 39154275785, every job
+green), version 1.4.1, or the artifact of any later green run on `claude/vyro-1.4.1`. Install the
+MSI over 1.4.0. About 20 minutes.
 
 1.4.1 answers the owner's report after 1.4.0: Connect and Disconnect did nothing on headphones,
 earbuds and a speaker, and a device that was disconnected still showed Connected. It also adds
