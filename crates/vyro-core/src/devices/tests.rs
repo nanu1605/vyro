@@ -289,6 +289,146 @@ fn connection_state_and_problems() {
     assert_eq!(d.manufacturer, None);
 }
 
+/// A paired Bluetooth entry for container `c`.
+fn aep(c: &str, connected: Option<bool>) -> RawAep {
+    RawAep {
+        container: Some(c.into()),
+        connected,
+        ..RawAep::default()
+    }
+}
+
+#[test]
+fn bluetooth_connection_follows_settings_then_audio_then_the_container() {
+    use LinkState as S;
+    let active = endpoint("e1", Some("a"), true);
+    let mut unplugged = endpoint("e2", Some("a"), true);
+    unplugged.state = 4;
+    // The paired entry decides, as Settings shows it.
+    assert_eq!(
+        bt_state(Some(false), &[&active], Some(true)),
+        S::NotConnected
+    );
+    assert_eq!(
+        bt_state(Some(true), &[&unplugged], Some(false)),
+        S::Connected
+    );
+    // Else audio: connected while an endpoint is active.
+    assert_eq!(
+        bt_state(None, &[&unplugged, &active], Some(false)),
+        S::Connected
+    );
+    assert_eq!(bt_state(None, &[&unplugged], Some(true)), S::NotConnected);
+    // Else the container.
+    assert_eq!(bt_state(None, &[], Some(true)), S::Connected);
+    assert_eq!(bt_state(None, &[], Some(false)), S::NotConnected);
+    // Nothing said is not "connected" any more.
+    assert_eq!(bt_state(None, &[], None), S::Unknown);
+}
+
+/// The 1.4.0 bug: a speaker that was off still showed Connected (its container said so, or
+/// said nothing), so it offered only Disconnect.
+#[test]
+fn a_speaker_that_is_off_is_not_connected() {
+    let mut speaker = endpoint("e1", Some("a"), true);
+    speaker.state = 4;
+    let raw = Raw {
+        containers: vec![container("a", "SRS-XB13")],
+        nodes: vec![node("a", "Bluetooth", "BTHENUM")],
+        aeps: vec![aep("{A}", Some(false))],
+        endpoints: vec![speaker.clone()],
+        ..Raw::default()
+    };
+    let d = one(&raw);
+    assert_eq!((d.state, d.connected), (LinkState::NotConnected, false));
+    assert_eq!(d.control, Some(Control::Audio));
+
+    // No paired entry: its unplugged endpoint tells.
+    let d = one(&Raw {
+        aeps: Vec::new(),
+        ..raw.clone()
+    });
+    assert_eq!(d.state, LinkState::NotConnected);
+
+    // Nothing from Windows at all: Unknown, its battery still shown.
+    let mut silent = container("a", "SRS-XB13");
+    silent.connected = None;
+    let mut n = node("a", "Bluetooth", "BTHENUM");
+    n.battery = Some(55);
+    let d = one(&Raw {
+        containers: vec![silent],
+        nodes: vec![n],
+        ..Raw::default()
+    });
+    assert_eq!((d.state, d.connected), (LinkState::Unknown, false));
+    assert_eq!(d.battery.and_then(|b| b.percent), Some(55));
+}
+
+/// A controller Windows says nothing about is connected while XInput has its slot.
+#[test]
+fn an_xinput_slot_shows_its_controller_connected() {
+    let mut c = container("a", "Xbox Wireless Controller");
+    c.connected = None;
+    let mut pad = node("a", "HIDClass", "HID");
+    pad.hardware_ids =
+        vec!["HID\\{00001812-0000-1000-8000-00805f9b34fb}_VID&02045e_PID&0b13&IG_00".into()];
+    let d = one(&Raw {
+        containers: vec![c],
+        nodes: vec![pad, node("a", "Bluetooth", "BTHLE")],
+        pads: vec![RawPad {
+            slot: 0,
+            ids: Some((0x045e, 0x0b13)),
+            wireless: true,
+            battery_type: 2,
+            battery_level: 1,
+        }],
+        ..Raw::default()
+    });
+    assert_eq!((d.state, d.connected), (LinkState::Connected, true));
+    assert_eq!(d.low, Some(LowBattery::Low));
+}
+
+#[test]
+fn low_battery_by_percent_and_level_never_while_charging() {
+    let b = |percent: Option<u8>, level: Option<BatteryLevel>, charging: Option<bool>| Battery {
+        percent,
+        level,
+        charging,
+        source: BatterySource::Windows,
+    };
+    assert_eq!(low(None), None);
+    assert_eq!(low(Some(&b(Some(20), None, None))), None);
+    assert_eq!(low(Some(&b(Some(19), None, None))), Some(LowBattery::Low));
+    assert_eq!(low(Some(&b(Some(10), None, None))), Some(LowBattery::Low));
+    assert_eq!(
+        low(Some(&b(Some(9), None, None))),
+        Some(LowBattery::Critical)
+    );
+    assert_eq!(low(Some(&b(Some(5), None, Some(true)))), None);
+    assert_eq!(
+        low(Some(&b(Some(5), None, Some(false)))),
+        Some(LowBattery::Critical)
+    );
+    assert_eq!(
+        low(Some(&b(None, Some(BatteryLevel::Low), None))),
+        Some(LowBattery::Low)
+    );
+    assert_eq!(
+        low(Some(&b(None, Some(BatteryLevel::Empty), None))),
+        Some(LowBattery::Critical)
+    );
+    assert_eq!(low(Some(&b(None, Some(BatteryLevel::Medium), None))), None);
+    // The sample's mouse at 17 % shows the notice in the preview.
+    let sample = sample();
+    let lows: Vec<_> = sample
+        .devices
+        .iter()
+        .filter(|d| d.low.is_some())
+        .map(|d| d.name.as_str())
+        .collect();
+    assert_eq!(lows, ["MX Master 3S"]);
+}
+
 #[test]
 fn indirect_names_give_their_fallback_text() {
     assert_eq!(
@@ -329,6 +469,7 @@ fn names_come_from_the_device_then_its_parts_then_its_kind() {
         container: Some("{A}".into()),
         name: Some(n.into()),
         battery: None,
+        connected: None,
     };
 
     // The container's own name wins.
@@ -431,6 +572,7 @@ fn windows_battery_also_from_the_container_or_paired_entry() {
                 container: Some("a".into()),
                 name: None,
                 battery: a_battery,
+                connected: None,
             }],
             ..Raw::default()
         }

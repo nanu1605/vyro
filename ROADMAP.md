@@ -2511,6 +2511,43 @@ field check; the relay built into releases for everyone, any other relay allowed
       It ships in the next release; the count only sets the reading rate, so 1.4.0's users are
       not affected.
 
+### 1.4.1 — Connect and Disconnect that work, low batteries in sight
+
+The owner, after 1.4.0 (2026-10-18): Connect and Disconnect did nothing on headphones, earbuds
+and a speaker, and a device that was disconnected still showed Connected. Asked for at the same
+time: a low battery on the Dashboard, with a dot on Devices. Built on `claude/vyro-1.4.1` from
+`main` (912d6f5, which has the relay client fix above). The rest of that request is planned as
+1.5 (control from the phone: actions, processes, shut down and wake), 1.6 (GPU tuning, NVIDIA
+first) and 1.7 (the PC's screen on the phone), each with its own field check.
+
+- [x] **Connected, as Settings shows it.** A paired Bluetooth device's connection came only
+      from its device container, and a container without the property counted as connected:
+      a speaker that was off showed Connected, offered only Disconnect, and pressing it changed
+      nothing to see. Now, in order: the paired entry's `System.Devices.Aep.IsConnected` (what
+      Settings shows), else its audio (connected while one of its endpoints is active), else
+      the container; nothing said is **Paired**, offering both Connect and Disconnect
+      (`devices::bt_state`, `DeviceInfo.state`). A controller XInput has a slot for is
+      connected. The hot-plug watch also follows the paired entries, so a device turned off or
+      disconnected in Windows changes within seconds.
+- [x] **Every audio profile.** Connect and Disconnect for an audio device stopped at the first
+      profile that took the request; a headset's other one (stereo or hands-free) stayed
+      connected. Now each of its profiles is asked once (`devices::audio_connection`).
+- [x] **The answer comes from Windows.** After asking, the app reads the device's connection
+      every 500 ms until it shows the change (10 s for Disconnect, 15 s for Connect) and
+      answers with what it saw (`devices::settle`); the row's message comes from that, not from
+      guesses at later reads. Each click has its own message and timers, and only the newest
+      list read is shown. Every step is logged (profiles, refusals, the radio's answer, the
+      check), without device addresses.
+- [x] **Low battery**, by P22's colours: under 20 %, or XInput's "low", is low; under
+      10 %, or "empty", critical; never while charging (`devices::low`, `DeviceInfo.low`). The
+      app now reads the device list in the background (`src-tauri/src/device_watch.rs`): 20 s
+      after launch, after each hot-plug change and every 5 minutes, and the hot-plug watch
+      starts at launch instead of with the Devices tab. A strip on the Dashboard ("Low battery:
+      MX Master 3S 17%", and N more) opens Devices, which has a dot (amber, red when critical)
+      while any battery is low. The preview shows both.
+- [ ] CI green on this branch; field check 1.4.1
+      ([`docs/field-check-1.4.1.md`](docs/field-check-1.4.1.md)); the owner's go.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

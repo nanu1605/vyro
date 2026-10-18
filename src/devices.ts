@@ -1,6 +1,15 @@
 // Devices tab (P22): labels, groups and the battery view. Pure, so it is unit-tested.
 
-import type { Battery, BatterySource, Connection, Control, DeviceInfo, DeviceKind, Devices } from './types';
+import type {
+  Battery,
+  BatterySource,
+  Connection,
+  Control,
+  DeviceInfo,
+  DeviceKind,
+  Devices,
+  LinkState,
+} from './types';
 
 export const KIND_LABEL: Record<DeviceKind, string> = {
   keyboard: 'Keyboard',
@@ -62,6 +71,8 @@ export function connectionText(d: DeviceInfo, all: DeviceInfo[] = []): string {
 }
 
 export function stateText(d: DeviceInfo): string {
+  // Paired, and Windows says nothing about its connection (1.4.1).
+  if (d.state === 'unknown') return 'Paired';
   // A device behind a receiver that stopped answering is asleep or switched off.
   if (!d.connected) return d.connection === 'receiver' ? 'Asleep or off' : 'Not connected';
   if (d.problem === 22) return 'Disabled';
@@ -94,7 +105,7 @@ export interface BatteryView {
 }
 
 export function batteryView(d: DeviceInfo): BatteryView {
-  const b = d.connected ? d.battery : null;
+  const b = d.state === 'notConnected' ? null : d.battery;
   const none: BatteryView = { text: '—', pct: null, tone: 'none', source: null, charging: false };
   if (b == null) return none;
   const source = SOURCE_LABEL[b.source];
@@ -107,11 +118,21 @@ export function batteryView(d: DeviceInfo): BatteryView {
   return none;
 }
 
-/** Connected devices whose battery is low and not charging, lowest first. */
+/** Devices whose battery needs charging soon (the engine's rule, 1.4.1), lowest first. */
 export function lowBattery(list: DeviceInfo[]): DeviceInfo[] {
   return list
-    .filter((d) => !batteryView(d).charging && (batteryView(d).tone === 'warn' || batteryView(d).tone === 'hot'))
+    .filter((d) => d.low != null && d.state !== 'notConnected')
     .sort((a, b) => (batteryView(a).pct ?? 0) - (batteryView(b).pct ?? 0));
+}
+
+/** The low-battery notice (Dashboard strip, Devices dot): the worst tone and one line. */
+export function lowNotice(list: DeviceInfo[]): { tone: 'warn' | 'fail'; text: string } | null {
+  const low = lowBattery(list);
+  if (low.length === 0) return null;
+  const tone = low.some((d) => d.low === 'critical') ? 'fail' : 'warn';
+  const named = low.slice(0, 2).map((d) => `${d.name} ${batteryView(d).text}`);
+  const more = low.length - named.length;
+  return { tone, text: named.join(', ') + (more > 0 ? ` and ${more} more` : '') };
 }
 
 export function summary(d: Devices): string {
@@ -124,31 +145,35 @@ export function summary(d: Devices): string {
   return parts.join(' · ');
 }
 
-/** The button a paired Bluetooth device gets (1.3): Connect while it is off, else Disconnect. */
-export function actionLabel(d: DeviceInfo): 'Connect' | 'Disconnect' | null {
-  if (d.control == null) return null;
-  return d.connected ? 'Disconnect' : 'Connect';
+/** The buttons a paired Bluetooth device gets (1.3): Connect while it is off, Disconnect
+ * while it is on, and both when Windows does not say (1.4.1). */
+export function actions(d: DeviceInfo): Array<'Connect' | 'Disconnect'> {
+  if (d.control == null) return [];
+  if (d.state === 'unknown') return ['Connect', 'Disconnect'];
+  return d.connected ? ['Disconnect'] : ['Connect'];
 }
 
-/** A Connect or Disconnect under way: what was asked and what the listings since showed. */
+/** A Connect or Disconnect: what was asked, and the connection Windows showed once it had
+ * time to change (null while under way). */
 export interface Pending {
   want: boolean;
   control: Control;
-  /** A listing since showed it disconnected. */
-  seenOff: boolean;
-  /** Long enough has passed for Windows to have done it. */
-  settled: boolean;
+  /** Which click this is, so an earlier click's timers leave it alone. */
+  token: number;
+  seen: LinkState | null;
   error: string | null;
 }
 
-/** What became of a Connect or Disconnect, from the latest listing; null while it may still
- * happen. A device that drops its link can connect again by itself as soon as it is used. */
+/** What became of a Connect or Disconnect; null while it is under way. A device that drops its
+ * link can connect again by itself as soon as it is used. */
 export function outcome(p: Pending, now: DeviceInfo | undefined): string | null {
   if (p.error) return p.error;
-  const on = now?.connected ?? false;
-  if (on === p.want) return p.want ? 'Connected' : 'Disconnected';
-  if (!p.want && p.seenOff) return 'It came back: the device connected again by itself';
-  if (!p.settled) return null;
+  if (p.seen == null) return null;
+  if (p.seen === (p.want ? 'connected' : 'notConnected')) {
+    if (!p.want && now?.state === 'connected') return 'It came back: the device connected again by itself';
+    return p.want ? 'Connected' : 'Disconnected';
+  }
+  if (p.seen === 'unknown') return "Asked. Windows doesn't say whether it is connected";
   if (p.want) return "Didn't connect: turn it on, or press a button on it";
   return p.control === 'link'
     ? 'Still connected: Windows may connect it again as soon as it is used'

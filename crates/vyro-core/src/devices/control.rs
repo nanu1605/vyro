@@ -32,7 +32,7 @@ use windows::Win32::System::Variant::VT_CLSID;
 use windows::Win32::System::IO::DeviceIoControl;
 use windows_future::{AsyncStatus, IAsyncOperation};
 
-use super::{bt_address, key, norm_guid};
+use super::{bt_address, key, norm_guid, LinkState};
 use crate::live::dll::Library;
 
 /// The Bluetooth audio driver's one-shot properties: reconnect (0) and disconnect (1).
@@ -44,6 +44,11 @@ const KSPROPERTY_TYPE_GET: u32 = 1;
 const IOCTL_BTH_DISCONNECT_DEVICE: u32 = 0x0041_000C;
 /// How long Connect waits for Windows to reach a device.
 const REACH: Duration = Duration::from_secs(12);
+/// How long the check after asking waits for the change to show (1.4.1), and how often it
+/// reads.
+const SETTLE_CONNECT: Duration = Duration::from_secs(15);
+const SETTLE_DISCONNECT: Duration = Duration::from_secs(10);
+const SETTLE_EVERY: Duration = Duration::from_millis(500);
 
 /// The paired device's addresses (a dual-mode device has a Classic and an LE node).
 fn addresses(id: &str) -> Result<Vec<(u64, bool)>, String> {
@@ -63,6 +68,35 @@ fn addresses(id: &str) -> Result<Vec<(u64, bool)>, String> {
 fn com() {
     // SAFETY: COM for this thread (the multithreaded apartment, as the other COM readers).
     let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+}
+
+/// After a Connect or Disconnect was taken: the device's connection once it shows what was
+/// asked, or as it is when the wait ends. The answer comes from Windows, not from the request.
+pub fn settle(id: &str, connect: bool) -> LinkState {
+    let want = if connect {
+        LinkState::Connected
+    } else {
+        LinkState::NotConnected
+    };
+    let until = Instant::now()
+        + if connect {
+            SETTLE_CONNECT
+        } else {
+            SETTLE_DISCONNECT
+        };
+    let started = Instant::now();
+    loop {
+        let now = super::win::state_of(id).unwrap_or(LinkState::Unknown);
+        if now == want || Instant::now() >= until {
+            log::info!(
+                "devices: {} {id}: {now:?} after {} ms",
+                if connect { "connect" } else { "disconnect" },
+                started.elapsed().as_millis()
+            );
+            return now;
+        }
+        std::thread::sleep(SETTLE_EVERY);
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -85,8 +119,10 @@ fn container_of(dev: &IMMDevice) -> Option<String> {
     id
 }
 
-/// The kernel-streaming filter behind an audio endpoint: its connector's other end.
-fn filter_of(en: &IMMDeviceEnumerator, endpoint: &IMMDevice) -> Option<IKsControl> {
+/// The kernel-streaming filter behind an audio endpoint (its connector's other end), and the
+/// filter's device id, which names it among the device's filters. The id holds the device's
+/// address: it is compared here and never logged.
+fn filter_of(en: &IMMDeviceEnumerator, endpoint: &IMMDevice) -> Option<(String, IKsControl)> {
     // SAFETY: COM calls on live interfaces; the device id string is freed after use.
     unsafe {
         let topology: IDeviceTopology = endpoint.Activate(CLSCTX_ALL, None).ok()?;
@@ -95,13 +131,16 @@ fn filter_of(en: &IMMDeviceEnumerator, endpoint: &IMMDevice) -> Option<IKsContro
         let part: IPart = other.cast().ok()?;
         let filter = part.GetTopologyObject().ok()?;
         let id = filter.GetDeviceId().ok()?;
+        let name = id.to_string().ok();
         let device = en.GetDevice(PCWSTR(id.0));
         CoTaskMemFree(Some(id.0.cast_const().cast()));
-        device.ok()?.Activate(CLSCTX_ALL, None).ok()
+        Some((name?, device.ok()?.Activate(CLSCTX_ALL, None).ok()?))
     }
 }
 
-/// Connects or disconnects a Bluetooth audio device through its audio connection.
+/// Connects or disconnects a Bluetooth audio device through its audio connection: every one
+/// of its audio profiles (1.4.1). A headset has a stereo and a hands-free profile, each its
+/// own filter; asking only the first left the other connected.
 pub fn audio(id: &str, connect: bool) -> Result<(), String> {
     com();
     // SAFETY: standard Core Audio entry point.
@@ -126,7 +165,10 @@ pub fn audio(id: &str, connect: bool) -> Result<(), String> {
             },
         },
     };
+    let verb = if connect { "connect" } else { "disconnect" };
     let mut ours = 0;
+    let mut asked: Vec<String> = Vec::new();
+    let mut accepted = 0;
     for i in 0..count {
         // SAFETY: COM call with an index below the count.
         let Ok(endpoint) = (unsafe { list.Item(i) }) else {
@@ -136,9 +178,15 @@ pub fn audio(id: &str, connect: bool) -> Result<(), String> {
             continue;
         }
         ours += 1;
-        let Some(ks) = filter_of(&en, &endpoint) else {
+        let Some((filter, ks)) = filter_of(&en, &endpoint) else {
+            log::info!("devices: {verb} {id}: an endpoint has no Bluetooth audio filter");
             continue;
         };
+        // A filter serves the endpoints of one profile: ask it once.
+        if asked.contains(&filter) {
+            continue;
+        }
+        asked.push(filter);
         let mut returned = 0u32;
         // SAFETY: a property request with no data, as the driver's one-shot expects.
         let done = unsafe {
@@ -150,15 +198,22 @@ pub fn audio(id: &str, connect: bool) -> Result<(), String> {
                 &mut returned,
             )
         };
-        if done.is_ok() {
-            return Ok(());
+        match done {
+            Ok(()) => accepted += 1,
+            Err(e) => log::info!("devices: {verb} {id}: profile {} refused: {e}", asked.len()),
         }
     }
-    Err(if ours == 0 {
-        "Windows has no audio connection for this device".into()
+    log::info!(
+        "devices: {verb} {id}: {ours} endpoints, {} profiles, {accepted} accepted",
+        asked.len()
+    );
+    if accepted > 0 {
+        Ok(())
+    } else if ours == 0 {
+        Err("Windows has no audio connection for this device".into())
     } else {
-        "Windows' Bluetooth audio driver did not take the request".into()
-    })
+        Err("Windows' Bluetooth audio driver did not take the request".into())
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -212,6 +267,7 @@ pub fn reach(id: &str) -> Result<(), String> {
             }
         }
     }
+    log::info!("devices: connect {id}: found {found}");
     if found {
         Ok(())
     } else {
@@ -297,10 +353,16 @@ pub fn disconnect(id: &str) -> Result<(), String> {
             }
         }
     }
-    for radio in radios {
+    for radio in &radios {
         // SAFETY: radio handles opened by the search, closed once.
-        let _ = unsafe { CloseHandle(radio) };
+        let _ = unsafe { CloseHandle(*radio) };
     }
+    log::info!(
+        "devices: disconnect {id}: {} addresses, {} radios, done {done}, last error {:?}",
+        addresses.len(),
+        radios.len(),
+        last.as_ref().map(windows::core::Error::code)
+    );
     if done {
         return Ok(());
     }

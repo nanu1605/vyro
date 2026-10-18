@@ -5,6 +5,7 @@ mod bench;
 mod changes;
 mod commands;
 mod dashboard;
+mod device_watch;
 mod diag;
 mod engine;
 mod gaming;
@@ -67,6 +68,7 @@ fn main() {
             app.manage(dashboard::DashboardStore::load(app.handle()));
             app.manage(remote::Remote::load(app.handle()));
             app.manage(widgets::WidgetStore::load(app.handle()));
+            app.manage(device_watch::DeviceWatch::default());
             tray::build(app.handle())?;
             let settings = app.state::<tray::SettingsStore>().get();
             if let Err(e) = tray::apply(app.handle(), settings) {
@@ -78,6 +80,7 @@ fn main() {
             // Desktop widgets come back with Vyro, also when it starts in the tray.
             widgets::sync(app.handle());
             updates::watch(app.handle());
+            device_watch::start(app.handle());
             // CI's smoke test of the installed app (only with VYRO_SMOKE set).
             smoke::start();
             if minimized {
@@ -105,6 +108,7 @@ fn main() {
             commands::get_displays,
             commands::get_devices,
             commands::set_device_connected,
+            device_watch::get_low_batteries,
             dashboard::get_dashboard,
             dashboard::set_dashboard,
             widgets::get_widgets,

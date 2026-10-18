@@ -26,8 +26,8 @@ pub const DEVICES_EVENT: &str = "devices-changed";
 /// Emitted with a [`BackendStatus`] when the service connection changes.
 pub const BACKEND_EVENT: &str = "backend-status";
 
-/// Starts the device hot-plug watch on first use (the Devices tab's first read); later calls
-/// do nothing.
+/// Starts the device hot-plug watch, at launch with the background device reader (1.4.1);
+/// later calls do nothing. Each change tells the window and the reader.
 pub fn watch_devices(app: &AppHandle) {
     #[cfg(windows)]
     {
@@ -38,6 +38,7 @@ pub fn watch_devices(app: &AppHandle) {
                 if let Err(e) = app.emit(DEVICES_EVENT, ()) {
                     log::debug!("emit {DEVICES_EVENT}: {e}");
                 }
+                crate::device_watch::poke(&app);
             });
         });
     }

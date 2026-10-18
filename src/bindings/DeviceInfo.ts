@@ -3,6 +3,8 @@ import type { Battery } from "./Battery";
 import type { Connection } from "./Connection";
 import type { Control } from "./Control";
 import type { DeviceKind } from "./DeviceKind";
+import type { LinkState } from "./LinkState";
+import type { LowBattery } from "./LowBattery";
 
 export type DeviceInfo = { 
 /**
@@ -14,14 +16,18 @@ id: string, name: string, kind: DeviceKind, manufacturer: string | null, connect
  */
 wireless: boolean, 
 /**
- * False for a paired Bluetooth device that is off or out of range. Unplugged wired devices
- * are not listed at all.
+ * `state` is Connected. False for a paired Bluetooth device that is off or out of range,
+ * or that Windows says nothing about. Unplugged wired devices are not listed at all.
  */
-connected: boolean, 
+connected: boolean, state: LinkState, 
 /**
- * Only while connected; `None` is shown as "—".
+ * Only while not known to be disconnected; `None` is shown as "—".
  */
 battery: Battery | null, 
+/**
+ * The battery needs charging soon, and is not charging.
+ */
+low: LowBattery | null, 
 /**
  * Device Manager problem code of a part of it (22 = disabled), while connected.
  */

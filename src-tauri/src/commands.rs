@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use tauri::State;
 use vyro_core::alerts::{AlertFired, AlertRule};
-use vyro_core::devices::{Control, Devices};
+use vyro_core::devices::{Control, Devices, LinkState};
 use vyro_core::engine::{BackendStatus, EngineApi};
 use vyro_core::health::HealthEvent;
 use vyro_core::info::{
@@ -118,18 +118,19 @@ pub(crate) fn collect_displays() -> Vec<DisplayInfo> {
 }
 
 /// Peripherals, wireless battery and sound devices (P22), read fresh on every call: when the
-/// Devices tab opens, after each `devices-changed` event and once a minute while it shows. The
-/// first call starts the hot-plug watch, so nothing watches until the tab is used.
+/// Devices tab opens, after each `devices-changed` event and once a minute while it shows. Its
+/// low batteries also feed the Dashboard's notice (1.4.1).
 #[tauri::command]
 pub async fn get_devices(app: tauri::AppHandle) -> Result<Devices, String> {
-    crate::engine::watch_devices(&app);
-    tauri::async_runtime::spawn_blocking(collect_devices)
+    let devices = tauri::async_runtime::spawn_blocking(collect_devices)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    crate::device_watch::store(&app, &devices);
+    Ok(devices)
 }
 
 #[cfg(windows)]
-fn collect_devices() -> Devices {
+pub(crate) fn collect_devices() -> Devices {
     if std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1") {
         return vyro_core::devices::sample();
     }
@@ -137,33 +138,44 @@ fn collect_devices() -> Devices {
 }
 
 #[cfg(not(windows))]
-fn collect_devices() -> Devices {
+pub(crate) fn collect_devices() -> Devices {
     vyro_core::devices::sample()
 }
 
 /// Connects or disconnects a paired Bluetooth device (1.3), by the id and control the device
 /// list gave it. An audio device goes through its audio connection here, as Windows Settings
 /// does; Connect for any other device asks Windows to reach it; Disconnect for any other device
-/// goes to the engine (the service), which drops its link at the radio. Whether it worked shows
-/// in the next listing.
+/// goes to the engine (the service), which drops its link at the radio. Once asked, it waits
+/// for Windows to show the change (1.4.1) and answers with the connection it saw.
 #[tauri::command]
 pub async fn set_device_connected(
     engine: State<'_, Engine>,
     id: String,
     control: Control,
     connect: bool,
-) -> Result<(), String> {
+) -> Result<LinkState, String> {
     if control == Control::Link && !connect {
-        return with_engine(&engine, move |e| e.bluetooth_disconnect(&id)).await;
+        let asked = id.clone();
+        with_engine(&engine, move |e| e.bluetooth_disconnect(&asked)).await?;
+    } else {
+        let asked = id.clone();
+        tauri::async_runtime::spawn_blocking(move || device_control(&asked, control, connect))
+            .await
+            .map_err(|e| e.to_string())??;
     }
-    tauri::async_runtime::spawn_blocking(move || device_control(&id, control, connect))
+    tauri::async_runtime::spawn_blocking(move || device_settle(&id, connect))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(windows)]
+fn simulated() -> bool {
+    std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1")
 }
 
 #[cfg(windows)]
 fn device_control(id: &str, control: Control, connect: bool) -> Result<(), String> {
-    if std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1") {
+    if simulated() {
         return Ok(());
     }
     match control {
@@ -175,6 +187,21 @@ fn device_control(id: &str, control: Control, connect: bool) -> Result<(), Strin
 #[cfg(not(windows))]
 fn device_control(_id: &str, _control: Control, _connect: bool) -> Result<(), String> {
     Ok(())
+}
+
+/// The connection Windows shows once the change has had time to happen; the sample changes
+/// as asked.
+fn device_settle(id: &str, connect: bool) -> LinkState {
+    #[cfg(windows)]
+    if !simulated() {
+        return vyro_core::devices::settle(id, connect);
+    }
+    let _ = id;
+    if connect {
+        LinkState::Connected
+    } else {
+        LinkState::NotConnected
+    }
 }
 
 /// Drives with full health data, read fresh by the engine (SMART needs the service or

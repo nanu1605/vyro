@@ -39,8 +39,8 @@ use windows::Win32::Devices::Properties::{
     DEVPKEY_Device_DeviceDesc, DEVPKEY_Device_EnumeratorName, DEVPKEY_Device_FriendlyName,
     DEVPKEY_Device_HardwareIds, DEVPKEY_Device_InstanceId, DEVPKEY_Device_IsPresent,
     DEVPKEY_Device_ProblemCode, DEVPKEY_NAME, DEVPROPCOMPKEY, DEVPROPERTY, DEVPROPTYPE,
-    DEVPROP_STORE_SYSTEM, DEVPROP_TRUE, DEVPROP_TYPE_BOOLEAN, DEVPROP_TYPE_BYTE, DEVPROP_TYPE_GUID,
-    DEVPROP_TYPE_STRING, DEVPROP_TYPE_STRING_INDIRECT, DEVPROP_TYPE_STRING_LIST,
+    DEVPROP_BOOLEAN, DEVPROP_STORE_SYSTEM, DEVPROP_TRUE, DEVPROP_TYPE_BOOLEAN, DEVPROP_TYPE_BYTE,
+    DEVPROP_TYPE_GUID, DEVPROP_TYPE_STRING, DEVPROP_TYPE_STRING_INDIRECT, DEVPROP_TYPE_STRING_LIST,
     DEVPROP_TYPE_UINT16, DEVPROP_TYPE_UINT32,
 };
 use windows::Win32::Foundation::{CloseHandle, DEVPROPKEY, GENERIC_READ, HANDLE, PROPERTYKEY};
@@ -65,8 +65,8 @@ use windows::Win32::UI::Input::XboxController::{
 use windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore;
 
 use super::{
-    build, gatt_wanted, norm_guid, plain_text, Devices, Raw, RawAep, RawContainer, RawEndpoint,
-    RawNode, RawPad,
+    bt_state, build, gatt_wanted, key, norm_guid, plain_text, Devices, LinkState, Raw, RawAep,
+    RawContainer, RawEndpoint, RawNode, RawPad,
 };
 use crate::live::dll::Library;
 
@@ -85,12 +85,18 @@ const AEP_PAIRED: DEVPROPKEY = DEVPROPKEY {
     fmtid: GUID::from_u128(0xa359_96ab_11cf_4935_8b61_a676_1081_ecdf),
     pid: 16,
 };
+/// System.Devices.Aep.IsConnected: what Settings shows as Connected (1.4.1).
+const AEP_CONNECTED: DEVPROPKEY = DEVPROPKEY {
+    fmtid: GUID::from_u128(0xa359_96ab_11cf_4935_8b61_a676_1081_ecdf),
+    pid: 7,
+};
 const AEP_PROTOCOL: DEVPROPKEY = DEVPROPKEY {
     fmtid: GUID::from_u128(0x3b2c_e006_5e61_4fde_bab8_9b8a_ac9b_26df),
     pid: 5,
 };
-/// Bluetooth and Bluetooth LE association protocols.
-const AEP_BLUETOOTH: [GUID; 2] = [
+/// Bluetooth and Bluetooth LE association protocols. Static: the watch's filters point at
+/// them.
+static AEP_BLUETOOTH: [GUID; 2] = [
     GUID::from_u128(0xe0cb_f06c_cd8b_4647_bb8a_263b_43f0_f974),
     GUID::from_u128(0xbb7b_b05e_5972_42b5_94fc_76ea_a708_4d49),
 ];
@@ -112,13 +118,35 @@ pub fn collect() -> Devices {
         containers,
         nodes,
         aeps: aeps(),
+        // Before the Battery Service reads: an audio device's endpoints tell whether it is
+        // connected.
+        endpoints: endpoints(&instances),
         ..Raw::default()
     };
     raw.gatt = gatt_batteries(&gatt_wanted(&raw), &instances);
     raw.hid = super::hid_win::batteries(&instances);
     raw.pads = pads();
-    raw.endpoints = endpoints(&instances);
     build(&raw)
+}
+
+/// One paired Bluetooth device's connection, read without battery reads: what Connect and
+/// Disconnect check after asking (1.4.1). `None`: no such device.
+pub fn state_of(id: &str) -> Option<LinkState> {
+    let containers = containers();
+    let c = containers.iter().find(|c| key(&norm_guid(&c.id)) == id)?;
+    let target = norm_guid(&c.id);
+    let ours =
+        |container: Option<&str>| container.map(norm_guid).as_deref() == Some(target.as_str());
+    let aep = aeps()
+        .into_iter()
+        .find(|a| ours(a.container.as_deref()))
+        .and_then(|a| a.connected);
+    let endpoints = endpoints(&HashMap::new());
+    let audio: Vec<&RawEndpoint> = endpoints
+        .iter()
+        .filter(|e| ours(e.container.as_deref()))
+        .collect();
+    Some(bt_state(aep, &audio, c.connected))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -306,34 +334,15 @@ fn aeps() -> Vec<RawAep> {
         DEVPKEY_NAME,
         AEP_CONTAINER,
         AEP_PAIRED,
+        AEP_CONNECTED,
         AEP_PROTOCOL,
         DEVPKEY_BLUETOOTH_BATTERY,
     ];
-    let paired = DEVPROP_TRUE;
     let mut out = Vec::new();
     // One query per protocol, filtered as Windows' own Bluetooth selectors are: an unfiltered
     // endpoint query would also search the network.
-    for protocol in AEP_BLUETOOTH {
-        let filter = [
-            DEVPROP_FILTER_EXPRESSION {
-                Operator: DEVPROP_OPERATOR_EQUALS,
-                Property: DEVPROPERTY {
-                    CompKey: comp(AEP_PROTOCOL),
-                    Type: DEVPROP_TYPE_GUID,
-                    BufferSize: u32::try_from(std::mem::size_of::<GUID>()).unwrap_or(16),
-                    Buffer: std::ptr::from_ref(&protocol).cast_mut().cast::<c_void>(),
-                },
-            },
-            DEVPROP_FILTER_EXPRESSION {
-                Operator: DEVPROP_OPERATOR_EQUALS,
-                Property: DEVPROPERTY {
-                    CompKey: comp(AEP_PAIRED),
-                    Type: DEVPROP_TYPE_BOOLEAN,
-                    BufferSize: 1,
-                    Buffer: std::ptr::from_ref(&paired).cast_mut().cast::<c_void>(),
-                },
-            },
-        ];
+    for protocol in &AEP_BLUETOOTH {
+        let filter = paired_filter(protocol);
         query(DevObjectTypeAEP, &keys, Some(&filter), |_, p| {
             if p.bool(&AEP_PAIRED) == Some(false) {
                 return;
@@ -342,10 +351,37 @@ fn aeps() -> Vec<RawAep> {
                 container: p.guid(&AEP_CONTAINER),
                 name: p.string(&DEVPKEY_NAME),
                 battery: p.small(&DEVPKEY_BLUETOOTH_BATTERY),
+                connected: p.bool(&AEP_CONNECTED),
             });
         });
     }
     out
+}
+
+/// Paired entries of one Bluetooth protocol. The filter points at `protocol` and at a static
+/// true.
+fn paired_filter(protocol: &'static GUID) -> [DEVPROP_FILTER_EXPRESSION; 2] {
+    static PAIRED: DEVPROP_BOOLEAN = DEVPROP_TRUE;
+    [
+        DEVPROP_FILTER_EXPRESSION {
+            Operator: DEVPROP_OPERATOR_EQUALS,
+            Property: DEVPROPERTY {
+                CompKey: comp(AEP_PROTOCOL),
+                Type: DEVPROP_TYPE_GUID,
+                BufferSize: u32::try_from(std::mem::size_of::<GUID>()).unwrap_or(16),
+                Buffer: std::ptr::from_ref(protocol).cast_mut().cast::<c_void>(),
+            },
+        },
+        DEVPROP_FILTER_EXPRESSION {
+            Operator: DEVPROP_OPERATOR_EQUALS,
+            Property: DEVPROPERTY {
+                CompKey: comp(AEP_PAIRED),
+                Type: DEVPROP_TYPE_BOOLEAN,
+                BufferSize: 1,
+                Buffer: std::ptr::from_ref(&PAIRED).cast_mut().cast::<c_void>(),
+            },
+        },
+    ]
 }
 
 /// Present device nodes, and each one's container by instance id (uppercase), which stays here.
@@ -822,8 +858,9 @@ fn endpoints(instances: &HashMap<String, String>) -> Vec<RawEndpoint> {
 // ---------------------------------------------------------------------------------------------
 
 static POKE: OnceLock<mpsc::SyncSender<()>> = OnceLock::new();
-/// The container query has finished its first listing; later results are changes.
-static LISTED: AtomicBool = AtomicBool::new(false);
+/// Each watch query has finished its first listing; its later results are changes.
+static CONTAINERS_LISTED: AtomicBool = AtomicBool::new(false);
+static AEPS_LISTED: [AtomicBool; 2] = [const { AtomicBool::new(false) }; 2];
 
 fn poke() {
     if let Some(tx) = POKE.get() {
@@ -843,29 +880,60 @@ unsafe extern "system" fn on_interface(
     0
 }
 
-unsafe extern "system" fn on_container(
+unsafe extern "system" fn on_result(
     _: HDEVQUERY,
-    _: *const c_void,
+    context: *const c_void,
     data: *const DEV_QUERY_RESULT_ACTION_DATA,
 ) {
-    // SAFETY: Windows passes a valid action for the duration of the call.
-    let Some(d) = (unsafe { data.as_ref() }) else {
+    // SAFETY: Windows passes a valid action for the duration of the call; the context is one
+    // of the static flags above.
+    let (Some(d), Some(listed)) = (unsafe { data.as_ref() }, unsafe {
+        context.cast::<AtomicBool>().as_ref()
+    }) else {
         return;
     };
     if d.Action == DevQueryResultStateChange {
         // SAFETY: `State` is the member for a state change.
         if unsafe { d.Data.State } == DevQueryStateEnumCompleted {
-            LISTED.store(true, Ordering::SeqCst);
+            listed.store(true, Ordering::SeqCst);
         }
-    } else if LISTED.load(Ordering::SeqCst) {
+    } else if listed.load(Ordering::SeqCst) {
         poke();
+    }
+}
+
+/// A query that stays open and reports changes to `keys`.
+fn watch_query(
+    kind: DEV_OBJECT_TYPE,
+    keys: &[DEVPROPKEY],
+    filter: Option<&[DEVPROP_FILTER_EXPRESSION]>,
+    listed: &'static AtomicBool,
+    what: &str,
+) {
+    let keys: Vec<DEVPROPCOMPKEY> = keys.iter().copied().map(comp).collect();
+    // SAFETY: the callback is a plain function and its context a static; the filter points at
+    // statics; the query lives for the process (`HDEVQUERY` is not closed on drop).
+    match unsafe {
+        DevCreateObjectQuery(
+            kind,
+            windows::Win32::Devices::DeviceQuery::DevQueryFlagUpdateResults
+                .0
+                .unsigned_abs(),
+            Some(&keys),
+            filter,
+            Some(on_result),
+            Some(std::ptr::from_ref(listed).cast::<c_void>()),
+        )
+    } {
+        Ok(_) => {}
+        Err(e) => log::info!("devices: {what} watch unavailable: {e}"),
     }
 }
 
 /// Calls `on_change` (from its own thread) once things settle after a device arrives, leaves,
 /// connects or disconnects. Interface arrivals and removals cover plugging in and out (and a
-/// Bluetooth device's functions starting); the container query covers Bluetooth connection.
-/// Starts once; later calls do nothing.
+/// Bluetooth device's functions starting); the container and paired-entry queries cover
+/// Bluetooth connection. Starts once; later calls do nothing.
 pub fn watch(on_change: impl Fn() + Send + 'static) {
     let (tx, rx) = mpsc::sync_channel::<()>(1);
     if POKE.set(tx).is_err() {
@@ -902,22 +970,23 @@ pub fn watch(on_change: impl Fn() + Send + 'static) {
         log::info!("devices: interface notifications unavailable ({})", cr.0);
     }
 
-    let keys = [comp(DEVPKEY_DeviceContainer_IsConnected)];
-    // SAFETY: the callback is a plain function; the query lives for the process.
-    match unsafe {
-        DevCreateObjectQuery(
-            DevObjectTypeDeviceContainer,
-            windows::Win32::Devices::DeviceQuery::DevQueryFlagUpdateResults
-                .0
-                .unsigned_abs(),
-            Some(&keys),
-            None,
-            Some(on_container),
-            None,
-        )
-    } {
-        Ok(_) => {}
-        Err(e) => log::info!("devices: connection watch unavailable: {e}"),
+    watch_query(
+        DevObjectTypeDeviceContainer,
+        &[DEVPKEY_DeviceContainer_IsConnected],
+        None,
+        &CONTAINERS_LISTED,
+        "connection",
+    );
+    // What Settings shows as Connected (1.4.1).
+    for (protocol, listed) in AEP_BLUETOOTH.iter().zip(&AEPS_LISTED) {
+        let filter = paired_filter(protocol);
+        watch_query(
+            DevObjectTypeAEP,
+            &[AEP_CONNECTED],
+            Some(&filter),
+            listed,
+            "Bluetooth connection",
+        );
     }
 }
 

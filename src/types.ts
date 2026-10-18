@@ -84,6 +84,8 @@ export type { Connection } from './bindings/Connection';
 export type { Control } from './bindings/Control';
 export type { DeviceInfo } from './bindings/DeviceInfo';
 export type { DeviceKind } from './bindings/DeviceKind';
+export type { LinkState } from './bindings/LinkState';
+export type { LowBattery } from './bindings/LowBattery';
 export type { Devices } from './bindings/Devices';
 export type { Dashboard } from './bindings/Dashboard';
 export type { RemoteStatus } from './bindings/RemoteStatus';

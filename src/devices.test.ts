@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-  actionLabel,
+  actions,
   batteryView,
   connectionText,
   grouped,
   lowBattery,
+  lowNotice,
   outcome,
   ownerName,
   stateText,
@@ -22,7 +23,9 @@ const dev = (over: Partial<DeviceInfo> = {}): DeviceInfo => ({
   connection: 'usb',
   wireless: false,
   connected: true,
+  state: 'connected',
   battery: null,
+  low: null,
   problem: null,
   parent: null,
   control: null,
@@ -50,34 +53,40 @@ describe('devices', () => {
     expect(connectionText(dev({ connection: 'other', wireless: true }))).toBe('Wireless');
     expect(connectionText(dev({ connection: 'other' }))).toBe('Wired');
     expect(stateText(dev())).toBe('Connected');
-    expect(stateText(dev({ connected: false }))).toBe('Not connected');
+    expect(stateText(dev({ connected: false, state: 'notConnected' }))).toBe('Not connected');
+    // Windows says nothing (1.4.1): paired, not "Connected".
+    expect(stateText(dev({ connected: false, state: 'unknown' }))).toBe('Paired');
     expect(stateText(dev({ problem: 22 }))).toBe('Disabled');
     expect(stateText(dev({ problem: 43 }))).toBe('Problem (code 43)');
   });
 
   it('offers Connect or Disconnect to paired Bluetooth devices and says what became of it', () => {
-    expect(actionLabel(dev())).toBeNull();
+    expect(actions(dev())).toEqual([]);
     const buds = dev({ connection: 'bluetooth', wireless: true, control: 'audio' });
-    expect(actionLabel(buds)).toBe('Disconnect');
-    expect(actionLabel({ ...buds, connected: false })).toBe('Connect');
+    const off = { ...buds, connected: false, state: 'notConnected' as const };
+    expect(actions(buds)).toEqual(['Disconnect']);
+    expect(actions(off)).toEqual(['Connect']);
+    // Windows says nothing: both, so neither is out of reach (1.4.1).
+    expect(actions({ ...buds, connected: false, state: 'unknown' })).toEqual(['Connect', 'Disconnect']);
 
     const asked = (want: boolean, control: Pending['control'] = 'audio'): Pending => ({
       want,
       control,
-      seenOff: false,
-      settled: false,
+      token: 1,
+      seen: null,
       error: null,
     });
-    // Done as soon as a listing shows it; nothing to say yet before that.
-    expect(outcome(asked(false), { ...buds, connected: false })).toBe('Disconnected');
-    expect(outcome(asked(true), buds)).toBe('Connected');
+    // Under way until the engine answers with what Windows showed.
     expect(outcome(asked(false), buds)).toBeNull();
-    // Back by itself after a listing showed it off.
-    expect(outcome({ ...asked(false, 'link'), seenOff: true }, buds)).toMatch(/came back/);
-    // Given time and nothing changed.
-    expect(outcome({ ...asked(true), settled: true }, { ...buds, connected: false })).toMatch(/turn it on/);
-    expect(outcome({ ...asked(false, 'link'), settled: true }, buds)).toMatch(/as soon as it is used/);
-    expect(outcome({ ...asked(false), settled: true }, buds)).toBe("Didn't disconnect");
+    expect(outcome({ ...asked(false), seen: 'notConnected' }, off)).toBe('Disconnected');
+    expect(outcome({ ...asked(true), seen: 'connected' }, buds)).toBe('Connected');
+    // Off when checked, back since.
+    expect(outcome({ ...asked(false, 'link'), seen: 'notConnected' }, buds)).toMatch(/came back/);
+    // Nothing changed in the time Windows was given.
+    expect(outcome({ ...asked(true), seen: 'notConnected' }, off)).toMatch(/turn it on/);
+    expect(outcome({ ...asked(false, 'link'), seen: 'connected' }, buds)).toMatch(/as soon as it is used/);
+    expect(outcome({ ...asked(false), seen: 'connected' }, buds)).toBe("Didn't disconnect");
+    expect(outcome({ ...asked(false), seen: 'unknown' }, buds)).toMatch(/doesn't say/);
     // An error says so at once.
     expect(outcome({ ...asked(false), error: 'Not a paired Bluetooth device' }, buds)).toBe(
       'Not a paired Bluetooth device',
@@ -109,24 +118,38 @@ describe('devices', () => {
     });
     expect(batteryView(dev())).toEqual({ text: '—', pct: null, tone: 'none', source: null, charging: false });
     expect(
-      batteryView(dev({ connected: false, battery: { percent: 50, level: null, charging: null, source: 'windows' } }))
-        .text,
+      batteryView(
+        dev({
+          connected: false,
+          state: 'notConnected',
+          battery: { percent: 50, level: null, charging: null, source: 'windows' },
+        }),
+      ).text,
     ).toBe('—');
     const charging = batteryView(dev({ battery: { percent: 46, level: null, charging: true, source: 'logitech' } }));
     expect(charging).toMatchObject({ text: '46%', charging: true });
     expect(charging.source).toMatch(/Logitech/);
   });
 
-  it('lists low batteries lowest first and sums the tab up', () => {
+  it('lists low batteries lowest first, words the notice and sums the tab up', () => {
     const list = [
-      dev({ id: 'a', battery: { percent: 15, level: null, charging: null, source: 'windows' } }),
-      dev({ id: 'b', battery: { percent: 5, level: null, charging: null, source: 'bluetoothLe' } }),
+      dev({ id: 'a', name: 'Mouse', low: 'low', battery: { percent: 15, level: null, charging: null, source: 'windows' } }),
+      dev({
+        id: 'b',
+        name: 'Pad',
+        low: 'critical',
+        battery: { percent: 5, level: null, charging: null, source: 'bluetoothLe' },
+      }),
       dev({ id: 'c', battery: { percent: 80, level: null, charging: null, source: 'windows' } }),
-      dev({ id: 'd', connected: false }),
-      // Low but on its charger: not a warning.
+      dev({ id: 'd', connected: false, state: 'notConnected' }),
+      // Low but on its charger: the engine does not mark it.
       dev({ id: 'e', battery: { percent: 8, level: null, charging: true, source: 'logitech' } }),
     ];
     expect(lowBattery(list).map((d) => d.id)).toEqual(['b', 'a']);
+    expect(lowNotice(list)).toEqual({ tone: 'fail', text: 'Pad 5%, Mouse 15%' });
+    expect(lowNotice([list[0]!])).toEqual({ tone: 'warn', text: 'Mouse 15%' });
+    expect(lowNotice([...list, { ...list[0]!, id: 'f', name: 'Keys' }])?.text).toBe('Pad 5%, Mouse 15% and 1 more');
+    expect(lowNotice(list.slice(2))).toBeNull();
     expect(summary({ devices: list, audio: [] })).toBe('5 devices · 4 connected · 4 with battery');
     expect(summary({ devices: [dev()], audio: [] })).toBe('1 device');
   });

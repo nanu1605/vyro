@@ -7,9 +7,11 @@ app or library).
 - **Build spec:** [`PROJECT_PLAN.md`](PROJECT_PLAN.md) — what to build and why.
 - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — milestones, phase tracker, decision log.
 
-**Status:** 1.4. Live CPU, GPU, board, fan, voltage, RAM, storage and network sensors on
+**Status:** 1.4.1. Live CPU, GPU, board, fan, voltage, RAM, storage and network sensors on
 Windows (low-level ones through PawnIO, read by the Vyro Sensor Service), history, System
-Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 1.4: a
+Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 1.4.1:
+Bluetooth Connect and Disconnect that work for headphones and speakers, a device's connection
+as Windows Settings shows it, and a low battery on the Dashboard. New in 1.4: a
 [phone app](#phone-app-from-anywhere-14) for Android and iPhone shows the PC's readings from any
 network, through the Vyro relay, encrypted end to end. Also new in 1.4: every device named as
 Windows Settings names it, the batteries of Logitech, PlayStation and Xbox wireless devices,
@@ -221,11 +223,16 @@ or actions, 0.3 moves `alerts.json` aside (to `alerts.json.bad`) and uses its de
   Bluetooth and Bluetooth LE, Xbox controllers, PlayStation controllers on a cable, and
   Logitech devices, each device on a Logitech receiver in its own row (1.4). Other makers'
   2.4 GHz receivers keep it to their own software; `vyro-inventory` names the dongle so its
-  protocol can be added. Paired Bluetooth devices have **Connect** and **Disconnect** (1.4):
-  audio devices as Windows Settings does; other devices through the Vyro service, and they may
-  connect again by themselves as soon as they are used. It also lists the sound outputs and
-  inputs, with the defaults. The list updates within a second when a device arrives or leaves.
-  Device names stay on this PC: they are not put in reports, cards or the history.
+  protocol can be added. A paired Bluetooth device is Connected or Not connected as Windows
+  Settings shows it (1.4.1); **Paired** means Windows doesn't say. It has **Connect** and
+  **Disconnect** (1.4): audio devices as Windows Settings does, every audio profile of them
+  (1.4.1); other devices through the Vyro service, and they may connect again by themselves as
+  soon as they are used. After either, the row says what Windows then showed. A battery under
+  20 % (red under 10 %) that is not charging shows as a strip on the Dashboard and a dot on
+  Devices (1.4.1); Vyro reads the devices in the background for it every 5 minutes and when
+  one comes or goes. It also lists the sound outputs and inputs, with the defaults. The list
+  updates within a second when a device arrives, leaves, connects or disconnects. Device names
+  stay on this PC: they are not put in reports, cards or the history.
 - **Share card.** In Hardware: a picture of your PC's specs and Performance Score, in 16:9,
   square or story size. It is saved to `Pictures\Vyro` or copied to the clipboard, and never
   shows the computer's name or serial numbers.
@@ -347,6 +354,7 @@ Nothing on it changes the PC.
 | [`docs/field-check-1.3.md`](docs/field-check-1.3.md) | The field check of 1.3: device names, wireless batteries, Bluetooth Connect and Disconnect, the colour wheel |
 | [`docs/remote.md`](docs/remote.md) | The phone app and the relay (1.4): how it connects and pairs, the encryption, what the relay sees, limits, running your own relay |
 | [`docs/field-check-1.4.md`](docs/field-check-1.4.md) | The field check of 1.4: the phone app from anywhere, on Android and iPhone |
+| [`docs/field-check-1.4.1.md`](docs/field-check-1.4.1.md) | The field check of 1.4.1: Bluetooth Connect and Disconnect, connected or not, low batteries |
 
 `vyro-remote.exe` in the same artifact checks the service from the outside (state, connection,
 sensors; `--capture Game.exe` measures a running game for 15 s). The service logs to `%ProgramData%\Vyro\service.log`.

@@ -62,10 +62,12 @@ export const sampleDevices: Devices = {
       "control": null,
       "id": "9c0abe51c6e6",
       "kind": "keyboard",
+      "low": null,
       "manufacturer": "Razer",
       "name": "BlackWidow V3",
       "parent": null,
       "problem": null,
+      "state": "connected",
       "wireless": false
     },
     {
@@ -80,10 +82,12 @@ export const sampleDevices: Devices = {
       "control": null,
       "id": "58f37e68fb59",
       "kind": "keyboard",
+      "low": null,
       "manufacturer": "Logitech",
       "name": "G915 TKL",
       "parent": "f28d5b0d6f8b",
       "problem": null,
+      "state": "connected",
       "wireless": true
     },
     {
@@ -98,10 +102,12 @@ export const sampleDevices: Devices = {
       "control": null,
       "id": "f2e4491be8a4",
       "kind": "mouse",
+      "low": null,
       "manufacturer": "Logitech",
       "name": "G Pro X Superlight 2",
       "parent": "f28d5b0d6f8b",
       "problem": null,
+      "state": "connected",
       "wireless": true
     },
     {
@@ -111,10 +117,12 @@ export const sampleDevices: Devices = {
       "control": null,
       "id": "d0f631ca1ddb",
       "kind": "mouse",
+      "low": null,
       "manufacturer": "Logitech",
       "name": "G502 HERO Gaming Mouse",
       "parent": null,
       "problem": null,
+      "state": "connected",
       "wireless": false
     },
     {
@@ -129,10 +137,12 @@ export const sampleDevices: Devices = {
       "control": "link",
       "id": "7ed6a8377b92",
       "kind": "mouse",
+      "low": "low",
       "manufacturer": "Logitech",
       "name": "MX Master 3S",
       "parent": null,
       "problem": null,
+      "state": "connected",
       "wireless": true
     },
     {
@@ -147,10 +157,12 @@ export const sampleDevices: Devices = {
       "control": null,
       "id": "1f311134efe1",
       "kind": "controller",
+      "low": null,
       "manufacturer": "Sony",
       "name": "DualSense Wireless Controller",
       "parent": null,
       "problem": null,
+      "state": "connected",
       "wireless": true
     },
     {
@@ -165,10 +177,12 @@ export const sampleDevices: Devices = {
       "control": "link",
       "id": "d0bf3e6ee1d6",
       "kind": "controller",
+      "low": null,
       "manufacturer": "Microsoft",
       "name": "Xbox Wireless Controller",
       "parent": null,
       "problem": null,
+      "state": "connected",
       "wireless": true
     },
     {
@@ -178,10 +192,12 @@ export const sampleDevices: Devices = {
       "control": null,
       "id": "f28d5b0d6f8b",
       "kind": "receiver",
+      "low": null,
       "manufacturer": "Logitech",
       "name": "USB Receiver",
       "parent": null,
       "problem": null,
+      "state": "connected",
       "wireless": true
     },
     {
@@ -191,10 +207,12 @@ export const sampleDevices: Devices = {
       "control": null,
       "id": "7c1c97df17c0",
       "kind": "headset",
+      "low": null,
       "manufacturer": "SteelSeries",
       "name": "Arctis Nova 7",
       "parent": null,
       "problem": null,
+      "state": "connected",
       "wireless": false
     },
     {
@@ -209,10 +227,12 @@ export const sampleDevices: Devices = {
       "control": "audio",
       "id": "0012a3fa000c",
       "kind": "headphones",
+      "low": null,
       "manufacturer": "Samsung",
       "name": "Galaxy Buds2 Pro",
       "parent": null,
       "problem": null,
+      "state": "connected",
       "wireless": true
     },
     {
@@ -222,10 +242,12 @@ export const sampleDevices: Devices = {
       "control": null,
       "id": "f4baf901d1b9",
       "kind": "microphone",
+      "low": null,
       "manufacturer": null,
       "name": "USB Audio Condenser Mic",
       "parent": null,
       "problem": null,
+      "state": "connected",
       "wireless": false
     },
     {
@@ -235,10 +257,12 @@ export const sampleDevices: Devices = {
       "control": null,
       "id": "95144b44f2a5",
       "kind": "other",
+      "low": null,
       "manufacturer": null,
       "name": "AURA LED Controller",
       "parent": null,
       "problem": null,
+      "state": "connected",
       "wireless": false
     },
     {
@@ -248,10 +272,12 @@ export const sampleDevices: Devices = {
       "control": "link",
       "id": "6db53c9d5a2c",
       "kind": "keyboard",
+      "low": null,
       "manufacturer": "Logitech",
       "name": "MX Keys",
       "parent": null,
       "problem": null,
+      "state": "notConnected",
       "wireless": true
     }
   ]

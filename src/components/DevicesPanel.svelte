@@ -3,7 +3,7 @@
   import Card from './Card.svelte';
   import LoadState from './LoadState.svelte';
   import {
-    actionLabel,
+    actions,
     batteryView,
     connectionText,
     grouped,
@@ -32,16 +32,25 @@
   let loading = $state(false);
   let readAt = $state<Date | null>(null);
 
+  /** Reads overlap (the minute, hot-plug, after an action): only the newest one counts. */
+  let reads = 0;
+
   function load(): void {
+    const n = ++reads;
     loading = true;
     getDevices()
       .then((v) => {
+        if (n !== reads) return;
         data = v;
         error = null;
         readAt = new Date();
       })
-      .catch((e: unknown) => (error = String(e)))
-      .finally(() => (loading = false));
+      .catch((e: unknown) => {
+        if (n === reads) error = String(e);
+      })
+      .finally(() => {
+        if (n === reads) loading = false;
+      });
   }
 
   $effect(() => {
@@ -68,44 +77,36 @@
   });
 
   // Connect and Disconnect (1.3): what was asked of each device, until its outcome has shown a
-  // while. Windows reports the change through the hot-plug event; two later reads catch a device
-  // that is slow to answer, or connects again by itself.
+  // while. The engine waits for Windows to show the change and answers with what it saw
+  // (1.4.1); a read a few seconds later catches a device that connects again by itself.
   let pending = $state<Record<string, Pending>>({});
-  /** When the request has had time to work, and when its outcome stops showing. */
-  const SETTLE_MS = 8000;
+  /** How long an outcome shows, and when the read after it is. */
   const SHOW_MS = 20_000;
+  const RECHECK_MS = 5000;
+  let clicks = 0;
 
-  $effect(() => {
-    if (!data) return;
-    for (const [id, p] of Object.entries(pending)) {
-      if (!p.want && data.devices.find((d) => d.id === id)?.connected === false && !p.seenOff) {
-        pending[id] = { ...p, seenOff: true };
-      }
-    }
-  });
-
-  async function act(d: DeviceInfo): Promise<void> {
+  async function act(d: DeviceInfo, want: boolean): Promise<void> {
     const control = d.control;
     const was = pending[d.id];
-    if (control == null || (was && !was.settled)) return;
+    if (control == null || (was && was.seen == null && was.error == null)) return;
     const id = d.id;
+    const token = ++clicks;
+    // Only this click's own answers and timers touch its entry.
     const update = (patch: Partial<Pending>) => {
       const cur = pending[id];
-      if (cur) pending[id] = { ...cur, ...patch };
+      if (cur?.token === token) pending[id] = { ...cur, ...patch };
     };
-    const want = !d.connected;
-    pending[id] = { want, control, seenOff: false, settled: false, error: null };
+    pending[id] = { want, control, token, seen: null, error: null };
     try {
-      await setDeviceConnected(id, control, want);
-      setTimeout(load, 2500);
+      update({ seen: await setDeviceConnected(id, control, want) });
+      load();
+      setTimeout(load, RECHECK_MS);
     } catch (e) {
-      update({ error: String(e), settled: true });
+      update({ error: String(e) });
     }
     setTimeout(() => {
-      update({ settled: true });
-      load();
-    }, SETTLE_MS);
-    setTimeout(() => delete pending[id], SHOW_MS);
+      if (pending[id]?.token === token) delete pending[id];
+    }, SHOW_MS);
   }
 
   const groups = $derived(data ? grouped(data.devices) : []);
@@ -147,18 +148,25 @@
           {#each g.devices as d (d.id)}
             {@const b = batteryView(d)}
             {@const state = stateText(d)}
-            {@const label = actionLabel(d)}
+            {@const labels = actions(d)}
             {@const p = pending[d.id]}
             {@const result = p ? outcome(p, d) : null}
-            <li class:off={!d.connected}>
+            <li class:off={d.state === 'notConnected'}>
               <div class="what">
                 <b>{d.name}</b>
                 <span>{[KIND_LABEL[d.kind], connectionText(d, data.devices), d.manufacturer].filter(Boolean).join(' · ')}</span>
-                {#if label}
+                {#if labels.length > 0}
                   <span class="outcome" role="status">{p ? (result ?? (p.want ? 'Connecting…' : 'Disconnecting…')) : ''}</span>
                 {/if}
               </div>
-              <span class="state" class:ok={state === 'Connected'} class:bad={d.connected && state !== 'Connected'}>{state}</span>
+              <span
+                class="state"
+                class:ok={state === 'Connected'}
+                class:bad={d.connected && state !== 'Connected'}
+                title={d.state === 'unknown' ? "Paired: Windows doesn't say whether it is connected" : undefined}
+              >
+                {state}
+              </span>
               <span
                 class="battery {b.tone}"
                 title={b.source ? `Battery ${b.text}${b.charging ? ', charging' : ''}, ${b.source}` : 'No battery reading'}
@@ -172,16 +180,16 @@
                 {#if b.source}<span class="sr-only">, {b.source}</span>{:else}<span class="sr-only">, not reported</span>{/if}
               </span>
               <span class="act">
-                {#if label}
+                {#each labels as label (label)}
                   <button
                     type="button"
-                    onclick={() => void act(d)}
+                    onclick={() => void act(d, label === 'Connect')}
                     disabled={p != null && result == null}
                     aria-label="{label} {d.name}"
                   >
                     {label}
                   </button>
-                {/if}
+                {/each}
               </span>
             </li>
           {/each}
@@ -301,6 +309,8 @@
   }
   .act {
     display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
     justify-content: flex-end;
   }
   .what .outcome {

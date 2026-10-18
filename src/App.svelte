@@ -19,7 +19,8 @@
   import CoolingPanel from './components/CoolingPanel.svelte';
   import { animator } from './anim';
   import { loadUpdates, update } from './updates.svelte';
-  import { getBackendStatus, getHardwareChanges, getPawnIoStatus, getRemoteBrief, inTauri, onBackendStatus, onHardwareChanged, onOpenView, onRemote, onSensors, onWindowOpened, restoreFans, setUiVisible } from './ipc';
+  import { getBackendStatus, getHardwareChanges, getLowBatteries, getPawnIoStatus, getRemoteBrief, inTauri, onBackendStatus, onHardwareChanged, onLowBattery, onOpenView, onRemote, onSensors, onWindowOpened, restoreFans, setUiVisible } from './ipc';
+  import { lowNotice } from './devices';
   import { loadSeen, newestId, saveSeen } from './changes';
   import { loadSeenKeys, markSeen, unseen } from './insights';
   import { loadPrefs, prefs, profileSpec, tempText } from './prefs.svelte';
@@ -28,7 +29,7 @@
   import Sidebar, { type Dot } from './components/shell/Sidebar.svelte';
   import TopBar from './components/shell/TopBar.svelte';
   import LiveRail from './components/shell/LiveRail.svelte';
-  import type { AlertFired, BackendStatus, PawnIoStatus, RemoteBrief, SensorSnapshot } from './types';
+  import type { AlertFired, BackendStatus, DeviceInfo, PawnIoStatus, RemoteBrief, SensorSnapshot } from './types';
 
   function lastTab(): Tab {
     try {
@@ -152,6 +153,10 @@
     await restoreFans().catch(() => {});
   }
 
+  // Low batteries (1.4.1): a strip on the Dashboard and a dot on Devices while any is low.
+  let lowBatteries = $state.raw<DeviceInfo[]>([]);
+  const low = $derived(lowNotice(lowBatteries));
+
   // Remote companion (P26): the header says so while it is on, from any tab.
   let remote = $state.raw<RemoteBrief | null>(null);
   function openRemote(): void {
@@ -199,6 +204,7 @@
     if (overall === 'warn' || overall === 'fail') d.health = { tone: overall, note: overall === 'fail' ? 'problem' : 'warning' };
     if (newestChange > changesSeen) d.hardware = { tone: 'new', note: 'new PC changes' };
     if (insightsNew.length) d.insights = { tone: 'new', note: 'new findings' };
+    if (low) d.devices = { tone: low.tone, note: `low battery: ${low.text}` };
     return d;
   });
   /** Where readings come from, for the sidebar's foot. */
@@ -226,6 +232,7 @@
     let stopChanges: (() => void) | undefined;
     let stopOpened: (() => void) | undefined;
     let stopRemote: (() => void) | undefined;
+    let stopLow: (() => void) | undefined;
     let stopView: (() => void) | undefined;
     let disposed = false;
     // Opened again from the tray: back to the Dashboard unless "Last tab" is chosen.
@@ -255,6 +262,13 @@
     getRemoteBrief()
       .then((b) => (remote = b))
       .catch(() => {});
+    getLowBatteries()
+      .then((v) => (lowBatteries = v))
+      .catch(() => {});
+    void onLowBattery((v) => (lowBatteries = v)).then((fn) => {
+      if (disposed) fn();
+      else stopLow = fn;
+    });
     void onRemote((b) => (remote = b)).then((fn) => {
       if (disposed) fn();
       else stopRemote = fn;
@@ -302,6 +316,7 @@
       stopChanges?.();
       stopOpened?.();
       stopRemote?.();
+      stopLow?.();
       stopView?.();
       document.removeEventListener('visibilitychange', onVisibility);
     };
@@ -344,6 +359,13 @@
                 <span class="alert-dot {overall}" aria-hidden="true"></span>
                 <span class="msg">{attention[0]}{attention.length > 1 ? ` (+${attention.length - 1} more)` : ''}</span>
                 <span class="go">Health →</span>
+              </button>
+            {/if}
+            {#if low}
+              <button type="button" class="health-strip {low.tone}" onclick={() => select('devices')}>
+                <span class="alert-dot {low.tone}" aria-hidden="true"></span>
+                <span class="msg"><b>Low battery:</b> {low.text}</span>
+                <span class="go">Devices →</span>
               </button>
             {/if}
             <DashboardGrid

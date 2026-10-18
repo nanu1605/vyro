@@ -15,7 +15,7 @@ mod hid_win;
 mod win;
 
 #[cfg(windows)]
-pub use control::{audio as audio_connection, disconnect, reach};
+pub use control::{audio as audio_connection, disconnect, reach, settle};
 #[cfg(windows)]
 pub use hid_win::{collections as hid_collections, Collection as HidCollection};
 #[cfg(windows)]
@@ -97,6 +97,32 @@ pub enum Control {
     Link,
 }
 
+/// Whether a device is connected, as far as Windows tells (1.4.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum LinkState {
+    Connected,
+    /// Off, out of range, or disconnected; behind a receiver: asleep or off.
+    NotConnected,
+    /// A paired Bluetooth device Windows says nothing about.
+    Unknown,
+}
+
+/// A battery that needs charging soon (1.4.1), by P22's colours: under 20 % or XInput's
+/// "low" level, critical under 10 % or "empty".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum LowBattery {
+    Low,
+    Critical,
+}
+
+/// Below this percentage a battery is low, and below [`CRITICAL`] critical.
+pub const LOW: u8 = 20;
+pub const CRITICAL: u8 = 10;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -132,11 +158,14 @@ pub struct DeviceInfo {
     pub connection: Connection,
     /// Bluetooth, a wireless receiver, or a wireless controller.
     pub wireless: bool,
-    /// False for a paired Bluetooth device that is off or out of range. Unplugged wired devices
-    /// are not listed at all.
+    /// `state` is Connected. False for a paired Bluetooth device that is off or out of range,
+    /// or that Windows says nothing about. Unplugged wired devices are not listed at all.
     pub connected: bool,
-    /// Only while connected; `None` is shown as "—".
+    pub state: LinkState,
+    /// Only while not known to be disconnected; `None` is shown as "—".
     pub battery: Option<Battery>,
+    /// The battery needs charging soon, and is not charging.
+    pub low: Option<LowBattery>,
     /// Device Manager problem code of a part of it (22 = disabled), while connected.
     pub problem: Option<u32>,
     /// The receiver a device is paired to (its id), for devices reached through one.
@@ -217,6 +246,8 @@ pub struct RawAep {
     pub container: Option<String>,
     pub name: Option<String>,
     pub battery: Option<u8>,
+    /// System.Devices.Aep.IsConnected: what Settings shows as Connected.
+    pub connected: Option<bool>,
 }
 
 /// `DEVICE_STATE_ACTIVE`.
@@ -582,18 +613,69 @@ fn windows_battery(c: &RawContainer, nodes: &[&RawNode], aep: Option<&RawAep>) -
         .find(|b| *b <= 100)
 }
 
-/// Bluetooth LE containers worth a Battery Service read: connected, and Windows has no
-/// battery reading of its own for them.
+/// Whether a paired Bluetooth device is connected (1.4.1): its paired entry says, as Settings
+/// shows it; else its audio, connected while one of its endpoints is active; else its
+/// container. Nothing said is Unknown: a container without the property used to count as
+/// connected, and a speaker that was off then offered only Disconnect.
+pub fn bt_state(
+    aep: Option<bool>,
+    endpoints: &[&RawEndpoint],
+    container: Option<bool>,
+) -> LinkState {
+    let audio = (!endpoints.is_empty()).then(|| endpoints.iter().any(|e| e.state == AUDIO_ACTIVE));
+    match aep.or(audio).or(container) {
+        Some(true) => LinkState::Connected,
+        Some(false) => LinkState::NotConnected,
+        None => LinkState::Unknown,
+    }
+}
+
+/// Whether a battery needs charging soon; never while it charges.
+pub fn low(battery: Option<&Battery>) -> Option<LowBattery> {
+    let b = battery?;
+    if b.charging == Some(true) {
+        return None;
+    }
+    match (b.percent, b.level) {
+        (Some(p), _) if p < CRITICAL => Some(LowBattery::Critical),
+        (Some(p), _) if p < LOW => Some(LowBattery::Low),
+        (None, Some(BatteryLevel::Empty)) => Some(LowBattery::Critical),
+        (None, Some(BatteryLevel::Low)) => Some(LowBattery::Low),
+        _ => None,
+    }
+}
+
+/// Audio endpoints by container.
+fn endpoints_by_container(list: &[RawEndpoint]) -> HashMap<String, Vec<&RawEndpoint>> {
+    let mut by: HashMap<String, Vec<&RawEndpoint>> = HashMap::new();
+    for e in list {
+        if let Some(c) = &e.container {
+            by.entry(norm_guid(c)).or_default().push(e);
+        }
+    }
+    by
+}
+
+/// Bluetooth LE containers worth a Battery Service read: not known to be disconnected, and
+/// Windows has no battery reading of its own for them.
 pub fn gatt_wanted(raw: &Raw) -> Vec<String> {
     let groups = group(&raw.nodes);
     let aeps = aeps(&raw.aeps);
+    let endpoints = endpoints_by_container(&raw.endpoints);
     raw.containers
         .iter()
-        .filter(|c| c.connected != Some(false) && !c.local_machine)
+        .filter(|c| !c.local_machine)
         .filter_map(|c| {
             let id = norm_guid(&c.id);
             let nodes = groups.get(&id)?;
-            let windows = windows_battery(c, nodes, aeps.get(&id).copied());
+            let aep = aeps.get(&id).copied();
+            let audio = endpoints.get(&id).map_or(&[][..], Vec::as_slice);
+            if bt_state(aep.and_then(|a| a.connected), audio, c.connected)
+                == LinkState::NotConnected
+            {
+                return None;
+            }
+            let windows = windows_battery(c, nodes, aep);
             (nodes.iter().any(|n| is_ble(n)) && windows.is_none()).then_some(id)
         })
         .collect()
@@ -632,6 +714,18 @@ fn pad_battery(p: &RawPad) -> Option<Battery> {
         charging: None,
         source: BatterySource::Xinput,
     })
+}
+
+/// An XInput slot that belongs to a listed controller: its battery where nothing else gave
+/// one, and a slot in use means the controller is connected.
+fn pad_matched(d: &mut DeviceInfo, p: &RawPad) {
+    if d.battery.is_none() {
+        d.battery = pad_battery(p);
+    }
+    if d.state == LinkState::Unknown {
+        d.state = LinkState::Connected;
+        d.connected = true;
+    }
 }
 
 fn charge_battery(c: Option<hid::Charge>, source: BatterySource) -> Option<Battery> {
@@ -728,12 +822,7 @@ pub fn build(raw: &Raw) -> Devices {
         .filter(|(_, v)| *v <= 100)
         .map(|(c, v)| (norm_guid(c), *v))
         .collect();
-    let mut by_container: HashMap<String, Vec<&RawEndpoint>> = HashMap::new();
-    for e in &raw.endpoints {
-        if let Some(c) = &e.container {
-            by_container.entry(norm_guid(c)).or_default().push(e);
-        }
-    }
+    let by_container = endpoints_by_container(&raw.endpoints);
 
     let mut devices = Vec::new();
     let mut xinput = Vec::new();
@@ -758,9 +847,15 @@ pub fn build(raw: &Raw) -> Devices {
         };
         let conn = connection(c, nodes);
         let bluetooth = matches!(conn, Connection::Bluetooth | Connection::BluetoothLe);
-        let connected = !bluetooth || c.connected != Some(false);
+        let state = if bluetooth {
+            bt_state(aep.and_then(|a| a.connected), endpoints, c.connected)
+        } else {
+            LinkState::Connected
+        };
+        // Readings and problems are shown unless it is known to be disconnected.
+        let live = state != LinkState::NotConnected;
         let name = known.unwrap_or_else(|| kind_label(kind).into());
-        let battery = connected
+        let battery = live
             .then(|| {
                 windows_battery(c, nodes, aep)
                     .map(|p| (p, BatterySource::Windows))
@@ -777,7 +872,7 @@ pub fn build(raw: &Raw) -> Devices {
                     })
             })
             .flatten();
-        if connected && nodes.iter().any(|n| is_xinput(n)) {
+        if live && nodes.iter().any(|n| is_xinput(n)) {
             let ids: Vec<String> = nodes
                 .iter()
                 .filter(|n| is_xinput(n))
@@ -785,7 +880,7 @@ pub fn build(raw: &Raw) -> Devices {
                 .collect();
             xinput.push((devices.len(), vid_pid(&ids)));
         }
-        let problem = connected
+        let problem = live
             .then(|| nodes.iter().filter_map(|n| n.problem).find(|p| *p != 0))
             .flatten();
         let lname = name.to_ascii_lowercase();
@@ -796,8 +891,10 @@ pub fn build(raw: &Raw) -> Devices {
             kind,
             manufacturer: maker(c.manufacturer.as_ref()),
             connection: conn,
-            connected,
+            connected: state == LinkState::Connected,
+            state,
             battery,
+            low: None,
             problem,
             parent: None,
             control: bluetooth.then(|| control(kind, endpoints)),
@@ -827,11 +924,17 @@ pub fn build(raw: &Raw) -> Devices {
             connection: Connection::Receiver,
             wireless: true,
             connected: h.awake,
+            state: if h.awake {
+                LinkState::Connected
+            } else {
+                LinkState::NotConnected
+            },
             battery: if h.awake {
                 charge_battery(h.charge, h.source)
             } else {
                 None
             },
+            low: None,
             problem: None,
             parent: Some(receiver),
             control: None,
@@ -856,9 +959,7 @@ pub fn build(raw: &Raw) -> Devices {
             .collect();
         if let [i] = same.as_slice() {
             taken.insert(*i);
-            if devices[*i].battery.is_none() {
-                devices[*i].battery = pad_battery(p);
-            }
+            pad_matched(&mut devices[*i], p);
         } else {
             left.push(p);
         }
@@ -869,9 +970,7 @@ pub fn build(raw: &Raw) -> Devices {
         .filter(|i| !taken.contains(i))
         .collect();
     if let ([i], [p]) = (free.as_slice(), left.as_slice()) {
-        if devices[*i].battery.is_none() {
-            devices[*i].battery = pad_battery(p);
-        }
+        pad_matched(&mut devices[*i], p);
     } else {
         for p in left {
             devices.push(DeviceInfo {
@@ -886,7 +985,9 @@ pub fn build(raw: &Raw) -> Devices {
                 },
                 wireless: p.wireless,
                 connected: true,
+                state: LinkState::Connected,
                 battery: pad_battery(p),
+                low: None,
                 problem: None,
                 parent: None,
                 control: None,
@@ -894,6 +995,9 @@ pub fn build(raw: &Raw) -> Devices {
         }
     }
 
+    for d in &mut devices {
+        d.low = low(d.battery.as_ref());
+    }
     devices.sort_by(|a, b| {
         b.connected
             .cmp(&a.connected)
