@@ -36,6 +36,7 @@ pub mod ram;
 pub mod registry;
 pub mod remote;
 pub mod score;
+pub mod screen;
 pub mod sim;
 pub mod sio;
 pub mod snapshot;

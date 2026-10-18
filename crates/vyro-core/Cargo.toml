@@ -19,6 +19,7 @@ rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 sha2 = "0.10.9"
+str0m = { version = "0.24.1", default-features = false, features = ["rust-crypto"] }
 thiserror = "2.0.21"
 ts-rs = "12.0.1"
 tungstenite = { version = "0.28.0", default-features = false, features = ["handshake", "__rustls-tls"] }
