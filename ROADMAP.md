@@ -2661,10 +2661,15 @@ settings, tested on an NVIDIA desktop card and a laptop GPU (decision 37). Built
       failed write, a crash at start, apply at start only when tested, another card's presets,
       trials, sleep), crash events from the logs, IPC 15, the tray tooltip, the window's logic.
       On Windows CI, WARP renders the fixed frame the same twice and keeps the memory pattern.
-- [ ] CI green; field check 1.6 ([`docs/field-check-1.6.md`](docs/field-check-1.6.md)) on the
-      owner's NVIDIA desktop card and a laptop, including whether NVML accepts the offsets on
-      GeForce under Windows (if not, NVAPI is the next step); 1.4.1 and 1.5 released first; the
-      owner's go.
+- [x] **CI green** on eca77e0 (run 39161727115): Linux, Windows with the installed-app smoke
+      test (WARP renders the fixed frame and keeps the memory pattern), the relay and phone app
+      with the end-to-end test, accessibility. Test build `vyro-windows-eca77e0`. Locally: fmt,
+      clippy (Linux and windows-gnu), 729 core tests, 214 frontend tests, the builds, the
+      budgets (the view is its own 6.7 kB chunk) and the accessibility sweep (696 checks).
+- [ ] Field check 1.6 ([`docs/field-check-1.6.md`](docs/field-check-1.6.md)) on the owner's
+      NVIDIA desktop card and a laptop, including whether NVML accepts the offsets on GeForce
+      under Windows (if not, NVAPI is the next step); 1.4.1 and 1.5 released first; the owner's
+      go.
 
 ## Risks
 

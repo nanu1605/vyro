@@ -1,7 +1,8 @@
 # Field check: 1.6 (GPU tuning)
 
-Status: **to do.** Test build: the `vyro-windows-<commit>` artifact of the latest green CI run on
-`claude/vyro-1.6`, version 1.6.0. Install the MSI over 1.5. About 90 minutes on the desktop
+Status: **to do.** Test build: **`vyro-windows-eca77e0`** (CI run 39161727115, every job green),
+version 1.6.0, or the artifact of any later green run on `claude/vyro-1.6`. Install the MSI over
+1.5. About 90 minutes on the desktop
 (most of it Find my best, which can run unattended) and 30 on the laptop.
 
 1.6 answers the owner's request for GPU overclocking with presets made for the installed card and
