@@ -5,6 +5,9 @@
 //! The phone's first `hello` brings a secret of its own, which replaces the link's, so the link
 //! works once: a photo of the QR code is useless afterwards. A phone stays paired while it is
 //! used at least once in the owner's chosen number of days (Settings → Remote).
+//!
+//! Each phone may only look, or also control the PC (1.5): the owner chooses when pairing and
+//! can change it later, on the PC only.
 
 use serde::{Deserialize, Serialize};
 
@@ -29,6 +32,9 @@ pub struct StoredPhone {
     pub expires: i64,
     #[serde(default)]
     pub last_seen: Option<i64>,
+    /// May control the PC (1.5); phones paired before may only look.
+    #[serde(default)]
+    pub control: bool,
 }
 
 /// `remote.json`'s `relay`.
@@ -43,6 +49,8 @@ pub struct StoredRelay {
     /// The key this PC shows the relay, sealed ([`vault`]).
     pub pc_key: String,
     pub phones: Vec<StoredPhone>,
+    /// "Wake from phone" (1.5): phones are told this PC's wired address.
+    pub wake: bool,
 }
 
 #[derive(Clone)]
@@ -56,6 +64,7 @@ struct Phone {
     last_seen: Option<i64>,
     /// Still on the pairing link's secret.
     pending: bool,
+    control: bool,
 }
 
 /// What a phone's `hello` did.
@@ -78,6 +87,8 @@ pub struct Phones {
     dirty: bool,
     /// Bumped whenever the list the relay holds must change.
     generation: u64,
+    /// Phones whose `info` changed (their permission): tell them while they are here.
+    info_due: Vec<PhoneId>,
 }
 
 fn arr<const N: usize>(hex_text: &str) -> Option<[u8; N]> {
@@ -101,6 +112,7 @@ impl Phones {
             phones: Vec::new(),
             dirty: true,
             generation: 1,
+            info_due: Vec::new(),
         }
     }
 
@@ -124,6 +136,7 @@ impl Phones {
                     expires: p.expires,
                     last_seen: p.last_seen,
                     pending: false,
+                    control: p.control,
                 })
             })
             .take(MAX_DEVICES)
@@ -135,6 +148,7 @@ impl Phones {
             phones,
             dirty: dropped,
             generation: 1,
+            info_due: Vec::new(),
         })
     }
 
@@ -158,9 +172,11 @@ impl Phones {
                         paired: p.paired,
                         expires: p.expires,
                         last_seen: p.last_seen,
+                        control: p.control,
                     })
                 })
                 .collect(),
+            wake: false,
         }
     }
 
@@ -215,9 +231,38 @@ impl Phones {
             expires: now + PAIR_SECS,
             last_seen: None,
             pending: true,
+            control: false,
         });
         self.generation += 1;
         Ok(())
+    }
+
+    /// Lets a phone (or the open pairing) control the PC, or only look; `false` when there is
+    /// no such phone. Only the owner, on the PC, calls this.
+    pub fn set_control(&mut self, id: &str, on: bool) -> bool {
+        let Some(p) = self.phones.iter_mut().find(|p| hex(&p.id) == id) else {
+            return false;
+        };
+        if p.control != on {
+            p.control = on;
+            self.dirty = true;
+            if !p.pending && !self.info_due.contains(&p.id) {
+                self.info_due.push(p.id);
+            }
+        }
+        true
+    }
+
+    /// May the phone control the PC.
+    pub fn may_control(&self, id: &PhoneId) -> bool {
+        self.phones
+            .iter()
+            .any(|p| &p.id == id && !p.pending && p.control)
+    }
+
+    /// Phones to send their `info` again, since it changed.
+    pub fn take_info_due(&mut self) -> Vec<PhoneId> {
+        std::mem::take(&mut self.info_due)
     }
 
     pub fn id_free(&self, id: &PhoneId) -> bool {
@@ -348,6 +393,7 @@ impl Phones {
                     last_seen: p.last_seen,
                     last_address: None,
                     anywhere: true,
+                    control: p.control,
                 }
             })
             .collect()

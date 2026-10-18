@@ -49,6 +49,7 @@ pub fn start(app: &AppHandle) {
 }
 
 /// A device arrived, left, connected or disconnected: read again.
+#[cfg(windows)]
 pub fn poke(app: &AppHandle) {
     if let Some(w) = app.try_state::<DeviceWatch>() {
         if let Some(tx) = lock(&w.poke).as_ref() {

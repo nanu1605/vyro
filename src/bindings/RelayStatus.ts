@@ -17,4 +17,8 @@ custom: boolean, state: RelayState, error: string | null, pairing: RelayPairing 
 /**
  * Phones with the app open now.
  */
-watching: number, };
+watching: number, 
+/**
+ * "Wake from phone" (1.5).
+ */
+wake: boolean, };

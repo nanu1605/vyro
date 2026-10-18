@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addPc, confirmNext, linkFrom, loadPcs, MAX_PCS, parseLink, removePc, savePcs, updatePc, type PairedPc } from './pcs';
+import { addPc, confirmNext, linkFrom, loadPcs, MAX_PCS, parseLink, removePc, savePcs, sleepers, updatePc, type PairedPc } from './pcs';
 
 const ROOM = '00112233445566778899aabbccddeeff';
 const SECRET = 'A'.repeat(43);
@@ -65,5 +65,22 @@ describe('the paired PCs', () => {
     let pcs: PairedPc[] = [];
     for (let i = 0; i < MAX_PCS + 2; i++) pcs = addPc(pcs, { room: i.toString(16).padStart(32, '0'), phone: '00000001', secret: SECRET }, NEXT, i);
     expect(pcs).toHaveLength(MAX_PCS);
+  });
+
+  it('keeps a PC\'s wake address while it gives one, and lists the others to wake', () => {
+    const a: PairedPc = { room: ROOM, phone: '0a1b2c3d', secret: 'A'.repeat(43), name: 'Desk', used: 2 };
+    const b: PairedPc = { ...a, room: 'ff'.repeat(16), name: 'Laptop', used: 1 };
+    let list = updatePc([a, b], ROOM, { wake: 'A8-A1-59-12-34-56' });
+    expect(sleepers(list, b.room)).toEqual([{ name: 'Desk', mac: 'A8-A1-59-12-34-56', room: ROOM }]);
+    expect(sleepers(list, ROOM)).toEqual([]);
+    const store = new Map<string, string>();
+    savePcs(list, { setItem: (k, v) => store.set(k, v) });
+    expect(loadPcs({ getItem: (k) => store.get(k) ?? null })[0]?.wake).toBe('A8-A1-59-12-34-56');
+    // Turned off on the PC: the address goes.
+    list = updatePc(list, ROOM, { wake: undefined });
+    expect(list[0]).not.toHaveProperty('wake');
+    // A stored address that does not look like one drops the entry.
+    store.set('vyro.pcs', JSON.stringify([{ ...a, wake: 'not a mac' }]));
+    expect(loadPcs({ getItem: (k) => store.get(k) ?? null })).toEqual([]);
   });
 });

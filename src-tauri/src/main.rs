@@ -13,6 +13,7 @@ mod look;
 mod overlay;
 mod pin;
 mod remote;
+mod remote_api;
 mod share;
 mod smoke;
 mod snap;
@@ -69,6 +70,7 @@ fn main() {
             app.manage(remote::Remote::load(app.handle()));
             app.manage(widgets::WidgetStore::load(app.handle()));
             app.manage(device_watch::DeviceWatch::default());
+            app.manage(remote_api::PhoneState::load(app.handle()));
             tray::build(app.handle())?;
             let settings = app.state::<tray::SettingsStore>().get();
             if let Err(e) = tray::apply(app.handle(), settings) {
@@ -109,6 +111,10 @@ fn main() {
             commands::get_devices,
             commands::set_device_connected,
             device_watch::get_low_batteries,
+            commands::end_process,
+            remote_api::get_power_state,
+            remote_api::cancel_power_action,
+            remote_api::get_phone_actions,
             dashboard::get_dashboard,
             dashboard::set_dashboard,
             widgets::get_widgets,
@@ -169,6 +175,9 @@ fn main() {
             remote::start_relay_pairing,
             remote::cancel_relay_pairing,
             remote::reset_relay,
+            remote::set_phone_control,
+            remote::set_wake_from_phone,
+            remote::get_wake_readiness,
             share::save_share_card,
             share::reveal_card,
             updates::get_update_status,

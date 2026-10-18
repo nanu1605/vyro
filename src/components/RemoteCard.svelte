@@ -8,18 +8,23 @@
   import {
     cancelRelayPairing,
     cancelRemotePairing,
+    getPhoneActions,
     getRemoteStatus,
+    getWakeReadiness,
+    onPhoneActions,
     onRemote,
     resetRelay,
+    setPhoneControl,
     setRelayEnabled,
     setRelayUrl,
     setRemoteEnabled,
     setRemoteOptions,
+    setWakeFromPhone,
     signOutRemote,
     startRelayPairing,
     startRemotePairing,
   } from '../ipc';
-  import type { RemoteStatus } from '../types';
+  import type { PhoneAction, RemoteStatus, WakeReadiness } from '../types';
 
   interface Props {
     active: boolean;
@@ -40,6 +45,38 @@
   let portDraft = $state<number | null>(null);
   let daysDraft = $state<number | null>(null);
   let relayDraft = $state<string | null>(null);
+  /** The next phone paired may change the PC (1.5); off unless the owner says so. */
+  let pairControl = $state(false);
+  let actions = $state.raw<PhoneAction[]>([]);
+  let readiness = $state.raw<WakeReadiness | null>(null);
+
+  function loadActions(): void {
+    getPhoneActions()
+      .then((a) => (actions = a))
+      .catch(() => {});
+  }
+  $effect(() => {
+    if (!active) return;
+    untrack(loadActions);
+    let stop: (() => void) | undefined;
+    let disposed = false;
+    void onPhoneActions(loadActions).then((fn) => {
+      if (disposed) fn();
+      else stop = fn;
+    });
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  });
+  $effect(() => {
+    if (!active || !status?.relay.wake) return;
+    untrack(() =>
+      getWakeReadiness()
+        .then((r) => (readiness = r))
+        .catch(() => {}),
+    );
+  });
 
   async function run(f: () => Promise<RemoteStatus>): Promise<boolean> {
     busy = true;
@@ -200,7 +237,7 @@
             : ''}
         </p>
         {#if status.relay.error}<p class="note warn">{status.relay.error}</p>{/if}
-        <p class="note">Encrypted end to end · read-only.</p>
+        <p class="note">Encrypted end to end. A phone only looks unless you let it change this PC.</p>
 
         {#if status.relay.pairing}
           <div class="pairing" role="group" aria-labelledby="relay-code">
@@ -231,12 +268,20 @@
             </div>
           </div>
         {:else}
+          <fieldset class="may">
+            <legend>The next phone paired may</legend>
+            <label><input type="radio" name="pair-control" value={false} bind:group={pairControl} /> Only look</label>
+            <label>
+              <input type="radio" name="pair-control" value={true} bind:group={pairControl} />
+              Look and change this PC: end programs, shut it down or restart it, start a benchmark, switch profiles…
+            </label>
+          </fieldset>
           <div class="actions">
             <button
               type="button"
               class="primary"
               disabled={busy || phones >= MAX_DEVICES || status.relay.state !== 'online'}
-              onclick={() => void run(startRelayPairing)}
+              onclick={() => void run(() => startRelayPairing(pairControl))}
             >
               Pair a phone
             </button>
@@ -355,9 +400,22 @@
                     : ''}{d.lastAddress ? ` from ${d.lastAddress}` : ''}
                 </small>
               </div>
-              <button type="button" disabled={busy} aria-label="Sign out {d.name}" onclick={() => void run(() => signOutRemote(d.id))}>
-                Sign out
-              </button>
+              <span class="row-actions">
+                {#if d.anywhere}
+                  <button
+                    type="button"
+                    disabled={busy}
+                    aria-pressed={d.control}
+                    aria-label="{d.name} may change this PC"
+                    onclick={() => void run(() => setPhoneControl(d.id, !d.control))}
+                  >
+                    {d.control ? 'May change this PC' : 'Only looks'}
+                  </button>
+                {/if}
+                <button type="button" disabled={busy} aria-label="Sign out {d.name}" onclick={() => void run(() => signOutRemote(d.id))}>
+                  Sign out
+                </button>
+              </span>
             </li>
           {/each}
         </ul>
@@ -369,6 +427,56 @@
       {:else}
         <p class="note">None yet.</p>
       {/if}
+    {/if}
+
+    {#if relayOn}
+      <h3 id="remote-wake">Wake from phone</h3>
+      <label class="check">
+        <input
+          type="checkbox"
+          checked={status.relay.wake}
+          disabled={busy}
+          onchange={(e) => void run(() => setWakeFromPhone(e.currentTarget.checked))}
+        />
+        Let a phone have another Vyro PC on this network wake this one
+      </label>
+      <p class="note">
+        A phone cannot send the wake signal itself; another PC that is on, on the same network and paired with the phone
+        sends it. Phones are told this PC's wired network address, sealed.
+      </p>
+      {#if status.relay.wake && readiness}
+        <ul class="ready">
+          <li class:bad={!readiness.adapter}>
+            {readiness.adapter ? `Wired adapter: ${readiness.adapter}` : 'No wired adapter: wake needs a network cable.'}
+          </li>
+          {#if readiness.adapter}
+            <li class:bad={readiness.magicPacket === false}>
+              {readiness.magicPacket === true
+                ? '“Wake on Magic Packet” is on.'
+                : readiness.magicPacket === false
+                  ? '“Wake on Magic Packet” is off: Device Manager → the adapter → Advanced.'
+                  : 'Check Device Manager → the adapter → Advanced: “Wake on Magic Packet” on, and Power Management: “Allow this device to wake the computer”.'}
+            </li>
+          {/if}
+          {#if readiness.fastStartup}
+            <li class="bad">Fast Startup is on: some PCs then wake only from sleep. Turn it off in Control Panel → Power Options.</li>
+          {/if}
+          <li>Turn on “Wake on LAN” (or “Power on by PCI-E”) in the BIOS: Vyro cannot see it.</li>
+          {#if readiness.laptop}<li>Laptops mostly wake only from sleep, on a cable and plugged in.</li>{/if}
+        </ul>
+      {/if}
+    {/if}
+
+    {#if actions.length}
+      <h3 id="remote-recent">Recent from your phones</h3>
+      <ul class="recent" aria-labelledby="remote-recent">
+        {#each actions.slice(0, 10) as a, i (i)}
+          <li>
+            <span>{a.what}</span>
+            <small>{a.phone} · {fmtDateTime(a.at)}{a.error ? ` · not done: ${a.error}` : ''}</small>
+          </li>
+        {/each}
+      </ul>
     {/if}
 
     <details>
@@ -427,6 +535,55 @@
 </Card>
 
 <style>
+  .may {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0.5rem 0 0;
+    padding: 0;
+    border: 0;
+    font-size: 0.85rem;
+  }
+  .may legend {
+    margin-bottom: 0.25rem;
+    color: var(--muted);
+  }
+  .may label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.45rem;
+  }
+  .row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    justify-content: flex-end;
+  }
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .ready,
+  .recent {
+    display: grid;
+    gap: 0.3rem;
+    margin: 0.5rem 0 0;
+    padding-left: 1.1rem;
+    font-size: 0.85rem;
+  }
+  .ready .bad {
+    font-weight: 600;
+  }
+  .recent {
+    padding-left: 0;
+    list-style: none;
+  }
+  .recent li {
+    display: grid;
+  }
+  .recent small {
+    color: var(--muted);
+  }
   p {
     margin: 0 0 0.5rem;
     font-size: 0.85rem;

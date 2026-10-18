@@ -154,18 +154,22 @@ pub async fn set_device_connected(
     control: Control,
     connect: bool,
 ) -> Result<LinkState, String> {
+    with_engine(&engine, move |e| device_action(e, &id, control, connect)).await
+}
+
+/// Connect or Disconnect, then the connection Windows shows (the window's and a phone's).
+pub(crate) fn device_action(
+    engine: &dyn EngineApi,
+    id: &str,
+    control: Control,
+    connect: bool,
+) -> Result<LinkState, String> {
     if control == Control::Link && !connect {
-        let asked = id.clone();
-        with_engine(&engine, move |e| e.bluetooth_disconnect(&asked)).await?;
+        engine.bluetooth_disconnect(id)?;
     } else {
-        let asked = id.clone();
-        tauri::async_runtime::spawn_blocking(move || device_control(&asked, control, connect))
-            .await
-            .map_err(|e| e.to_string())??;
+        device_control(id, control, connect)?;
     }
-    tauri::async_runtime::spawn_blocking(move || device_settle(&id, connect))
-        .await
-        .map_err(|e| e.to_string())
+    Ok(device_settle(id, connect))
 }
 
 #[cfg(windows)]
@@ -202,6 +206,15 @@ fn device_settle(id: &str, connect: bool) -> LinkState {
     } else {
         LinkState::NotConnected
     }
+}
+
+/// Ends a process from the Processes view (1.5), if it is still the one named; Windows' own
+/// and Vyro's are never ended.
+#[tauri::command]
+pub async fn end_process(pid: u32, name: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || vyro_core::actions::process::end(pid, &name))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Drives with full health data, read fresh by the engine (SMART needs the service or

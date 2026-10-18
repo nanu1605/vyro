@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RemoteView } from '../types';
 import { confirmNext, type PairedPc } from './pcs';
-import { PcLink, type LinkState, type PhoneInfo } from './relay';
+import { PcLink, RequestError, type LinkState, type PhoneInfo } from './relay';
 import { aad, b64url, deriveKeys, open, seal, unhex, type Bytes } from './seal';
 
 const ROOM = '00112233445566778899aabbccddeeff';
@@ -106,7 +106,7 @@ describe('a phone and its PC through the relay', () => {
     first.open();
     first.text('{"t":"pc","online":true}');
     await flush();
-    expect(await pc0.read(first.sent[0]!)).toEqual({ t: 'hello', name: 'Pixel · Chrome', next: S1 });
+    expect(await pc0.read(first.sent[0]!)).toEqual({ t: 'hello', name: 'Pixel · Chrome', protocol: 2, next: S1 });
 
     first.binary(await pc0.frame({ t: 'rekeyed' }));
     first.end(4001);
@@ -119,7 +119,7 @@ describe('a phone and its PC through the relay', () => {
     second.open();
     second.text('{"t":"pc","online":true}');
     await flush();
-    expect(await pc1.read(second.sent[0]!)).toEqual({ t: 'hello', name: 'Pixel · Chrome' });
+    expect(await pc1.read(second.sent[0]!)).toEqual({ t: 'hello', name: 'Pixel · Chrome', protocol: 2 });
     second.binary(await pc1.frame({ t: 'info', pc: 'DESKTOP-7', protocol: 1 }));
     await flush();
     expect(t.infos[0]?.pc).toBe('DESKTOP-7');
@@ -162,7 +162,7 @@ describe('a phone and its PC through the relay', () => {
     expect(t.states.at(-1)).toBe('asleep');
     s.text('{"t":"pc","online":true}');
     await flush();
-    s.binary(await pc1.frame({ t: 'info', pc: 'DESKTOP-7' }));
+    s.binary(await pc1.frame({ t: 'info', pc: 'DESKTOP-7', protocol: 0 }));
     await flush();
     expect(t.states.at(-1)).toBe('tooOld');
 
@@ -175,6 +175,73 @@ describe('a phone and its PC through the relay', () => {
     t.sockets[1]!.end(4403);
     await flush();
     expect(t.states.at(-1)).toBe('signedOut');
+    t.link.stop();
+  });
+
+  it('asks a protocol 2 PC: every message after hello carries the session and a new count', async () => {
+    const t = setup({ room: ROOM, phone: PHONE, secret: S1, name: 'DESKTOP-7', used: 1 });
+    const pc1 = await pcSide(S1);
+    t.link.start();
+    await flush();
+    const s = t.sockets[0]!;
+    s.open();
+    s.text('{"t":"pc","online":true}');
+    await flush();
+    s.binary(await pc1.frame({ t: 'info', pc: 'DESKTOP-7', protocol: 2, session: 'abc', control: false, methods: ['processes'] }));
+    await flush();
+    expect(t.infos.at(-1)).toMatchObject({ session: 'abc', control: false });
+    expect(await pc1.read(s.sent.at(-1)!)).toEqual({ t: 'watch', s: 'abc', n: 1 });
+
+    const asked = t.link.request<{ pid: number }[]>('processes');
+    const p2 = t.link.request('power', { action: 'lock' }).then(
+      () => null,
+      (e: Error) => e,
+    );
+    await flush();
+    const r1 = (await pc1.read(s.sent.at(-2)!))!;
+    const r2 = (await pc1.read(s.sent.at(-1)!))!;
+    expect(r1).toEqual({ t: 'req', id: 1, m: 'processes', p: {}, s: 'abc', n: 2 });
+    expect(r2).toMatchObject({ t: 'req', id: 2, m: 'power', p: { action: 'lock' }, n: 3 });
+
+    // A long answer comes in parts, in any order.
+    const text = JSON.stringify({ t: 'res', id: 1, ok: [{ pid: 4242 }] });
+    const half = Math.floor(text.length / 2);
+    s.binary(await pc1.frame({ t: 'part', id: 1, i: 1, n: 2, d: text.slice(half) }));
+    s.binary(await pc1.frame({ t: 'part', id: 1, i: 0, n: 2, d: text.slice(0, half) }));
+    s.binary(await pc1.frame({ t: 'res', id: 2, err: 'This phone may only look.' }));
+    await flush();
+    expect(await asked).toEqual([{ pid: 4242 }]);
+    expect((await p2)?.message).toMatch(/may only look/);
+
+    // The owner allows control: the same session, so the count goes on.
+    s.binary(await pc1.frame({ t: 'info', pc: 'DESKTOP-7', protocol: 2, session: 'abc', control: true, methods: ['processes', 'power'] }));
+    await flush();
+    expect(t.infos.at(-1)?.control).toBe(true);
+    void t.link.request('power', { action: 'lock' }).catch(() => {});
+    await flush();
+    expect(await pc1.read(s.sent.at(-1)!)).toMatchObject({ m: 'power', n: 4 });
+
+    // The PC goes to sleep: what was asked fails.
+    const lost = t.link.request('processes');
+    s.text('{"t":"pc","online":false}');
+    await expect(lost).rejects.toBeInstanceOf(RequestError);
+    t.link.stop();
+  });
+
+  it('shows a protocol 1 PC, but asks it nothing', async () => {
+    const t = setup({ room: ROOM, phone: PHONE, secret: S1, name: 'DESKTOP-7', used: 1 });
+    const pc1 = await pcSide(S1);
+    t.link.start();
+    await flush();
+    const s = t.sockets[0]!;
+    s.open();
+    s.text('{"t":"pc","online":true}');
+    await flush();
+    s.binary(await pc1.frame({ t: 'info', pc: 'DESKTOP-7', protocol: 1 }));
+    await flush();
+    expect(t.states.at(-1)).toBe('online');
+    expect(await pc1.read(s.sent.at(-1)!)).toEqual({ t: 'watch' });
+    await expect(t.link.request('processes')).rejects.toThrow('Update Vyro on the PC');
     t.link.stop();
   });
 

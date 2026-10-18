@@ -10,7 +10,9 @@
 //!
 //! With `--relay`, it plays a PC reached through a relay instead (1.4), for the phone app
 //! (`pnpm build:phone`, then `pnpm --dir relay dev`): it prints a pairing link; Enter shows a new
-//! one, `out` signs every phone out, `q` quits.
+//! one, `out` signs every phone out, `control` lets every phone control it and `view` only
+//! look, `q` quits. It answers a phone's requests (1.5) with simulated data; actions are only
+//! printed (`asked: power {…}`), never done.
 //!
 //! ```sh
 //! cargo run -p vyro-core --example companion -- --relay http://127.0.0.1:8787
@@ -19,11 +21,11 @@
 use std::io::BufRead;
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use vyro_core::engine::{ClientPids, EngineApi, EngineConfig, LocalEngine};
 use vyro_core::remote::relay::proto::{pairing_link, relay_base};
-use vyro_core::remote::relay::{Phones, RelayClient, RelayHooks};
+use vyro_core::remote::relay::{Phones, RelayClient, RelayHooks, Request};
 use vyro_core::remote::{net, random, Auth, Hooks, RemoteInfo, RemoteServer, ServerConfig};
 use vyro_core::units::TempUnit;
 use vyro_core::{unix_now, PollerConfig, SimProvider};
@@ -64,12 +66,31 @@ fn engine(
     Ok(engine)
 }
 
+/// A phone's request, answered with the simulated engine's data. Actions are printed only.
+fn answer(engine: &OnceLock<Arc<LocalEngine>>, r: &Request) -> Result<serde_json::Value, String> {
+    let latest = || engine.get().and_then(|e| e.latest());
+    match r.method.as_str() {
+        "processes" => Ok(
+            serde_json::to_value(latest().map(|s| s.processes).unwrap_or_default())
+                .unwrap_or_default(),
+        ),
+        "power.state" => Ok(serde_json::json!({ "pending": null })),
+        "power" | "power.cancel" | "process.end" | "profile.pick" | "fans.bios" | "wake" => {
+            println!("asked: {} {}", r.method, r.params);
+            Ok(serde_json::json!({ "done": true }))
+        }
+        _ => Err("This example PC does not answer that.".into()),
+    }
+}
+
 /// A PC reached through a relay: prints `link: …` for each pairing and `state: …`,
-/// `watching: …` as they change (the end-to-end test reads them).
+/// `watching: …` and `asked: …` as they happen (the end-to-end test reads them).
 fn relay(url: &str, theme: String) -> Result<(), String> {
     let base = relay_base(url)?;
     let (room, key) = random::<16>().zip(random::<32>()).ok_or("no randomness")?;
     let phones = Arc::new(Mutex::new(Phones::fresh(room, key)));
+    let slot: Arc<OnceLock<Arc<LocalEngine>>> = Arc::new(OnceLock::new());
+    let asked = Arc::clone(&slot);
     let client = Arc::new(RelayClient::start(
         base.clone(),
         Arc::clone(&phones),
@@ -81,10 +102,12 @@ fn relay(url: &str, theme: String) -> Result<(), String> {
             state: Box::new(|s| {
                 println!("state: {}", serde_json::to_string(&s).unwrap_or_default())
             }),
+            request: Box::new(move |r, reply| reply.send(answer(&asked, &r))),
         },
     )?);
     let feed = Arc::clone(&client);
-    let engine = engine(move |snap| feed.publish(snap, TempUnit::C))?;
+    let engine = Arc::new(engine(move |snap| feed.publish(snap, TempUnit::C))?);
+    let _ = slot.set(Arc::clone(&engine));
     let show = || {
         let (Some(secret), Some(id)) = (random::<32>(), random::<4>()) else {
             return;
@@ -110,6 +133,13 @@ fn relay(url: &str, theme: String) -> Result<(), String> {
                 vyro_core::lock(&phones).sign_out_all();
                 client.nudge();
                 println!("signed out");
+            }
+            Ok(which @ ("control" | "view")) => {
+                let mut p = vyro_core::lock(&phones);
+                for d in p.devices(&[]) {
+                    p.set_control(&d.id, which == "control");
+                }
+                println!("phones may {which}");
             }
             Ok(_) => show(),
         }

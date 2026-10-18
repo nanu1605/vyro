@@ -18,7 +18,7 @@ use tungstenite::{Connector, HandshakeError, Message, WebSocket};
 
 use super::phones::Phones;
 use super::proto::{self, b64url, SOCKET_PROTOCOL};
-use super::session::{Effects, Now, Out, Session};
+use super::session::{Effects, Now, Out, Request, Session};
 use super::RelayState;
 use crate::remote::view::{self, FiredView};
 use crate::remote::RemoteInfo;
@@ -53,6 +53,26 @@ pub struct RelayHooks {
     pub watching: Box<dyn Fn(u32) + Send + Sync>,
     /// The connection's state changed.
     pub state: Box<dyn Fn(RelayState) + Send + Sync>,
+    /// A phone's request, already checked (1.5). Answer through `Reply`, from any thread and
+    /// without holding up the caller: this is the connection's own thread.
+    pub request: Box<dyn Fn(Request, Reply) + Send + Sync>,
+}
+
+/// An answer on its way to a phone: the phone (hex), the request's id, the result.
+type Answer = (String, u64, Result<serde_json::Value, String>);
+
+/// Where the answer to one request goes. Dropped unanswered, the phone hears nothing and gives
+/// up after its own wait.
+pub struct Reply {
+    queue: Arc<Mutex<VecDeque<Answer>>>,
+    phone: String,
+    id: u64,
+}
+
+impl Reply {
+    pub fn send(self, result: Result<serde_json::Value, String>) {
+        lock(&self.queue).push_back((self.phone, self.id, result));
+    }
 }
 
 #[derive(Default)]
@@ -74,6 +94,8 @@ struct Shared {
     watching: Mutex<Vec<String>>,
     /// The phone list the relay last confirmed it has ([`Phones::generation`]).
     listed: (Mutex<u64>, Condvar),
+    /// The app's answers, sent by the connection's thread.
+    answers: Arc<Mutex<VecDeque<Answer>>>,
     hooks: RelayHooks,
 }
 
@@ -111,6 +133,7 @@ impl RelayClient {
             status: Mutex::new((RelayState::Connecting, None)),
             watching: Mutex::new(Vec::new()),
             listed: (Mutex::new(0), Condvar::new()),
+            answers: Arc::new(Mutex::new(VecDeque::new())),
             hooks,
         });
         let s = Arc::clone(&shared);
@@ -405,12 +428,24 @@ fn talk(s: &Shared, ws: &mut Ws) -> Ended {
             let f = lock(&s.feed);
             (f.seq, f.json.clone())
         };
+        let answers: Vec<Answer> = lock(&s.answers).drain(..).collect();
+        let info = || (s.hooks.info)();
+        let now = Now {
+            at: unix_now(),
+            days: s.days.load(Ordering::SeqCst),
+            info: &info,
+            view: json.as_deref(),
+        };
         let (outs, gone) = {
-            let p = lock(&s.phones);
+            let mut p = lock(&s.phones);
             let gone = session.forget_gone(&p);
             let mut outs: Vec<Out> = session.sync(&p).into_iter().collect();
             if let Some(json) = &json {
                 outs.extend(session.views(&p, seq, json));
+            }
+            outs.extend(session.refresh(&mut p, &now));
+            for (phone, id, result) in &answers {
+                outs.extend(session.answer(&p, phone, *id, result));
             }
             (outs, gone)
         };
@@ -446,14 +481,7 @@ fn talk(s: &Shared, ws: &mut Ws) -> Ended {
                         apply(s, &session, fx);
                     }
                     Message::Binary(b) => {
-                        let info = || (s.hooks.info)();
-                        let now = Now {
-                            at: unix_now(),
-                            days: s.days.load(Ordering::SeqCst),
-                            info: &info,
-                            view: json.as_deref(),
-                        };
-                        let (outs, fx) = {
+                        let (outs, fx, requests) = {
                             let mut p = lock(&s.phones);
                             session.on_frame(&mut p, &b, &now)
                         };
@@ -462,6 +490,14 @@ fn talk(s: &Shared, ws: &mut Ws) -> Ended {
                         apply(s, &session, fx);
                         if let Err(e) = send(ws, outs) {
                             return Ended::Lost(e);
+                        }
+                        for r in requests {
+                            let reply = Reply {
+                                queue: Arc::clone(&s.answers),
+                                phone: r.phone.clone(),
+                                id: r.id,
+                            };
+                            (s.hooks.request)(r, reply);
                         }
                     }
                     Message::Close(frame) => {

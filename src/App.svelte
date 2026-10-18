@@ -19,7 +19,7 @@
   import CoolingPanel from './components/CoolingPanel.svelte';
   import { animator } from './anim';
   import { loadUpdates, update } from './updates.svelte';
-  import { getBackendStatus, getHardwareChanges, getLowBatteries, getPawnIoStatus, getRemoteBrief, inTauri, onBackendStatus, onHardwareChanged, onLowBattery, onOpenView, onRemote, onSensors, onWindowOpened, restoreFans, setUiVisible } from './ipc';
+  import { cancelPowerAction, getBackendStatus, getHardwareChanges, getLowBatteries, getPawnIoStatus, getPowerState, getRemoteBrief, inTauri, onBackendStatus, onHardwareChanged, onLowBattery, onOpenView, onPowerPending, onRemote, onSensors, onWindowOpened, restoreFans, setUiVisible } from './ipc';
   import { lowNotice } from './devices';
   import { loadSeen, newestId, saveSeen } from './changes';
   import { loadSeenKeys, markSeen, unseen } from './insights';
@@ -29,7 +29,7 @@
   import Sidebar, { type Dot } from './components/shell/Sidebar.svelte';
   import TopBar from './components/shell/TopBar.svelte';
   import LiveRail from './components/shell/LiveRail.svelte';
-  import type { AlertFired, BackendStatus, DeviceInfo, PawnIoStatus, RemoteBrief, SensorSnapshot } from './types';
+  import type { AlertFired, BackendStatus, DeviceInfo, PawnIoStatus, PendingPower, RemoteBrief, SensorSnapshot } from './types';
 
   function lastTab(): Tab {
     try {
@@ -157,6 +157,20 @@
   let lowBatteries = $state.raw<DeviceInfo[]>([]);
   const low = $derived(lowNotice(lowBatteries));
 
+  // A shutdown or restart a phone asked for (1.5): shown on every view until it happens, with
+  // Cancel.
+  let pendingPower = $state.raw<PendingPower | null>(null);
+  let powerError = $state<string | null>(null);
+  async function cancelPower(): Promise<void> {
+    try {
+      pendingPower = (await cancelPowerAction()).pending;
+      powerError = null;
+    } catch (e) {
+      powerError = String(e).replace(/^Error: /, '');
+    }
+  }
+  const POWER_WORD: Record<string, string> = { shutDown: 'Shutting down', restart: 'Restarting' };
+
   // Remote companion (P26): the header says so while it is on, from any tab.
   let remote = $state.raw<RemoteBrief | null>(null);
   function openRemote(): void {
@@ -233,6 +247,7 @@
     let stopOpened: (() => void) | undefined;
     let stopRemote: (() => void) | undefined;
     let stopLow: (() => void) | undefined;
+    let stopPower: (() => void) | undefined;
     let stopView: (() => void) | undefined;
     let disposed = false;
     // Opened again from the tray: back to the Dashboard unless "Last tab" is chosen.
@@ -268,6 +283,13 @@
     void onLowBattery((v) => (lowBatteries = v)).then((fn) => {
       if (disposed) fn();
       else stopLow = fn;
+    });
+    getPowerState()
+      .then((p) => (pendingPower = p.pending))
+      .catch(() => {});
+    void onPowerPending((p) => (pendingPower = p.pending)).then((fn) => {
+      if (disposed) fn();
+      else stopPower = fn;
     });
     void onRemote((b) => (remote = b)).then((fn) => {
       if (disposed) fn();
@@ -317,6 +339,7 @@
       stopOpened?.();
       stopRemote?.();
       stopLow?.();
+      stopPower?.();
       stopView?.();
       document.removeEventListener('visibilitychange', onVisibility);
     };
@@ -339,6 +362,18 @@
     />
 
     <main>
+      {#if pendingPower}
+        <div class="power-banner" role="alert">
+          <span>
+            <b>{POWER_WORD[pendingPower.action] ?? pendingPower.action}</b> at {new Date(pendingPower.at * 1000).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+            })}, asked from {pendingPower.by}.{powerError ? ` ${powerError}` : ''}
+          </span>
+          <button type="button" onclick={() => void cancelPower()}>Cancel</button>
+        </div>
+      {/if}
       {#if visited.cooling}
         <div id="panel-cooling" role="tabpanel" aria-labelledby="tab-cooling" hidden={tab !== 'cooling'}>
           <CoolingPanel {snap} {backend} active={tab === 'cooling'} />
@@ -599,6 +634,19 @@
   }
   .alert-dot.fail {
     background: var(--hot);
+  }
+  .power-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: 0 0 0.9rem;
+    padding: 0.6rem 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--hot) 55%, var(--line));
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--hot) 10%, var(--panel));
+    color: var(--text);
+    font-size: 0.9rem;
   }
   .health-strip {
     display: flex;

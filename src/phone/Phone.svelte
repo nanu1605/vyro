@@ -1,18 +1,29 @@
 <script lang="ts">
   // The phone app (1.4): a PC's readings from anywhere, through the Vyro relay, sealed end to
-  // end. Installable from the browser (no app store). Read-only: it shows the readings and can
-  // only sign itself out.
+  // end. Installable from the browser (no app store). From 1.5 it also shows what runs on the
+  // PC, its devices and Health, and, on a phone the owner allowed on the PC, changes it: ends a
+  // process, shuts it down, wakes another PC, and the rest Vyro does (screens/).
   import { onMount } from 'svelte';
   import { fmtDate } from '../format';
   import { applyLook, type AccentChoice, type ThemeId } from '../themes';
   import type { RemoteView } from '../types';
   import { deviceName, pageTitle, STALE_SECS } from '../remote/companion';
   import LiveView from '../remote/LiveView.svelte';
-  import { addPc, confirmNext, linkFrom, loadPcs, MAX_PCS, parseLink, removePc, savePcs, updatePc, type Link, type PairedPc } from './pcs';
+  import { addPc, confirmNext, linkFrom, loadPcs, MAX_PCS, parseLink, removePc, savePcs, sleepers, updatePc, type Link, type PairedPc } from './pcs';
   import { PcLink, type LinkState, type PhoneInfo } from './relay';
+  import { errText } from './screens/ask';
   import { b64url, randomBytes, SECRET_LEN } from './seal';
 
   type Screen = 'home' | 'pc' | 'scan' | 'install';
+  /** A PC's tabs (1.5); only Live for a PC whose Vyro is older. */
+  type Tab = 'live' | 'processes' | 'devices' | 'health' | 'more';
+  const TABS: Array<{ id: Tab; label: string }> = [
+    { id: 'live', label: 'Live' },
+    { id: 'processes', label: 'Processes' },
+    { id: 'devices', label: 'Devices' },
+    { id: 'health', label: 'Health' },
+    { id: 'more', label: 'More' },
+  ];
 
   /** Chrome's install prompt (Android, desktop). */
   interface InstallPrompt extends Event {
@@ -40,11 +51,19 @@
   let notice = $state<string | null>(null);
   let pasted = $state('');
   let installPrompt = $state<InstallPrompt | null>(null);
+  let tab = $state<Tab>('live');
+  let waking = $state<string | null>(null);
 
   let link: PcLink | null = null;
   let listLinks: PcLink[] = [];
 
   const pc = $derived(pcs.find((p) => p.room === current));
+  /** The PC answers requests (protocol 2), and which this phone may make. */
+  const asks = $derived((info?.methods?.length ?? 0) > 0);
+  const can = (m: string) => info?.methods?.includes(m) ?? false;
+  const ask = <T,>(m: string, p: object = {}) =>
+    link ? link.request<T>(m, p) : Promise.reject<T>(new Error('Not connected to the PC.'));
+  const others = $derived(sleepers(pcs, current));
   const unit = $derived(info?.unit ?? 'c');
   const stale = $derived(screen === 'pc' && linkState === 'online' && (lastAt === 0 || now - lastAt > STALE_SECS * 1000));
   const STATE_TEXT: Record<LinkState, string> = {
@@ -81,7 +100,7 @@
         () => pcs.find((q) => q.room === p.room),
         {
           onState: (s) => (listStates = { ...listStates, [p.room]: s }),
-          onInfo: (i) => save(updatePc(pcs, p.room, { name: i.pc || p.name })),
+          onInfo: (i) => save(updatePc(pcs, p.room, { name: i.pc || p.name, wake: i.wake?.mac })),
           onView: () => {},
           onRekeyed: () => save(confirmNext(pcs, p.room)),
         },
@@ -108,6 +127,7 @@
     lastAt = 0;
     linkState = 'connecting';
     screen = 'pc';
+    tab = 'live';
     notice = null;
     save(updatePc(pcs, room, { used: Date.now() }));
     link = new PcLink(
@@ -116,7 +136,7 @@
         onState: (s) => (linkState = s),
         onInfo: (i) => {
           info = i;
-          if (i.pc) save(updatePc(pcs, room, { name: i.pc }));
+          save(updatePc(pcs, room, { name: i.pc || (pcs.find((p) => p.room === room)?.name ?? ''), wake: i.wake?.mac }));
           applyLook({ theme: i.theme as ThemeId, accent: i.accent as AccentChoice, openOn: 'dashboard' });
         },
         onView: (v) => {
@@ -187,6 +207,49 @@
     goHome();
   }
 
+  /** Has another paired PC, awake and allowing this phone, send `target` the wake signal. */
+  async function wakeThrough(target: PairedPc): Promise<void> {
+    if (!target.wake) return;
+    waking = `Asking another PC to wake ${target.name}…`;
+    for (const helper of pcs.filter((p) => p.room !== target.room)) {
+      const result = await new Promise<string | null>((resolve) => {
+        let done = false;
+        const finish = (r: string | null) => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          l.stop();
+          resolve(r);
+        };
+        const timer = setTimeout(() => finish(null), 12_000);
+        const l: PcLink = new PcLink(
+          () => pcs.find((q) => q.room === helper.room),
+          {
+            onState: (s) => {
+              if (s !== 'online' && s !== 'connecting') finish(null);
+            },
+            onInfo: (i) => {
+              if (!i.methods?.includes('wake')) return finish(null);
+              l.request('wake', { mac: target.wake, pc: target.name }).then(
+                () => finish(helper.name),
+                () => finish(null),
+              );
+            },
+            onView: () => {},
+            onRekeyed: () => save(confirmNext(pcs, helper.room)),
+          },
+          { name: NAME, watch: false, base: location.origin },
+        );
+        l.start();
+      });
+      if (result) {
+        waking = `${result} sent ${target.name} the wake signal. It shows here once it is up.`;
+        return;
+      }
+    }
+    waking = `No other PC could send it. One of them has to be on, on the same network, and let this phone control it.`;
+  }
+
   async function install(): Promise<void> {
     const p = installPrompt;
     installPrompt = null;
@@ -251,7 +314,9 @@
       {/if}
     </div>
     <div class="bar-row">
-      <p class="tagline">End-to-end encrypted · read-only</p>
+      <p class="tagline">
+        End-to-end encrypted{screen === 'pc' && info ? (info.control ? ' · can change this PC' : ' · view only') : ''}
+      </p>
       {#if screen === 'pc' || screen === 'scan'}
         <button type="button" class="ghost small-btn" onclick={goHome}>{pcs.length > 1 ? 'All PCs' : 'PCs'}</button>
       {/if}
@@ -284,7 +349,31 @@
         />
       {/await}
     {:else if screen === 'pc' && pc}
-      {#if linkState === 'online' && view}
+      {#if linkState === 'online' && asks}
+        <nav class="tabs" aria-label="{pc.name}">
+          {#each TABS as t (t.id)}
+            <button type="button" class="tab" aria-current={tab === t.id ? 'page' : undefined} onclick={() => (tab = t.id)}>
+              {t.label}
+            </button>
+          {/each}
+        </nav>
+      {/if}
+      {#if linkState === 'online' && asks && tab !== 'live'}
+        {#if tab === 'processes'}
+          {#await import('./screens/Processes.svelte') then m}<m.default {ask} {can} pc={pc.name} />{/await}
+        {:else if tab === 'devices'}
+          {#await import('./screens/Devices.svelte') then m}<m.default {ask} {can} pc={pc.name} />{/await}
+        {:else if tab === 'health'}
+          {#await import('./screens/Health.svelte') then m}<m.default {ask} {can} pc={pc.name} />{/await}
+        {:else}
+          {#await import('./screens/More.svelte') then m}<m.default {ask} {can} pc={pc.name} sleepers={others} />{/await}
+        {/if}
+        {#if !info?.control}
+          <p class="muted small">
+            This phone may only look. To let it change {pc.name}: Settings → Remote → From anywhere on the PC.
+          </p>
+        {/if}
+      {:else if linkState === 'online' && view}
         <LiveView {view} {unit} pc={pc.name} {now} />
         <footer>
           {#if info}
@@ -299,6 +388,14 @@
         <section class="panel" aria-labelledby="state-title">
           <h1 id="state-title">{pc.name} is asleep or off</h1>
           <p>Its readings come back here as soon as it wakes, with Vyro running and <b>Reach from anywhere</b> on.</p>
+          {#if pc.wake && pcs.length > 1}
+            <div class="actions">
+              <button type="button" onclick={() => void wakeThrough(pc).catch((e: unknown) => (waking = errText(e)))}>
+                Wake {pc.name}
+              </button>
+            </div>
+          {/if}
+          {#if waking}<p role="status">{waking}</p>{/if}
         </section>
       {:else if linkState === 'unreachable'}
         <section class="panel" aria-labelledby="state-title">
@@ -381,14 +478,33 @@
         </section>
       {/if}
       <p class="muted small">
-        Readings travel through the Vyro relay sealed with keys only this phone and your PC have; the relay cannot read
-        them. Nothing here can change the PC.
+        Everything travels through the Vyro relay sealed with keys only this phone and your PC have; the relay cannot read
+        it. Whether this phone may change a PC is decided on that PC.
       </p>
     {/if}
   </main>
 </div>
 
 <style>
+  .tabs {
+    display: flex;
+    gap: 0.25rem;
+    margin: 0 0 0.9rem;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--line);
+  }
+  .tab {
+    flex: none;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px 8px 0 0;
+    background: transparent;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .tab[aria-current='page'] {
+    color: var(--text);
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
   .bar-row {
     display: flex;
     align-items: center;

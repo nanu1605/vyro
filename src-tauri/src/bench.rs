@@ -183,7 +183,7 @@ fn setup(
     }
 }
 
-fn preflight_now(app: &AppHandle, state: &BenchState) -> Preflight {
+pub(crate) fn preflight_now(app: &AppHandle, state: &BenchState) -> Preflight {
     let gpu = bench::gpu::adapter_name();
     let dir = temp_dir();
     let drive = app
@@ -218,7 +218,7 @@ pub async fn start_benchmark(app: AppHandle, mode: BenchMode) -> Result<(), Stri
         .map_err(|e| e.to_string())?
 }
 
-fn start(app: &AppHandle, mode: BenchMode) -> Result<(), String> {
+pub(crate) fn start(app: &AppHandle, mode: BenchMode) -> Result<(), String> {
     let state = app.state::<BenchState>();
     let engine = app.state::<Engine>();
     let pre = preflight_now(app, &state);
@@ -311,7 +311,11 @@ pub fn stop_benchmark(app: AppHandle) {
 /// Where the run is, while one goes on (a reopened view picks it up).
 #[tauri::command]
 pub fn get_benchmark_progress(state: State<'_, BenchState>) -> Option<BenchProgress> {
-    if running(&state) {
+    progress(&state)
+}
+
+pub(crate) fn progress(state: &BenchState) -> Option<BenchProgress> {
+    if running(state) {
         lock(&state.progress).clone()
     } else {
         None

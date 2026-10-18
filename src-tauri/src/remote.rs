@@ -14,6 +14,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
+use vyro_core::actions::wake::WakeReadiness;
 use vyro_core::remote::auth::{hex, Auth, Stored, STORED_VERSION};
 use vyro_core::remote::relay::proto::{pairing_link, relay_base};
 use vyro_core::remote::relay::{
@@ -44,6 +45,8 @@ struct RelayChoice {
     enabled: bool,
     /// The owner's own relay; none: the built-in one.
     url: Option<String>,
+    /// "Wake from phone" (1.5): phones are told this PC's wired address.
+    wake: bool,
 }
 
 pub struct Remote {
@@ -163,10 +166,58 @@ fn hooks(app: &AppHandle) -> Hooks {
     }
 }
 
+/// The wired adapter another PC would wake this one through, while "Wake from phone" is on.
+/// Read at most every few minutes: a phone's `info` asks for it while the relay connection
+/// holds its phones.
+fn wake_target(app: &AppHandle) -> Option<vyro_core::actions::wake::WakeTarget> {
+    use vyro_core::actions::wake::{mac_text, parse_mac, WakeTarget};
+    type Cached = Option<(std::time::Instant, Option<WakeTarget>)>;
+    static CACHE: Mutex<Cached> = Mutex::new(None);
+    const FRESH: Duration = Duration::from_secs(300);
+    let on = app
+        .try_state::<Remote>()
+        .is_some_and(|r| lock(&r.relay).wake);
+    if !on {
+        return None;
+    }
+    if let Some((at, target)) = lock(&CACHE).as_ref() {
+        if at.elapsed() < FRESH {
+            return target.clone();
+        }
+    }
+    let target = wired_adapter().and_then(|a| {
+        let mac = parse_mac(&a.mac?.0)?;
+        Some(WakeTarget {
+            mac: mac_text(&mac),
+        })
+    });
+    *lock(&CACHE) = Some((std::time::Instant::now(), target.clone()));
+    target
+}
+
+/// This PC's wired, physical adapter, a connected one first.
+fn wired_adapter() -> Option<vyro_core::info::NetAdapterInfo> {
+    let mut wired: Vec<_> = crate::commands::collect_network()
+        .into_iter()
+        .filter(|a| {
+            a.kind == vyro_core::snapshot::NetKind::Ethernet
+                && !a.virtual_adapter
+                && a.mac.is_some()
+        })
+        .collect();
+    wired.sort_by_key(|a| (!a.connected, !a.primary));
+    wired.into_iter().next()
+}
+
 fn relay_hooks(app: &AppHandle) -> RelayHooks {
     let (about, save, watched, state) = (app.clone(), app.clone(), app.clone(), app.clone());
+    let asked = app.clone();
     RelayHooks {
-        info: Box::new(move || info(&about)),
+        // Only phones through the relay, sealed, hear how to wake this PC; never the LAN page.
+        info: Box::new(move || RemoteInfo {
+            wake: wake_target(&about),
+            ..info(&about)
+        }),
         saved: Box::new(move || saved(&save)),
         watching: Box::new(move |n| {
             if let Some(r) = watched.try_state::<Remote>() {
@@ -175,6 +226,7 @@ fn relay_hooks(app: &AppHandle) -> RelayHooks {
             watching_changed(&watched);
         }),
         state: Box::new(move |_| emit(&state)),
+        request: Box::new(move |r, reply| crate::remote_api::handle(&asked, r, reply)),
     }
 }
 
@@ -206,6 +258,7 @@ impl Remote {
             relay: Mutex::new(RelayChoice {
                 enabled: relay.enabled,
                 url: relay.url.and_then(|u| relay_base(&u).ok()),
+                wake: relay.wake,
             }),
             phones: Mutex::new(phones),
             client: Mutex::new(None),
@@ -251,10 +304,14 @@ impl Remote {
         };
         let choice = lock(&self.relay).clone();
         let relay = match lock(&self.phones).as_ref() {
-            Some(p) => Some(lock(p).stored(choice.enabled, choice.url)),
-            None if choice.enabled || choice.url.is_some() => Some(StoredRelay {
+            Some(p) => Some(StoredRelay {
+                wake: choice.wake,
+                ..lock(p).stored(choice.enabled, choice.url)
+            }),
+            None if choice.enabled || choice.url.is_some() || choice.wake => Some(StoredRelay {
                 enabled: choice.enabled,
                 url: choice.url,
+                wake: choice.wake,
                 ..StoredRelay::default()
             }),
             None => None,
@@ -498,7 +555,30 @@ impl Remote {
         Ok(())
     }
 
-    fn start_relay_pairing(&self) -> Result<(), String> {
+    /// Lets a phone control the PC, or only look (1.5). The phone hears at once.
+    fn set_phone_control(&self, id: &str, control: bool) -> Result<(), String> {
+        let phones = lock(&self.phones).clone().ok_or("No phone is paired.")?;
+        if !lock(&phones).set_control(id, control) {
+            return Err("That phone is no longer paired.".into());
+        }
+        log::info!(
+            "remote: a phone may {}",
+            if control {
+                "control this PC"
+            } else {
+                "only look"
+            }
+        );
+        self.save();
+        Ok(())
+    }
+
+    fn set_wake(&self, on: bool) {
+        lock(&self.relay).wake = on;
+        self.save();
+    }
+
+    fn start_relay_pairing(&self, control: bool) -> Result<(), String> {
         if lock(&self.client).is_none() {
             return Err("Turn on reach from anywhere first.".into());
         }
@@ -519,6 +599,7 @@ impl Remote {
                 .find(|id| p.id_free(id) && !lan.contains(&hex(id)))
                 .ok_or("No randomness available.")?;
             p.start_pairing(unix_now(), secret, id)?;
+            p.set_control(&hex(&id), control);
             p.generation()
         };
         if let Some(c) = lock(&self.client).as_ref() {
@@ -582,6 +663,7 @@ impl Remote {
             error,
             pairing,
             watching: u32::try_from(watching.len()).unwrap_or(u32::MAX),
+            wake: choice.wake,
         };
         (status, devices)
     }
@@ -750,9 +832,51 @@ pub async fn set_relay_url(app: AppHandle, url: Option<String>) -> Result<Remote
     change(app, move |app, r| r.set_relay_url(app, url.as_deref())).await
 }
 
+/// `control`: the phone may control the PC (1.5); otherwise it only looks.
 #[tauri::command]
-pub async fn start_relay_pairing(app: AppHandle) -> Result<RemoteStatus, String> {
-    change(app, |_, r| r.start_relay_pairing()).await
+pub async fn start_relay_pairing(app: AppHandle, control: bool) -> Result<RemoteStatus, String> {
+    change(app, move |_, r| r.start_relay_pairing(control)).await
+}
+
+/// Lets a phone paired through the relay control the PC, or only look (1.5).
+#[tauri::command]
+pub async fn set_phone_control(
+    app: AppHandle,
+    id: String,
+    control: bool,
+) -> Result<RemoteStatus, String> {
+    change(app, move |_, r| r.set_phone_control(&id, control)).await
+}
+
+/// "Wake from phone" (1.5).
+#[tauri::command]
+pub async fn set_wake_from_phone(app: AppHandle, on: bool) -> Result<RemoteStatus, String> {
+    change(app, move |_, r| {
+        r.set_wake(on);
+        Ok(())
+    })
+    .await
+}
+
+/// How ready this PC is to be woken: its wired adapter and Windows' settings for it.
+#[tauri::command]
+pub async fn get_wake_readiness(app: AppHandle) -> Result<WakeReadiness, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let adapter = wired_adapter();
+        let laptop = app.try_state::<crate::engine::Engine>().is_some_and(|e| {
+            e.inventory.hardware().board.form_factor == vyro_core::info::FormFactor::Laptop
+        });
+        WakeReadiness {
+            magic_packet: adapter
+                .as_ref()
+                .and_then(|a| vyro_core::actions::wake::magic_packet_setting(&a.description)),
+            adapter: adapter.map(|a| a.name),
+            fast_startup: vyro_core::actions::wake::fast_startup(),
+            laptop,
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

@@ -28,7 +28,7 @@ fn join(parts: &[Option<&str>]) -> Option<String> {
 }
 
 /// The PC summary and the drivers, from the inventory (no serial numbers).
-fn app_info(app: &AppHandle, engine: &Engine) -> DiagAppInfo {
+pub(crate) fn app_info(app: &AppHandle, engine: &Engine) -> DiagAppInfo {
     let hw = engine.inventory.hardware();
     let sys = engine.inventory.system();
     let status = engine.status();

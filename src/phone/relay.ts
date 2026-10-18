@@ -1,13 +1,20 @@
 // The phone's connection to one PC through the relay (1.4): a WebSocket to the PC's room,
 // everything to and from the PC sealed (`seal.ts`). It reconnects by itself, and tells the page
 // how things stand: the PC asleep, this phone signed out, the relay out of reach.
+//
+// Protocol 2 (1.5): the PC's `info` gives this connection a session; every later message
+// carries it with a count, so the relay cannot replay one. Requests (`request`) go out as
+// `req` and come back as `res`, or a long answer in `part`s.
 
 import type { RemoteInfo, RemoteView } from '../types';
 import { aad, b64url, deriveKeys, open, seal, unb64url, unhex, type Bytes, type Keys } from './seal';
 import type { PairedPc } from './pcs';
 
-/** The sealed messages' version this app speaks. */
-export const PROTOCOL = 1;
+/** The sealed messages' version this app speaks, and the oldest PC it can still show. */
+export const PROTOCOL = 2;
+export const OLDEST = 1;
+/** How long a request waits for its answer. */
+export const REQUEST_MS = 30_000;
 
 export type LinkState =
   | 'connecting'
@@ -25,7 +32,18 @@ export type LinkState =
   /** The PC's Vyro is older than this app. */
   | 'tooOld';
 
-export type PhoneInfo = RemoteInfo & { protocol?: number };
+export type PhoneInfo = RemoteInfo & {
+  protocol?: number;
+  /** Protocol 2: this connection's session. */
+  session?: string;
+  /** This phone may control the PC (the owner allows it on the PC). */
+  control?: boolean;
+  /** The requests it may make. */
+  methods?: string[];
+};
+
+/** A request that failed: the PC refused it, or did not answer. */
+export class RequestError extends Error {}
 
 export interface Handlers {
   onState(s: LinkState): void;
@@ -69,6 +87,12 @@ export class PcLink {
   private current: LinkState = 'connecting';
   /** Messages and closes are handled one at a time, in order (opening a frame waits). */
   private queue: Promise<void> = Promise.resolve();
+  /** Protocol 2: this connection's session and the count of messages sent in it. */
+  private session: string | null = null;
+  private count = 0;
+  private nextId = 1;
+  private outgoing: Promise<void> = Promise.resolve();
+  private waiting = new Map<number, { ok: (v: unknown) => void; fail: (e: Error) => void; parts: string[] }>();
 
   constructor(
     private readonly pc: () => PairedPc | undefined,
@@ -115,6 +139,39 @@ export class PcLink {
   async signOut(): Promise<void> {
     if (this.ws?.readyState === 1) await this.send({ t: 'bye' });
     this.stop();
+  }
+
+  /** Asks the PC (protocol 2). Fails when the PC refuses, is older, or does not answer. */
+  request<T = unknown>(method: string, params: object = {}): Promise<T> {
+    if (this.current !== 'online' || !this.session) {
+      return Promise.reject(new RequestError(this.session ? 'Not connected to the PC.' : 'Update Vyro on the PC.'));
+    }
+    const id = this.nextId++;
+    return new Promise<T>((ok, fail) => {
+      const timer = setTimeout(() => {
+        this.waiting.delete(id);
+        fail(new RequestError("The PC didn't answer."));
+      }, REQUEST_MS);
+      this.waiting.set(id, {
+        ok: (v) => {
+          clearTimeout(timer);
+          ok(v as T);
+        },
+        fail: (e) => {
+          clearTimeout(timer);
+          fail(e);
+        },
+        parts: [],
+      });
+      void this.send({ t: 'req', id, m: method, p: params });
+    });
+  }
+
+  /** Requests under way fail: the connection they were made on is gone. */
+  private dropWaiting(why: string): void {
+    const all = [...this.waiting.values()];
+    this.waiting.clear();
+    for (const w of all) w.fail(new RequestError(why));
   }
 
   private set(s: LinkState): void {
@@ -197,6 +254,8 @@ export class PcLink {
   private closed(ws: WebSocket, code: number): void {
     if (ws !== this.ws) return;
     this.ws = null;
+    this.session = null;
+    this.dropWaiting('The connection to the PC was lost.');
     this.stopPing();
     if (this.stopped) return;
     const pairing = this.pc()?.next !== undefined;
@@ -235,10 +294,18 @@ export class PcLink {
       if (m.t !== 'pc') return;
       this.wait = WAIT_MIN;
       if (m.online) {
-        // The PC is there: say hello (it answers with its info).
+        // The PC is there: say hello (it answers with its info and, from protocol 2, a session).
         const pc = this.pc();
-        await this.send({ t: 'hello', name: this.opts.name, ...(pc?.next && !this.onNext ? { next: pc.next } : {}) });
+        this.session = null;
+        await this.send({
+          t: 'hello',
+          name: this.opts.name,
+          protocol: PROTOCOL,
+          ...(pc?.next && !this.onNext ? { next: pc.next } : {}),
+        });
       } else {
+        this.session = null;
+        this.dropWaiting('The PC went to sleep or off.');
         this.set('asleep');
       }
       return;
@@ -246,16 +313,16 @@ export class PcLink {
     if (!this.keys) return;
     const plain = await open(this.keys, this.aadIn, new Uint8Array(data));
     if (!plain) return;
-    let m: { t?: string; view?: RemoteView } & PhoneInfo;
+    let m: Incoming;
     try {
-      m = JSON.parse(new TextDecoder().decode(plain)) as typeof m;
+      m = JSON.parse(new TextDecoder().decode(plain)) as Incoming;
     } catch {
       return;
     }
     if (m.t === 'rekeyed') {
       this.on.onRekeyed();
     } else if (m.t === 'info') {
-      if ((m.protocol ?? 0) < PROTOCOL) {
+      if ((m.protocol ?? 0) < OLDEST) {
         this.set('tooOld');
         return;
       }
@@ -264,9 +331,28 @@ export class PcLink {
         this.onNext = false;
         this.on.onRekeyed();
       }
+      // A new session starts its count again; the same one (a permission change) keeps it.
+      const fresh = (m.session ?? null) !== this.session;
+      this.session = m.session ?? null;
+      if (fresh) this.count = 0;
       this.on.onInfo(m);
+      const wasOnline = this.current === 'online';
       this.set('online');
-      if (this.opts.watch) await this.send({ t: 'watch' });
+      if (this.opts.watch && (fresh || !wasOnline)) await this.send({ t: 'watch' });
+    } else if (m.t === 'res' && m.id != null) {
+      this.answered(m.id, m);
+    } else if (m.t === 'part' && m.id != null && m.d != null) {
+      const w = this.waiting.get(m.id);
+      if (!w) return;
+      w.parts[m.i ?? 0] = m.d;
+      if (w.parts.filter((x) => x != null).length === m.n) {
+        try {
+          this.answered(m.id, JSON.parse(w.parts.join('')) as Incoming);
+        } catch {
+          this.waiting.delete(m.id);
+          w.fail(new RequestError('The answer did not arrive whole.'));
+        }
+      }
     } else if (m.t === 'view' && m.view) {
       if (m.view.ts < this.lastTs) return;
       this.lastTs = m.view.ts;
@@ -274,10 +360,30 @@ export class PcLink {
     }
   }
 
-  private async send(msg: object): Promise<void> {
+  private answered(id: number, m: Incoming): void {
+    const w = this.waiting.get(id);
+    if (!w) return;
+    this.waiting.delete(id);
+    if (m.err != null) w.fail(new RequestError(m.err));
+    else w.ok(m.ok);
+  }
+
+  /** Messages go out one at a time, in the order of their counts (sealing waits). */
+  private send(msg: { t: string } & Record<string, unknown>): Promise<void> {
+    const next = this.outgoing.then(() => this.sendNow(msg));
+    this.outgoing = next.catch(() => {});
+    return next;
+  }
+
+  private async sendNow(msg: { t: string } & Record<string, unknown>): Promise<void> {
     const ws = this.ws;
     if (!ws || ws.readyState !== 1 || !this.keys) return;
-    const frame = await seal(this.keys, this.aadOut, new TextEncoder().encode(JSON.stringify(msg)));
+    // After hello, protocol 2 stamps every message with the session and the next count.
+    const stamped = msg.t !== 'hello' && this.session ? { ...msg, s: this.session, n: ++this.count } : msg;
+    const frame = await seal(this.keys, this.aadOut, new TextEncoder().encode(JSON.stringify(stamped)));
     if (ws === this.ws && ws.readyState === 1) ws.send(frame);
   }
 }
+
+/** A message from the PC, opened. */
+type Incoming = { t?: string; view?: RemoteView; id?: number; ok?: unknown; err?: string; i?: number; n?: number; d?: string } & PhoneInfo;

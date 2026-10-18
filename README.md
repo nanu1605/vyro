@@ -7,9 +7,12 @@ app or library).
 - **Build spec:** [`PROJECT_PLAN.md`](PROJECT_PLAN.md) — what to build and why.
 - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — milestones, phase tracker, decision log.
 
-**Status:** 1.4.1. Live CPU, GPU, board, fan, voltage, RAM, storage and network sensors on
+**Status:** 1.5. Live CPU, GPU, board, fan, voltage, RAM, storage and network sensors on
 Windows (low-level ones through PawnIO, read by the Vyro Sensor Service), history, System
-Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 1.4.1:
+Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 1.5: the
+[phone app](#phone-app-from-anywhere-14) shows what runs on the PC, its devices and Health, and,
+if you allow it on the PC, changes it: end a program, shut down, restart, sleep or lock, wake
+another PC, switch profiles, run a benchmark or diagnostics. New in 1.4.1:
 Bluetooth Connect and Disconnect that work for headphones and speakers, a device's connection
 as Windows Settings shows it, and a low battery on the Dashboard. New in 1.4: a
 [phone app](#phone-app-from-anywhere-14) for Android and iPhone shows the PC's readings from any
@@ -276,7 +279,8 @@ everything.
 
 **Off by default.** Settings → Remote → **From anywhere** lets your phone show this PC's
 readings on any network: at home, on mobile data, at work. It is an app you install from the
-browser, on Android and iPhone, with no app store. Like the companion below it is read-only.
+browser, on Android and iPhone, with no app store. A phone only looks unless you let it change
+the PC (1.5).
 
 - **How it connects.** The PC keeps one connection to the Vyro relay, a small service on
   Cloudflare, and the phone reaches it there: no port is opened on the PC, and no router is set
@@ -294,6 +298,21 @@ browser, on Android and iPhone, with no app store. Like the companion below it i
     at least once in the chosen time (30 days by default). Settings signs any phone out at once.
 - **The app** shows the same readings as the companion, from several PCs if you pair them, and
   says when a PC is asleep or off. It opens without a network too, to show where things stand.
+  From 1.5 its tabs also show what runs on the PC (Processes), its Devices with their batteries,
+  and Health with alerts; More has the PC's profile, fans, benchmark, diagnostics and updates.
+- **Changing the PC from the phone (1.5).** When pairing, Settings asks whether the phone may
+  only look or also change the PC; the paired list changes it any time. A phone allowed to may
+  end a program (never Windows' own or Vyro), shut down or restart (after 30 seconds unless
+  "now", with a banner and Cancel on the PC), sleep, hibernate, lock or sign out, switch the
+  profile, give the fans back to the BIOS, turn alerts on or off, run a benchmark or
+  diagnostics, connect or disconnect a Bluetooth device, and update Vyro. Turning fan control
+  on and confirming a pump stay at the PC. Settings lists what phones changed. After a restart,
+  the phone reaches the PC again once someone signs in.
+- **Waking the PC (1.5).** A phone cannot send the wake signal itself (web pages cannot send it),
+  so another Vyro PC on the same network sends it: turn on **Wake from phone** in Settings on
+  the PC to be woken, and keep another PC paired with the phone. Settings says what Windows
+  shows about the wired adapter and Fast Startup; the BIOS needs "Wake on LAN" on. A router with
+  a Wake-on-LAN page, or a smart plug with the BIOS set to power on after power loss, also work.
 - **Limits.** Networks that block `workers.dev` or allow the web only through a proxy cannot
   reach the relay. The relay runs on Cloudflare's free plan, shared by everyone: past its
   daily limit it pauses until midnight UTC. Alerts are not sent to phones yet.
@@ -355,6 +374,7 @@ Nothing on it changes the PC.
 | [`docs/remote.md`](docs/remote.md) | The phone app and the relay (1.4): how it connects and pairs, the encryption, what the relay sees, limits, running your own relay |
 | [`docs/field-check-1.4.md`](docs/field-check-1.4.md) | The field check of 1.4: the phone app from anywhere, on Android and iPhone |
 | [`docs/field-check-1.4.1.md`](docs/field-check-1.4.1.md) | The field check of 1.4.1: Bluetooth Connect and Disconnect, connected or not, low batteries |
+| [`docs/field-check-1.5.md`](docs/field-check-1.5.md) | The field check of 1.5: the phone's new tabs, letting a phone change the PC, End task, power, waking a PC |
 
 `vyro-remote.exe` in the same artifact checks the service from the outside (state, connection,
 sensors; `--capture Game.exe` measures a running game for 15 s). The service logs to `%ProgramData%\Vyro\service.log`.

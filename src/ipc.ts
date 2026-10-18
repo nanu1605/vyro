@@ -8,7 +8,7 @@ import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
 import { savedLook, type AccentChoice, type OpenOn, type ThemeId } from './themes';
 import { EMPTY as NO_WIDGETS, type Widgets } from './widgets';
-import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Control, Dashboard, DeviceInfo, Devices, LinkState, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Control, Dashboard, DeviceInfo, Devices, LinkState, PhoneAction, PowerState, WakeReadiness, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -832,9 +832,63 @@ export async function setRelayUrl(url: string | null): Promise<RemoteStatus> {
 }
 
 /** Opens a pairing; the status carries its link and QR code once the relay can take it. */
-export async function startRelayPairing(): Promise<RemoteStatus> {
+/** `control`: the phone may change the PC (1.5); otherwise it only looks. */
+export async function startRelayPairing(control: boolean): Promise<RemoteStatus> {
   if (!inTauri) return (await import('./sim-remote')).simRelayPairing();
-  return invoke<RemoteStatus>('start_relay_pairing');
+  return invoke<RemoteStatus>('start_relay_pairing', { control });
+}
+
+/** Lets a phone paired from anywhere change the PC, or only look (1.5). */
+export async function setPhoneControl(id: string, control: boolean): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simPhoneControl(id, control);
+  return invoke<RemoteStatus>('set_phone_control', { id, control });
+}
+
+/** "Wake from phone" (1.5): phones are told this PC's wired address. */
+export async function setWakeFromPhone(on: boolean): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simWake(on);
+  return invoke<RemoteStatus>('set_wake_from_phone', { on });
+}
+
+export async function getWakeReadiness(): Promise<WakeReadiness> {
+  if (!inTauri) return (await import('./sim-remote')).simWakeReadiness();
+  return invoke<WakeReadiness>('get_wake_readiness');
+}
+
+/** What phones changed on this PC, newest first (1.5). */
+export async function getPhoneActions(): Promise<PhoneAction[]> {
+  if (!inTauri) return (await import('./sim-remote')).simPhoneActions();
+  return invoke<PhoneAction[]>('get_phone_actions');
+}
+
+export async function onPhoneActions(cb: () => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen('phone-actions', () => cb());
+}
+
+/** A shutdown or restart a phone asked for, while it waits (1.5). */
+export async function getPowerState(): Promise<PowerState> {
+  if (!inTauri) return { pending: null, canSleep: true, canHibernate: false };
+  return invoke<PowerState>('get_power_state');
+}
+
+export async function cancelPowerAction(): Promise<PowerState> {
+  if (!inTauri) return { pending: null, canSleep: true, canHibernate: false };
+  return invoke<PowerState>('cancel_power_action');
+}
+
+export async function onPowerPending(cb: (s: PowerState) => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<PowerState>('power-pending', (e) => cb(e.payload));
+}
+
+/** Ends a process (1.5); Windows' own and Vyro's are refused. */
+export async function endProcess(pid: number, name: string): Promise<void> {
+  if (!inTauri) {
+    await new Promise((r) => setTimeout(r, 300));
+    return;
+  }
+  return invoke('end_process', { pid, name });
 }
 
 export async function cancelRelayPairing(): Promise<RemoteStatus> {

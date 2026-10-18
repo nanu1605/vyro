@@ -102,6 +102,9 @@ pub struct RemoteDevice {
     /// Paired through the relay (1.4), not on this network.
     #[serde(default)]
     pub anywhere: bool,
+    /// May control the PC (1.5); only phones paired through the relay can.
+    #[serde(default)]
+    pub control: bool,
 }
 
 /// The current pairing code.
@@ -189,6 +192,11 @@ pub struct RemoteInfo {
     /// This device's name and when its pairing ends.
     pub device: String,
     pub expires: i64,
+    /// So another PC can wake this one (1.5): only to phones through the relay, sealed, while
+    /// "Wake from phone" is on; never on the local page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub wake: Option<crate::actions::wake::WakeTarget>,
 }
 
 #[cfg(test)]

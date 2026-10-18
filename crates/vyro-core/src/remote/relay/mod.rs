@@ -9,9 +9,11 @@
 //! - [`vault`]: secrets at rest, sealed to the Windows account (DPAPI).
 //! - [`session`]: one connection's conversation, without I/O, so it is tested as is.
 //! - [`client`]: the connection itself, on its own thread, reconnecting as needed.
+//! - [`api`]: what a phone may ask (1.5), and which requests need its permission to control.
 //!
 //! Like the local companion it runs in the app, as the signed-in user, never in the service.
 
+pub mod api;
 pub mod client;
 pub mod phones;
 pub mod proto;
@@ -22,8 +24,9 @@ pub mod vault;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub use client::{RelayClient, RelayHooks};
+pub use client::{RelayClient, RelayHooks, Reply};
 pub use phones::{Phones, StoredPhone, StoredRelay};
+pub use session::Request;
 
 /// An open pairing lasts this long, and its secret works once.
 pub const PAIR_SECS: i64 = 600;
@@ -68,6 +71,9 @@ pub struct RelayStatus {
     pub pairing: Option<RelayPairing>,
     /// Phones with the app open now.
     pub watching: u32,
+    /// "Wake from phone" (1.5).
+    #[serde(default)]
+    pub wake: bool,
 }
 
 #[cfg(test)]

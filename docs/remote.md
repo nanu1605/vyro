@@ -1,8 +1,9 @@
 # Remote: the phone companion and reach from anywhere
 
 Vyro shows a PC's readings on other devices in two ways. Both are off until turned on in
-Settings → Remote, both are read-only, and both run in the app, as the signed-in user, never in
-the LocalSystem service.
+Settings → Remote, and both run in the app, as the signed-in user, never in the LocalSystem
+service. The page on this network is read-only. A phone paired from anywhere only looks too,
+unless the owner lets it change the PC (1.5, [below](#control-from-the-phone-15)).
 
 | | On this network (1.0) | From anywhere (1.4) |
 |---|---|---|
@@ -74,16 +75,54 @@ Not stored: no readings and no logs (the Worker's request logs are off). A room 
 of its PC's key, its phones' ids and key hashes, and when the PC was last connected; it is
 deleted 90 days after the PC was last seen.
 
+### Control from the phone (1.5)
+
+- **Off for each phone until the owner allows it, on the PC.** When pairing, Settings asks whether
+  the phone may only look or also change the PC; the paired list changes it later. The phone
+  cannot give itself permission: the PC checks every request against it.
+- **What a phone may do** is a fixed list (`vyro_core::remote::relay::api`). Any paired phone may
+  read: processes, devices, Health, Insights, the Performance Score, alerts, fans, profiles,
+  benchmark and diagnostics results, PC changes, updates and power state. A phone allowed to
+  control the PC may also: switch or keep a profile, give the fans back to the BIOS, turn alert
+  rules on or off, start or stop a benchmark, run diagnostics, connect or disconnect a Bluetooth
+  device, end a process, check for or install an update, shut down, restart, sleep, hibernate,
+  lock, sign out, cancel a shutdown, and have the PC wake another PC. Anything else is refused.
+- **Only at the PC:** turning fan control on, confirming a pump, and (1.6) editing GPU settings.
+  These need someone who can see and hear the PC.
+- **No replays.** On protocol 2 the PC gives each connection of a phone a random session in its
+  sealed `info`; every later message from the phone carries it with a count that only goes up.
+  The PC drops a message from another connection or with a count it has seen, so the relay
+  cannot replay a recorded request. Answers carry the request's id; a long one comes in parts.
+- **A record.** Settings → Remote lists what phones changed, with the phone's name and time (the
+  last 50, in `phone-actions.json` in the app's data folder). Ending a process and shutting down
+  or restarting also show a notification on the PC, and a waiting shutdown shows a banner with
+  Cancel on every view.
+- **Ending a process** never touches Windows' own processes, Explorer or Vyro, and checks the
+  process is still the one named; a process that runs as administrator cannot be ended (Vyro is
+  not elevated).
+- **Power.** Shut down and Restart wait 30 seconds unless asked for "now", can close apps with
+  unsaved work only if asked, and are full shutdowns (not Fast Startup's), which a wake signal can
+  wake from. Remote access runs in the app, so after a restart or sign-out the phone shows
+  "asleep or off" until someone signs in.
+- **Waking a PC.** A phone's browser cannot send the wake signal (web pages cannot send UDP).
+  With "Wake from phone" on, a PC tells its phones, sealed, its wired adapter's address; another
+  Vyro PC on the same network, paired with the same phone and allowing it, sends the signal
+  when asked. Settings shows what Windows says about the adapter's wake setting and Fast
+  Startup; the BIOS setting cannot be read. A router's own Wake-on-LAN page, or a smart plug with
+  the BIOS set to power on after power loss, are other ways.
+
 ### Trust points, plainly
 
 - **The phone app's code comes from the relay.** Whoever controls the Cloudflare account could
-  serve an app that leaks the phone's secrets. It is deployed only by `relay.yml` from this
-  repository, by hand; the account should have two-factor sign-in. Running your own relay (below)
-  removes that trust point.
+  serve an app that leaks the phone's secrets, and, for a phone allowed to change the PC, sends
+  it requests (1.5). It is deployed only by `relay.yml` from this repository, by hand; the
+  account should have two-factor sign-in. Running your own relay (below) removes that trust
+  point; letting phones only look limits what it could do.
 - **The relay can deny service:** it can drop frames or close connections. It cannot read or
   forge readings: a forged frame does not open, and the phone ignores readings older than the
   last it showed.
 - **A phone that is lost** is signed out from Settings → Remote; the relay cuts it off at once.
+  A phone that may change the PC is as strong as its lock screen.
 
 ### Limits
 

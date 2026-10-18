@@ -19,4 +19,8 @@ watching: boolean,
 /**
  * Paired through the relay (1.4), not on this network.
  */
-anywhere: boolean, };
+anywhere: boolean, 
+/**
+ * May control the PC (1.5); only phones paired through the relay can.
+ */
+control: boolean, };

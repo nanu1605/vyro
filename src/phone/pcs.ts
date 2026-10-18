@@ -16,6 +16,8 @@ export interface PairedPc {
   name: string;
   /** Last opened (ms), so the list starts with the one used most recently. */
   used: number;
+  /** Its wired adapter's address, while it lets phones have another PC wake it (1.5). */
+  wake?: string;
 }
 
 /** A pairing link's contents. */
@@ -30,6 +32,7 @@ const KEY = 'vyro.pcs';
 
 const ROOM = /^[0-9a-f]{32}$/;
 const PHONE = /^[0-9a-f]{8}$/;
+const MAC = /^[0-9A-F]{2}(-[0-9A-F]{2}){5}$/;
 
 function secretOk(s: string): boolean {
   return unb64url(s)?.length === SECRET_LEN;
@@ -68,7 +71,8 @@ function valid(p: unknown): p is PairedPc {
     secretOk(v.secret) &&
     (v.next === undefined || (typeof v.next === 'string' && secretOk(v.next))) &&
     typeof v.name === 'string' &&
-    typeof v.used === 'number'
+    typeof v.used === 'number' &&
+    (v.wake === undefined || (typeof v.wake === 'string' && MAC.test(v.wake)))
   );
 }
 
@@ -100,11 +104,26 @@ export function addPc(pcs: PairedPc[], link: Link, next: string, now: number): P
 
 /** The PC took the phone's own secret. */
 export function confirmNext(pcs: PairedPc[], room: string): PairedPc[] {
-  return pcs.map((p) => (p.room === room && p.next ? { room: p.room, phone: p.phone, secret: p.next, name: p.name, used: p.used } : p));
+  return pcs.map((p) => {
+    if (p.room !== room || !p.next) return p;
+    const { next, ...rest } = p;
+    return { ...rest, secret: next };
+  });
 }
 
-export function updatePc(pcs: PairedPc[], room: string, change: Partial<Pick<PairedPc, 'name' | 'used'>>): PairedPc[] {
-  return pcs.map((p) => (p.room === room ? { ...p, ...change } : p));
+export function updatePc(pcs: PairedPc[], room: string, change: Partial<Pick<PairedPc, 'name' | 'used' | 'wake'>>): PairedPc[] {
+  return pcs.map((p) => {
+    if (p.room !== room) return p;
+    const next = { ...p, ...change };
+    // No address any more: the owner turned "Wake from phone" off.
+    if ('wake' in change && change.wake === undefined) delete next.wake;
+    return next;
+  });
+}
+
+/** Other paired PCs this phone can have woken: they gave their address. */
+export function sleepers(pcs: PairedPc[], except: string | null): Array<{ name: string; mac: string; room: string }> {
+  return pcs.filter((p) => p.room !== except && p.wake).map((p) => ({ name: p.name, mac: p.wake!, room: p.room }));
 }
 
 export function removePc(pcs: PairedPc[], room: string): PairedPc[] {

@@ -144,7 +144,7 @@ fn messages_have_the_shapes_the_relay_and_the_phone_read() {
     assert_eq!(v["t"], "phones");
     assert_eq!(v["list"][0]["id"], "0a1b2c3d");
 
-    let v: serde_json::Value = serde_json::from_str(&proto::info_message(&info())).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&proto::info_message(&info(), None)).unwrap();
     assert_eq!(v["t"], "info");
     assert_eq!(v["pc"], "DESKTOP-TEST");
     assert_eq!(v["protocol"], proto::PROTOCOL);
@@ -318,7 +318,7 @@ fn pairing_over_the_relay_then_reading() {
         r#"{{"t":"hello","name":"iPhone","next":"{}"}}"#,
         b64url(&OWN_SECRET)
     );
-    let (outs, fx) = s.on_frame(&mut p, &link_phone.frame(&hello), &now(&info_fn, None));
+    let (outs, fx, _) = s.on_frame(&mut p, &link_phone.frame(&hello), &now(&info_fn, None));
     assert!(fx.saved);
     assert_eq!(outs.len(), 2);
     assert_eq!(link_phone.read(&outs[0]).unwrap()["t"], "rekeyed");
@@ -327,7 +327,7 @@ fn pairing_over_the_relay_then_reading() {
 
     // The phone comes back on its own secret.
     let phone = TestPhone::new(ID, &OWN_SECRET);
-    let (outs, _) = s.on_frame(
+    let (outs, _, _) = s.on_frame(
         &mut p,
         &phone.frame(r#"{"t":"hello","name":"iPhone"}"#),
         &now(&info_fn, None),
@@ -343,7 +343,7 @@ fn pairing_over_the_relay_then_reading() {
     );
 
     // Watching gets the latest view at once, then each new one.
-    let (outs, fx) = s.on_frame(
+    let (outs, fx, _) = s.on_frame(
         &mut p,
         &phone.frame(r#"{"t":"watch"}"#),
         &now(&info_fn, Some(r#"{"ts":1}"#)),
@@ -369,7 +369,7 @@ fn frames_that_do_not_open_are_ignored_and_a_phone_can_sign_itself_out() {
     let _ = s.sync(&p);
     let info_fn = info;
     let stranger = TestPhone::new(ID, &[0x77; 32]);
-    let (outs, fx) = s.on_frame(
+    let (outs, fx, _) = s.on_frame(
         &mut p,
         &stranger.frame(r#"{"t":"bye"}"#),
         &now(&info_fn, None),
@@ -393,7 +393,7 @@ fn frames_that_do_not_open_are_ignored_and_a_phone_can_sign_itself_out() {
         &phone.frame(r#"{"t":"watch"}"#),
         &now(&info_fn, None),
     );
-    let (outs, fx) = s.on_frame(&mut p, &phone.frame(r#"{"t":"bye"}"#), &now(&info_fn, None));
+    let (outs, fx, _) = s.on_frame(&mut p, &phone.frame(r#"{"t":"bye"}"#), &now(&info_fn, None));
     assert!(fx.saved && fx.watching);
     let Out::Text(list) = &outs[0] else { panic!() };
     assert!(!list.contains("0a1b2c3d"));
@@ -415,6 +415,276 @@ fn a_phone_signed_out_in_the_app_stops_watching_at_once() {
     p.sign_out("0a1b2c3d");
     assert!(s.forget_gone(&p));
     assert!(s.watching().is_empty());
+}
+
+// --- requests (1.5) --------------------------------------------------------------------------
+
+/// A protocol 2 phone that said hello: its session.
+fn hello2(s: &mut Session, p: &mut Phones, phone: &TestPhone) -> (String, serde_json::Value) {
+    let info_fn = info;
+    let (outs, _, _) = s.on_frame(
+        p,
+        &phone.frame(r#"{"t":"hello","name":"iPhone","protocol":2}"#),
+        &now(&info_fn, None),
+    );
+    let info = phone.read(&outs[0]).unwrap();
+    (info["session"].as_str().unwrap().to_owned(), info)
+}
+
+fn req(session: &str, n: u64, id: u64, m: &str) -> String {
+    format!(r#"{{"t":"req","s":"{session}","n":{n},"id":{id},"m":"{m}","p":{{"pid":4}}}}"#)
+}
+
+#[test]
+fn requests_need_the_session_a_new_count_and_permission() {
+    let mut p = paired();
+    let mut s = Session::new();
+    let info_fn = info;
+    let phone = TestPhone::new(ID, &OWN_SECRET);
+    let (session, info) = hello2(&mut s, &mut p, &phone);
+    assert_eq!(info["protocol"], 2);
+    assert_eq!(info["control"], false);
+    let methods: Vec<&str> = info["methods"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|m| m.as_str())
+        .collect();
+    assert!(methods.contains(&"processes") && !methods.contains(&"power"));
+
+    // Without the session, or with another one: dropped.
+    let bare = r#"{"t":"req","id":1,"m":"processes"}"#;
+    let (outs, _, reqs) = s.on_frame(&mut p, &phone.frame(bare), &now(&info_fn, None));
+    assert!(outs.is_empty() && reqs.is_empty());
+    let other = req(&b64url(&[9; 16]), 1, 1, "processes");
+    assert!(s
+        .on_frame(&mut p, &phone.frame(&other), &now(&info_fn, None))
+        .2
+        .is_empty());
+
+    // A reading request goes to the app, once: the same frame again is a replay.
+    let frame = phone.frame(&req(&session, 1, 1, "processes"));
+    let (_, _, reqs) = s.on_frame(&mut p, &frame, &now(&info_fn, None));
+    assert_eq!(reqs.len(), 1);
+    assert_eq!(
+        (reqs[0].phone.as_str(), reqs[0].name.as_str(), reqs[0].id),
+        ("0a1b2c3d", "Pixel 9 · Chrome", 1)
+    );
+    assert_eq!(
+        (reqs[0].method.as_str(), &reqs[0].params["pid"]),
+        ("processes", &4.into())
+    );
+    let (outs, _, reqs) = s.on_frame(&mut p, &frame, &now(&info_fn, None));
+    assert!(outs.is_empty() && reqs.is_empty(), "a replay does nothing");
+    let older = phone.frame(&req(&session, 1, 2, "devices"));
+    assert!(s
+        .on_frame(&mut p, &older, &now(&info_fn, None))
+        .2
+        .is_empty());
+
+    // Changing the PC needs the owner's permission; unknown requests are refused.
+    let (outs, _, reqs) = s.on_frame(
+        &mut p,
+        &phone.frame(&req(&session, 2, 3, "power")),
+        &now(&info_fn, None),
+    );
+    assert!(reqs.is_empty());
+    let res = phone.read(&outs[0]).unwrap();
+    assert_eq!(
+        (res["t"].as_str(), res["id"].as_u64()),
+        (Some("res"), Some(3))
+    );
+    assert_eq!(res["err"], api::VIEW_ONLY);
+    let (outs, _, _) = s.on_frame(
+        &mut p,
+        &phone.frame(&req(&session, 3, 4, "format.c")),
+        &now(&info_fn, None),
+    );
+    assert_eq!(phone.read(&outs[0]).unwrap()["err"], api::UNKNOWN);
+
+    // The owner allows control on the PC: the phone hears at once, and may.
+    assert!(p.set_control("0a1b2c3d", true));
+    let outs = s.refresh(&mut p, &now(&info_fn, None));
+    let info = phone.read(&outs[0]).unwrap();
+    assert_eq!(
+        (info["control"].as_bool(), info["session"].as_str()),
+        (Some(true), Some(session.as_str()))
+    );
+    assert!(s.refresh(&mut p, &now(&info_fn, None)).is_empty(), "once");
+    let (_, _, reqs) = s.on_frame(
+        &mut p,
+        &phone.frame(&req(&session, 4, 5, "power")),
+        &now(&info_fn, None),
+    );
+    assert_eq!(reqs[0].method, "power");
+
+    // A new hello is a new session: the old one's messages are refused.
+    let (fresh, _) = hello2(&mut s, &mut p, &phone);
+    assert_ne!(fresh, session);
+    let stale = phone.frame(&req(&session, 9, 6, "power"));
+    assert!(s
+        .on_frame(&mut p, &stale, &now(&info_fn, None))
+        .2
+        .is_empty());
+    // And a phone that left the relay starts over too.
+    let _ = s.on_text(r#"{"t":"here","phones":[]}"#);
+    let gone = phone.frame(&req(&fresh, 10, 7, "power"));
+    assert!(s.on_frame(&mut p, &gone, &now(&info_fn, None)).2.is_empty());
+}
+
+#[test]
+fn a_protocol_1_phone_only_looks() {
+    let mut p = paired();
+    assert!(p.set_control("0a1b2c3d", true));
+    let mut s = Session::new();
+    let info_fn = info;
+    let phone = TestPhone::new(ID, &OWN_SECRET);
+    let (outs, _, _) = s.on_frame(
+        &mut p,
+        &phone.frame(r#"{"t":"hello","name":"iPhone"}"#),
+        &now(&info_fn, None),
+    );
+    let info = phone.read(&outs[0]).unwrap();
+    assert_eq!(info["t"], "info");
+    assert!(info.get("session").is_none() && info.get("methods").is_none());
+    let (_, _, reqs) = s.on_frame(
+        &mut p,
+        &phone.frame(r#"{"t":"req","id":1,"m":"power"}"#),
+        &now(&info_fn, None),
+    );
+    assert!(reqs.is_empty());
+    let (_, fx, _) = s.on_frame(
+        &mut p,
+        &phone.frame(r#"{"t":"watch"}"#),
+        &now(&info_fn, None),
+    );
+    assert!(fx.watching);
+    // Something newer than this PC knows is ignored.
+    let (outs, _, reqs) = s.on_frame(
+        &mut p,
+        &phone.frame(r#"{"t":"stream","x":1}"#),
+        &now(&info_fn, None),
+    );
+    assert!(outs.is_empty() && reqs.is_empty());
+}
+
+#[test]
+fn long_answers_go_in_parts_and_only_to_paired_phones() {
+    let p = paired();
+    let s = Session::new();
+    let phone = TestPhone::new(ID, &OWN_SECRET);
+    let short = s.answer(&p, "0a1b2c3d", 1, &Ok(serde_json::json!({ "a": 1 })));
+    assert_eq!(phone.read(&short[0]).unwrap()["ok"]["a"], 1);
+
+    let big = serde_json::json!({ "names": vec!["é process ".repeat(40); 400] });
+    let outs = s.answer(&p, "0a1b2c3d", 2, &Ok(big.clone()));
+    assert!(outs.len() > 1);
+    let parts: Vec<serde_json::Value> = outs.iter().map(|o| phone.read(o).unwrap()).collect();
+    let mut joined = String::new();
+    for (i, part) in parts.iter().enumerate() {
+        assert_eq!(
+            (part["t"].as_str(), part["id"].as_u64()),
+            (Some("part"), Some(2))
+        );
+        assert_eq!(part["i"].as_u64(), Some(i as u64));
+        assert_eq!(part["n"].as_u64(), Some(parts.len() as u64));
+        joined.push_str(part["d"].as_str().unwrap());
+    }
+    for o in &outs {
+        let Out::Binary(b) = o else { panic!() };
+        assert!(b.len() < 64 * 1024, "fits a relay frame");
+    }
+    let res: serde_json::Value = serde_json::from_str(&joined).unwrap();
+    assert_eq!(res["ok"], big);
+
+    // Signed out in the meantime: nothing goes.
+    let mut gone = paired();
+    gone.sign_out("0a1b2c3d");
+    assert!(s.answer(&gone, "0a1b2c3d", 3, &Err("x".into())).is_empty());
+    assert!(s.answer(&p, "zz", 3, &Err("x".into())).is_empty());
+}
+
+#[test]
+fn control_is_kept_and_phones_paired_before_only_look() {
+    let mut p = paired();
+    assert!(!p.may_control(&ID));
+    assert!(p.set_control("0a1b2c3d", true));
+    assert!(!p.set_control("ffffffff", true));
+    assert!(p.may_control(&ID));
+    assert!(p.devices(&[])[0].control);
+    let stored = p.stored(true, None);
+    assert!(stored.phones[0].control);
+    let back = Phones::load(&stored, NOW).unwrap();
+    assert!(back.may_control(&ID));
+
+    // A 1.4 file has no `control`: the phone only looks.
+    let mut json: serde_json::Value = serde_json::to_value(&stored).unwrap();
+    json["phones"][0].as_object_mut().unwrap().remove("control");
+    let old: StoredRelay = serde_json::from_value(json).unwrap();
+    assert!(!Phones::load(&old, NOW).unwrap().may_control(&ID));
+
+    // Allowed while pairing: in force once the phone has paired.
+    let mut q = Phones::fresh(ROOM, PC_KEY);
+    q.start_pairing(NOW, LINK_SECRET, ID).unwrap();
+    assert!(q.set_control("0a1b2c3d", true));
+    assert!(!q.may_control(&ID), "not before it pairs");
+    let _ = q.hello(&ID, "iPhone", Some(&b64url(&OWN_SECRET)), NOW, 30);
+    assert!(q.may_control(&ID));
+}
+
+#[test]
+fn every_request_has_one_access_and_changes_need_control() {
+    let mut seen = std::collections::HashSet::new();
+    for (m, _) in api::METHODS {
+        assert!(seen.insert(*m), "{m} twice");
+    }
+    assert_eq!(api::access("power"), Some(api::Access::Control));
+    assert_eq!(api::access("process.end"), Some(api::Access::Control));
+    assert_eq!(api::access("processes"), Some(api::Access::View));
+    assert_eq!(api::access("nope"), None);
+    assert!(api::allowed(false)
+        .iter()
+        .all(|m| api::access(m) == Some(api::Access::View)));
+    assert_eq!(api::allowed(true).len(), api::METHODS.len());
+}
+
+#[test]
+fn what_a_phone_changed_is_kept_in_words() {
+    let d = |m: &str, p: serde_json::Value| api::describe(m, &p);
+    assert_eq!(
+        d(
+            "process.end",
+            serde_json::json!({ "pid": 4, "name": "chrome.exe" })
+        ),
+        "Ended chrome.exe"
+    );
+    assert_eq!(
+        d(
+            "power",
+            serde_json::json!({ "action": "restart", "wait": 30 })
+        ),
+        "Restart, in 30 s"
+    );
+    assert_eq!(
+        d(
+            "power",
+            serde_json::json!({ "action": "shutDown", "wait": 0 })
+        ),
+        "Shut down, now"
+    );
+    assert_eq!(d("power", serde_json::json!({ "action": "lock" })), "Lock");
+    assert_eq!(
+        d("profile.pick", serde_json::json!({ "profile": "gaming" })),
+        "Switched to the gaming profile"
+    );
+    assert_eq!(
+        d(
+            "alerts.enable",
+            serde_json::json!({ "id": "cpu-hot", "on": false })
+        ),
+        "Turned the alert \"cpu-hot\" off"
+    );
+    assert_eq!(d("wake", serde_json::json!({ "pc": "DESK" })), "Woke DESK");
 }
 
 // --- the connection, against a stand-in relay -----------------------------------------------
@@ -479,6 +749,9 @@ fn the_client_shows_its_key_sends_the_list_answers_phones_and_reconnects() {
             state: Box::new(move |s| {
                 let _ = tx.lock().unwrap().send(s);
             }),
+            request: Box::new(|r, reply| {
+                reply.send(Ok(serde_json::json!({ "asked": r.method })));
+            }),
         },
     )
     .unwrap();
@@ -501,17 +774,46 @@ fn the_client_shows_its_key_sends_the_list_answers_phones_and_reconnects() {
     relay
         .ws
         .send(Message::Binary(
-            phone.frame(r#"{"t":"hello","name":"iPhone"}"#).into(),
+            phone
+                .frame(r#"{"t":"hello","name":"iPhone","protocol":2}"#)
+                .into(),
         ))
         .unwrap();
     let Message::Binary(b) = relay.next() else {
         panic!("expected info")
     };
-    assert_eq!(phone.read(&Out::Binary(b.to_vec())).unwrap()["t"], "info");
+    let info = phone.read(&Out::Binary(b.to_vec())).unwrap();
+    assert_eq!(info["t"], "info");
+    let session = info["session"].as_str().unwrap().to_owned();
+
+    // A request reaches the app, and its answer the phone.
+    relay
+        .ws
+        .send(Message::Binary(
+            phone
+                .frame(&format!(
+                    r#"{{"t":"req","s":"{session}","n":1,"id":7,"m":"processes"}}"#
+                ))
+                .into(),
+        ))
+        .unwrap();
+    let Message::Binary(b) = relay.next() else {
+        panic!("expected the answer")
+    };
+    let res = phone.read(&Out::Binary(b.to_vec())).unwrap();
+    assert_eq!(
+        (res["t"].as_str(), res["id"].as_u64()),
+        (Some("res"), Some(7))
+    );
+    assert_eq!(res["ok"]["asked"], "processes");
 
     relay
         .ws
-        .send(Message::Binary(phone.frame(r#"{"t":"watch"}"#).into()))
+        .send(Message::Binary(
+            phone
+                .frame(&format!(r#"{{"t":"watch","s":"{session}","n":2}}"#))
+                .into(),
+        ))
         .unwrap();
     client.publish(&SensorSnapshot::default(), TempUnit::C);
     let deadline = Instant::now() + Duration::from_secs(5);

@@ -8,8 +8,15 @@
 //!
 //! Data, binary, never opened by the relay: `[phone id: 4 bytes][sealed frame]` (see
 //! [`super::seal`]). Inside a sealed frame, JSON:
-//! - phone → PC: `hello {name, next?}`, `watch`, `unwatch`, `bye`;
-//! - PC → phone: `info`, `view`, `rekeyed`, `signedOut`.
+//! - phone → PC: `hello {name, next?, protocol?}`, `watch`, `unwatch`, `bye`, and from protocol 2
+//!   (1.5) `req {id, m, p}`;
+//! - PC → phone: `info`, `view`, `rekeyed`, and from protocol 2 `res {id, ok | err}`, or for a
+//!   long answer its `part {id, i, n, d}`s.
+//!
+//! Protocol 2: the PC's `info` gives each connection of a phone a random `session`; every later
+//! message from that phone carries it as `s`, with `n` counting up. A message from another
+//! connection, or with a count already seen, is dropped: a recorded frame replayed by the relay
+//! does nothing. Phones on protocol 1 can only look.
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -20,7 +27,9 @@ use crate::remote::auth::hex;
 use crate::remote::RemoteInfo;
 
 /// The sealed messages' version. A phone app that needs a newer PC says so.
-pub const PROTOCOL: u32 = 1;
+pub const PROTOCOL: u32 = 2;
+/// A longer answer goes in parts of at most this many bytes (a relay frame is at most 64 KiB).
+pub const PART: usize = 48 * 1024;
 /// The socket protocol the relay answers with.
 pub const SOCKET_PROTOCOL: &str = "vyro.1";
 
@@ -59,6 +68,9 @@ pub enum FromPhone {
         name: String,
         #[serde(default)]
         next: Option<String>,
+        /// The phone app's protocol; 1 when it does not say.
+        #[serde(default = "first")]
+        protocol: u32,
     },
     /// The app is showing: send the readings.
     Watch,
@@ -66,6 +78,41 @@ pub enum FromPhone {
     Unwatch,
     /// The phone signs itself out.
     Bye,
+    /// A request (protocol 2): `m` is one of [`super::api::METHODS`].
+    Req {
+        id: u64,
+        m: String,
+        #[serde(default)]
+        p: serde_json::Value,
+    },
+    /// Something newer than this PC knows.
+    #[serde(other)]
+    Other,
+}
+
+fn first() -> u32 {
+    1
+}
+
+/// Protocol 2's mark on every message after `hello`: the connection's session and a count.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+pub struct Stamp {
+    #[serde(default)]
+    pub s: Option<String>,
+    #[serde(default)]
+    pub n: Option<u64>,
+}
+
+/// What a protocol 2 phone learns in its `info` beyond the PC's.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Access {
+    /// This connection's session, base64url.
+    pub session: String,
+    /// The phone may control the PC.
+    pub control: bool,
+    /// The requests it may make.
+    pub methods: Vec<&'static str>,
 }
 
 #[derive(Serialize)]
@@ -75,20 +122,81 @@ enum ToPhone<'a> {
         #[serde(flatten)]
         info: &'a RemoteInfo,
         protocol: u32,
+        #[serde(flatten)]
+        access: Option<&'a Access>,
     },
     Rekeyed,
+    Res {
+        id: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        ok: Option<&'a serde_json::Value>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        err: Option<&'a str>,
+    },
+    Part {
+        id: u64,
+        i: usize,
+        n: usize,
+        d: &'a str,
+    },
 }
 
-pub fn info_message(info: &RemoteInfo) -> String {
+/// The PC's `info`; protocol 2 phones also get their session and what they may do.
+pub fn info_message(info: &RemoteInfo, access: Option<&Access>) -> String {
     serde_json::to_string(&ToPhone::Info {
         info,
         protocol: PROTOCOL,
+        access,
     })
     .unwrap_or_default()
 }
 
 pub fn rekeyed_message() -> String {
     serde_json::to_string(&ToPhone::Rekeyed).unwrap_or_default()
+}
+
+/// The answer to request `id`, as one message or, when long, its parts in order. The phone
+/// joins the parts' `d` and reads the joined text as the `res`.
+pub fn answer_messages(id: u64, result: &Result<serde_json::Value, String>) -> Vec<String> {
+    let res = match result {
+        Ok(v) => ToPhone::Res {
+            id,
+            ok: Some(v),
+            err: None,
+        },
+        Err(e) => ToPhone::Res {
+            id,
+            ok: None,
+            err: Some(e),
+        },
+    };
+    let text = serde_json::to_string(&res).unwrap_or_default();
+    if text.len() <= PART {
+        return vec![text];
+    }
+    let pieces = split_utf8(&text, PART);
+    let n = pieces.len();
+    pieces
+        .iter()
+        .enumerate()
+        .map(|(i, d)| serde_json::to_string(&ToPhone::Part { id, i, n, d }).unwrap_or_default())
+        .collect()
+}
+
+/// `text` in pieces of at most `max` bytes, never splitting a character.
+fn split_utf8(text: &str, max: usize) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut rest = text;
+    while !rest.is_empty() {
+        let mut end = rest.len().min(max);
+        while !rest.is_char_boundary(end) {
+            end -= 1;
+        }
+        let (head, tail) = rest.split_at(end);
+        out.push(head);
+        rest = tail;
+    }
+    out
 }
 
 /// `view` around a [`crate::remote::RemoteView`] already in JSON.

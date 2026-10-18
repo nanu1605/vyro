@@ -1,5 +1,6 @@
 <script lang="ts">
   import { fmt, fmtMB } from '../format';
+  import { endProcess } from '../ipc';
   import type { ProcessSnapshot } from '../types';
 
   interface Props {
@@ -43,6 +44,23 @@
     return list;
   });
 
+  // End task (1.5): asked once, then the row says what happened.
+  let asking = $state<number | null>(null);
+  let busy = $state(false);
+  let said = $state<string | null>(null);
+  async function end(p: ProcessSnapshot): Promise<void> {
+    busy = true;
+    try {
+      await endProcess(p.pid, p.name);
+      said = `Ended ${p.name}.`;
+    } catch (e) {
+      said = `${p.name}: ${String(e).replace(/^Error: /, '')}`;
+    } finally {
+      busy = false;
+      asking = null;
+    }
+  }
+
   const cell = (p: ProcessSnapshot, col: Col): string => {
     switch (col) {
       case 'name':
@@ -62,6 +80,7 @@
 <section class="panel">
   <div class="bar">
     <p class="note">Busiest processes by CPU, memory and GPU. Memory is the private working set.</p>
+    {#if said}<p class="note said" role="status">{said}</p>{/if}
     <input type="search" placeholder="Filter by name or PID" aria-label="Filter processes" bind:value={filter} />
   </div>
   <div class="scroll">
@@ -78,6 +97,7 @@
               </button>
             </th>
           {/each}
+          <th><span class="sr-only">End task</span></th>
         </tr>
       </thead>
       <tbody>
@@ -86,9 +106,21 @@
             {#each COLS as c (c.id)}
               <td class:num={c.num} class:name={c.id === 'name'}>{cell(p, c.id)}</td>
             {/each}
+            <td class="end">
+              {#if asking === p.pid}
+                <button type="button" disabled={busy} onclick={() => void end(p)} aria-label="End {p.name} now">
+                  End
+                </button>
+                <button type="button" onclick={() => (asking = null)}>Keep</button>
+              {:else}
+                <button type="button" onclick={() => ((asking = p.pid), (said = null))} aria-label="End task {p.name}…">
+                  End task…
+                </button>
+              {/if}
+            </td>
           </tr>
         {:else}
-          <tr><td colspan={COLS.length} class="empty">{processes.length ? 'No matches.' : 'Waiting for data…'}</td></tr>
+          <tr><td colspan={COLS.length + 1} class="empty">{processes.length ? 'No matches.' : 'Waiting for data…'}</td></tr>
         {/each}
       </tbody>
     </table>
@@ -96,6 +128,20 @@
 </section>
 
 <style>
+  .end {
+    white-space: nowrap;
+    text-align: right;
+  }
+  .end button {
+    padding: 0.15rem 0.55rem;
+    font-size: 0.8rem;
+  }
+  .end button + button {
+    margin-left: 0.3rem;
+  }
+  .said {
+    margin: 0;
+  }
   .bar {
     display: flex;
     flex-wrap: wrap;

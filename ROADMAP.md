@@ -49,6 +49,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 32 | Accent of any colour | A colour wheel (1.3): fills (gauges, graphs, the 3-D view, the logo, the share card's ring) show the colour as picked; text in the accent takes a shade of the same hue and chroma, lightened or darkened just to 4.5:1 on every surface of the theme. The GPU colour is the main one turned round the hue circle, away from warning hues (the owner, 2026-10-17) | decided |
 | 33 | Connect and Disconnect | Paired Bluetooth devices only (the owner's "all Bluetooth", 2026-10-17): audio through its audio connection as Settings does; any other device's link dropped by the Vyro service, and Connect asks Windows to reach it. Wired and receiver devices get no actions | decided |
 | 34 | Reach from anywhere | A phone app installed from the browser (no app stores) reaches the PC through the Vyro relay: a Cloudflare Worker, one Durable Object per PC, in the owner's free account, built into releases for everyone, with any other relay allowed in Settings (the owner, 2026-10-17). Readings sealed end to end (HKDF-SHA256 to an auth key and an AES-256-GCM key; a secret per phone that replaces the pairing link's); the relay keeps only hashes and sees metadata. Off by default; the PC opens no port. Supersedes 19's "LAN only" | decided |
+| 36 | Control from the phone | A phone paired from anywhere may change the PC only if the owner allows it, on the PC, when pairing or later (1.5; the owner's request, 2026-10-18): a fixed list of requests (`relay::api`), each checked on the PC against that phone's permission; protocol 2 gives each connection a session and counts its messages, so nothing can be replayed; what phones changed is kept and shown in Settings. Turning fan control on, confirming a pump and editing GPU settings stay at the PC. The LAN page stays read-only. Amends 34's "read-only" | decided |
 | 35 | 1.3 ships in 1.4.0 | 1.3.0 is not released on its own: its changes (decisions 32 and 33, device names, wireless batteries) ship in 1.4.0, once field check 1.3 passes on the 1.4 test build (the owner, 2026-10-18). One update for installed copies instead of two; the 1.3 branch is neither merged nor released | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
@@ -2551,6 +2552,56 @@ first) and 1.7 (the PC's screen on the phone), each with its own field check.
       budgets and the accessibility sweep (665 checks).
 - [ ] Field check 1.4.1 ([`docs/field-check-1.4.1.md`](docs/field-check-1.4.1.md)); the owner's
       go.
+
+### 1.5.0 — control from the phone: what runs, power, wake
+
+The owner, 2026-10-18: "User can check and run anything that vyro supports remotely", shut the
+PC or laptop down from the phone and wake it if possible, and see what runs on it (decision 36).
+The PC's screen on the phone is 1.7. Built on `claude/vyro-1.5`, from 1.4.1 (its device states
+show on the phone).
+
+- [x] **Protocol 2** (`relay/proto.rs`, `session.rs`): `hello` says the phone's protocol; the
+      PC's `info` gives a protocol 2 phone a session, whether it may control the PC, and the
+      requests it may make. Every later message carries the session and a count that only goes
+      up; the PC drops anything else, so the relay cannot replay a request. `req {id, m, p}` →
+      `res {id, ok | err}`, a long answer in `part`s of at most 48 KiB. Unknown messages are
+      ignored. Requests run on threads of their own in the app; answers go back through the
+      connection's queue. A phone on 1.4's app still sees readings; the 1.5 app still shows a
+      1.4 PC's readings.
+- [x] **What a phone may ask** (`relay::api`): reading (processes, devices, Health, Insights,
+      score, alerts, fans, profiles, benchmark and diagnostics results, PC changes, updates,
+      power state) for any paired phone; changing (profile, fans to BIOS, alert rules on/off,
+      benchmark start/stop, diagnostics, Bluetooth Connect/Disconnect, end a process, updates,
+      shut down, restart, sleep, hibernate, lock, sign out, cancel, wake another PC) only for a
+      phone allowed to control the PC. Answered in `src-tauri/src/remote_api.rs` with the same
+      work the window's commands do.
+- [x] **Permission and record**: Settings → Remote asks, when pairing, whether the phone may
+      only look (the default) or also change the PC, and the paired list changes it; the phone
+      hears at once. What phones changed (the last 50) shows under "Recent from your phones",
+      in `phone-actions.json`.
+- [x] **End task** (`vyro_core::actions::process`), in the Processes view too: Windows' own
+      processes, Explorer and Vyro are never ended; the process is named again just before, so a
+      reused number is left alone; one that runs as administrator says so.
+- [x] **Power** (`actions::power`): shut down and restart wait 30 s (or now), close apps with
+      unsaved work only if asked, and are full shutdowns; sleep, hibernate (when Windows allows
+      them), lock, sign out, cancel. The PC shows a notification and a banner with Cancel on
+      every view while a shutdown waits.
+- [x] **Wake** (`actions::wake`): with "Wake from phone" on, phones are told the PC's wired
+      address, sealed (never the LAN page); another Vyro PC on the same network sends the wake
+      packet when the phone asks (from More, or "Wake <PC>" on a PC that is asleep). Settings
+      shows the readiness Windows can tell: the wired adapter, its "Wake on Magic Packet", Fast
+      Startup, and that the BIOS setting cannot be read.
+- [x] **The phone app**: tabs Live, Processes, Devices, Health and More (power, wake, profile,
+      fans, benchmark, diagnostics, updates); actions show only to a phone allowed to control
+      the PC. Start bundle 33.5 kB gzipped (budget 40 kB); each tab is its own chunk.
+- [x] **Tests**: protocol 2 (sessions, counts, replays, permission, unknown requests, parts,
+      old phones), stored permission (1.4 files read as "only look"), the request table, the
+      protected processes, power requests, wake packets and addresses; the phone's link
+      (stamps, requests, parts, refusals, a 1.4 PC); the end-to-end test drives the new tabs,
+      a phone that may only look, the owner allowing control, Lock and End task.
+- [ ] CI green; field check 1.5 ([`docs/field-check-1.5.md`](docs/field-check-1.5.md)); 1.4.1
+      released first; the owner's go. Then the relay is deployed (`relay.yml`), which serves
+      the new phone app.
 
 ## Risks
 

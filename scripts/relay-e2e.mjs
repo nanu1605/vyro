@@ -3,11 +3,13 @@
 //
 //   pnpm build:phone && pnpm --dir relay install && node scripts/relay-e2e.mjs
 //
-// It pairs a phone from the PC's link and reads live readings; finds the same link refused the
-// second time; checks that nothing on the wire between the phone and the relay is readable;
-// signs the phone out from the PC; shows a PC that went away as asleep; and runs axe on each
-// screen at phone and desktop width. Exits 1 on any failure. With SHOTS=<folder>, it also saves
-// a screenshot of each screen there.
+// It pairs a phone from the PC's link and reads live readings; opens the other tabs (1.5) and
+// finds a phone that may only look offered no changes; lets it control the PC and has it lock
+// the PC and end a process (the example PC only prints what it was asked); finds the same link
+// refused the second time; checks that nothing on the wire between the phone and the relay is
+// readable; signs the phone out from the PC; shows a PC that went away as asleep; and runs axe
+// on each screen at phone and desktop width. Exits 1 on any failure. With SHOTS=<folder>, it
+// also saves a screenshot of each screen there.
 
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -186,6 +188,50 @@ async function main() {
     await pc.out.wait(/^watching: 1$/);
     ok('the PC sees one phone watching');
     await axeBoth(a.page, 'phone app, live readings');
+
+    // 1b. The other tabs (1.5). Paired as the PC's default: it may only look.
+    const tab = (name) => a.page.getByRole('navigation').getByRole('button', { name, exact: true }).click();
+    await tab('Processes');
+    await seeText(a.page, 'What runs on', 'the Processes tab lists what runs on the PC');
+    await a.page.locator('.rows li').first().waitFor({ timeout: 10_000 }).then(
+      () => ok('…with processes'),
+      () => problem('processes', 'no process listed'),
+    );
+    if (await a.page.getByRole('button', { name: /^End task|^End .*…$/ }).count()) problem('view only', 'End is offered');
+    else ok('a phone that may only look is offered no End');
+    await axeBoth(a.page, 'phone app, processes');
+    await tab('Devices');
+    await seeText(a.page, 'Devices on', 'the Devices tab');
+    await axeBoth(a.page, 'phone app, devices');
+    await tab('Health');
+    await seeText(a.page, 'Health of', 'the Health tab');
+    await axeBoth(a.page, 'phone app, health');
+    await tab('More');
+    await seeText(a.page, 'Diagnostics', 'the More tab');
+    if (await a.page.getByRole('heading', { name: 'Power' }).count()) problem('view only', 'Power is offered');
+    else ok('…without Power for a phone that may only look');
+    await axeBoth(a.page, 'phone app, more (view only)');
+
+    // The owner lets it control the PC: the phone hears at once.
+    pc.say('control');
+    await seeText(a.page, 'can change this PC', 'a phone allowed on the PC is told at once');
+    await a.page.getByRole('heading', { name: 'Power' }).waitFor({ timeout: 10_000 });
+    await axeBoth(a.page, 'phone app, more (control)');
+    await a.page.getByRole('button', { name: 'Lock…' }).click();
+    await axeBoth(a.page, 'phone app, power confirmation');
+    await a.page.getByRole('button', { name: 'Lock', exact: true }).click();
+    await pc.out.wait(/^asked: power .*"action":"lock"/).then(
+      () => ok('Lock reaches the PC'),
+      (e) => problem('lock', e.message),
+    );
+    await tab('Processes');
+    await a.page.getByRole('button', { name: /^End .*…$/ }).first().click();
+    await a.page.getByRole('button', { name: /^End .* now$/ }).first().click();
+    await pc.out.wait(/^asked: process\.end /).then(
+      () => ok('End reaches the PC'),
+      (e) => problem('end', e.message),
+    );
+    await tab('Live');
 
     // 2. The link works once.
     const b = await phone(browser, 'phone B');

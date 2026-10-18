@@ -78,7 +78,7 @@ impl Updates {
         }
     }
 
-    fn status(&self) -> UpdateStatus {
+    pub(crate) fn status(&self) -> UpdateStatus {
         lock(&self.status).clone()
     }
 
@@ -96,7 +96,7 @@ impl Updates {
 }
 
 /// Looks for an update; `auto` checks notify when one is found.
-async fn check(app: &AppHandle, auto: bool) -> UpdateStatus {
+pub(crate) async fn check(app: &AppHandle, auto: bool) -> UpdateStatus {
     let state = app.state::<Updates>();
     if !state.status().configured {
         return state.status();

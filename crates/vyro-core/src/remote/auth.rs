@@ -334,6 +334,7 @@ impl Auth {
                 last_address: d.last_address.clone(),
                 watching: watching.contains(&d.id),
                 anywhere: false,
+                control: false,
             })
             .collect()
     }
