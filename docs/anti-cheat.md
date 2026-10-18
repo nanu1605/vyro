@@ -14,13 +14,14 @@ or warns about Vyro, the "If a game complains" section lists what to turn off, f
 | **PresentMon** (`PresentMon.exe` 2.6.0, Intel, signed, MIT). It records frame timing through Event Tracing for Windows (ETW), the same events Windows' own tools read. | Frame rate and frame times of the game in front. | Only while a game is in front and frame capture is on (Settings) |
 | **The overlay window.** It is an ordinary desktop window, always on top and click-through, that never takes focus. | FPS and readings over the game. | Only while a captured game is in front and the overlay is on |
 | **Reads of other processes' names, CPU and memory use** (the Processes tab and the footprint). | Task-Manager-style listing. | While the app is open |
+| **GPU tuning through NVML** (1.6): the service sets an NVIDIA card's clock offsets and power limit with the driver's own calls, as NVIDIA's tools do. Nothing touches the game. | The owner's presets. | Only after the owner turns GPU tuning on and applies a preset other than Stock |
 
 ## What Vyro never does
 
 - It never injects code or a DLL into a game, and never hooks its graphics API. The overlay is a separate window.
 - It never reads or writes another process's memory.
 - It never sends input to a game, and never reads keyboard or mouse input.
-- It never writes CPU or GPU settings: no clocks, voltages, power limits or overclocking. The only hardware writes are fan and pump speeds, on the allow-listed board, once the owner turns fan control on.
+- It never writes CPU settings or any voltage. GPU settings (an NVIDIA card's clock offsets and power limit) are written only once the owner turns GPU tuning on and applies a preset (1.6, decision 37), and only through NVIDIA's own driver interface, NVML. The other hardware writes are fan and pump speeds, on the allow-listed board, once the owner turns fan control on.
 
 ## What has been reported
 
@@ -32,7 +33,7 @@ or warns about Vyro, the "If a game complains" section lists what to turn off, f
 ## If a game complains
 
 From least to most:
-1. **Turn off the overlay** (Settings → Overlay), then frame capture (Settings → Gaming). PresentMon and the overlay then never start.
+1. **Turn off the overlay** (Settings → Overlay), then frame capture (Settings → Gaming). PresentMon and the overlay then never start. With GPU tuning on, **Return GPU to stock** (the tray) or turn it off.
 2. **Stop the service while playing:** `sc stop VyroService` from an administrator prompt, or Services → Vyro Sensor Service → Stop. PawnIO's modules are no longer used. The app keeps showing what it can read without the driver (usage, GPU, drives, network), and fan control hands the fans back to the BIOS before the service stops.
 3. **Uninstall PawnIO** (Apps → PawnIO) if the anti-cheat refuses to run while the driver is merely installed. Vyro then shows its "needs PawnIO" banner, and works without the low-level sensors and fan control.
 

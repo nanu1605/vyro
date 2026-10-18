@@ -103,6 +103,43 @@ void main(uint3 id : SV_DispatchThreadID) {
 }
 ";
 
+/// Video memory pattern (GPU tuning's stability test): every thread writes, then checks, 16
+/// words; differences are counted in `Bad`.
+const VRAM_HLSL: &str = r"
+RWByteAddressBuffer Buf : register(u0);
+RWByteAddressBuffer Bad : register(u1);
+cbuffer P : register(b0) { uint seed; uint offset; uint pad0; uint pad1; };
+uint pattern(uint i) {
+    uint x = (i * 0x9E3779B9u) ^ seed;
+    x ^= x >> 15; x *= 0x2C1B3C6Du; x ^= x >> 12;
+    return x;
+}
+[numthreads(256, 1, 1)]
+void fill(uint3 id : SV_DispatchThreadID) {
+    uint w = id.x * 16;
+    [unroll] for (uint k = 0; k < 16; k += 4) {
+        uint i = offset + w + k;
+        Buf.Store4((w + k) * 4, uint4(pattern(i), pattern(i + 1), pattern(i + 2), pattern(i + 3)));
+    }
+}
+[numthreads(256, 1, 1)]
+void verify(uint3 id : SV_DispatchThreadID) {
+    uint w = id.x * 16;
+    uint bad = 0;
+    [unroll] for (uint k = 0; k < 16; k += 4) {
+        uint i = offset + w + k;
+        uint4 v = Buf.Load4((w + k) * 4);
+        bad += (v.x != pattern(i) ? 1u : 0u) + (v.y != pattern(i + 1) ? 1u : 0u)
+             + (v.z != pattern(i + 2) ? 1u : 0u) + (v.w != pattern(i + 3) ? 1u : 0u);
+    }
+    if (bad != 0) { uint old; Bad.InterlockedAdd(0, bad, old); }
+}
+";
+/// Video memory is checked in chunks of this many MB (16 words a thread, 16384 groups).
+const VRAM_CHUNK_MB: u32 = 256;
+/// The fixed frame [`D3d::frame_hash`] renders.
+const HASH_FRAME: u64 = 1000;
+
 const SCENE_HLSL: &str = r"
 cbuffer Frame : register(b0) { row_major float4x4 viewProj; float4 light; float4 eye; float4 clock; };
 cbuffer Draw : register(b1) { float4 base; };
@@ -249,6 +286,7 @@ struct Scene {
     indices: u32,
     frame_cb: ID3D11Buffer,
     draw_cb: ID3D11Buffer,
+    color: ID3D11Texture2D,
     rtv: ID3D11RenderTargetView,
     dsv: ID3D11DepthStencilView,
     raster: ID3D11RasterizerState,
@@ -273,6 +311,18 @@ pub struct D3d {
     fma: Option<Fma>,
     copy: Option<CopyKernel>,
     scene: Option<Scene>,
+    vram: Option<Vram>,
+}
+
+/// The pattern kernels, the chunks of video memory they use, and the difference counter.
+struct Vram {
+    fill: ID3D11ComputeShader,
+    verify: ID3D11ComputeShader,
+    params: ID3D11Buffer,
+    chunks: Vec<ID3D11UnorderedAccessView>,
+    bad: ID3D11Buffer,
+    bad_view: ID3D11UnorderedAccessView,
+    bad_read: ID3D11Buffer,
 }
 
 impl D3d {
@@ -325,6 +375,7 @@ impl D3d {
             fma: None,
             copy: None,
             scene: None,
+            vram: None,
         })
     }
 
@@ -733,6 +784,7 @@ impl D3d {
                     indices: idx.len() as u32,
                     frame_cb,
                     draw_cb,
+                    color,
                     rtv,
                     dsv,
                     raster,
@@ -744,19 +796,22 @@ impl D3d {
         }
     }
 
-    /// Submits one frame of the scene.
-    fn draw(&mut self) -> Result<(), GpuError> {
+    /// Submits one frame of the scene: the next one, or frame `fixed`.
+    fn draw(&mut self, fixed: Option<u64>) -> Result<(), GpuError> {
         let (w, h) = self.size;
         let draws = self.draws;
         let Some(s) = self.scene.as_mut() else {
             return Err(GpuError::Other("scene: not ready".into()));
         };
-        s.frame += 1;
+        let frame = fixed.unwrap_or_else(|| {
+            s.frame += 1;
+            s.frame
+        });
         let consts = FrameConsts {
             view_proj: view_proj(w as f32 / h as f32),
             light: [40.0, 120.0, -30.0, 0.0],
             eye: [EYE[0], EYE[1], EYE[2], 0.0],
-            clock: [s.frame as f32 * 0.01, 0.0, 0.0, 0.0],
+            clock: [frame as f32 * 0.01, 0.0, 0.0, 0.0],
         };
         let ctx = &self.ctx;
         let stride = 24u32;
@@ -815,6 +870,83 @@ impl D3d {
                 ctx.DrawIndexedInstanced(s.indices, INSTANCES, 0, 0, 0);
             }
         }
+        Ok(())
+    }
+}
+
+impl D3d {
+    fn compute_entry(&self, src: &str, entry: PCSTR) -> Result<ID3D11ComputeShader, GpuError> {
+        let code = compile(src, entry, windows::core::s!("cs_5_0"))?;
+        let mut cs = None;
+        // SAFETY: the bytecode outlives the call.
+        unsafe {
+            self.dev
+                .CreateComputeShader(bytes(&code), None, Some(&mut cs))
+        }
+        .map_err(|e| self.fail("compute shader", &e))?;
+        cs.ok_or_else(|| GpuError::Other("compute shader: none".into()))
+    }
+
+    fn raw(&self, bytes: u32, usage_staging: bool) -> Result<ID3D11Buffer, GpuError> {
+        self.buffer(
+            &if usage_staging {
+                D3D11_BUFFER_DESC {
+                    ByteWidth: bytes,
+                    Usage: D3D11_USAGE_STAGING,
+                    BindFlags: 0,
+                    CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
+                    MiscFlags: 0,
+                    StructureByteStride: 0,
+                }
+            } else {
+                D3D11_BUFFER_DESC {
+                    ByteWidth: bytes,
+                    Usage: D3D11_USAGE_DEFAULT,
+                    BindFlags: D3D11_BIND_UNORDERED_ACCESS.0 as u32,
+                    CPUAccessFlags: 0,
+                    MiscFlags: D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS.0 as u32,
+                    StructureByteStride: 0,
+                }
+            },
+            None,
+        )
+    }
+
+    /// The pattern kernels and `chunks` chunks of video memory (fewer when the card has no
+    /// room for more; at least one).
+    fn vram_setup(&mut self, chunks: u32) -> Result<(), GpuError> {
+        if self
+            .vram
+            .as_ref()
+            .is_some_and(|v| v.chunks.len() as u32 == chunks)
+        {
+            return Ok(());
+        }
+        self.vram = None;
+        let bytes = VRAM_CHUNK_MB << 20;
+        let mut views = Vec::new();
+        for _ in 0..chunks.max(1) {
+            let made = self
+                .raw(bytes, false)
+                .and_then(|b| self.uav(&b, DXGI_FORMAT_R32_TYPELESS, bytes / 4, true));
+            match made {
+                Ok(v) => views.push(v),
+                Err(e @ GpuError::Reset(_)) => return Err(e),
+                Err(e) if views.is_empty() => return Err(e),
+                Err(_) => break,
+            }
+        }
+        let bad = self.raw(16, false)?;
+        let bad_view = self.uav(&bad, DXGI_FORMAT_R32_TYPELESS, 4, true)?;
+        self.vram = Some(Vram {
+            fill: self.compute_entry(VRAM_HLSL, windows::core::s!("fill"))?,
+            verify: self.compute_entry(VRAM_HLSL, windows::core::s!("verify"))?,
+            params: self.constants(16, false)?,
+            chunks: views,
+            bad,
+            bad_view,
+            bad_read: self.raw(16, true)?,
+        });
         Ok(())
     }
 }
@@ -929,7 +1061,7 @@ impl Gpu for D3d {
             Ok(())
         };
         while Instant::now() < until && !stop.load(Ordering::Relaxed) {
-            self.draw()?;
+            self.draw(None)?;
             self.end(&q[(sent % 3) as usize]);
             sent += 1;
             // Two frames in flight, as in games.
@@ -941,6 +1073,134 @@ impl Gpu for D3d {
             finish(self, &mut done)?;
         }
         Ok(())
+    }
+
+    fn frame_hash(&mut self) -> Result<u64, GpuError> {
+        self.hash_frame()
+    }
+
+    fn vram_check(&mut self, mb: u32, seed: u32) -> Result<(u64, f64), GpuError> {
+        self.check_vram(mb, seed)
+    }
+
+    fn free_vram_mb(&self) -> Option<u64> {
+        self.vram_free()
+    }
+}
+
+impl D3d {
+    /// [`Gpu::frame_hash`]: frame [`HASH_FRAME`], copied back and hashed row by row.
+    fn hash_frame(&mut self) -> Result<u64, GpuError> {
+        self.scene_setup()?;
+        self.draw(Some(HASH_FRAME))?;
+        let (w, h) = self.size;
+        let s = self
+            .scene
+            .as_ref()
+            .ok_or_else(|| GpuError::Other("scene: not ready".into()))?;
+        let desc = D3D11_TEXTURE2D_DESC {
+            Width: w,
+            Height: h,
+            MipLevels: 1,
+            ArraySize: 1,
+            Format: DXGI_FORMAT_R8G8B8A8_UNORM,
+            SampleDesc: DXGI_SAMPLE_DESC {
+                Count: 1,
+                Quality: 0,
+            },
+            Usage: D3D11_USAGE_STAGING,
+            BindFlags: 0,
+            CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
+            MiscFlags: 0,
+        };
+        let mut staging = None;
+        // SAFETY: valid descriptor and out pointer.
+        unsafe { self.dev.CreateTexture2D(&desc, None, Some(&mut staging)) }
+            .map_err(|e| self.fail("frame read-back", &e))?;
+        let staging = staging.ok_or_else(|| GpuError::Other("frame read-back: none".into()))?;
+        let mut m = D3D11_MAPPED_SUBRESOURCE::default();
+        // SAFETY: live resources; each row is read within the mapped pitch while mapped.
+        unsafe {
+            self.ctx.CopyResource(&staging, &s.color);
+            self.ctx
+                .Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut m))
+                .map_err(|e| self.fail("frame read-back", &e))?;
+            let mut hash = crate::bench::gpu::FNV_START;
+            for row in 0..h as usize {
+                let p = m.pData.cast::<u8>().add(row * m.RowPitch as usize);
+                hash =
+                    crate::bench::gpu::fnv1a(hash, std::slice::from_raw_parts(p, w as usize * 4));
+            }
+            self.ctx.Unmap(&staging, 0);
+            Ok(hash)
+        }
+    }
+
+    /// [`Gpu::vram_check`].
+    fn check_vram(&mut self, mb: u32, seed: u32) -> Result<(u64, f64), GpuError> {
+        self.vram_setup(mb.div_ceil(VRAM_CHUNK_MB).max(1))?;
+        let q = self.event()?;
+        let v = self
+            .vram
+            .as_ref()
+            .ok_or_else(|| GpuError::Other("video memory: not ready".into()))?;
+        let words = (VRAM_CHUNK_MB << 20) / 4;
+        let groups = words / 16 / 256;
+        let start = Instant::now();
+        // SAFETY: live shaders, views and buffers; the constants are 16 bytes as declared.
+        unsafe {
+            self.ctx.ClearUnorderedAccessViewUint(&v.bad_view, &[0; 4]);
+            for cs in [&v.fill, &v.verify] {
+                self.ctx.CSSetShader(cs, None);
+                for (n, chunk) in v.chunks.iter().enumerate() {
+                    let p: [u32; 4] = [seed, (n as u32).wrapping_mul(words), 0, 0];
+                    self.ctx
+                        .UpdateSubresource(&v.params, 0, None, p.as_ptr().cast(), 0, 0);
+                    self.ctx
+                        .CSSetConstantBuffers(0, Some(&[Some(v.params.clone())]));
+                    self.ctx.CSSetUnorderedAccessViews(
+                        0,
+                        2,
+                        Some([Some(chunk.clone()), Some(v.bad_view.clone())].as_ptr()),
+                        None,
+                    );
+                    self.ctx.Dispatch(groups, 1, 1);
+                }
+            }
+            self.ctx.CopyResource(&v.bad_read, &v.bad);
+        }
+        self.end(&q);
+        self.wait(&q)?;
+        let took = start.elapsed().as_secs_f64();
+        let mut m = D3D11_MAPPED_SUBRESOURCE::default();
+        // SAFETY: a 16-byte staging buffer, read while mapped.
+        let bad = unsafe {
+            self.ctx
+                .Map(&v.bad_read, 0, D3D11_MAP_READ, 0, Some(&mut m))
+                .map_err(|e| self.fail("reading back", &e))?;
+            let n = *m.pData.cast::<u32>();
+            self.ctx.Unmap(&v.bad_read, 0);
+            n
+        };
+        let bytes = 2.0 * v.chunks.len() as f64 * f64::from(VRAM_CHUNK_MB << 20);
+        Ok((u64::from(bad), bytes / took.max(1e-6) / 1e9))
+    }
+
+    /// [`Gpu::free_vram_mb`]: the adapter's budget for this process less what it uses.
+    fn vram_free(&self) -> Option<u64> {
+        use windows::Win32::Graphics::Dxgi::{
+            IDXGIAdapter3, IDXGIDevice, DXGI_MEMORY_SEGMENT_GROUP_LOCAL,
+            DXGI_QUERY_VIDEO_MEMORY_INFO,
+        };
+        // SAFETY: plain interface queries on live objects; the info struct is written in place.
+        unsafe {
+            let dxgi: IDXGIDevice = self.dev.cast().ok()?;
+            let a: IDXGIAdapter3 = dxgi.GetAdapter().ok()?.cast().ok()?;
+            let mut info = DXGI_QUERY_VIDEO_MEMORY_INFO::default();
+            a.QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &mut info)
+                .ok()?;
+            Some(info.Budget.saturating_sub(info.CurrentUsage) >> 20)
+        }
     }
 }
 
@@ -1039,6 +1299,16 @@ mod tests {
             "{n} frames, {} times",
             times.len()
         );
+        // The stability test's checks: a fixed frame hashes the same every time, and video
+        // memory keeps its pattern.
+        let a = g.frame_hash().unwrap();
+        g.frames(0.1, &AtomicBool::new(false), &mut Vec::new(), &mut || {})
+            .unwrap();
+        assert_eq!(g.frame_hash().unwrap(), a);
+        let (bad, gbs) = g.vram_check(256, 7).unwrap();
+        assert_eq!(bad, 0);
+        assert!(gbs > 0.0);
+        assert_eq!(g.vram_check(256, 8).unwrap().0, 0);
         // A stop ends it after the frames in flight.
         let stop = AtomicBool::new(true);
         let mut times = Vec::new();

@@ -1,8 +1,9 @@
 <script lang="ts">
   // Everything else Vyro does, from the phone (1.5): shut down, restart, sleep or lock the PC,
-  // its profile and fans, a benchmark, diagnostics, updates, and waking another PC. What
-  // changes the PC shows only to a phone the owner allowed to control it.
+  // its profile and fans, GPU tuning (1.6), a benchmark, diagnostics, updates, and waking another
+  // PC. What changes the PC shows only to a phone the owner allowed to control it.
   import { fmt, fmtDateTime } from '../../format';
+  import { runningText } from '../../gputune';
   import type {
     BenchProgress,
     DiagReport,
@@ -14,6 +15,7 @@
     Preflight,
     ProfileSpec,
     RunSummary,
+    TuneStatus,
   } from '../../types';
   import { errText, every, type ScreenProps } from './ask';
 
@@ -39,6 +41,7 @@
   let runs = $state.raw<RunSummary[]>([]);
   let diags = $state.raw<DiagSummary[]>([]);
   let updates = $state.raw<UpdateStatus | null>(null);
+  let gpu = $state.raw<TuneStatus | null>(null);
   let message = $state<string | null>(null);
   let busy = $state(false);
   /** The power action being confirmed. */
@@ -56,6 +59,7 @@
     void quiet(ask<RunSummary[]>('bench.runs')).then((v) => (runs = v ?? []));
     void quiet(ask<DiagSummary[]>('diag.runs')).then((v) => (diags = v ?? []));
     void quiet(ask<UpdateStatus>('updates')).then((v) => (updates = v));
+    void quiet(ask<TuneStatus>('gpu.tune')).then((v) => (gpu = v));
   }
   $effect(() => every(5000, load));
 
@@ -152,6 +156,28 @@
         </button>
       {/each}
     </div>
+  </section>
+{/if}
+
+{#if gpu && gpu.capability.state === 'writable' && gpu.config.enabled}
+  {@const usable = gpu.presets.filter((p) => p.testedAt != null)}
+  <section class="panel" aria-labelledby="gpu-title">
+    <h2 id="gpu-title">GPU tuning</h2>
+    <p>{runningText(gpu)}{gpu.held ? `. ${gpu.held}` : ''}</p>
+    {#if can('gpu.preset')}
+      <div class="actions">
+        {#each usable as p (p.id)}
+          <button
+            type="button"
+            class="ghost"
+            aria-pressed={gpu.applied === p.id || (p.id === 'stock' && gpu.applied == null)}
+            disabled={busy || gpu.trial != null}
+            onclick={() => void run(`${p.name} applied.`, 'gpu.preset', { id: p.id, name: p.name })}>{p.name}</button
+          >
+        {/each}
+      </div>
+      <p class="muted small">Stock and presets that passed the stability test. Your own values and tests are set at the PC.</p>
+    {/if}
   </section>
 {/if}
 

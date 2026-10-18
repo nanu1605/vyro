@@ -20,6 +20,7 @@ import PcCase from '@lucide/svelte/icons/pc-case';
 import Settings from '@lucide/svelte/icons/settings';
 import Thermometer from '@lucide/svelte/icons/thermometer';
 import Wifi from '@lucide/svelte/icons/wifi';
+import Zap from '@lucide/svelte/icons/zap';
 
 export type Group = 'overview' | 'performance' | 'pc' | 'app';
 
@@ -46,6 +47,7 @@ export const VIEWS = [
   { id: 'gaming', label: 'Gaming', group: 'performance', icon: Gamepad2, blurb: 'Frame rates, sessions and the overlay' },
   { id: 'benchmark', label: 'Benchmark', group: 'performance', icon: Gauge, blurb: 'Measure this PC against itself' },
   { id: 'cooling', label: 'Cooling', group: 'performance', icon: Fan, blurb: 'Fans, pump and curves' },
+  { id: 'gpu', label: 'GPU tuning', group: 'performance', icon: Zap, blurb: 'Clocks, power limit and tested presets' },
   { id: 'history', label: 'History', group: 'performance', icon: ChartLine, blurb: 'Readings over time' },
   { id: 'mypc', label: 'My PC', group: 'pc', icon: PcCase, blurb: 'This PC in 3-D, with a thermal map' },
   { id: 'hardware', label: 'Hardware', group: 'pc', icon: Cpu, blurb: 'Parts, firmware and changes' },

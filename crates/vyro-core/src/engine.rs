@@ -160,8 +160,9 @@ pub trait EngineApi: Send + Sync {
     fn bluetooth_disconnect(&self, id: &str) -> Result<(), String>;
     /// GPU tuning (1.6): the card, what its driver allows, the presets and what runs now.
     fn gpu_tune_status(&self) -> Result<TuneStatus, String>;
-    /// Validates, saves and applies GPU tuning settings.
-    fn set_gpu_tune(&self, config: TuneConfig) -> Result<(), String>;
+    /// Validates and saves GPU tuning settings; with `apply`, the preset in force goes on the
+    /// card.
+    fn set_gpu_tune(&self, config: TuneConfig, apply: bool) -> Result<(), String>;
     /// "Return GPU to stock", until a preset is applied again.
     fn restore_gpu(&self) -> Result<(), String>;
     /// GPU tuning log, newest last (kept across restarts where there is a history store).
@@ -740,8 +741,8 @@ impl EngineApi for LocalEngine {
         Ok(self.tune.status())
     }
 
-    fn set_gpu_tune(&self, config: TuneConfig) -> Result<(), String> {
-        self.tune.set_config(config)
+    fn set_gpu_tune(&self, config: TuneConfig, apply: bool) -> Result<(), String> {
+        self.tune.set_config(config, apply)
     }
 
     fn restore_gpu(&self) -> Result<(), String> {

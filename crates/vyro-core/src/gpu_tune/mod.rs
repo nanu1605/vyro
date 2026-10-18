@@ -22,6 +22,7 @@ pub mod controller;
 #[cfg(windows)]
 mod nvidia;
 pub mod search;
+pub mod stress;
 #[cfg(test)]
 mod tests;
 
@@ -363,8 +364,12 @@ pub struct TuneStatus {
     pub applied: Option<String>,
     /// The profile whose preset is in force.
     pub profile: Profile,
-    /// Why the card is held at Stock until Vyro restarts (temperature, a crash, another program).
+    /// Why a guard holds the card at stock (heat, a failed write, another program) until the
+    /// owner applies a preset again.
     pub held: Option<String>,
+    /// Why the card is at stock although tuning is on (a crash was found, "Return to stock", a
+    /// start that applies only tested settings): applying a preset puts it back.
+    pub waiting: Option<String>,
     pub last_error: Option<String>,
     /// A stability test under way.
     pub trial: Option<Trial>,
@@ -385,6 +390,7 @@ impl TuneStatus {
             applied: None,
             profile: Profile::default(),
             held: None,
+            waiting: None,
             last_error: None,
             trial: None,
         }

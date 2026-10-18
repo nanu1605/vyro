@@ -334,7 +334,7 @@ impl Server {
             Request::SetFanProfile { profile } => json(e.set_fan_profile(profile)),
             Request::BluetoothDisconnect { id } => json(e.bluetooth_disconnect(&id)),
             Request::GpuTuneStatus => json(e.gpu_tune_status()),
-            Request::SetGpuTune { config } => json(e.set_gpu_tune(config)),
+            Request::SetGpuTune { config, apply } => json(e.set_gpu_tune(config, apply)),
             Request::RestoreGpu => json(e.restore_gpu()),
             Request::GpuTuneEvents => json(e.gpu_tune_events()),
             Request::SetGpuTuneProfile { profile } => json(e.set_gpu_tune_profile(profile)),

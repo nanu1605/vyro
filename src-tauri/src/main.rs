@@ -9,6 +9,7 @@ mod device_watch;
 mod diag;
 mod engine;
 mod gaming;
+mod gpu_tune;
 mod look;
 mod overlay;
 mod pin;
@@ -63,6 +64,7 @@ fn main() {
             app.manage(overlay::Overlay::default());
             app.manage(gaming::GameState::default());
             app.manage(bench::BenchState::default());
+            app.manage(gpu_tune::TuneTest::default());
             app.manage(updates::Updates::new(can_update, current));
             app.manage(engine);
             app.manage(tray::SettingsStore::load(app.handle()));
@@ -150,6 +152,13 @@ fn main() {
             commands::set_fan_config,
             commands::restore_fans,
             commands::get_fan_events,
+            gpu_tune::get_gpu_tune,
+            gpu_tune::set_gpu_tune,
+            gpu_tune::restore_gpu,
+            gpu_tune::get_gpu_tune_events,
+            gpu_tune::start_gpu_test,
+            gpu_tune::stop_gpu_test,
+            gpu_tune::get_gpu_test_progress,
             bench::benchmark_preflight,
             bench::start_benchmark,
             bench::stop_benchmark,
@@ -191,6 +200,8 @@ fn main() {
         if let tauri::RunEvent::Exit = event {
             // Ends a benchmark's load and keeps the stopped run before the engine goes.
             bench::stop_and_wait(handle, "Vyro quit.", std::time::Duration::from_secs(3));
+            // Ends a GPU stability test, so its trial ends now rather than in half a minute.
+            gpu_tune::stop_and_wait(handle, std::time::Duration::from_secs(3));
             if let Some(remote) = handle.try_state::<remote::Remote>() {
                 remote.stop();
                 remote.stop_relay();

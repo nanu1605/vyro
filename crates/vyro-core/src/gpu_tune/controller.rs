@@ -210,10 +210,30 @@ impl Shared {
     }
 }
 
-/// Loads a saved configuration; an unreadable or invalid one falls back to "off".
+/// Loads a saved configuration. The owner's presets are brought within the driver's ranges
+/// (a driver update can narrow them); one that is unreadable or still invalid falls back to
+/// "off", and a file that does not parse is set aside.
 pub fn load_config(path: &Path, limits: &Limits, suggested: &[super::Preset]) -> TuneConfig {
-    match crate::files::read_json::<TuneConfig>(path, |c| validate(c, Some(limits), suggested)) {
+    let mut cfg = match crate::files::read_json::<TuneConfig>(path, |_| Ok(())) {
         Ok(c) => c.unwrap_or_default(),
+        Err(e) => {
+            log::warn!("gpu tuning: {} not used: {e}", path.display());
+            return TuneConfig::default();
+        }
+    };
+    for p in &mut cfg.presets {
+        let within = limits.clamp(p.settings);
+        if within != p.settings {
+            log::info!(
+                "gpu tuning: \"{}\" brought within the driver's ranges: {}",
+                p.name,
+                describe(&within)
+            );
+            p.settings = within;
+        }
+    }
+    match validate(&cfg, Some(limits), suggested) {
+        Ok(()) => cfg,
         Err(e) => {
             log::warn!("gpu tuning: {} not used: {e}", path.display());
             TuneConfig::default()
@@ -494,7 +514,8 @@ impl TuneControl {
             clocks: inner.clocks,
             applied,
             profile: inner.profile,
-            held: inner.held.clone().or_else(|| inner.waiting.clone()),
+            held: inner.held.clone(),
+            waiting: inner.waiting.clone(),
             last_error: inner.last_error.clone(),
             trial: inner.trial.as_ref().map(|(t, _)| t.clone()),
         }
@@ -505,9 +526,10 @@ impl TuneControl {
         lock(&self.shared.inner).recent.iter().cloned().collect()
     }
 
-    /// Saves and applies what the owner set: the preset in force goes on the card (a guard's
-    /// hold ends, since the owner chose again).
-    pub fn set_config(&self, mut cfg: TuneConfig) -> Result<(), String> {
+    /// Saves what the owner set. With `apply` the preset in force goes on the card (a guard's
+    /// hold ends, since the owner chose again); without, only the presets and choices are kept
+    /// (the card keeps what it runs, with the new values of a preset it runs).
+    pub fn set_config(&self, mut cfg: TuneConfig, apply: bool) -> Result<(), String> {
         self.writable()?;
         let gpu = self.gpu.as_ref().ok_or("not started")?;
         let suggested = suggestions(gpu.family, gpu.laptop, &self.limits);
@@ -529,7 +551,7 @@ impl TuneControl {
                 (true, false) => inner.record(TuneEventKind::Off, "GPU tuning turned off".into()),
                 _ => {}
             }
-            if inner.config.enabled {
+            if inner.config.enabled && apply {
                 inner.armed = true;
                 inner.waiting = None;
                 inner.held = None;
@@ -537,10 +559,11 @@ impl TuneControl {
                 inner.guard = TempGuard::default();
                 let id = inner.config.preset_for(inner.profile).to_owned();
                 let name = inner.preset_name(&id);
-                let what = find(&inner.presets, &id)
-                    .map(|s| describe(&s))
-                    .unwrap_or_default();
-                inner.record(TuneEventKind::Applied, format!("{name} applied ({what})"));
+                let message = match find(&inner.presets, &id) {
+                    Some(s) if !s.is_stock() => format!("{name} applied ({})", describe(&s)),
+                    _ => format!("{name} applied"),
+                };
+                inner.record(TuneEventKind::Applied, message);
             }
         }
         self.shared.flush_events();

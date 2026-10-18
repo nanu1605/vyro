@@ -5,7 +5,8 @@
 // text inside them in whole words even at their narrowest. Since 1.3 also: custom accents that are
 // hard to read as picked (navy on Midnight, pale yellow on Daylight), and Settings with the colour
 // wheel open. Since 1.4 also: Settings → Remote's reach from anywhere (the relay's confirmation,
-// a phone's pairing code, the options). The phone app itself is swept by scripts/relay-e2e.mjs.
+// a phone's pairing code, the options). Since 1.6 also: GPU tuning's confirmation, and the view with
+// tuning on and a stability test running. The phone app itself is swept by scripts/relay-e2e.mjs.
 // Runs against the browser preview
 // (sample data, two GPUs as on the owner's PC) of a finished build:
 //
@@ -29,7 +30,7 @@ const BASE = `http://localhost:${PORT}`;
 const THEMES = ['midnight', 'amoled', 'cyber', 'glass', 'minimal', 'daylight'];
 const WIDTHS = [1920, 1440, 390];
 const TABS = [
-  'Dashboard', 'Cooling', 'History', 'Health', 'Insights', 'Gaming', 'Benchmark', 'Processes',
+  'Dashboard', 'Cooling', 'GPU tuning', 'History', 'Health', 'Insights', 'Gaming', 'Benchmark', 'Processes',
   'Hardware', 'My PC', 'Storage', 'Network', 'Displays', 'Devices', 'System', 'Sensors', 'Widgets', 'Settings',
 ];
 
@@ -286,6 +287,21 @@ async function sweepDialogs(browser, theme, width) {
   await page.waitForTimeout(300);
   await axe(page, at('Fan control confirmation'));
   await page.getByRole('dialog').getByRole('button', { name: /Cancel|Not now/ }).first().click();
+
+  // GPU tuning (1.6): its confirmation, then the view with tuning on, a preset applied and a
+  // stability test running.
+  await tab(page, 'GPU tuning');
+  await page.getByRole('button', { name: 'Turn on GPU tuning…' }).click();
+  await page.waitForTimeout(300);
+  await axe(page, at('GPU tuning confirmation'));
+  await page.getByRole('dialog').getByRole('button', { name: 'Turn on', exact: true }).click();
+  await page.getByRole('button', { name: 'Apply Performance' }).click();
+  await page.getByRole('button', { name: 'Test Efficient' }).click();
+  await page.getByRole('progressbar', { name: 'Test progress' }).waitFor();
+  await page.waitForTimeout(300);
+  await axe(page, at('GPU tuning on, testing'));
+  await noSidewaysScroll(page, at('GPU tuning on, testing'));
+  await page.getByRole('button', { name: 'Stop', exact: true }).click();
 
   // The share card (from Hardware).
   await tab(page, 'Hardware');

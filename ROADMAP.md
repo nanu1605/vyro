@@ -51,6 +51,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 34 | Reach from anywhere | A phone app installed from the browser (no app stores) reaches the PC through the Vyro relay: a Cloudflare Worker, one Durable Object per PC, in the owner's free account, built into releases for everyone, with any other relay allowed in Settings (the owner, 2026-10-17). Readings sealed end to end (HKDF-SHA256 to an auth key and an AES-256-GCM key; a secret per phone that replaces the pairing link's); the relay keeps only hashes and sees metadata. Off by default; the PC opens no port. Supersedes 19's "LAN only" | decided |
 | 36 | Control from the phone | A phone paired from anywhere may change the PC only if the owner allows it, on the PC, when pairing or later (1.5; the owner's request, 2026-10-18): a fixed list of requests (`relay::api`), each checked on the PC against that phone's permission; protocol 2 gives each connection a session and counts its messages, so nothing can be replayed; what phones changed is kept and shown in Settings. Turning fan control on, confirming a pump and editing GPU settings stay at the PC. The LAN page stays read-only. Amends 34's "read-only" | decided |
 | 35 | 1.3 ships in 1.4.0 | 1.3.0 is not released on its own: its changes (decisions 32 and 33, device names, wireless batteries) ship in 1.4.0, once field check 1.3 passes on the 1.4 test build (the owner, 2026-10-18). One update for installed copies instead of two; the 1.3 branch is neither merged nor released | decided |
+| 37 | GPU tuning | Vyro may change an NVIDIA card's core and memory clock offsets and its power limit (1.6; the owner's request, 2026-10-18, on an NVIDIA desktop card and a laptop GPU): only through the driver's own interface (NVML, loaded from System32), only in the service, off until the owner turns it on and confirms, only on RTX 20 to RTX 50 cards and only what the driver gives a range for. Presets per family scaled to those ranges, the owner's own, one per profile; a stability test and "Find my best"; stock on every exit, after heat, a crash or a driver reset, and when another program keeps changing the values; only tested settings at start; from a phone only Stock and tested presets. AMD and Intel later. Supersedes "never writes GPU settings" (anti-cheat notes) and the plans' "overclocking out of scope" | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -2607,6 +2608,63 @@ show on the phone).
 - [ ] Field check 1.5 ([`docs/field-check-1.5.md`](docs/field-check-1.5.md)); 1.4.1 released
       first; the owner's go. Then the relay is deployed (`relay.yml`), which serves the new
       phone app.
+
+### 1.6.0 — GPU tuning: presets, your own settings, a stability test
+
+The owner, 2026-10-18: overclocking with presets "based on the GPU installed" and custom
+settings, tested on an NVIDIA desktop card and a laptop GPU (decision 37). Built on
+`claude/vyro-1.6`, from 1.5 (a phone may switch presets).
+
+- [x] **Core** (`vyro_core::gpu_tune`): settings are a core offset, a memory offset (MHz, as the
+      driver counts them) and a power limit (% of the card's default). The driver's ranges decide
+      what may change: offsets through NVML's per-P-state calls (driver R555 and later), the
+      power limit through its constraints; a setting without a range stays stock. Families:
+      Turing, Ampere, Ada, Blackwell, desktop and laptop. Suggested presets per family (Quiet:
+      75 % power; Efficient: 85 % and a small core offset; Performance: the highest power limit
+      and modest offsets), scaled to the ranges; a suggestion that would come out as stock is
+      left out. The owner's presets (16), one preset per profile, validated in Rust.
+- [x] **Controller** in the service: writes the preset in force and reads it back every 5 s.
+      Stock is the driver's own, so nothing is captured first. Guards: 90 °C edge or 105 °C
+      hotspot on two readings in a row → stock until a preset is applied again; values that
+      change are written again, three times in two minutes → stock and "another program";
+      a write the driver does not keep → stock. A marker (`gpu-tuned.json`) is kept while the
+      card runs tuned; at start one left behind means stock first, and a Kernel-Power 41,
+      Display 4101, nvlddmkm 153 or a LiveKernelEvent 141/117 report since → "Apply at start"
+      off and a notice (a crash during a test leaves it as it was). Stock before sleep, on
+      service stop and shutdown; the preset again after waking. Only settings that passed the
+      stability test are applied at start. NVML now loads only from System32 or NVIDIA's own
+      folder, for the readings too. IPC 15.
+- [x] **Stability test** (`gpu_tune::stress`, app side `src-tauri/src/gpu_tune.rs`): rounds of
+      FP32 load, the integer hash the CPU checks, the scene, a fixed frame whose hash must match
+      the test's first, and a pattern over about 70 % of free video memory (up to 4 GB) checked
+      on the GPU, which also measures its bandwidth. Any mistake or a driver reset fails the
+      settings. The service holds them on trial; the app renews the trial every 10 s, so it
+      ends within 30 s if the app stops. 5 minutes; settings that pass are kept as tested.
+- [x] **Find my best** (`gpu_tune::search`): at the highest power limit, the core offset rises
+      15 MHz a step (45 s tests) until one fails or +300 MHz, keeps 15 MHz below the last pass;
+      then the memory offset 100 MHz a step while its bandwidth does not drop more than 1 %,
+      keeps 100 MHz below; then the 5-minute test, one step lower each time it fails (twice at
+      most). Saved as "Best for this card", tested. Refused while a game or a benchmark runs or
+      Health warns; benchmarks wait for it.
+- [x] **Window**: GPU tuning view (Performance group): the card and driver, what runs now, the
+      presets with Apply, Test and Copy, Custom sliders within the driver's ranges, Find my best
+      with progress and Stop, "Apply at start", a preset per profile, the safety rules and the
+      log; a confirmation the first time. A "GPU tuned" chip with Stock in the top bar, "Return
+      GPU to stock" in the tray, and the tray's tooltip. The preview simulates an RTX 5060 Ti.
+- [x] **Phone** (1.5's control permission): More shows what the card runs and, for a phone
+      allowed to change the PC, Stock and the tested presets (`gpu.preset`, `gpu.stock`); custom
+      values and tests stay at the PC.
+- [x] **Tests**: presets per family and their scaling, validation, tested settings, the
+      temperature guard, crash verdicts, drift, the search (climb, slower memory, a result that
+      fails the long test, nothing passes), the stability test with a stand-in GPU, the
+      controller (apply and read back, return to stock, profiles, heat, another program, a
+      failed write, a crash at start, apply at start only when tested, another card's presets,
+      trials, sleep), crash events from the logs, IPC 15, the tray tooltip, the window's logic.
+      On Windows CI, WARP renders the fixed frame the same twice and keeps the memory pattern.
+- [ ] CI green; field check 1.6 ([`docs/field-check-1.6.md`](docs/field-check-1.6.md)) on the
+      owner's NVIDIA desktop card and a laptop, including whether NVML accepts the offsets on
+      GeForce under Windows (if not, NVAPI is the next step); 1.4.1 and 1.5 released first; the
+      owner's go.
 
 ## Risks
 

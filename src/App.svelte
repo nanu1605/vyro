@@ -19,7 +19,7 @@
   import CoolingPanel from './components/CoolingPanel.svelte';
   import { animator } from './anim';
   import { loadUpdates, update } from './updates.svelte';
-  import { cancelPowerAction, getBackendStatus, getHardwareChanges, getLowBatteries, getPawnIoStatus, getPowerState, getRemoteBrief, inTauri, onBackendStatus, onHardwareChanged, onLowBattery, onOpenView, onPowerPending, onRemote, onSensors, onWindowOpened, restoreFans, setUiVisible } from './ipc';
+  import { cancelPowerAction, getBackendStatus, getHardwareChanges, getLowBatteries, getPawnIoStatus, getPowerState, getRemoteBrief, inTauri, onBackendStatus, onHardwareChanged, onLowBattery, onOpenView, onPowerPending, onRemote, onSensors, onWindowOpened, restoreFans, restoreGpu, setUiVisible } from './ipc';
   import { lowNotice } from './devices';
   import { loadSeen, newestId, saveSeen } from './changes';
   import { loadSeenKeys, markSeen, unseen } from './insights';
@@ -151,6 +151,11 @@
   const fans = $derived(snap?.fanControl ?? null);
   async function fansToBios(): Promise<void> {
     await restoreFans().catch(() => {});
+  }
+  // GPU tuning (1.6): the header shows while the card runs tuned or a guard holds it at stock.
+  const gpuTune = $derived(snap?.gpuTune ?? null);
+  async function gpuToStock(): Promise<void> {
+    await restoreGpu().catch(() => {});
   }
 
   // Low batteries (1.4.1): a strip on the Dashboard and a dot on Devices while any is low.
@@ -354,10 +359,12 @@
       {tab}
       {remote}
       {fans}
+      gpu={gpuTune}
       update={update.status?.available && !update.status.installing ? update.status.available.version : null}
       onselect={select}
       onremote={openRemote}
       onbios={fansToBios}
+      onstock={gpuToStock}
       onsearch={openPalette}
     />
 
@@ -450,6 +457,14 @@
         </div>
       {/if}
 
+      {#if visited.gpu}
+        <div id="panel-gpu" role="tabpanel" aria-labelledby="tab-gpu" hidden={tab !== 'gpu'}>
+          <!-- Loaded on first visit, as Benchmark. -->
+          {#await import('./components/GpuTunePanel.svelte') then { default: GpuTunePanel }}
+            <GpuTunePanel {snap} {backend} active={tab === 'gpu'} />
+          {/await}
+        </div>
+      {/if}
       {#if visited.benchmark}
         <div id="panel-benchmark" role="tabpanel" aria-labelledby="tab-benchmark" hidden={tab !== 'benchmark'}>
           <!-- Loaded on first visit: most sessions never open it. -->

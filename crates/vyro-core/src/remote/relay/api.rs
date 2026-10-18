@@ -34,6 +34,7 @@ pub const METHODS: &[(&str, Access)] = &[
     ("changes", Access::View),
     ("updates", Access::View),
     ("power.state", Access::View),
+    ("gpu.tune", Access::View),
     // Changing.
     ("profile.pick", Access::Control),
     ("profile.keep", Access::Control),
@@ -49,6 +50,9 @@ pub const METHODS: &[(&str, Access)] = &[
     ("power", Access::Control),
     ("power.cancel", Access::Control),
     ("wake", Access::Control),
+    // GPU tuning (1.6): only Stock and presets that passed the stability test.
+    ("gpu.preset", Access::Control),
+    ("gpu.stock", Access::Control),
 ];
 
 /// Who may make `method`; `None`: no such request.
@@ -133,6 +137,8 @@ pub fn describe(method: &str, p: &serde_json::Value) -> String {
         }
         "power.cancel" => "Cancelled the shutdown".into(),
         "wake" => format!("Woke {}", s("pc")),
+        "gpu.preset" => format!("Applied the GPU preset \"{}\"", s("name")),
+        "gpu.stock" => "Returned the GPU to stock".into(),
         other => other.into(),
     }
 }

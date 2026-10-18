@@ -685,6 +685,15 @@ fn what_a_phone_changed_is_kept_in_words() {
         "Turned the alert \"cpu-hot\" off"
     );
     assert_eq!(d("wake", serde_json::json!({ "pc": "DESK" })), "Woke DESK");
+    assert_eq!(
+        d(
+            "gpu.preset",
+            serde_json::json!({ "id": "best", "name": "Best for this card" })
+        ),
+        "Applied the GPU preset \"Best for this card\""
+    );
+    assert_eq!(api::access("gpu.preset"), Some(api::Access::Control));
+    assert_eq!(api::access("gpu.tune"), Some(api::Access::View));
 }
 
 // --- the connection, against a stand-in relay -----------------------------------------------

@@ -225,6 +225,9 @@ pub(crate) fn start(app: &AppHandle, mode: BenchMode) -> Result<(), String> {
     if let Some(b) = pre.blockers.first() {
         return Err(b.clone());
     }
+    if crate::gpu_tune::testing(app) {
+        return Err("A GPU stability test is running.".into());
+    }
     let mut slot = lock(&state.run);
     if slot.as_ref().is_some_and(|r| !r.thread.is_finished()) {
         return Err("A benchmark is already running.".into());

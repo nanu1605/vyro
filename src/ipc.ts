@@ -8,7 +8,7 @@ import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
 import { savedLook, type AccentChoice, type OpenOn, type ThemeId } from './themes';
 import { EMPTY as NO_WIDGETS, type Widgets } from './widgets';
-import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Control, Dashboard, DeviceInfo, Devices, LinkState, PhoneAction, PowerState, WakeReadiness, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo } from './types';
+import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Control, Dashboard, DeviceInfo, Devices, LinkState, PhoneAction, PowerState, WakeReadiness, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo, GpuTestDone, GpuTestKind, GpuTestProgress, TuneConfig, TuneEvent, TuneSettings, TuneStatus } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -21,12 +21,14 @@ export async function onSensors(cb: (s: SensorSnapshot) => void): Promise<() => 
     const rules = await simRules();
     // The simulated board's fan control, the preview's findings and the alert rules that hold,
     // as the service reports them in each snapshot.
+    const { simGpuBrief } = await simTune();
     return startSim((s) => {
       const withAlerts = { ...s, alertState: simAlertState(rules(), s.ts) };
       const f = simFanStatus(withAlerts);
       cb({
         ...withAlerts,
         fanControl: { active: f.active, fullSpeed: f.active && f.overrideReason != null },
+        gpuTune: simGpuBrief(),
         insights: { attention: SIM_ATTENTION },
       });
     });
@@ -974,4 +976,60 @@ export async function dragWidget(): Promise<void> {
 export async function onOpenView(cb: (view: string) => void): Promise<() => void> {
   if (!inTauri) return () => {};
   return listen<string>('open-view', (e) => cb(e.payload));
+}
+
+// ---- GPU tuning (1.6) ----
+
+const simTune = () => import('./sim-gpu-tune');
+
+/** The card, what its driver allows, the presets and what runs now. */
+export async function getGpuTune(): Promise<TuneStatus> {
+  if (!inTauri) return (await simTune()).simGpuTune();
+  return invoke<TuneStatus>('get_gpu_tune');
+}
+
+/** Saves what the owner set; with `apply`, the preset in force goes on the card. */
+export async function setGpuTune(config: TuneConfig, apply: boolean): Promise<void> {
+  if (!inTauri) return (await simTune()).simSetGpuTune(config, apply);
+  return invoke('set_gpu_tune', { config, apply });
+}
+
+/** "Return GPU to stock", until a preset is applied again. */
+export async function restoreGpu(): Promise<void> {
+  if (!inTauri) return (await simTune()).simRestoreGpu();
+  return invoke('restore_gpu');
+}
+
+/** The GPU tuning log, newest last. */
+export async function getGpuTuneEvents(): Promise<TuneEvent[]> {
+  if (!inTauri) return (await simTune()).simGpuEvents();
+  return invoke<TuneEvent[]>('get_gpu_tune_events');
+}
+
+/** "Test this setting" (`settings`) or "Find my best". */
+export async function startGpuTest(kind: GpuTestKind, settings: TuneSettings | null): Promise<void> {
+  if (!inTauri) return (await simTune()).simStartGpuTest(kind, settings);
+  return invoke('start_gpu_test', { kind, settings });
+}
+
+export async function stopGpuTest(): Promise<void> {
+  if (!inTauri) return (await simTune()).simStopGpuTest();
+  return invoke('stop_gpu_test');
+}
+
+/** Where a test is, while one goes on. */
+export async function getGpuTestProgress(): Promise<GpuTestProgress | null> {
+  if (!inTauri) return (await simTune()).simGpuTestProgress();
+  return invoke<GpuTestProgress | null>('get_gpu_test_progress');
+}
+
+/** A test's progress and its end. */
+export async function onGpuTest(progress: (p: GpuTestProgress) => void, done: (d: GpuTestDone) => void): Promise<() => void> {
+  if (!inTauri) return (await simTune()).simOnGpuTest(progress, done);
+  const a = await listen<GpuTestProgress>('gpu-test-progress', (e) => progress(e.payload));
+  const b = await listen<GpuTestDone>('gpu-test-done', (e) => done(e.payload));
+  return () => {
+    a();
+    b();
+  };
 }

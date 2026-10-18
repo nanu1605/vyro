@@ -27,9 +27,15 @@ applied: string | null,
  */
 profile: Profile, 
 /**
- * Why the card is held at Stock until Vyro restarts (temperature, a crash, another program).
+ * Why a guard holds the card at stock (heat, a failed write, another program) until the
+ * owner applies a preset again.
  */
-held: string | null, lastError: string | null, 
+held: string | null, 
+/**
+ * Why the card is at stock although tuning is on (a crash was found, "Return to stock", a
+ * start that applies only tested settings): applying a preset puts it back.
+ */
+waiting: string | null, lastError: string | null, 
 /**
  * A stability test under way.
  */

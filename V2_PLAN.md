@@ -276,7 +276,8 @@ with one-click Diagnose / Benchmark / Cooling actions, Sensor Explorer still one
 
 ## Out of scope / non-blockers (roadmap §31)
 
-Never V2 launch blockers, and mostly not V2 at all: automatic overclocking, automatic voltage
+Never V2 launch blockers, and mostly not V2 at all: automatic overclocking (1.6 added GPU
+tuning the owner applies, with a tested "Find my best": decision 37), automatic voltage
 modification, BIOS flashing, unrestricted register writes, mandatory cloud account, cloud telemetry
 by default, public-internet exposure, mandatory AI/cloud API usage, Electron-class runtime,
 excessive background animation, and **injected in-game overlay** (research item; companion overlay

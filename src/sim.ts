@@ -41,6 +41,7 @@ export function emptySnapshot(ts: number): SensorSnapshot {
     health: { overall: 'unknown', subsystems: [] },
     alerts: [],
     fanControl: { active: false, fullSpeed: false },
+    gpuTune: { tuned: false, held: false },
     insights: { attention: [] },
     alertState: { active: [] },
   };

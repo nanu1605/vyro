@@ -116,9 +116,13 @@ pub fn apply_effective(app: &AppHandle) {
         engine.set_poll_interval(next.poll_ms);
         engine.set_game(next.game.is_some());
         if prev.as_ref().map(|p| p.fans) != Some(next.fans) {
-            // The service puts the profile's own fan settings in force, if it has any.
+            // The service puts the profile's own fan settings and GPU preset in force, if it
+            // has any.
             if let Err(e) = engine.api.set_fan_profile(next.fans) {
                 log::warn!("fans: profile: {e}");
+            }
+            if let Err(e) = engine.api.set_gpu_tune_profile(next.fans) {
+                log::warn!("gpu tuning: profile: {e}");
             }
         }
     }

@@ -49,6 +49,42 @@ pub trait Gpu {
         times: &mut Vec<f64>,
         on_frame: &mut dyn FnMut(),
     ) -> Result<(), GpuError>;
+    /// Renders one fixed frame of the scene and hashes it (GPU tuning's stability test, 1.6):
+    /// a card renders it the same every time, unless it makes mistakes.
+    fn frame_hash(&mut self) -> Result<u64, GpuError> {
+        Err(GpuError::Other("not available".into()))
+    }
+    /// Writes a pattern made from `seed` over about `mb` MB of video memory, then reads it back
+    /// on the GPU: the words that came back different, and the GB/s written and read.
+    fn vram_check(&mut self, mb: u32, seed: u32) -> Result<(u64, f64), GpuError> {
+        let _ = (mb, seed);
+        Err(GpuError::Other("not available".into()))
+    }
+    /// Video memory Windows lets this program use now, MB.
+    fn free_vram_mb(&self) -> Option<u64> {
+        None
+    }
+}
+
+/// FNV-1a over `bytes`, continuing from `h` (start with [`FNV_START`]).
+pub fn fnv1a(mut h: u64, bytes: &[u8]) -> u64 {
+    for b in bytes {
+        h ^= u64::from(*b);
+        h = h.wrapping_mul(0x0000_0100_0000_01B3);
+    }
+    h
+}
+
+pub const FNV_START: u64 = 0xCBF2_9CE4_8422_2325;
+
+/// The pattern word `i` of [`Gpu::vram_check`] holds for `seed` (the shader works it out the
+/// same way).
+pub fn vram_pattern(i: u32, seed: u32) -> u32 {
+    let mut x = i.wrapping_mul(0x9E37_79B9) ^ seed;
+    x ^= x >> 15;
+    x = x.wrapping_mul(0x2C1B_3C6D);
+    x ^= x >> 12;
+    x
 }
 
 /// Makes a [`Gpu`] on the calling thread.

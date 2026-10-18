@@ -203,6 +203,7 @@ pub enum Request {
     #[serde(rename_all = "camelCase")]
     SetGpuTune {
         config: TuneConfig,
+        apply: bool,
     },
     RestoreGpu,
     GpuTuneEvents,

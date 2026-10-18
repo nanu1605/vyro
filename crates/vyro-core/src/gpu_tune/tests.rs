@@ -499,7 +499,7 @@ fn applies_reads_back_and_restores_at_shutdown() {
     let c = TuneControl::start(Box::new(dev), fast(Some(dir.path())));
     assert!(matches!(c.capability(), TuneCapability::Writable { .. }));
     assert!(!c.brief().tuned);
-    c.set_config(on("mine")).unwrap();
+    c.set_config(on("mine"), true).unwrap();
     wait_for("tuned", || c.status().current == Some(PLUS));
     let st = c.status();
     assert_eq!(st.applied.as_deref(), Some("mine"));
@@ -520,12 +520,17 @@ fn applies_reads_back_and_restores_at_shutdown() {
 #[test]
 fn return_to_stock_and_apply_again() {
     let c = TuneControl::start(Box::new(SimDevice::new()), fast(None));
-    c.set_config(on("mine")).unwrap();
+    c.set_config(on("mine"), true).unwrap();
     wait_for("tuned", || c.brief().tuned);
     c.restore().unwrap();
     wait_for("stock", || c.status().current == Some(Settings::STOCK));
-    assert!(c.status().held.unwrap().contains("Returned to stock"));
-    c.set_config(on("mine")).unwrap();
+    assert!(c.status().waiting.unwrap().contains("Returned to stock"));
+    // Saving presets without applying leaves the card at stock.
+    c.set_config(on("mine"), false).unwrap();
+    std::thread::sleep(Duration::from_millis(60));
+    assert_eq!(c.status().current, Some(Settings::STOCK));
+    assert!(c.status().waiting.is_some());
+    c.set_config(on("mine"), true).unwrap();
     wait_for("tuned again", || c.brief().tuned);
 }
 
@@ -535,7 +540,7 @@ fn profiles_have_their_own_preset() {
     let mut cfg = on(STOCK);
     cfg.profiles
         .insert(crate::profiles::Profile::Gaming, "mine".into());
-    c.set_config(cfg).unwrap();
+    c.set_config(cfg, true).unwrap();
     wait_for("stock", || c.status().current == Some(Settings::STOCK));
     c.set_profile(crate::profiles::Profile::Gaming).unwrap();
     wait_for("gaming preset", || c.status().current == Some(PLUS));
@@ -548,7 +553,7 @@ fn profiles_have_their_own_preset() {
 #[test]
 fn heat_holds_the_card_at_stock() {
     let c = TuneControl::start(Box::new(SimDevice::new()), fast(None));
-    c.set_config(on("mine")).unwrap();
+    c.set_config(on("mine"), true).unwrap();
     wait_for("tuned", || c.brief().tuned);
     c.on_tick(&[snapshot(92.0)]);
     assert!(c.brief().tuned, "one reading is not enough");
@@ -560,7 +565,7 @@ fn heat_holds_the_card_at_stock() {
     c.set_profile(crate::profiles::Profile::Gaming).unwrap();
     std::thread::sleep(Duration::from_millis(60));
     assert_eq!(c.status().current, Some(Settings::STOCK));
-    c.set_config(on("mine")).unwrap();
+    c.set_config(on("mine"), true).unwrap();
     wait_for("tuned again", || c.status().current == Some(PLUS));
 }
 
@@ -569,7 +574,7 @@ fn another_program_changing_the_card_ends_tuning() {
     let dev = SimDevice::new();
     let other = Arc::clone(&dev.other);
     let c = TuneControl::start(Box::new(dev), fast(None));
-    c.set_config(on("mine")).unwrap();
+    c.set_config(on("mine"), true).unwrap();
     wait_for("tuned", || c.status().current == Some(PLUS));
     for _ in 0..3 {
         *crate::lock(&other) = Some(Settings {
@@ -594,7 +599,7 @@ fn a_failed_write_holds_at_stock() {
     let fail = Arc::clone(&dev.fail);
     let c = TuneControl::start(Box::new(dev), fast(None));
     *crate::lock(&fail) = true;
-    c.set_config(on("mine")).unwrap();
+    c.set_config(on("mine"), true).unwrap();
     wait_for("held", || c.brief().held);
     assert!(c.status().last_error.unwrap().contains("refused"));
 }
@@ -621,7 +626,7 @@ fn a_crash_while_tuned_turns_apply_at_start_off() {
     let c = TuneControl::start(Box::new(SimDevice::new()), opts);
     let st = c.status();
     assert!(!st.config.apply_at_start);
-    let why = st.held.unwrap();
+    let why = st.waiting.unwrap();
     assert!(why.contains("stopped without shutting down"), "{why}");
     std::thread::sleep(Duration::from_millis(60));
     assert_eq!(c.status().current, Some(Settings::STOCK));
@@ -652,7 +657,7 @@ fn apply_at_start_only_for_tested_settings() {
     assert_eq!(st.current, Some(PLUS));
     let (st, _d) = start(false);
     assert_eq!(st.current, Some(Settings::STOCK));
-    assert!(st.held.unwrap().contains("stability test"));
+    assert!(st.waiting.unwrap().contains("stability test"));
 }
 
 #[test]
@@ -667,9 +672,9 @@ fn presets_from_another_card_are_not_applied() {
     std::thread::sleep(Duration::from_millis(60));
     let st = c.status();
     assert_eq!(st.current, Some(Settings::STOCK));
-    assert!(st.held.unwrap().contains("another card"));
+    assert!(st.waiting.unwrap().contains("another card"));
     // Applying binds them to this card; the old card's test results do not carry over.
-    c.set_config(st.config).unwrap();
+    c.set_config(st.config, true).unwrap();
     let st = c.status();
     assert_eq!(st.config.gpu.as_deref(), Some("GPU-sim"));
     assert!(st.config.tested.is_empty());
@@ -684,7 +689,7 @@ fn a_trial_ends_by_itself_and_marks_tested_settings() {
         done: 0.0,
     };
     assert!(c.trial(Some(trial(PLUS))).is_err(), "tuning is off");
-    c.set_config(on(STOCK)).unwrap();
+    c.set_config(on(STOCK), true).unwrap();
     c.trial(Some(trial(PLUS))).unwrap();
     wait_for("on trial", || c.status().current == Some(PLUS));
     assert!(c.status().trial.is_some());
@@ -716,7 +721,7 @@ fn a_trial_ends_by_itself_and_marks_tested_settings() {
 #[test]
 fn sleep_gives_stock_and_waking_applies_again() {
     let c = TuneControl::start(Box::new(SimDevice::new()), fast(None));
-    c.set_config(on("mine")).unwrap();
+    c.set_config(on("mine"), true).unwrap();
     wait_for("tuned", || c.status().current == Some(PLUS));
     c.set_suspended(true);
     assert_eq!(
@@ -742,7 +747,7 @@ fn cards_vyro_does_not_tune() {
     );
     let c = TuneControl::start(Box::new(old), fast(None));
     assert!(matches!(c.capability(), TuneCapability::ReadOnly { .. }));
-    assert!(c.set_config(on("mine")).is_err());
+    assert!(c.set_config(on("mine"), true).is_err());
     let ada = GpuInfo {
         name: "NVIDIA GeForce RTX 4060 Laptop GPU".into(),
         uuid: "GPU-4060".into(),
@@ -753,4 +758,182 @@ fn cards_vyro_does_not_tune() {
     let locked = SimDevice::new().with_info(ada, Limits::default());
     let c = TuneControl::start(Box::new(locked), fast(None));
     assert!(matches!(c.capability(), TuneCapability::ReadOnly { .. }));
+}
+
+// ---- The stability test ----
+
+#[derive(Default)]
+struct FakeGpu {
+    round: u32,
+    /// Fail this way in this round.
+    wrong_in: Option<u32>,
+    frame_differs_in: Option<u32>,
+    vram_bad_in: Option<u32>,
+    reset_in: Option<u32>,
+    no_hash: bool,
+    bandwidths: Vec<f64>,
+}
+
+impl crate::bench::gpu::Gpu for FakeGpu {
+    fn name(&self) -> String {
+        "fake".into()
+    }
+    fn compute(
+        &mut self,
+        _: f64,
+        _: &std::sync::atomic::AtomicBool,
+    ) -> Result<f64, crate::bench::gpu::GpuError> {
+        if self.reset_in == Some(self.round) {
+            return Err(crate::bench::gpu::GpuError::Reset(
+                "DXGI_ERROR_DEVICE_REMOVED".into(),
+            ));
+        }
+        Ok(1.0)
+    }
+    fn bandwidth(
+        &mut self,
+        _: f64,
+        _: &std::sync::atomic::AtomicBool,
+    ) -> Result<f64, crate::bench::gpu::GpuError> {
+        Ok(1.0)
+    }
+    fn check(&mut self) -> Result<u32, crate::bench::gpu::GpuError> {
+        Ok(if self.wrong_in == Some(self.round) {
+            3
+        } else {
+            0
+        })
+    }
+    fn frames(
+        &mut self,
+        _: f64,
+        _: &std::sync::atomic::AtomicBool,
+        _: &mut Vec<f64>,
+        _: &mut dyn FnMut(),
+    ) -> Result<(), crate::bench::gpu::GpuError> {
+        Ok(())
+    }
+    fn frame_hash(&mut self) -> Result<u64, crate::bench::gpu::GpuError> {
+        if self.no_hash {
+            return Err(crate::bench::gpu::GpuError::Other("not available".into()));
+        }
+        Ok(if self.frame_differs_in == Some(self.round) {
+            2
+        } else {
+            1
+        })
+    }
+    fn vram_check(&mut self, mb: u32, _: u32) -> Result<(u64, f64), crate::bench::gpu::GpuError> {
+        assert_eq!(mb, 2800, "70 % of the free 4000 MB");
+        let r = self.round;
+        self.round += 1;
+        let gbs = self.bandwidths.get(r as usize).copied().unwrap_or(500.0);
+        Ok((if self.vram_bad_in == Some(r) { 12 } else { 0 }, gbs))
+    }
+    fn free_vram_mb(&self) -> Option<u64> {
+        Some(4000)
+    }
+}
+
+fn stress_run(gpu: &mut FakeGpu, secs: f64) -> Result<stress::Outcome, String> {
+    let stop = std::sync::atomic::AtomicBool::new(false);
+    let mut last = 0.0;
+    stress::run(gpu, secs, &stop, &mut |p| {
+        assert!(p >= last && p <= 1.0);
+        last = p;
+    })
+}
+
+#[test]
+fn stability_test_passes_a_card_without_mistakes() {
+    let mut g = FakeGpu {
+        bandwidths: vec![500.0, 480.0, 510.0],
+        ..FakeGpu::default()
+    };
+    let out = stress_run(&mut g, 0.0).unwrap();
+    assert!(out.passed && out.rounds == 1, "{out:?}");
+    assert_eq!(out.bandwidth_gbs, Some(500.0));
+    let mut g = FakeGpu {
+        bandwidths: vec![500.0, 480.0, 510.0],
+        ..FakeGpu::default()
+    };
+    let out = stress_run(&mut g, 0.02).unwrap();
+    assert!(out.passed && out.rounds >= 1);
+}
+
+#[test]
+fn stability_test_failures() {
+    let fail = |g: FakeGpu| {
+        let mut g = g;
+        let out = stress_run(&mut g, 10.0).unwrap();
+        assert!(!out.passed);
+        out.reason.unwrap()
+    };
+    assert!(fail(FakeGpu {
+        wrong_in: Some(2),
+        ..FakeGpu::default()
+    })
+    .contains("3 wrong results"));
+    assert!(fail(FakeGpu {
+        frame_differs_in: Some(3),
+        ..FakeGpu::default()
+    })
+    .contains("frame came out different"));
+    assert!(fail(FakeGpu {
+        vram_bad_in: Some(1),
+        ..FakeGpu::default()
+    })
+    .contains("12 words of video memory"));
+    assert!(fail(FakeGpu {
+        reset_in: Some(0),
+        ..FakeGpu::default()
+    })
+    .contains("driver reset"));
+    // A check that cannot run says nothing about the settings.
+    let mut g = FakeGpu {
+        no_hash: true,
+        ..FakeGpu::default()
+    };
+    assert!(stress_run(&mut g, 10.0).is_err());
+    // Stopped.
+    let stop = std::sync::atomic::AtomicBool::new(true);
+    let out = stress::run(&mut FakeGpu::default(), 10.0, &stop, &mut |_| {}).unwrap();
+    assert!(out.stopped && !out.passed);
+}
+
+#[test]
+fn video_memory_checked_each_round() {
+    assert_eq!(stress::vram_mb(None), 256);
+    assert_eq!(stress::vram_mb(Some(100)), 256);
+    assert_eq!(stress::vram_mb(Some(10_000)), 4096);
+    assert_eq!(stress::vram_mb(Some(4000)), 2800);
+}
+
+#[test]
+fn saved_presets_are_brought_within_narrower_ranges() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join(controller::CONFIG_FILE);
+    let mut cfg = on("mine");
+    cfg.presets[0].settings = Settings {
+        core_mhz: 900,
+        ..PLUS
+    };
+    crate::files::write_json(&path, &cfg).unwrap();
+    let narrow = Limits {
+        core: Some(Range {
+            min: -200,
+            max: 300,
+        }),
+        ..limits()
+    };
+    let sugg = suggestions(Some(Family::Ada), false, &narrow);
+    let loaded = controller::load_config(&path, &narrow, &sugg);
+    assert!(loaded.enabled);
+    assert_eq!(loaded.presets[0].settings.core_mhz, 300);
+    // Unparsable: off, and set aside.
+    std::fs::write(&path, b"{ not json").unwrap();
+    assert_eq!(
+        controller::load_config(&path, &narrow, &sugg),
+        TuneConfig::default()
+    );
 }

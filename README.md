@@ -7,9 +7,11 @@ app or library).
 - **Build spec:** [`PROJECT_PLAN.md`](PROJECT_PLAN.md) — what to build and why.
 - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — milestones, phase tracker, decision log.
 
-**Status:** 1.5. Live CPU, GPU, board, fan, voltage, RAM, storage and network sensors on
+**Status:** 1.6. Live CPU, GPU, board, fan, voltage, RAM, storage and network sensors on
 Windows (low-level ones through PawnIO, read by the Vyro Sensor Service), history, System
-Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 1.5: the
+Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 1.6:
+[GPU tuning](#gpu-tuning-16) for NVIDIA RTX 20 to RTX 50 cards, with presets made for the card,
+your own settings, a stability test and "Find my best". New in 1.5: the
 [phone app](#phone-app-from-anywhere-14) shows what runs on the PC, its devices and Health, and,
 if you allow it on the PC, changes it: end a program, shut down, restart, sleep or lock, wake
 another PC, switch profiles, run a benchmark or diagnostics. New in 1.4.1:
@@ -71,6 +73,33 @@ Only boards that have been checked on real hardware can be controlled: today the
 GAMING PLUS WIFI (MS-7E24, Nuvoton NCT6687D). Every other board shows its fans read-only.
 [`docs/control-safety.md`](docs/control-safety.md) lists every safety rule with the code that
 enforces it, its tests and its result on that board.
+
+## GPU tuning (1.6)
+
+The **GPU tuning** view changes an NVIDIA card's core and memory clocks and its power limit, on
+RTX 20 to RTX 50 cards, desktop and laptop. It is off until you turn it on and confirm, and it
+runs in the service through NVIDIA's own driver interface (NVML), as NVIDIA's tools do.
+
+- **Presets** made for the card's family and scaled to what its driver allows: Quiet (lower
+  power limit), Efficient (nearly the same speed for less power) and Performance (the highest
+  power limit and modest offsets). Your own settings with sliders kept within the driver's
+  ranges, saved as presets. A preset per profile, so Gaming can run Performance and Silent can
+  run Quiet. A laptop's driver often fixes the power limit: only what it allows is offered.
+- **Test** runs a 5-minute stability test: full load with every result checked, a frame that
+  must come out the same every time, and a pattern over most of the free video memory. Settings
+  that pass are marked tested; only tested settings are applied when Vyro starts.
+- **Find my best** raises the core clock, then the memory clock, step by step while the test
+  passes and memory stays fast, keeps a margin, tests the result for 5 minutes and saves it as
+  "Best for this card". About 20 to 40 minutes.
+- **Safeguards.** Stock again at 90 °C (105 °C hotspot), before sleep, when the service stops
+  and on uninstall. After a crash or a display driver reset while tuned, Vyro starts the card at
+  stock and turns "Apply at start" off. If another program keeps changing the clocks, Vyro stops
+  tuning. "Return GPU to stock" is in the top bar and the tray. From the phone, only Stock and
+  tested presets can be applied. [`docs/control-safety.md`](docs/control-safety.md) lists each
+  rule with its code and tests.
+
+Higher clocks can crash games or the PC, and may affect the card's warranty. AMD and Intel
+graphics are not supported yet.
 
 ## Gaming
 
@@ -305,8 +334,9 @@ the PC (1.5).
   end a program (never Windows' own or Vyro), shut down or restart (after 30 seconds unless
   "now", with a banner and Cancel on the PC), sleep, hibernate, lock or sign out, switch the
   profile, give the fans back to the BIOS, turn alerts on or off, run a benchmark or
-  diagnostics, connect or disconnect a Bluetooth device, and update Vyro. Turning fan control
-  on and confirming a pump stay at the PC. Settings lists what phones changed. After a restart,
+  diagnostics, connect or disconnect a Bluetooth device, apply Stock or a tested GPU preset
+  (1.6), and update Vyro. Turning fan control on, confirming a pump and GPU tuning's own values
+  and tests stay at the PC. Settings lists what phones changed. After a restart,
   the phone reaches the PC again once someone signs in.
 - **Waking the PC (1.5).** A phone cannot send the wake signal itself (web pages cannot send it),
   so another Vyro PC on the same network sends it: turn on **Wake from phone** in Settings on

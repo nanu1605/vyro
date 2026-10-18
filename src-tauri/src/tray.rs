@@ -14,6 +14,7 @@ use tauri::{AppHandle, Emitter, Manager, Window, WindowEvent, Wry};
 use vyro_core::alerts::AlertFired;
 use vyro_core::fan::FanBrief;
 use vyro_core::gaming::auto::GameAutomation;
+use vyro_core::gpu_tune::TuneBrief;
 use vyro_core::profiles::Profile;
 use vyro_core::units::TempUnit;
 use vyro_core::{files, lock, unix_now};
@@ -294,29 +295,56 @@ pub fn set_widgets_checked(app: &AppHandle, on: bool) {
 
 /// "Return fans to BIOS", enabled while Vyro drives fans.
 pub struct FanItem(MenuItem<Wry>);
+/// "Return GPU to stock", enabled while the GPU runs tuned (1.6).
+pub struct GpuItem(MenuItem<Wry>);
 
-/// Shows fan control, the remote companion (P26) and the alerts that ask to be named (P18) in
-/// the tray: the tooltip says so and the menu offers the way back to the BIOS. False until the
-/// tray exists (the caller tries again with the next snapshot).
-pub fn set_tray_state(app: &AppHandle, fans: FanBrief, remote: bool, alerts: &[String]) -> bool {
+/// What the tray shows: fan control, GPU tuning, the remote companion (P26) and the alerts that
+/// ask to be named (P18).
+#[derive(Debug, Clone, PartialEq)]
+pub struct TrayState {
+    pub fans: FanBrief,
+    pub gpu: TuneBrief,
+    pub remote: bool,
+    pub alerts: Vec<String>,
+}
+
+/// Shows [`TrayState`] in the tray: the tooltip says it and the menu offers the way back to
+/// the BIOS and to stock. False until the tray exists (the caller tries again with the next
+/// snapshot).
+pub fn set_tray_state(app: &AppHandle, state: &TrayState) -> bool {
     let Some(tray) = app.tray_by_id("main") else {
         return false;
     };
-    let _ = tray.set_tooltip(Some(tooltip(fans, remote, alerts)));
+    let _ = tray.set_tooltip(Some(tooltip(state)));
     if let Some(item) = app.try_state::<FanItem>() {
-        let _ = item.0.set_enabled(fans.active);
+        let _ = item.0.set_enabled(state.fans.active);
+    }
+    if let Some(item) = app.try_state::<GpuItem>() {
+        let _ = item.0.set_enabled(state.gpu.tuned);
     }
     true
 }
 
-/// "Vyro · fan control on · remote on · alert: Hot under load" (Windows keeps 127 characters).
-fn tooltip(fans: FanBrief, remote: bool, alerts: &[String]) -> String {
+/// "Vyro · fan control on · GPU tuned · remote on · alert: Hot under load" (Windows keeps 127
+/// characters).
+fn tooltip(state: &TrayState) -> String {
+    let TrayState {
+        fans,
+        gpu,
+        remote,
+        alerts,
+    } = state;
     let mut tip = String::from(match (fans.active, fans.full_speed) {
         (true, true) => "Vyro · fans at full speed",
         (true, false) => "Vyro · fan control on",
         (false, _) => "Vyro",
     });
-    if remote {
+    if gpu.tuned {
+        tip.push_str(" · GPU tuned");
+    } else if gpu.held {
+        tip.push_str(" · GPU held at stock");
+    }
+    if *remote {
         tip.push_str(" · remote on");
     }
     if !alerts.is_empty() {
@@ -438,13 +466,17 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
 
     let fans = MenuItem::with_id(app, "fans-bios", "Return fans to BIOS", false, None::<&str>)?;
     app.manage(FanItem(fans.clone()));
+    let gpu = MenuItem::with_id(app, "gpu-stock", "Return GPU to stock", false, None::<&str>)?;
+    app.manage(GpuItem(gpu.clone()));
 
     let show = MenuItem::with_id(app, "show", "Show Vyro", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Vyro", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(
         app,
-        &[&show, &profiles, &overlay, &widgets, &fans, &sep, &quit],
+        &[
+            &show, &profiles, &overlay, &widgets, &fans, &gpu, &sep, &quit,
+        ],
     )?;
     let mut tray = TrayIconBuilder::with_id("main")
         .tooltip("Vyro")
@@ -457,6 +489,14 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
                 if let Some(engine) = app.try_state::<Engine>() {
                     if let Err(e) = engine.api.restore_fans() {
                         log::warn!("fans: return to BIOS: {e}");
+                    }
+                }
+            }
+            "gpu-stock" => {
+                crate::gpu_tune::stop(app);
+                if let Some(engine) = app.try_state::<Engine>() {
+                    if let Err(e) = engine.api.restore_gpu() {
+                        log::warn!("gpu tuning: return to stock: {e}");
                     }
                 }
             }
@@ -543,14 +583,43 @@ mod tests {
             active: true,
             full_speed: false,
         };
-        assert_eq!(tooltip(FanBrief::default(), false, &[]), "Vyro");
+        let state = |fans, gpu, remote, alerts: &[String]| TrayState {
+            fans,
+            gpu,
+            remote,
+            alerts: alerts.to_vec(),
+        };
+        let off = TuneBrief::default();
         assert_eq!(
-            tooltip(on, false, &["Hot under load".into()]),
+            tooltip(&state(FanBrief::default(), off, false, &[])),
+            "Vyro"
+        );
+        assert_eq!(
+            tooltip(&state(on, off, false, &["Hot under load".into()])),
             "Vyro · fan control on · alert: Hot under load"
         );
-        assert_eq!(tooltip(FanBrief::default(), true, &[]), "Vyro · remote on");
+        assert_eq!(
+            tooltip(&state(FanBrief::default(), off, true, &[])),
+            "Vyro · remote on"
+        );
+        let tuned = TuneBrief {
+            tuned: true,
+            held: false,
+        };
+        assert_eq!(
+            tooltip(&state(on, tuned, false, &[])),
+            "Vyro · fan control on · GPU tuned"
+        );
+        let held = TuneBrief {
+            tuned: false,
+            held: true,
+        };
+        assert_eq!(
+            tooltip(&state(FanBrief::default(), held, false, &[])),
+            "Vyro · GPU held at stock"
+        );
         let many: Vec<String> = (0..20).map(|i| format!("Alert number {i}")).collect();
-        let tip = tooltip(FanBrief::default(), false, &many);
+        let tip = tooltip(&state(FanBrief::default(), off, false, &many));
         assert!(tip.starts_with("Vyro · alerts: Alert number 0, "));
         assert_eq!(tip.chars().count(), 127);
     }

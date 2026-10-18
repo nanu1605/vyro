@@ -3,20 +3,22 @@
   // control, the phone companion, an update), and the command palette.
   import Search from '@lucide/svelte/icons/search';
   import { view, type Tab } from '../../nav';
-  import type { FanBrief, RemoteBrief } from '../../types';
+  import type { FanBrief, RemoteBrief, TuneBrief } from '../../types';
 
   interface Props {
     tab: Tab;
     remote: RemoteBrief | null;
     fans: FanBrief | null;
+    gpu: TuneBrief | null;
     /** A newer version, when one is waiting. */
     update: string | null;
     onselect: (t: Tab) => void;
     onremote: () => void;
     onbios: () => void;
+    onstock: () => void;
     onsearch: () => void;
   }
-  let { tab, remote, fans, update, onselect, onremote, onbios, onsearch }: Props = $props();
+  let { tab, remote, fans, gpu, update, onselect, onremote, onbios, onstock, onsearch }: Props = $props();
 
   const v = $derived(view(tab));
   const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
@@ -56,6 +58,20 @@
         </button>
         <button type="button" class="part bios" onclick={onbios} title="Hand every fan back to the BIOS">Return to BIOS</button>
       </div>
+    {/if}
+    {#if gpu?.tuned}
+      <div class="chip fans" role="status">
+        <button type="button" class="part" onclick={() => onselect('gpu')}>
+          <span class="led" aria-hidden="true"></span>
+          GPU tuned
+        </button>
+        <button type="button" class="part bios" onclick={onstock} title="Give the GPU its own clocks and power limit">Stock</button>
+      </div>
+    {:else if gpu?.held}
+      <button type="button" class="chip" onclick={() => onselect('gpu')} title="Open GPU tuning">
+        <span class="led hot" aria-hidden="true"></span>
+        GPU held at stock
+      </button>
     {/if}
     <button type="button" class="search" onclick={onsearch} aria-label="Search" aria-keyshortcuts={isMac ? 'Meta+K' : 'Control+K'}>
       <Search size={15} aria-hidden="true" />

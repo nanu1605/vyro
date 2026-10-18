@@ -1,4 +1,4 @@
-# Fan and pump control: safety matrix
+# Hardware control: safety matrix
 
 Status: **P27 audit (2026-10-16)**. This lists every rule from V2_PLAN's "Hardware-control safety"
 and how each one is met:
@@ -70,3 +70,26 @@ To add a board:
 1. Make a read-only dump with `vyro-fans` and get a supervised `--try` on each header.
 2. Add an allow-list entry with that board's headers and floors.
 3. Run the whole field column of this matrix on that board.
+
+## GPU tuning (1.6)
+
+Decision 37. Paths as above; tests are in `gpu_tune/tests.rs` unless another file is named. No
+card is field-checked yet: the column is filled by field check 1.6 on the owner's NVIDIA desktop
+card and a laptop.
+
+| Rule | Enforced in | Tests | Field result |
+|---|---|---|---|
+| **Off by default**, turned on only after a confirmation that names the risks. | `gpu_tune::TuneConfig::default` (`enabled: false`); the GPU tuning view's dialog | `validation` | **Pending** |
+| **Only the service writes**, through NVML loaded from System32 or NVIDIA's folder (never the search path). The app's own engine never tunes. | `engine::LocalEngine::start_tune` (`gpu_tune: false` in the app), `gpu_tune::nvidia::load_nvml` | `cards_vyro_does_not_tune` (an unavailable controller refuses settings) | **Pending** |
+| **Positive detection.** Only RTX 20 to RTX 50 cards, and only settings the driver gives a range for; others stay stock. | `gpu_tune::nvidia::open_device`, `Limits::clamp`, `validate` | `family_and_laptop_from_the_driver`, `suggestions_are_scaled_to_the_driver`, `cards_vyro_does_not_tune` | **Pending** |
+| **Every write is read back.** A value the driver does not keep holds the card at stock. | `controller::Worker::write` | `a_failed_write_holds_at_stock` | **Pending** |
+| **Heat.** 90 °C edge or 105 °C hotspot on two readings in a row → stock until a preset is applied again. | `TempGuard`, `TuneControl::on_tick` | `temperature_guard_needs_two_readings`, `heat_holds_the_card_at_stock` | **Pending** |
+| **Another program.** Values that change are written again; three times in two minutes → stock. | `controller::Worker::check` | `another_program_changing_the_card_ends_tuning`, `drift_compares_only_what_the_driver_allows` | **Pending** (MSI Afterburner) |
+| **Crash or driver reset.** A marker is kept while tuned; a start that finds one writes stock first, and a Kernel-Power 41, Display 4101, nvlddmkm 153 or LiveKernelEvent 141/117 since turns "Apply at start" off. A reset while running does the same. | `crash_verdict`, `TuneControl::start`, `Worker::check`, `sysinfo::gpu_crashes` | `crash_verdicts`, `a_crash_while_tuned_turns_apply_at_start_off`, `gpu_crash_events` (`sysinfo/events.rs`) | **Pending** (power pulled while tuned) |
+| **Only tested settings at start.** | `TuneControl::start`, `TuneConfig::tested_at` | `apply_at_start_only_for_tested_settings`, `tested_settings` | **Pending** |
+| **Another card.** Presets made on another card are not applied; applying binds them to this one and drops the old test results. | `Inner::ours`, `TuneControl::set_config` | `presets_from_another_card_are_not_applied` | **Pending** |
+| **Stock on exit.** Before sleep (the preset again after waking), on service stop, shutdown and uninstall. | `TuneControl::{set_suspended, shutdown}`, `Worker::run` | `sleep_gives_stock_and_waking_applies_again`, `applies_reads_back_and_restores_at_shutdown` | **Pending** |
+| **Trials end by themselves.** A stability test's settings are on trial for 30 s at a time; the app renews them while the test runs. | `TuneControl::trial`, `Inner::desired` (`TRIAL_LEASE`) | `a_trial_ends_by_itself_and_marks_tested_settings` | **Pending** |
+| **The stability test fails on any mistake**: a wrong result, a different frame, a changed memory word, a driver reset. | `gpu_tune::stress::run`, `bench::win::gpu` | `stability_test_failures`; `every_workload_runs_on_warp` (`bench/win/gpu.rs`, Windows) | **Pending** |
+| **From a phone** only Stock and tested presets. | `src-tauri/src/remote_api.rs` (`gpu_preset`), `relay::api` | `what_a_phone_changed_is_kept_in_words` (`remote/relay/tests.rs`) | **Pending** |
+| **Always visible**: the top bar's chip with Stock, "Return GPU to stock" in the tray, the tray's tooltip, and the log. | `gpu_tune::TuneBrief` in every snapshot; the app's header and tray | `the_tooltip_names_fan_control_and_alerts` (`src-tauri/src/tray.rs`) | **Pending** |

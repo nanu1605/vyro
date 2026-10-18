@@ -473,7 +473,7 @@ Cross‑check every sensor against a trusted reference; never display an unverif
 - **Fan / cooling CONTROL** — configurable fan curves, cooling profiles, pump control. Requires driver **write** access to EC/Super‑I/O; hardware‑safety and stability risk. Build only after per‑board validation and explicit user consent. v1 ships fan/pump **monitoring** + curve **visualization** only.
 - **Injected in‑game overlay** — anti‑cheat risk; default off, warned.
 
-**Out of scope entirely (v1 & v2 unless revisited):** overclocking/voltage tuning, ARM64 Windows, remote/network monitoring of other machines, cloud sync.
+**Out of scope entirely (v1 & v2 unless revisited):** overclocking/voltage tuning (revisited for NVIDIA clock offsets and power limits: decision 37, 1.6; voltages stay out), ARM64 Windows, remote/network monitoring of other machines, cloud sync.
 
 ---
 

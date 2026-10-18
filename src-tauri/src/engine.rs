@@ -11,7 +11,6 @@ use vyro_core::alerts::AlertFired;
 use vyro_core::engine::{
     BackendMode, BackendStatus, ClientPids, EngineApi, EngineConfig, LocalEngine,
 };
-use vyro_core::fan::FanBrief;
 use vyro_core::ipc::{RemoteEngine, RemoteStatus};
 use vyro_core::{lock, Inventory, PollerConfig, SensorSnapshot};
 
@@ -204,8 +203,8 @@ impl Engine {
 fn sink(app: &AppHandle, shown: &Arc<AtomicBool>) -> impl Fn(&SensorSnapshot) + Send + 'static {
     let app = app.clone();
     let shown = Arc::clone(shown);
-    // Fan state, the remote companion and alerts last shown in the tray; none yet.
-    let tray_state: Mutex<Option<(FanBrief, bool, Vec<String>)>> = Mutex::new(None);
+    // What the tray last showed; nothing yet.
+    let tray_state: Mutex<Option<crate::tray::TrayState>> = Mutex::new(None);
     // The drives last seen, to check the PC change history when one comes or goes.
     let drives: Mutex<Option<Vec<String>>> = Mutex::new(None);
     move |snap: &SensorSnapshot| {
@@ -226,20 +225,20 @@ fn sink(app: &AppHandle, shown: &Arc<AtomicBool>) -> impl Fn(&SensorSnapshot) + 
         let remote = app
             .try_state::<crate::remote::Remote>()
             .is_some_and(|r| r.brief().running);
-        let tray = (
-            snap.fan_control,
+        let tray = crate::tray::TrayState {
+            fans: snap.fan_control,
+            gpu: snap.gpu_tune,
             remote,
-            snap.alert_state
+            alerts: snap
+                .alert_state
                 .tray()
                 .into_iter()
                 .map(String::from)
-                .collect::<Vec<_>>(),
-        );
+                .collect(),
+        };
         {
             let mut shown = lock(&tray_state);
-            if shown.as_ref() != Some(&tray)
-                && crate::tray::set_tray_state(&app, tray.0, tray.1, &tray.2)
-            {
+            if shown.as_ref() != Some(&tray) && crate::tray::set_tray_state(&app, &tray) {
                 *shown = Some(tray);
             }
         }

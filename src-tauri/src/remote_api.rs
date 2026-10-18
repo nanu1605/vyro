@@ -173,6 +173,7 @@ fn call(app: &AppHandle, r: &Request) -> Result<Value, String> {
         "changes" => to_json(e.hardware_changes(20)?),
         "updates" => to_json(app.state::<crate::updates::Updates>().status()),
         "power.state" => to_json(power_state(app)),
+        "gpu.tune" => to_json(e.gpu_tune_status()?),
 
         // Changing.
         "profile.pick" => {
@@ -243,6 +244,15 @@ fn call(app: &AppHandle, r: &Request) -> Result<Value, String> {
             cancel_power(app)?;
             to_json(power_state(app))
         }
+        "gpu.preset" => {
+            gpu_preset(e, &param::<String>(p, "id")?)?;
+            done()
+        }
+        "gpu.stock" => {
+            crate::gpu_tune::stop(app);
+            e.restore_gpu()?;
+            done()
+        }
         "wake" => {
             let mac =
                 wake::parse_mac(&param::<String>(p, "mac")?).ok_or("Not a network address.")?;
@@ -251,6 +261,29 @@ fn call(app: &AppHandle, r: &Request) -> Result<Value, String> {
         }
         _ => Err(api::UNKNOWN.into()),
     }
+}
+
+/// Applies a GPU preset a phone chose, for the profile in force: only Stock or one whose
+/// settings passed the stability test on this card (custom values are set at the PC).
+fn gpu_preset(e: &dyn EngineApi, id: &str) -> Result<(), String> {
+    let status = e.gpu_tune_status()?;
+    if !status.config.enabled {
+        return Err("GPU tuning is off on the PC.".into());
+    }
+    let preset = status
+        .presets
+        .iter()
+        .find(|p| p.preset.id == id)
+        .ok_or("No such preset.")?;
+    if preset.tested_at.is_none() {
+        return Err("From a phone, only Stock and presets that passed the stability test.".into());
+    }
+    let mut cfg = status.config;
+    match cfg.profiles.get_mut(&status.profile) {
+        Some(own) => id.clone_into(own),
+        None => id.clone_into(&mut cfg.preset),
+    }
+    e.set_gpu_tune(cfg, true)
 }
 
 /// This PC's IPv4 addresses with their prefix lengths, to send wake packets from.

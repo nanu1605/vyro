@@ -461,8 +461,8 @@ impl EngineApi for RemoteEngine {
         self.call(&Request::GpuTuneStatus)
     }
 
-    fn set_gpu_tune(&self, config: TuneConfig) -> Result<(), String> {
-        self.call(&Request::SetGpuTune { config })
+    fn set_gpu_tune(&self, config: TuneConfig, apply: bool) -> Result<(), String> {
+        self.call(&Request::SetGpuTune { config, apply })
     }
 
     fn restore_gpu(&self) -> Result<(), String> {

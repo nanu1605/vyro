@@ -182,3 +182,41 @@ export type { DiagSummary } from './bindings/DiagSummary';
 export type { Field } from './bindings/Field';
 export type { GpuDriver } from './bindings/GpuDriver';
 export type { Origin } from './bindings/Origin';
+// GPU tuning (1.6).
+export type { GpuFamily } from './bindings/GpuFamily';
+export type { TuneBrief } from './bindings/TuneBrief';
+export type { TuneCapability } from './bindings/TuneCapability';
+export type { TuneClocks } from './bindings/TuneClocks';
+export type { TuneConfig } from './bindings/TuneConfig';
+export type { TuneEvent } from './bindings/TuneEvent';
+export type { TuneEventKind } from './bindings/TuneEventKind';
+export type { TuneGpu } from './bindings/TuneGpu';
+export type { TuneLimits } from './bindings/TuneLimits';
+export type { TunePreset } from './bindings/TunePreset';
+export type { TunePresetKind } from './bindings/TunePresetKind';
+export type { TunePresetView } from './bindings/TunePresetView';
+export type { TuneRange } from './bindings/TuneRange';
+export type { TuneSettings } from './bindings/TuneSettings';
+export type { TuneStatus } from './bindings/TuneStatus';
+export type { TuneTrial } from './bindings/TuneTrial';
+export type { TunedSettings } from './bindings/TunedSettings';
+
+/** "Test this setting" or "Find my best" (app side, `src-tauri/src/gpu_tune.rs`). */
+export type GpuTestKind = 'test' | 'best';
+
+/** Where a GPU stability test or "Find my best" is. */
+export interface GpuTestProgress {
+  kind: GpuTestKind;
+  step: string;
+  /** 0–1. */
+  done: number;
+  settings: import('./bindings/TuneSettings').TuneSettings;
+}
+
+/** How it ended. */
+export interface GpuTestDone {
+  kind: GpuTestKind;
+  passed: boolean;
+  settings: import('./bindings/TuneSettings').TuneSettings | null;
+  message: string;
+}
