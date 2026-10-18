@@ -2492,6 +2492,17 @@ field check; the relay built into releases for everyone, any other relay allowed
       `vyro.exe` and published the 11.6 MB MSI, `latest.json` and checksums here and to
       `nanu1605/vyro-releases`. Its `latest.json` now offers 1.4.0 to installed copies
       (checksums verified).
+- [x] **The accessibility sweep on My PC** (test-only): on `main` at 4c48e46 it failed once, on
+      My PC in Midnight, with Hardware's label muted and the sidebar's highlight still under it;
+      a re-run passed. Its log now says what was still moving when the wait ran out, and showed
+      why: on CI, My PC can go seconds without drawing a frame, every animation frozen part way
+      (on 44dae6d, the highlight 117 ms into its 160 ms slide after 5 s). Each axe run also waits
+      for the highlight to sit on the selected view, waits up to 15 s (56e0ac5, was 5 s), and
+      counts a contrast finding only if a second look a second later sees it too. CI run
+      39107001793 on 2a0e408 logged My PC still frozen after 15 s (the view's fade-in at 133 of
+      its 160 ms), and the sweep passed. If it fails there again, a longer wait is unlikely to
+      help: look at what My PC's 3-D view does on CI's software GPU, or sweep most themes with
+      the flat 2-D plan and the 3-D view once.
 
 ## Risks
 
