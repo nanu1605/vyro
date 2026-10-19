@@ -2593,7 +2593,13 @@ first) and 1.7 (the PC's screen on the phone), each with its own field check.
       connected.
 - [x] Field check 1.4.1 ([`docs/field-check-1.4.1.md`](docs/field-check-1.4.1.md)): done
       2026-10-19 on 1.7's test build bbc8120 (the owner's choice), every step works.
-- [ ] The owner's go, then the release.
+- [x] **1.4.1 released** (2026-10-19), on the owner's go: CI passed on ea18ffc (Linux, Windows
+      with the smoke test, the relay and phone app, accessibility), bbc8120's 1.4.1 code with the
+      field check's records. `main` fast-forwarded to it, and Release run 39328531150 tagged
+      `v1.4.1`, found the relay's address in `vyro.exe` and published the 11.6 MB MSI,
+      `latest.json` and checksums here and to `nanu1605/vyro-releases`. Its `latest.json` now
+      offers 1.4.1 to installed copies (checksums verified). The relay was not deployed: 1.4.1's
+      phone app is 1.4.0's (only a test changed).
 
 ### 1.5.0 — control from the phone: what runs, power, wake
 
