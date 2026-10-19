@@ -749,7 +749,7 @@ pub fn publish(app: &AppHandle, snap: &SensorSnapshot) {
     }
 }
 
-/// Runs a change off the UI thread, then answers with the new status.
+/// Runs a change off the UI thread, then answers with the new status and tells the views.
 async fn change(
     app: AppHandle,
     f: impl FnOnce(&AppHandle, &Remote) -> Result<(), String> + Send + 'static,
@@ -765,9 +765,14 @@ async fn change(
     .map_err(|e| e.to_string())?
 }
 
+/// Only reads: Settings → Remote reads again whenever it is told of a change, so a read that
+/// told it would start the next read, and so on for as long as Settings showed (each one reads
+/// the network adapters through Windows' DNS Client: the owner saw it take most of the CPU).
 #[tauri::command]
 pub async fn get_remote_status(app: AppHandle) -> Result<RemoteStatus, String> {
-    change(app, |_, _| Ok(())).await
+    tauri::async_runtime::spawn_blocking(move || app.state::<Remote>().status())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

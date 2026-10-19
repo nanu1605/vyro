@@ -49,6 +49,9 @@ If a step fails: note the message on the row, then send the app's log from
 - Task Manager: Vyro's CPU and memory when idle are as with 1.4.0 (the device list is now read
   in the background every 5 minutes).
 - The phone app (Settings → Remote → From anywhere) still shows readings.
+- Settings → Remote stays quiet: with it open, pair a phone and open the phone app. In Task
+  Manager, neither Vyro nor "Service Host: Network Service" (DNS Client) stays above a few
+  percent (1.7's field check saw 23 % on opening, 85 % with a phone paired, fixed here).
 
 ## Results
 
