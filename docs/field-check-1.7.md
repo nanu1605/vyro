@@ -2,9 +2,9 @@
 
 Status: **to do.** Test build: **`vyro-windows-3095d4f`** (CI run 39272496314, every job green),
 version 1.7.0, or the artifact of any later green run on `claude/vyro-1.7`. Install the MSI over
-1.6, and open the phone app from the relay this branch
-deploys (or the branch's own relay; see `docs/remote.md` → Running your own relay). About 60
-minutes, with an Android phone (Chrome) and an iPhone (Safari, the Home Screen app).
+1.6, and open the phone app from the relay this branch deploys (or the branch's own relay; see
+`docs/remote.md` → Running your own relay). The relay was last deployed from 2e42a83 (run
+39298073589); reload the phone app once to get it. About 60 minutes, with an Android phone (Chrome) and an iPhone (Safari, the Home Screen app).
 
 1.7 answers the owner's request to "see what is running on the PC from the phone, and use the
 system from the phone" (ROADMAP → 1.7.0, decision 38): directly where it can, and a slow view

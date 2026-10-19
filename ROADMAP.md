@@ -2889,7 +2889,8 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       they wait about 490 ms and two pictures arrive in 16 s; on CI's Windows runner it passes
       too. On the same runner Windows' encoder, fed noise, sends less than half as much after
       its rate drops from 2.5 to 0.5 Mbit/s mid-stream, with no keyframe (CI run 39272496314,
-      3095d4f). To check on the owner's phones on mobile data.
+      3095d4f). The relay serves the phone app with that line since the owner's go (deployed
+      from 2e42a83, run 39298073589). To check on the owner's phones on mobile data.
 - [ ] Field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)): Android Chrome
       and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU; the secure screen,
       an administrator window, two monitors, the slow view, the idle end; 1.4.1 to 1.6 released
