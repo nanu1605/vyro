@@ -96,6 +96,17 @@ fn keyframe(n: u8) -> Vec<u8> {
 /// channel; the PC's session answers on localhost, sends frames and reports the input.
 #[test]
 fn a_phone_receives_video_and_sends_input() {
+    loopback(false);
+}
+
+/// Browsers hide their own addresses behind mDNS names (`….local`) the PC cannot look up: such
+/// candidates are skipped, and the PC learns the phone's address from its first check.
+#[test]
+fn a_phone_hiding_its_address_still_connects() {
+    loopback(true);
+}
+
+fn loopback(mdns: bool) {
     let mut phone = RtcConfig::new()
         .clear_codecs()
         .enable_h264(true)
@@ -114,8 +125,14 @@ fn a_phone_receives_video_and_sends_input() {
         stun: Vec::new(),
         stun_timeout: Duration::ZERO,
     };
+    let mut offer = offer.to_sdp_string();
+    if mdns {
+        let ip = local.ip().to_string();
+        assert!(offer.contains(&ip), "{offer}");
+        offer = offer.replace(&ip, "4a1b2c3d-1234-4678-9abc-def012345678.local");
+    }
     let (mut session, answer) = rtc::start(
-        &offer.to_sdp_string(),
+        &offer,
         &opts,
         Box::new(move |e| {
             let _ = tx.send(e);

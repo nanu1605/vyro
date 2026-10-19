@@ -89,6 +89,10 @@
   let sending = false;
 
   const allowed = $derived(can('screen.start'));
+  /** This browser plays the PC's H.264 over WebRTC (phones do; some desktop builds do not). */
+  const direct =
+    typeof RTCPeerConnection !== 'undefined' &&
+    (RTCRtpReceiver.getCapabilities?.('video')?.codecs ?? []).some((c) => c.mimeType.toLowerCase() === 'video/h264');
   const showing = $derived(mode === 'connecting' || mode === 'direct' || mode === 'slow');
   /** Where the picture sits in the surface, before zooming. */
   const box = $derived(size ? contentBox({ left: 0, top: 0, width: sw, height: sh }, size.w, size.h) : null);
@@ -222,6 +226,10 @@
     const my = ++run;
     reset();
     mode = 'connecting';
+    if (!direct) {
+      void slow(my);
+      return;
+    }
     try {
       const p = new RTCPeerConnection({ iceServers: STUN });
       peer = p;

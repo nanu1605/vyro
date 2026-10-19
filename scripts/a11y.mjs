@@ -6,7 +6,7 @@
 // hard to read as picked (navy on Midnight, pale yellow on Daylight), and Settings with the colour
 // wheel open. Since 1.4 also: Settings → Remote's reach from anywhere (the relay's confirmation,
 // a phone's pairing code, the options). Since 1.6 also: GPU tuning's confirmation, and the view with
-// tuning on and a stability test running. The phone app itself is swept by scripts/relay-e2e.mjs.
+// tuning on and a stability test running. Since 1.7 also: the screen-shared banner. The phone app itself is swept by scripts/relay-e2e.mjs.
 // Runs against the browser preview
 // (sample data, two GPUs as on the owner's PC) of a finished build:
 //
@@ -332,6 +332,13 @@ async function sweepDialogs(browser, theme, width) {
   await page.waitForTimeout(300);
   await axe(page, at('Relay pairing and options'));
   await noSidewaysScroll(page, at('Relay pairing and options'));
+  // The screen shared with a phone (1.7): the banner on every view, and Stop.
+  await page.goto(`${BASE}/?screen`);
+  await page.getByText('Your screen is shared').waitFor();
+  await axe(page, at('Screen shared banner'));
+  await noSidewaysScroll(page, at('Screen shared banner'));
+  await page.getByRole('button', { name: 'Stop sharing' }).click();
+  await page.getByText('Your screen is shared').waitFor({ state: 'detached' });
   await ctx.close();
 }
 

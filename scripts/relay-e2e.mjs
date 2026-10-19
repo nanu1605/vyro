@@ -231,6 +231,36 @@ async function main() {
       () => ok('End reaches the PC'),
       (e) => problem('end', e.message),
     );
+
+    // 1c. The screen (1.7), its own permission. Playwright's Chromium plays no H.264, so the
+    // phone goes to the slow view: the PC's picture through the relay, a picture at a time.
+    await tab('Screen');
+    await seeText(a.page, 'may not see', 'the Screen tab says the screen is not allowed yet');
+    await axeBoth(a.page, 'phone app, screen (not allowed)');
+    pc.say('screen');
+    const show = a.page.getByRole('button', { name: /^Show .*screen$/ });
+    await show.waitFor({ timeout: 10_000 }).then(
+      () => ok('a phone allowed the screen is told at once'),
+      (e) => problem('screen', e.message),
+    );
+    await a.page.getByRole('button', { name: 'Screen 2, 1920×1080' }).click();
+    await axeBoth(a.page, 'phone app, screen');
+    await show.click();
+    await a.page.locator('.surface img').waitFor({ timeout: 15_000 }).then(
+      () => ok("the slow view shows the PC's picture"),
+      (e) => problem('slow view', e.message),
+    );
+    await seeText(a.page, 'the slow view, a picture at a time', '…and says it is the slow view');
+    await pc.out.wait(/^asked: screen\.stop /);
+    const surface = await a.page.locator('.surface').boundingBox();
+    if (surface) await a.page.touchscreen.tap(surface.x + surface.width / 2, surface.y + surface.height / 2);
+    await pc.out.next(/^asked: screen\.input .*"button"/).then(
+      () => ok('a tap reaches the PC as a click'),
+      (e) => problem('slow view', e.message),
+    );
+    await axeBoth(a.page, 'phone app, screen (slow view)');
+    await a.page.getByRole('button', { name: 'Stop', exact: true }).click();
+    await seeText(a.page, 'The session ended: you stopped it', '…and Stop ends it');
     await tab('Live');
 
     // 2. The link works once.
@@ -252,6 +282,45 @@ async function main() {
     const sealed = a.frames.filter((f) => typeof f.payload !== 'string').length;
     if (sealed < 3) problem('wire', `only ${sealed} sealed frames seen`);
     else ok(`${a.frames.length} frames between phone and relay, ${sealed} sealed, none readable`);
+
+    // 3b. A direct session (1.7), where the browser plays H.264 (Google Chrome, as CI's runner
+    // has; not Playwright's Chromium): offer and answer through the relay, then straight to the
+    // PC on this machine. The example PC sends no video (only Windows encodes it here), but the
+    // connection, its notes and the input are the real ones.
+    const chrome = await chromium.launch({ channel: 'chrome' }).catch(() => null);
+    if (!chrome) console.log('· no Google Chrome here: the direct session is not tried');
+    else {
+      try {
+        pc.say('');
+        const link = (await pc.out.next(/^link: (.+)$/))[1];
+        const d = await phone(chrome, 'phone D');
+        await d.page.goto(link);
+        await seeText(d.page, 'Live', 'phone D (Chrome) pairs');
+        pc.say('screen');
+        await d.page.getByRole('navigation').getByRole('button', { name: 'Screen', exact: true }).click();
+        const start = d.page.getByRole('button', { name: /^Show .*screen$/ });
+        await start.waitFor({ timeout: 10_000 });
+        await start.click();
+        await pc.out.next(/^screen: connected$/, 30_000).then(
+          () => ok('the phone connects to the PC directly'),
+          (e) => problem('direct', e.message),
+        );
+        await seeText(d.page, 'Tap to click', '…and the phone knows it is direct');
+        const box = await d.page.locator('.surface').boundingBox();
+        if (box) await d.page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+        await pc.out.next(/^screen input: Button/).then(
+          () => ok('a tap reaches the PC over the direct connection'),
+          (e) => problem('direct input', e.message),
+        );
+        await d.page.getByRole('button', { name: 'Stop', exact: true }).click();
+        await pc.out.next(/^asked: screen\.stop /).then(
+          () => ok('…and Stop ends it'),
+          (e) => problem('direct stop', e.message),
+        );
+      } finally {
+        await chrome.close();
+      }
+    }
 
     // 4. The list of PCs.
     await a.page.getByRole('button', { name: 'PCs' }).click();

@@ -7,9 +7,12 @@ app or library).
 - **Build spec:** [`PROJECT_PLAN.md`](PROJECT_PLAN.md) — what to build and why.
 - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — milestones, phase tracker, decision log.
 
-**Status:** 1.6. Live CPU, GPU, board, fan, voltage, RAM, storage and network sensors on
+**Status:** 1.7. Live CPU, GPU, board, fan, voltage, RAM, storage and network sensors on
 Windows (low-level ones through PawnIO, read by the Vyro Sensor Service), history, System
-Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 1.6:
+Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 1.7: the
+[phone app](#phone-app-from-anywhere-14) shows the PC's screen and uses it, for a phone you
+allow, straight to the PC where it can and a picture at a time through the relay where it
+cannot. New in 1.6:
 [GPU tuning](#gpu-tuning-16) for NVIDIA RTX 20 to RTX 50 cards, with presets made for the card,
 your own settings, a stability test and "Find my best". New in 1.5: the
 [phone app](#phone-app-from-anywhere-14) shows what runs on the PC, its devices and Health, and,
@@ -338,6 +341,15 @@ the PC (1.5).
   (1.6), and update Vyro. Turning fan control on, confirming a pump and GPU tuning's own values
   and tests stay at the PC. Settings lists what phones changed. After a restart,
   the phone reaches the PC again once someone signs in.
+- **The PC's screen on the phone (1.7).** A phone you mark "Sees the screen" in Settings →
+  Remote (apart from changing the PC) can watch the PC's screen in its Screen tab and use it: tap
+  to click, hold for a right click, drag, two fingers to scroll, pinch to zoom, a key bar and a
+  box to type into, and a choice of monitor. It connects straight to the PC where it can (fast,
+  encrypted end to end, the relay only introduces them); where it cannot, a slow view sends a
+  picture at a time through the relay, 20 minutes a day. One phone at a time; the PC shows a
+  banner and a tray item with Stop while it lasts, and a session left alone ends after 10
+  minutes. Windows' sign-in and administrator prompts cannot be seen or used, and Ctrl+Alt+Del
+  cannot be sent. Optionally the PC locks when a phone's session ends.
 - **Waking the PC (1.5).** A phone cannot send the wake signal itself (web pages cannot send it),
   so another Vyro PC on the same network sends it: turn on **Wake from phone** in Settings on
   the PC to be woken, and keep another PC paired with the phone. Settings says what Windows

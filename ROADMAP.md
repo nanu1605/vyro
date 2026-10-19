@@ -52,6 +52,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 36 | Control from the phone | A phone paired from anywhere may change the PC only if the owner allows it, on the PC, when pairing or later (1.5; the owner's request, 2026-10-18): a fixed list of requests (`relay::api`), each checked on the PC against that phone's permission; protocol 2 gives each connection a session and counts its messages, so nothing can be replayed; what phones changed is kept and shown in Settings. Turning fan control on, confirming a pump and editing GPU settings stay at the PC. The LAN page stays read-only. Amends 34's "read-only" | decided |
 | 35 | 1.3 ships in 1.4.0 | 1.3.0 is not released on its own: its changes (decisions 32 and 33, device names, wireless batteries) ship in 1.4.0, once field check 1.3 passes on the 1.4 test build (the owner, 2026-10-18). One update for installed copies instead of two; the 1.3 branch is neither merged nor released | decided |
 | 37 | GPU tuning | Vyro may change an NVIDIA card's core and memory clock offsets and its power limit (1.6; the owner's request, 2026-10-18, on an NVIDIA desktop card and a laptop GPU): only through the driver's own interface (NVML, loaded from System32), only in the service, off until the owner turns it on and confirms, only on RTX 20 to RTX 50 cards and only what the driver gives a range for. Presets per family scaled to those ranges, the owner's own, one per profile; a stability test and "Find my best"; stock on every exit, after heat, a crash or a driver reset, and when another program keeps changing the values; only tested settings at start; from a phone only Stock and tested presets. AMD and Intel later. Supersedes "never writes GPU settings" (anti-cheat notes) and the plans' "overclocking out of scope" | decided |
+| 38 | The screen on the phone | A phone may see and use the PC's screen only if the owner allows it, on the PC, apart from control (1.7; the owner's request, 2026-10-18, "direct, slow fallback"): one phone at a time, a banner and a tray item with Stop while it lasts, a notification at the start, a record of each session, an end after 10 minutes unused. Direct over WebRTC (str0m in the app, the phone's own browser), its fingerprints inside the sealed offer and answer so the relay cannot step in; the picture as H.264 from Windows' own encoder, input as Windows input in the signed-in session. Where no direct path exists, the slow view: one JPEG at a time through the relay, at most 2 a second, 20 minutes a day; the relay caps what a PC sends its phones at 1 GB a day. Windows' secure screens cannot be seen or used, and Ctrl+Alt+Del cannot be sent | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -2670,6 +2671,56 @@ settings, tested on an NVIDIA desktop card and a laptop GPU (decision 37). Built
       NVIDIA desktop card and a laptop, including whether NVML accepts the offsets on GeForce
       under Windows (if not, NVAPI is the next step); 1.4.1 and 1.5 released first; the owner's
       go.
+
+### 1.7.0 — the PC's screen on the phone
+
+The owner, 2026-10-18: "see what is running on the PC from the phone, and use the system
+from the phone", directly with a slow fallback (decision 38). Built on `claude/vyro-1.7`, from
+1.6, after a spike that showed each part working first.
+
+- [x] **Spike**: str0m 0.24.1 with its `rust-crypto` backend (no OpenSSL; its DTLS certificate
+      comes from `aws-lc-rs`, a C library that builds on CI's MSVC runner with no extra tools),
+      on one UDP socket at the PC's main address with the public one STUN reports. A loopback
+      test plays a phone: it connects, receives H.264 and sends input back, also when its offer
+      hides its address behind an mDNS name, as browsers do. On Windows CI: Windows' own H.264
+      encoder (constrained baseline, low latency, a keyframe when asked, SPS and PPS with every
+      keyframe), Desktop Duplication, input as `SendInput`, JPEG through WIC.
+- [x] **Permission**: Screen, per phone, apart from control and off until the owner allows it in
+      Settings → Remote's paired list; the phone's `info` says so at once. `screen.monitors`,
+      `screen.start`, `screen.stop`, `screen.slow` and `screen.input` need it (`relay::api`).
+      Taking it back, signing the phone out, or turning the relay off ends its session.
+- [x] **The PC's session** (`src-tauri/src/screen.rs`): one phone at a time. The phone's offer
+      in, the answer out; the monitor scaled to 1280×720 at most, 30 frames a second, 2.5 Mbit/s,
+      and again once a second when still; notes to the phone over the data channel (its size,
+      "secure screen", why it ended). Input lands on the monitor shown. A banner with "Stop
+      sharing" on every view, "Stop sharing the screen with …" in the tray, a notification at
+      the start, the start and end in Settings → Remote's record. It ends after 10 minutes with
+      no input and the phone not showing it (the phone says it is there every 30 s while it
+      does); "Lock this PC when a phone's session ends" is an option. Nothing captures without a
+      session.
+- [x] **The slow view**: if the phone has no direct path in 15 s, or plays no H.264, it asks for
+      one picture at a time through the relay: JPEG at most 960×600, at most 2 a second, only
+      when the screen changed; input in batches. 20 minutes a day per PC, counted on the PC
+      (`screen.json`). The relay counts what each PC sends its phones in a day (1 GB, far above a
+      day of readings) and drops the rest, telling the phones once.
+- [x] **Phone** (Screen tab, its own chunk): the PC's screen, tap to click, hold for a right
+      click, drag, two fingers to scroll, pinch to zoom here, a pointer dot; a key bar with Ctrl,
+      Alt, Shift and Win held until the next key (so held Ctrl and "c" is Ctrl+C), a box to type
+      into, a choice of monitor; connecting, live, slow view, secure screen and ended states.
+      Hidden for a PC whose Vyro has no screen; says how to allow it for a phone that may not.
+- [x] **Tests**: STUN, input messages and their checks, positions across monitors, the frame
+      helpers, the loopback session (also with a hidden address), the Screen permission (kept,
+      off by default, separate from control, refused without it), the idle rule, the slow
+      view's daily minutes, the notes; on Windows the encoder, capture and JPEG; the phone's
+      gestures, typing and batching, and its "allowance used up"; the relay's daily allowance
+      in its rules and in the running relay. End to end: the Screen tab asks for the permission,
+      the slow view shows the example PC's picture and a tap reaches it as a click, Stop ends
+      it; with Google Chrome (CI's runner), a direct session connects on the runner and a tap
+      arrives as input. Accessibility: the Screen tab's states, and the banner.
+- [ ] CI green, then field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)):
+      Android Chrome and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU;
+      the secure screen, an administrator window, two monitors, the slow view, the idle end;
+      1.4.1 to 1.6 released first; the owner's go.
 
 ## Risks
 

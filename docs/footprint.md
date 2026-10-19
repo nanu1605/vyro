@@ -33,6 +33,7 @@ timer, animation or WebGL runs; the engine keeps polling at the tray rate (5 s).
 | Dashboard builder (P24) | None | Widgets use the tick's snapshot | Suspended | +1 MB with 40 widgets | P24 build |
 | My PC 3-D (P23) | None (WebGL in the page) | None | Context freed; nothing runs | ≤ 30 fps while shown, GPU process +40 MB | P23 build |
 | Remote companion (P26) | `vyro-companion` (on only) and one per connection | One shared view per reading | 1 Hz while a phone watches | Under 1 MB on, nobody watching | P26 build |
+| Screen on the phone (1.7) | Only during a session: `vyro-screen-rtc`, `vyro-screen` (capture and H.264), `vyro-screen-idle` | None | Same | Nothing without a session; during one, measured at field check 1.7 | Tests; field check 1.7 |
 
 The frontend's repeating timers were audited too:
 - History, Insights, Score, the Dashboard's history and events widgets, Devices, Benchmark,

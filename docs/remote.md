@@ -68,8 +68,8 @@ connection at once. A phone can also sign itself out.
 |---|---|
 | that a PC (a random room) and its phones connect, and when | the readings, the PC's name, the theme, the phones' names |
 | the addresses they connect from (as any server does) | the secrets, or any key that opens the frames |
-| how many frames go each way, and how big | what the frames say |
-| hashes of the keys that let the PC and the phones in | |
+| how many frames go each way, and how big | what the frames say (the slow view's pictures too) |
+| hashes of the keys that let the PC and the phones in | a screen session's picture and input (they go directly) |
 
 Not stored: no readings and no logs (the Worker's request logs are off). A room keeps the hash
 of its PC's key, its phones' ids and key hashes, and when the PC was last connected; it is
@@ -111,6 +111,34 @@ deleted 90 days after the PC was last seen.
   Startup; the BIOS setting cannot be read. A router's own Wake-on-LAN page, or a smart plug with
   the BIOS set to power on after power loss, are other ways.
 
+### The screen on the phone (1.7)
+
+- **Off for each phone until the owner allows it, on the PC**, apart from control: Settings →
+  Remote's paired list has "Sees the screen" next to "May change this PC". A phone that may see
+  the screen can also use its mouse and keyboard. Taking it back ends the phone's session at
+  once; so do signing the phone out and turning reach from anywhere off.
+- **While it lasts** the PC shows a banner with "Stop sharing" on every view, "Stop sharing the
+  screen with …" in the tray, and a notification at the start; Settings → Remote's record keeps
+  each session's start and end. One phone at a time. A session ends after 10 minutes with no
+  input and the phone not showing it, and (if chosen) the PC locks when a phone's session ends.
+  Nothing is captured unless a session is on.
+- **Direct, end to end.** The phone's WebRTC offer and the PC's answer travel sealed through the
+  relay. They carry the certificate fingerprints DTLS checks, so the relay cannot put itself in
+  the middle: it never sees the picture or the input. The picture then goes straight from the PC
+  to the phone over UDP: on the same network, or through the router at the public address a
+  STUN server (Cloudflare's, Google's) reports. The STUN server sees that address, nothing else.
+  No TURN server is used.
+- **The slow view.** Where no direct path exists (some mobile networks and firewalls), the phone
+  asks for one picture at a time through the relay, sealed like everything else: JPEG, at most
+  2 a second, 20 minutes a day per PC.
+- **What it cannot do.** Vyro runs as the signed-in user: Windows' sign-in, lock and
+  administrator prompts are a secure screen it can neither see nor use (the phone says so), a
+  window running as administrator can be seen but not used, and Ctrl+Alt+Del cannot be sent.
+- **Trust.** A phone that may see the screen sees everything on it, including what is typed
+  where it shows. The phone app's code comes from the relay (below): whoever controls the relay
+  could serve an app that shows the screen to someone else, for a phone allowed to see it. Keep
+  "Sees the screen" for phones you would hand the PC to.
+
 ### Trust points, plainly
 
 - **The phone app's code comes from the relay.** Whoever controls the Cloudflare account could
@@ -138,6 +166,9 @@ deleted 90 days after the PC was last seen.
 - The relay caps frames at 64 KiB, 8 phones per PC with 2 connections each, and rates: the PC
   100 messages a second (bursts of 200), a phone 5 (bursts of 20). Breaking a cap closes the
   connection.
+- **A day's allowance** (1.7): the relay passes a PC's frames to its phones up to 1 GB a day
+  (UTC), far more than a day of readings or the screen's slow view, and drops the rest, telling
+  the phones once; it stops one room from using the shared plan up.
 
 ### Running your own relay
 

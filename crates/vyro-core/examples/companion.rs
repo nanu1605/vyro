@@ -11,8 +11,10 @@
 //! With `--relay`, it plays a PC reached through a relay instead (1.4), for the phone app
 //! (`pnpm build:phone`, then `pnpm --dir relay dev`): it prints a pairing link; Enter shows a new
 //! one, `out` signs every phone out, `control` lets every phone control it and `view` only
-//! look, `q` quits. It answers a phone's requests (1.5) with simulated data; actions are only
-//! printed (`asked: power {…}`), never done.
+//! look, `screen` lets every phone see its screen, `q` quits. It answers a phone's requests (1.5)
+//! with simulated data; actions are only printed (`asked: power {…}`), never done. Its screen
+//! (1.7) is a test picture in the slow view; a direct session connects and takes input (printed
+//! as `screen input: {…}`) but sends no video, since only Windows encodes H.264 here.
 //!
 //! ```sh
 //! cargo run -p vyro-core --example companion -- --relay http://127.0.0.1:8787
@@ -27,6 +29,8 @@ use vyro_core::engine::{ClientPids, EngineApi, EngineConfig, LocalEngine};
 use vyro_core::remote::relay::proto::{pairing_link, relay_base};
 use vyro_core::remote::relay::{Phones, RelayClient, RelayHooks, Request};
 use vyro_core::remote::{net, random, Auth, Hooks, RemoteInfo, RemoteServer, ServerConfig};
+use vyro_core::screen::rtc::{self, SessionEvent};
+use vyro_core::screen::share::Note;
 use vyro_core::units::TempUnit;
 use vyro_core::{unix_now, PollerConfig, SimProvider};
 
@@ -67,10 +71,68 @@ fn engine(
     Ok(engine)
 }
 
+/// The slow view's picture.
+const SCREEN_JPEG: &[u8] = include_bytes!("screen-test.jpg");
+/// The direct screen session, while there is one.
+static SCREEN: Mutex<Option<rtc::Session>> = Mutex::new(None);
+
+/// This machine's address on its network (no packet is sent); loopback without one.
+fn local_ipv4() -> std::net::IpAddr {
+    std::net::UdpSocket::bind("0.0.0.0:0")
+        .and_then(|s| s.connect("192.0.2.1:9").map(|()| s))
+        .and_then(|s| s.local_addr())
+        .map(|a| a.ip())
+        .unwrap_or(std::net::IpAddr::V4(Ipv4Addr::LOCALHOST))
+}
+
+/// A direct session: the phone's offer answered; input printed.
+fn screen_start(r: &Request) -> Result<serde_json::Value, String> {
+    let offer = r
+        .params
+        .get("offer")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("no offer")?;
+    let opts = rtc::Options {
+        hosts: vec![local_ipv4()],
+        stun: Vec::new(),
+        ..rtc::Options::default()
+    };
+    let (session, answer) = rtc::start(
+        offer,
+        &opts,
+        Box::new(|e| match e {
+            SessionEvent::Connected => println!("screen: connected"),
+            SessionEvent::Input(i) => println!("screen input: {i:?}"),
+            SessionEvent::Closed(why) => println!("screen: closed ({why})"),
+        }),
+    )?;
+    session.tell(Note::Sending { w: 320, h: 180 }.json());
+    *vyro_core::lock(&SCREEN) = Some(session);
+    Ok(serde_json::json!({ "answer": answer }))
+}
+
 /// A phone's request, answered with the simulated engine's data. Actions are printed only.
 fn answer(engine: &OnceLock<Arc<LocalEngine>>, r: &Request) -> Result<serde_json::Value, String> {
     let latest = || engine.get().and_then(|e| e.latest());
     match r.method.as_str() {
+        "screen.monitors" => Ok(serde_json::json!([
+            { "index": 0, "name": "Test", "width": 1280, "height": 720, "primary": true },
+            { "index": 1, "name": "Test 2", "width": 1920, "height": 1080, "primary": false }
+        ])),
+        "screen.start" => screen_start(r),
+        "screen.slow" => Ok(serde_json::json!({
+            "jpeg": vyro_core::remote::relay::proto::b64url(SCREEN_JPEG),
+            "w": 320,
+            "h": 180,
+            "left": 1200
+        })),
+        "screen.stop" | "screen.input" => {
+            if r.method == "screen.stop" {
+                vyro_core::lock(&SCREEN).take();
+            }
+            println!("asked: {} {}", r.method, r.params);
+            Ok(serde_json::json!({ "done": true }))
+        }
         "processes" => Ok(
             serde_json::to_value(latest().map(|s| s.processes).unwrap_or_default())
                 .unwrap_or_default(),
@@ -141,6 +203,13 @@ fn relay(url: &str, theme: String) -> Result<(), String> {
                     p.set_control(&d.id, which == "control");
                 }
                 println!("phones may {which}");
+            }
+            Ok("screen") => {
+                let mut p = vyro_core::lock(&phones);
+                for d in p.devices(&[]) {
+                    p.set_screen(&d.id, true);
+                }
+                println!("phones may see the screen");
             }
             Ok(_) => show(),
         }

@@ -127,6 +127,8 @@ pub struct Capture {
     output: IDXGIOutput1,
     dup: IDXGIOutputDuplication,
     staging: Option<ID3D11Texture2D>,
+    /// A picture was taken since the duplication opened (until then every frame is one).
+    seen: bool,
     pub monitor: Monitor,
 }
 
@@ -171,6 +173,7 @@ impl Capture {
             output,
             dup,
             staging: None,
+            seen: false,
             monitor,
         })
     }
@@ -181,6 +184,7 @@ impl Capture {
         self.dup = unsafe { self.output.DuplicateOutput(&self.device) }
             .map_err(|e| other("duplication", &e))?;
         self.staging = None;
+        self.seen = false;
         Ok(())
     }
 
@@ -198,7 +202,7 @@ impl Capture {
             let Some(res) = res else {
                 return Ok(None);
             };
-            if info.LastPresentTime == 0 {
+            if info.LastPresentTime == 0 && self.seen {
                 // Only the pointer moved.
                 return Ok(None);
             }
@@ -242,6 +246,7 @@ impl Capture {
                     bgra.extend_from_slice(std::slice::from_raw_parts(p, row));
                 }
                 self.ctx.Unmap(&staging, 0);
+                self.seen = true;
                 Ok(Some(Picture {
                     bgra,
                     width: desc.Width,

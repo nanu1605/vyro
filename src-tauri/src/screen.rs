@@ -567,7 +567,8 @@ mod win {
             );
             return Err(SLOW_SPENT.into());
         }
-        if since.is_some_and(|d| d < SLOW_INTERVAL) {
+        // Asked again too soon (the phone paces itself; the relay's delay varies): nothing new.
+        if since.is_some_and(|d| d < SLOW_INTERVAL / 2) {
             return Ok(json!({ "same": true, "left": left }));
         }
         match view.capture.next(200) {

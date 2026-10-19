@@ -190,6 +190,19 @@ jobs:
       - name: Clean install, probe the service, uninstall
         shell: pwsh
         run: |
+          # On failure, the reason, the logs' last lines and anything Defender caught become
+          # annotations on the run (job logs are not always at hand).
+          function Tell($title, $text) {
+            $t = (($text | Out-String).Trim() -replace '%', '%25' -replace "`r", '' -replace "`n", '%0A')
+            if ($t) { Write-Host "::notice title=$title::$t" }
+          }
+          trap {
+            Tell 'App log' (Get-Content "$env:LOCALAPPDATA\app.vyro.monitor\logs\*.log" -Tail 25 -ErrorAction SilentlyContinue)
+            Tell 'Service log' (Get-Content "$env:ProgramData\Vyro\*.log" -Tail 15 -ErrorAction SilentlyContinue)
+            Tell 'Defender' (Get-MpThreatDetection -ErrorAction SilentlyContinue | Select-Object -Last 5 | Format-List | Out-String)
+            Write-Host "::error title=Clean install::$($_.Exception.Message -replace '%', '%25' -replace "`r", '' -replace "`n", '%0A')"
+            break
+          }
           $msi = (Get-Item target\release\bundle\msi\*.msi | Select-Object -First 1).FullName
           function Msi($verb, $log) {
             $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList "$verb `"$msi`" /qn /norestart /l*v `"$log`""
