@@ -6,6 +6,7 @@ import {
   grouped,
   lowBattery,
   lowNotice,
+  oneAtATime,
   outcome,
   ownerName,
   stateText,
@@ -165,5 +166,72 @@ describe('devices', () => {
     );
     expect(s.devices.some((d) => d.connection === 'receiver' && d.parent != null)).toBe(true);
     expect(s.devices.some((d) => !d.connected)).toBe(true);
+  });
+});
+
+describe('reading the list one at a time', () => {
+  /** A read the test answers by hand. */
+  function reads() {
+    const started: Array<{ answer: (v: number) => void; refuse: (e: unknown) => void }> = [];
+    const read = () =>
+      new Promise<number>((answer, refuse) => {
+        started.push({ answer, refuse });
+      });
+    const nth = (i: number) => {
+      const r = started[i];
+      if (!r) throw new Error(`read ${i + 1} never started`);
+      return r;
+    };
+    return { started, read, nth };
+  }
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  it('keeps showing reads while new ones keep being asked for (the stuck tab)', async () => {
+    const { read, nth } = reads();
+    const shown: number[] = [];
+    const load = oneAtATime(read, (v) => shown.push(v), () => {}, () => {});
+    // Changes keep asking for reads, each before the last one answers: every answer shows.
+    for (let i = 1; i <= 4; i++) {
+      load();
+      load();
+      nth(i - 1).answer(i);
+      await settle();
+      expect(shown).toEqual(Array.from({ length: i }, (_, k) => k + 1));
+    }
+  });
+
+  it('runs one read at a time and one more for all asked meanwhile', async () => {
+    const { started, read, nth } = reads();
+    const shown: number[] = [];
+    const busy: boolean[] = [];
+    const load = oneAtATime(read, (v) => shown.push(v), () => {}, (b) => busy.push(b));
+    load();
+    load();
+    load();
+    load();
+    expect(started).toHaveLength(1);
+    nth(0).answer(1);
+    await settle();
+    expect(started).toHaveLength(2);
+    nth(1).answer(2);
+    await settle();
+    expect(started).toHaveLength(2);
+    expect(shown).toEqual([1, 2]);
+    expect(busy).toEqual([true, true, false]);
+  });
+
+  it('a read that fails says so and the next one still runs', async () => {
+    const { read, nth } = reads();
+    const shown: number[] = [];
+    const failed: unknown[] = [];
+    const load = oneAtATime(read, (v) => shown.push(v), (e) => failed.push(e), () => {});
+    load();
+    load();
+    nth(0).refuse('no');
+    await settle();
+    nth(1).answer(5);
+    await settle();
+    expect(failed).toEqual(['no']);
+    expect(shown).toEqual([5]);
   });
 });

@@ -6,6 +6,8 @@
 //! Privacy: Bluetooth addresses and device paths never leave the collector. Ids are short hashes
 //! of the container id, and names stay on this PC (never in reports, cards or history).
 
+#[cfg(any(windows, test))]
+mod bounded;
 #[cfg(windows)]
 mod control;
 pub mod hid;

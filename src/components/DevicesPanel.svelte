@@ -9,13 +9,14 @@
     grouped,
     KIND_LABEL,
     lowBattery,
+    oneAtATime,
     outcome,
     ownerName,
     stateText,
     summary,
     type Pending,
   } from '../devices';
-  import { getDevices, onDevicesChanged, setDeviceConnected } from '../ipc';
+  import { getDevices, onDevicesRead, setDeviceConnected } from '../ipc';
   import type { DeviceInfo, Devices } from '../types';
 
   interface Props {
@@ -32,26 +33,19 @@
   let loading = $state(false);
   let readAt = $state<Date | null>(null);
 
-  /** Reads overlap (the minute, hot-plug, after an action): only the newest one counts. */
-  let reads = 0;
-
-  function load(): void {
-    const n = ++reads;
-    loading = true;
-    getDevices()
-      .then((v) => {
-        if (n !== reads) return;
-        data = v;
-        error = null;
-        readAt = new Date();
-      })
-      .catch((e: unknown) => {
-        if (n === reads) error = String(e);
-      })
-      .finally(() => {
-        if (n === reads) loading = false;
-      });
+  function show(v: Devices): void {
+    data = v;
+    error = null;
+    readAt = new Date();
   }
+
+  /** Reads (opening, the minute, after an action) one at a time, every one shown. */
+  const load = oneAtATime(
+    getDevices,
+    show,
+    (e) => (error = String(e)),
+    (b) => (loading = b),
+  );
 
   $effect(() => {
     if (!active) return;
@@ -60,13 +54,11 @@
     return () => clearInterval(timer);
   });
 
-  // Hot add/remove: read again at once while the tab shows; otherwise opening it reads anyway.
+  // Hot add/remove: the background reader's list, read after the change.
   $effect(() => {
     let stop: (() => void) | undefined;
     let disposed = false;
-    void onDevicesChanged(() => {
-      if (active) load();
-    }).then((fn) => {
+    void onDevicesRead(show).then((fn) => {
       if (disposed) fn();
       else stop = fn;
     });

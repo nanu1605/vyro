@@ -118,8 +118,9 @@ pub(crate) fn collect_displays() -> Vec<DisplayInfo> {
 }
 
 /// Peripherals, wireless battery and sound devices (P22), read fresh on every call: when the
-/// Devices tab opens, after each `devices-changed` event and once a minute while it shows. Its
-/// low batteries also feed the Dashboard's notice (1.4.1).
+/// Devices tab opens, once a minute while it shows and after Connect or Disconnect (after a
+/// hot-plug change the background reader's list comes instead). Its low batteries also feed the
+/// Dashboard's notice (1.4.1).
 #[tauri::command]
 pub async fn get_devices(app: tauri::AppHandle) -> Result<Devices, String> {
     let devices = tauri::async_runtime::spawn_blocking(collect_devices)
