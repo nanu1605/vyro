@@ -2634,6 +2634,14 @@ show on the phone).
       frame fits. The same testing found nothing else to fix in protocol 2 against the relay:
       the 1.7 phone app works with a 1.4.0, 1.5 and 1.6 PC, and a phone holding the 1.4 app
       gets the new one the first time it opens after the relay is deployed.
+- [x] **A room outlives its PC by the full 90 days** (the same testing). The relay counted a
+      room's 90 days from when its PC last connected, not from when it last left: a PC that
+      stayed connected for more than 90 days could find its room forgotten, and every phone
+      signed out, soon after it went away. The relay now notes the time whenever its PC leaves
+      or is still there at a check. A test runs the relay with rooms that live 3 s and checks
+      that a PC connected past the first check keeps its room a whole life after leaving. The
+      relay's tests also gained the frame size limit either way, the PC's rate, and a PC that
+      leaves and comes back.
 - [ ] Field check 1.5 ([`docs/field-check-1.5.md`](docs/field-check-1.5.md)); 1.4.1 released
       first; the owner's go. Then the relay is deployed (`relay.yml`), which serves the new
       phone app.

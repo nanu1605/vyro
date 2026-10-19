@@ -18,6 +18,7 @@ import {
   PHONE_ID_BYTES,
   PHONE_RATE,
   PROTOCOL,
+  ROOM_TTL_MS,
   route,
   same,
   sha256,
@@ -65,12 +66,15 @@ export class Room extends DurableObject {
   /** The day the phones were told the day's allowance is used up. */
   private toldFull = -1;
   private readonly limit: number;
+  private readonly ttl: number;
 
   constructor(ctx: DurableObjectState, env: Cloudflare.Env) {
     super(ctx, env);
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
-    // The tests set a small allowance.
-    this.limit = Number((env as { DAILY_BYTES?: string }).DAILY_BYTES) || DAILY_BYTES;
+    // The tests set a small allowance and a short life.
+    const vars = env as { DAILY_BYTES?: string; ROOM_TTL_MS?: string };
+    this.limit = Number(vars.DAILY_BYTES) || DAILY_BYTES;
+    this.ttl = Number(vars.ROOM_TTL_MS) || ROOM_TTL_MS;
   }
 
   /** Whether `n` more bytes may go to phones today; tells them once when they may not. */
@@ -137,7 +141,7 @@ export class Room extends DurableObject {
     if (known !== undefined && !same(known, hash)) return this.refuse(CLOSE.refused, 'This room belongs to another PC');
     const now = Date.now();
     await this.ctx.storage.put(known === undefined ? { pc: hash, seen: now } : { seen: now });
-    await this.ctx.storage.setAlarm(expiry(now));
+    await this.ctx.storage.setAlarm(expiry(now, this.ttl));
     // A reconnect (another network, after sleep) takes the old socket's place.
     for (const old of this.open('pc')) old.close(CLOSE.replaced, 'Replaced by a newer connection');
     const { client, server } = pair();
@@ -216,6 +220,8 @@ export class Room extends DurableObject {
     }
     const who = ws.deserializeAttachment() as Who | null;
     if (who?.role === 'pc') {
+      // The room's 90 days count from now, not from when this connection began.
+      void this.ctx.storage.put('seen', Date.now());
       if (!this.open('pc', ws).length) this.toPhones({ t: 'pc', online: false });
     } else if (who?.role === 'phone') {
       this.toPc({ t: 'here', phones: this.here(ws) });
@@ -233,12 +239,14 @@ export class Room extends DurableObject {
   /** Forgets the room when its PC has been away for 90 days. */
   override async alarm(): Promise<void> {
     if (this.open('pc').length) {
-      await this.ctx.storage.setAlarm(expiry(Date.now()));
+      const now = Date.now();
+      await this.ctx.storage.put('seen', now);
+      await this.ctx.storage.setAlarm(expiry(now, this.ttl));
       return;
     }
     const seen = await this.ctx.storage.get<number>('seen');
-    if (seen !== undefined && Date.now() < expiry(seen)) {
-      await this.ctx.storage.setAlarm(expiry(seen));
+    if (seen !== undefined && Date.now() < expiry(seen, this.ttl)) {
+      await this.ctx.storage.setAlarm(expiry(seen, this.ttl));
       return;
     }
     for (const ws of this.ctx.getWebSockets()) ws.close(CLOSE.removed, 'Room removed');

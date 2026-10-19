@@ -174,8 +174,8 @@ export function spend(u: Usage, now: number, n: number, limit = DAILY_BYTES): { 
 }
 
 /** When a room is forgotten, given when its PC was last connected. */
-export function expiry(lastPc: number): number {
-  return lastPc + ROOM_TTL_MS;
+export function expiry(lastPc: number, ttl = ROOM_TTL_MS): number {
+  return lastPc + ttl;
 }
 
 /** Headers for the phone app's files: its own scripts only, sockets only to this relay, no
