@@ -66,6 +66,11 @@ pub enum Input {
         k: Key,
         down: bool,
     },
+    /// A letter or digit key pressed and released, as a key rather than as text: with Ctrl, Alt
+    /// or the Windows key held, a shortcut (Ctrl+C).
+    Press {
+        c: char,
+    },
     /// The phone still shows the screen (sent every 30 s while it does): a session the phone
     /// stopped showing ends after a while.
     Here,
@@ -89,6 +94,9 @@ pub fn parse(msg: &str) -> Result<Input, String> {
         Input::Text { s } if s.chars().count() > MAX_TEXT => Err("too much text at once".into()),
         Input::Text { s } if s.chars().any(|c| c.is_control() && c != '\n' && c != '\t') => {
             Err("control characters are sent as keys".into())
+        }
+        Input::Press { c } if !c.is_ascii_alphanumeric() => {
+            Err("only letters and digits are pressed as keys".into())
         }
         _ => Ok(i),
     }

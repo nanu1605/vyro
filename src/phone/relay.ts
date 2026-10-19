@@ -38,9 +38,15 @@ export type PhoneInfo = RemoteInfo & {
   session?: string;
   /** This phone may control the PC (the owner allows it on the PC). */
   control?: boolean;
+  /** This phone may see and use the PC's screen (1.7; absent: the PC cannot share it). */
+  screen?: boolean;
   /** The requests it may make. */
   methods?: string[];
 };
+
+/** Said when the relay's daily allowance for this PC is used up (1.7). */
+export const FULL = "Today's relay allowance for this PC is used up. It comes back after midnight (UTC).";
+const DAY_MS = 24 * 3600 * 1000;
 
 /** A request that failed: the PC refused it, or did not answer. */
 export class RequestError extends Error {}
@@ -73,6 +79,8 @@ const WAIT_MAX = 30_000;
 
 export class PcLink {
   private ws: WebSocket | null = null;
+  /** The day (UTC) the relay said this PC's allowance was used up. */
+  private fullDay = -1;
   private keys: Keys | null = null;
   private aadIn: Bytes = new Uint8Array(0);
   private aadOut: Bytes = new Uint8Array(0);
@@ -143,6 +151,7 @@ export class PcLink {
 
   /** Asks the PC (protocol 2). Fails when the PC refuses, is older, or does not answer. */
   request<T = unknown>(method: string, params: object = {}): Promise<T> {
+    if (this.fullDay === Math.floor(Date.now() / DAY_MS)) return Promise.reject(new RequestError(FULL));
     if (this.current !== 'online' || !this.session) {
       return Promise.reject(new RequestError(this.session ? 'Not connected to the PC.' : 'Update Vyro on the PC.'));
     }
@@ -289,6 +298,12 @@ export class PcLink {
       try {
         m = JSON.parse(data) as typeof m;
       } catch {
+        return;
+      }
+      if (m.t === 'full') {
+        // The PC's answers no longer get through today.
+        this.fullDay = Math.floor(Date.now() / DAY_MS);
+        this.dropWaiting(FULL);
         return;
       }
       if (m.t !== 'pc') return;

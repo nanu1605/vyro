@@ -15,13 +15,14 @@
   import { b64url, randomBytes, SECRET_LEN } from './seal';
 
   type Screen = 'home' | 'pc' | 'scan' | 'install';
-  /** A PC's tabs (1.5); only Live for a PC whose Vyro is older. */
-  type Tab = 'live' | 'processes' | 'devices' | 'health' | 'more';
+  /** A PC's tabs (1.5); only Live for a PC whose Vyro is older, Screen from 1.7. */
+  type Tab = 'live' | 'processes' | 'devices' | 'health' | 'screen' | 'more';
   const TABS: Array<{ id: Tab; label: string }> = [
     { id: 'live', label: 'Live' },
     { id: 'processes', label: 'Processes' },
     { id: 'devices', label: 'Devices' },
     { id: 'health', label: 'Health' },
+    { id: 'screen', label: 'Screen' },
     { id: 'more', label: 'More' },
   ];
 
@@ -64,6 +65,7 @@
   const ask = <T,>(m: string, p: object = {}) =>
     link ? link.request<T>(m, p) : Promise.reject<T>(new Error('Not connected to the PC.'));
   const others = $derived(sleepers(pcs, current));
+  const tabs = $derived(TABS.filter((t) => t.id !== 'screen' || info?.screen !== undefined));
   const unit = $derived(info?.unit ?? 'c');
   const stale = $derived(screen === 'pc' && linkState === 'online' && (lastAt === 0 || now - lastAt > STALE_SECS * 1000));
   const STATE_TEXT: Record<LinkState, string> = {
@@ -351,7 +353,7 @@
     {:else if screen === 'pc' && pc}
       {#if linkState === 'online' && asks}
         <nav class="tabs" aria-label="{pc.name}">
-          {#each TABS as t (t.id)}
+          {#each tabs as t (t.id)}
             <button type="button" class="tab" aria-current={tab === t.id ? 'page' : undefined} onclick={() => (tab = t.id)}>
               {t.label}
             </button>
@@ -365,10 +367,12 @@
           {#await import('./screens/Devices.svelte') then m}<m.default {ask} {can} pc={pc.name} />{/await}
         {:else if tab === 'health'}
           {#await import('./screens/Health.svelte') then m}<m.default {ask} {can} pc={pc.name} />{/await}
+        {:else if tab === 'screen'}
+          {#await import('./screens/Screen.svelte') then m}<m.default {ask} {can} pc={pc.name} />{/await}
         {:else}
           {#await import('./screens/More.svelte') then m}<m.default {ask} {can} pc={pc.name} sleepers={others} />{/await}
         {/if}
-        {#if !info?.control}
+        {#if !info?.control && tab !== 'screen'}
           <p class="muted small">
             This phone may only look. To let it change {pc.name}: Settings → Remote → From anywhere on the PC.
           </p>

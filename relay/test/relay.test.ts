@@ -189,6 +189,31 @@ describe('phones', () => {
     p.close();
   });
 
+  it("a PC that used up the day's allowance sends no more, and its phones are told once", async () => {
+    // The test relay allows 300 000 bytes a day.
+    const r = room();
+    const p = await pc(r, key());
+    const a = { id: '0000000a', auth: key() };
+    await register(p, [a]);
+    const sa = sock(`/phone/${r}/${a.id}`, a.auth);
+    await sa.json();
+    await p.json();
+    const big = sealed(3, 60_000);
+    for (let i = 0; i < 5; i++) {
+      p.ws.send(new Uint8Array([0, 0, 0, 0x0a, ...big]));
+      expect((await sa.next()) as Uint8Array).toHaveLength(60_000);
+    }
+    p.ws.send(new Uint8Array([0, 0, 0, 0x0a, ...big]));
+    expect(await sa.json()).toEqual({ t: 'full' });
+    p.ws.send(new Uint8Array([0, 0, 0, 0x0a, ...sealed(4)]));
+    expect(await sa.quiet()).toBe(true);
+    // The phone still reaches the PC.
+    sa.ws.send(sealed(9));
+    expect(await p.next()).toEqual(new Uint8Array([0, 0, 0, 0x0a, ...sealed(9)]));
+    sa.close();
+    p.close();
+  });
+
   it('signing a phone out, or changing its key, closes its socket at once', async () => {
     const r = room();
     const p = await pc(r, key());

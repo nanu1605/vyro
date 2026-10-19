@@ -143,6 +143,36 @@ export function allow(b: Bucket, rate: { perSecond: number; burst: number }, now
   return true;
 }
 
+/** Bytes a room's PC may send its phones in a day (UTC), in data frames (1.7). A day of live
+ * readings is far less, and so is the screen's slow view (20 minutes a day): this only stops a
+ * room from streaming through the shared relay without end. */
+export const DAILY_BYTES = 1024 ** 3;
+/** What a room sent today is saved each time it passes another this many bytes. */
+export const USAGE_STEP = 16 * 1024 * 1024;
+const DAY_MS = 24 * 3600 * 1000;
+
+export interface Usage {
+  /** Days since 1970 (UTC). */
+  day: number;
+  bytes: number;
+}
+
+/**
+ * Counts `n` more bytes at `now` (ms) against `limit`: `ok` when they may go (bytes over the
+ * limit are not counted), `save` when the count should be written down.
+ */
+export function spend(u: Usage, now: number, n: number, limit = DAILY_BYTES): { usage: Usage; ok: boolean; save: boolean } {
+  const day = Math.floor(now / DAY_MS);
+  const today = u.day === day ? u : { day, bytes: 0 };
+  if (today.bytes + n > limit) return { usage: today, ok: false, save: today !== u };
+  const bytes = today.bytes + n;
+  return {
+    usage: { day, bytes },
+    ok: true,
+    save: today !== u || Math.floor(bytes / USAGE_STEP) !== Math.floor(today.bytes / USAGE_STEP),
+  };
+}
+
 /** When a room is forgotten, given when its PC was last connected. */
 export function expiry(lastPc: number): number {
   return lastPc + ROOM_TTL_MS;

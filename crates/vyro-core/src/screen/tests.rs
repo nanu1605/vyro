@@ -46,6 +46,12 @@ fn stun_request_and_xor_mapped_address() {
 fn input_messages_are_checked() {
     assert_eq!(input::parse(r#"{"t":"here"}"#), Ok(input::Input::Here));
     assert_eq!(
+        input::parse(r#"{"t":"press","c":"c"}"#),
+        Ok(input::Input::Press { c: 'c' })
+    );
+    assert!(input::parse(r#"{"t":"press","c":"é"}"#).is_err());
+    assert!(input::parse(r#"{"t":"press","c":"+"}"#).is_err());
+    assert_eq!(
         input::parse(r#"{"t":"move","x":0.5,"y":0.25}"#),
         Ok(input::Input::Move { x: 0.5, y: 0.25 })
     );

@@ -153,6 +153,14 @@ fn inputs(i: &Input, monitor: Rect, desk: Rect) -> Vec<INPUT> {
             }
             vec![key(code, 0, f)]
         }
+        Input::Press { c } => {
+            // Letters and digits are their own virtual-key codes, in upper case.
+            let code = VIRTUAL_KEY(u16::from(c.to_ascii_uppercase() as u8));
+            vec![
+                key(code, 0, KEYBD_EVENT_FLAGS(0)),
+                key(code, 0, KEYEVENTF_KEYUP),
+            ]
+        }
         Input::Here => Vec::new(),
     }
 }
@@ -204,6 +212,12 @@ mod tests {
                 KEYEVENTF_UNICODE | KEYEVENTF_KEYUP
             );
             assert_eq!(v[8].Anonymous.ki.wVk, VK_RETURN);
+        }
+        let c = inputs(&Input::Press { c: 'c' }, r, r);
+        // SAFETY: reading the keyboard member of keyboard inputs.
+        unsafe {
+            assert_eq!(c[0].Anonymous.ki.wVk, VIRTUAL_KEY(u16::from(b'C')));
+            assert_eq!(c[1].Anonymous.ki.dwFlags, KEYEVENTF_KEYUP);
         }
         let s = inputs(&Input::Scroll { dx: 0.0, dy: 2.0 }, r, r);
         // SAFETY: reading the mouse member of a mouse input.

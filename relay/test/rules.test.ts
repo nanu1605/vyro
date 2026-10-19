@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allow, assetHeaders, control, cutOff, frameFits, isSocketPath, keyFrom, MAX_FRAME, MAX_PHONES, MIN_SEALED, route, same } from '../src/rules';
+import { allow, assetHeaders, control, cutOff, DAILY_BYTES, frameFits, isSocketPath, keyFrom, MAX_FRAME, MAX_PHONES, MIN_SEALED, route, same, spend, USAGE_STEP } from '../src/rules';
 
 const ROOM = '00112233445566778899aabbccddeeff';
 const KEY = 'A'.repeat(43); // 32 bytes of base64url
@@ -104,5 +104,30 @@ describe("the app's files", () => {
     expect(file['Cache-Control']).toContain('immutable');
     expect(file['Content-Security-Policy']).toContain('ws://127.0.0.1:8787');
     expect(file['Strict-Transport-Security']).toBeUndefined();
+  });
+});
+
+describe("a room's daily allowance", () => {
+  const DAY = 24 * 3600 * 1000;
+  const noon = 20_000 * DAY + DAY / 2;
+
+  it('counts what the PC sends today and stops at the limit', () => {
+    let r = spend({ day: 0, bytes: 0 }, noon, 1000, 5000);
+    expect(r).toEqual({ usage: { day: 20_000, bytes: 1000 }, ok: true, save: true });
+    r = spend(r.usage, noon + 1, 4000, 5000);
+    expect([r.ok, r.usage.bytes]).toEqual([true, 5000]);
+    r = spend(r.usage, noon + 2, 1, 5000);
+    expect([r.ok, r.usage.bytes, r.save]).toEqual([false, 5000, false]);
+    // A new day (UTC) starts over.
+    r = spend(r.usage, noon + DAY, 1, 5000);
+    expect(r).toEqual({ usage: { day: 20_001, bytes: 1 }, ok: true, save: true });
+  });
+
+  it('is written down every few megabytes, not every frame', () => {
+    const start = { day: 20_000, bytes: USAGE_STEP - 10 };
+    expect(spend(start, noon, 5).save).toBe(false);
+    expect(spend(start, noon, 10).save).toBe(true);
+    // A day of live readings is far below the default.
+    expect(5 * 1024 * 86_400).toBeLessThan(DAILY_BYTES);
   });
 });

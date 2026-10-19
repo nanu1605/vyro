@@ -9,6 +9,7 @@ import {
   allow,
   control,
   cutOff,
+  DAILY_BYTES,
   expiry,
   frameFits,
   hex,
@@ -21,8 +22,10 @@ import {
   same,
   sha256,
   SOCKETS_PER_PHONE,
+  spend,
   type Bucket,
   type Phone,
+  type Usage,
 } from './rules';
 
 /** Close codes the PC and the phones act on. */
@@ -57,10 +60,31 @@ function unhex(s: string): Uint8Array {
 
 export class Room extends DurableObject {
   private buckets = new WeakMap<WebSocket, Bucket>();
+  /** What the PC sent its phones today; read from storage once after waking. */
+  private usage: Usage | null = null;
+  /** The day the phones were told the day's allowance is used up. */
+  private toldFull = -1;
+  private readonly limit: number;
 
   constructor(ctx: DurableObjectState, env: Cloudflare.Env) {
     super(ctx, env);
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+    // The tests set a small allowance.
+    this.limit = Number((env as { DAILY_BYTES?: string }).DAILY_BYTES) || DAILY_BYTES;
+  }
+
+  /** Whether `n` more bytes may go to phones today; tells them once when they may not. */
+  private async allowOut(n: number): Promise<boolean> {
+    this.usage ??= (await this.ctx.storage.get<Usage>('usage')) ?? { day: 0, bytes: 0 };
+    const r = spend(this.usage, Date.now(), n, this.limit);
+    this.usage = r.usage;
+    if (r.save) await this.ctx.storage.put('usage', r.usage);
+    if (!r.ok && this.toldFull !== r.usage.day) {
+      this.toldFull = r.usage.day;
+      await this.ctx.storage.put('usage', r.usage);
+      this.toPhones({ t: 'full' });
+    }
+    return r.ok;
   }
 
   /** Accepts only to close at once with `code`: a browser cannot read an HTTP refusal, but it can
@@ -156,7 +180,9 @@ export class Room extends DurableObject {
       const bytes = new Uint8Array(msg);
       if (!frameFits(bytes.length, PHONE_ID_BYTES)) return ws.close(1009, 'Frame size');
       const body = bytes.slice(PHONE_ID_BYTES);
-      for (const p of this.open(`phone:${hex(bytes.subarray(0, PHONE_ID_BYTES))}`)) p.send(body);
+      const to = this.open(`phone:${hex(bytes.subarray(0, PHONE_ID_BYTES))}`);
+      if (!to.length || !(await this.allowOut(body.length * to.length))) return;
+      for (const p of to) p.send(body);
       return;
     }
     // A phone sends only sealed frames ("ping" is answered before it gets here).

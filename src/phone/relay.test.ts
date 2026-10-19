@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RemoteView } from '../types';
 import { confirmNext, type PairedPc } from './pcs';
-import { PcLink, RequestError, type LinkState, type PhoneInfo } from './relay';
+import { FULL, PcLink, RequestError, type LinkState, type PhoneInfo } from './relay';
 import { aad, b64url, deriveKeys, open, seal, unhex, type Bytes } from './seal';
 
 const ROOM = '00112233445566778899aabbccddeeff';
@@ -225,6 +225,28 @@ describe('a phone and its PC through the relay', () => {
     const lost = t.link.request('processes');
     s.text('{"t":"pc","online":false}');
     await expect(lost).rejects.toBeInstanceOf(RequestError);
+    t.link.stop();
+  });
+
+  it("stops asking once the relay says the PC's allowance for the day is used up", async () => {
+    const t = setup({ room: ROOM, phone: PHONE, secret: S1, name: 'DESKTOP-7', used: 1 });
+    const pc1 = await pcSide(S1);
+    t.link.start();
+    await flush();
+    const s = t.sockets[0]!;
+    s.open();
+    s.text('{"t":"pc","online":true}');
+    await flush();
+    s.binary(await pc1.frame({ t: 'info', pc: 'DESKTOP-7', protocol: 2, session: 'abc', methods: ['screen.slow'], screen: true }));
+    await flush();
+    expect(t.infos.at(-1)?.screen).toBe(true);
+    const waiting = t.link.request('screen.slow');
+    await flush();
+    s.text('{"t":"full"}');
+    await expect(waiting).rejects.toThrow(FULL);
+    const sent = s.sent.length;
+    await expect(t.link.request('screen.slow')).rejects.toThrow(FULL);
+    expect(s.sent.length).toBe(sent);
     t.link.stop();
   });
 
