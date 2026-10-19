@@ -2790,7 +2790,9 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
 - [x] **The relay deployed from this branch** (603270c, 2026-10-19, at the owner's go; Actions
       run 39227795520), so phones get the 1.7 app for the field checks. It works with a 1.4.0
       PC (view only) and with 1.5 and 1.6, so the 1.5 and 1.6 field checks need no deploy of
-      their own.
+      their own. Deployed again at 7207f8f (2026-10-19, at the owner's go; Actions run
+      39243700043), so the phone app has the screen fixes below: "Reconnecting…", asking for a
+      whole picture when it stops, and the "Receiving…" line.
 - [x] **Field result: the CPU while pairing** (2026-10-19). On the test build of 603270c the
       owner saw Vyro and Windows' DNS Client stay low while pairing and with a phone paired
       (1.4.1's fix to Settings → Remote, merged here); an earlier 1.7 build had shown 60 %.
