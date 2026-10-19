@@ -259,11 +259,10 @@
       setTimeout(() => {
         if (my === run && mode === 'connecting') void slow(my);
       }, DIRECT_MS);
-    } catch (e) {
-      if (my !== run) return;
-      closePeer();
-      mode = 'idle';
-      error = errText(e);
+    } catch {
+      // No direct session (the PC cannot encode its screen, or the phone could not offer one):
+      // the slow view, which says why if it cannot start either.
+      if (my === run) void slow(my);
     }
   }
 
