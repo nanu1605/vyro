@@ -2,9 +2,13 @@
 //! user; the secure desktop (sign-in, lock screen, administrator prompts) cannot be captured and
 //! is reported as such. The mouse pointer is not part of the picture: the phone draws its own.
 //!
+//! With HDR on, Desktop Duplication hands over 16-bit float pictures; [`super::hdr`] converts
+//! them to 8-bit on the GPU.
+//!
 //! On some PCs Desktop Duplication hands over pictures of nothing but zeros. A picture that stays
 //! blank is then taken again through GDI, as Chrome falls back to it; when GDI sees the screen,
-//! the rest of the session is taken through GDI.
+//! the rest of the session is taken through GDI. So is a session whose pictures Desktop
+//! Duplication gives in a form that cannot be read or converted.
 
 use std::time::{Duration, Instant};
 
@@ -32,6 +36,7 @@ use windows::Win32::Graphics::Gdi::{
 };
 
 use super::frames;
+use super::hdr::{self, Hdr};
 use super::input::Rect;
 pub use super::producer::{CaptureError, Picture};
 
@@ -128,6 +133,8 @@ fn describe(monitor: &Monitor, dup: &IDXGIOutputDuplication) {
         d.ModeDesc.Format.0,
         if readable(d.ModeDesc.Format) {
             " (8-bit BGRA)"
+        } else if d.ModeDesc.Format == hdr::FORMAT {
+            " (16-bit float: HDR)"
         } else {
             ""
         },
@@ -146,6 +153,10 @@ pub struct Capture {
     output: IDXGIOutput1,
     dup: IDXGIOutputDuplication,
     staging: Option<ID3D11Texture2D>,
+    /// Converts an HDR desktop's pictures, once one came.
+    hdr: Option<Hdr>,
+    /// Why Desktop Duplication's pictures cannot be used, when one could not be.
+    unusable: Option<String>,
     /// A picture was taken since the duplication opened (until then every frame is one).
     seen: bool,
     /// GDI instead, once Desktop Duplication's picture stayed blank and GDI could fill it.
@@ -314,6 +325,8 @@ impl Capture {
             output,
             dup,
             staging: None,
+            hdr: None,
+            unusable: None,
             seen: false,
             gdi: None,
             blank_since: None,
@@ -329,15 +342,19 @@ impl Capture {
             .map_err(|e| other("duplication", &e))?;
         describe(&self.monitor, &self.dup);
         self.staging = None;
+        self.hdr = None;
         self.blank_since = None;
         self.seen = false;
         Ok(())
     }
 
-    /// How the pictures are taken: "Desktop Duplication", or "GDI" after the fallback.
+    /// How the pictures are taken: "Desktop Duplication" (with "HDR" when they are converted),
+    /// or "GDI" after the fallback.
     pub fn method(&self) -> &'static str {
         if self.gdi.is_some() {
             "GDI"
+        } else if self.hdr.is_some() {
+            "Desktop Duplication (HDR)"
         } else {
             "Desktop Duplication"
         }
@@ -349,6 +366,9 @@ impl Capture {
             return g.next(timeout_ms);
         }
         let picture = self.duplicated(timeout_ms)?;
+        if let Some(why) = self.unusable.take() {
+            return self.instead_through_gdi(&why);
+        }
         match &picture {
             Some(p) if frames::blank(&p.bgra) => {
                 self.blank_since.get_or_insert_with(Instant::now);
@@ -372,6 +392,47 @@ impl Capture {
         Ok(picture)
     }
 
+    /// Desktop Duplication's pictures cannot be used: GDI takes the monitor for the rest of the
+    /// session, or the session ends saying why.
+    fn instead_through_gdi(&mut self, why: &str) -> Result<Option<Picture>, CaptureError> {
+        let mut g = Gdi::open(self.monitor.rect)
+            .map_err(|e| CaptureError::Other(format!("{why}, and {e}")))?;
+        let p = g.next(0)?;
+        log::warn!(
+            "screen: {why}, so {} goes on through GDI",
+            self.monitor.name
+        );
+        self.gdi = Some(g);
+        Ok(p)
+    }
+
+    /// The converter for an HDR picture this size, made on the first one.
+    fn hdr(&mut self, width: u32, height: u32) -> Result<&Hdr, CaptureError> {
+        if self
+            .hdr
+            .as_ref()
+            .is_none_or(|h| (h.width, h.height) != (width, height))
+        {
+            self.hdr = None;
+            let white = crate::display::sdr_white_level(&self.monitor.name);
+            let h = Hdr::new(&self.device, width, height, white.unwrap_or(hdr::WHITE))?;
+            log::info!(
+                "screen: {} is HDR; its pictures are converted with SDR white at {} nits{}",
+                self.monitor.name,
+                hdr::nits(white.unwrap_or(hdr::WHITE)),
+                if white.is_some() {
+                    ""
+                } else {
+                    " (Windows does not say)"
+                }
+            );
+            self.hdr = Some(h);
+        }
+        self.hdr
+            .as_ref()
+            .ok_or_else(|| CaptureError::Other("HDR: none".into()))
+    }
+
     /// The monitor through GDI, when GDI sees something on it.
     fn through_gdi(&self) -> Option<(Gdi, Picture)> {
         let mut g = match Gdi::open(self.monitor.rect) {
@@ -387,6 +448,29 @@ impl Capture {
         }
         g.last = Some((p.bgra.clone(), Instant::now()));
         Some((g, p))
+    }
+
+    /// A texture the CPU can read, for 8-bit pictures like `desc`.
+    fn staging(&mut self, desc: &D3D11_TEXTURE2D_DESC) -> Result<ID3D11Texture2D, CaptureError> {
+        if let Some(s) = &self.staging {
+            return Ok(s.clone());
+        }
+        let sd = D3D11_TEXTURE2D_DESC {
+            Usage: D3D11_USAGE_STAGING,
+            BindFlags: 0,
+            CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
+            MiscFlags: 0,
+            MipLevels: 1,
+            ArraySize: 1,
+            ..*desc
+        };
+        let mut s = None;
+        // SAFETY: valid descriptor and out pointer.
+        unsafe { self.device.CreateTexture2D(&sd, None, Some(&mut s)) }
+            .map_err(|e| other("capture", &e))?;
+        let s = s.ok_or_else(|| CaptureError::Other("capture: no texture".into()))?;
+        self.staging = Some(s.clone());
+        Ok(s)
     }
 
     /// The next picture through Desktop Duplication.
@@ -411,60 +495,67 @@ impl Capture {
             let mut desc = D3D11_TEXTURE2D_DESC::default();
             // SAFETY: a live texture.
             unsafe { tex.GetDesc(&mut desc) };
-            if !readable(desc.Format) {
-                // Windows promises 8-bit BGRA here; anything else would go out as noise.
-                return Err(CaptureError::Other(format!(
+            let staging = if readable(desc.Format) {
+                let s = self.staging(&desc)?;
+                // SAFETY: both textures are live and the same size and format.
+                unsafe { self.ctx.CopyResource(&s, &tex) };
+                s
+            } else if desc.Format == hdr::FORMAT {
+                let ctx = self.ctx.clone();
+                match self
+                    .hdr(desc.Width, desc.Height)
+                    .map(|h| h.convert(&ctx, &tex))
+                {
+                    Ok(s) => s,
+                    Err(e) => {
+                        self.unusable =
+                            Some(format!("the screen is HDR and cannot be converted ({e})"));
+                        return Ok(None);
+                    }
+                }
+            } else {
+                // Anything else would go out as noise.
+                self.unusable = Some(format!(
                     "the screen's pixel format ({}) cannot be read",
                     desc.Format.0
-                )));
-            }
-            let staging = match &self.staging {
-                Some(s) => s.clone(),
-                None => {
-                    let sd = D3D11_TEXTURE2D_DESC {
-                        Usage: D3D11_USAGE_STAGING,
-                        BindFlags: 0,
-                        CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
-                        MiscFlags: 0,
-                        MipLevels: 1,
-                        ArraySize: 1,
-                        ..desc
-                    };
-                    let mut s = None;
-                    // SAFETY: valid descriptor and out pointer.
-                    unsafe { self.device.CreateTexture2D(&sd, None, Some(&mut s)) }
-                        .map_err(|e| other("capture", &e))?;
-                    let s = s.ok_or_else(|| CaptureError::Other("capture: no texture".into()))?;
-                    self.staging = Some(s.clone());
-                    s
-                }
+                ));
+                return Ok(None);
             };
-            let mut m = D3D11_MAPPED_SUBRESOURCE::default();
-            // SAFETY: both textures are live and the same size; the mapped rows are read within
-            // the pitch while mapped.
-            unsafe {
-                self.ctx.CopyResource(&staging, &tex);
-                self.ctx
-                    .Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut m))
-                    .map_err(|e| other("capture", &e))?;
-                let row = desc.Width as usize * 4;
-                let mut bgra = Vec::with_capacity(row * desc.Height as usize);
-                for y in 0..desc.Height as usize {
-                    let p = m.pData.cast::<u8>().add(y * m.RowPitch as usize);
-                    bgra.extend_from_slice(std::slice::from_raw_parts(p, row));
-                }
-                self.ctx.Unmap(&staging, 0);
-                self.seen = true;
-                Ok(Some(Picture {
-                    bgra,
-                    width: desc.Width,
-                    height: desc.Height,
-                }))
-            }
+            let bgra = read(&self.ctx, &staging, desc.Width, desc.Height)?;
+            self.seen = true;
+            Ok(Some(Picture {
+                bgra,
+                width: desc.Width,
+                height: desc.Height,
+            }))
         })();
         // SAFETY: the frame acquired above.
         let _ = unsafe { self.dup.ReleaseFrame() };
         result
+    }
+}
+
+/// The rows of a mapped staging texture holding `width` x `height` BGRA pixels, packed.
+pub(super) fn read(
+    ctx: &ID3D11DeviceContext,
+    staging: &ID3D11Texture2D,
+    width: u32,
+    height: u32,
+) -> Result<Vec<u8>, CaptureError> {
+    let mut m = D3D11_MAPPED_SUBRESOURCE::default();
+    // SAFETY: a live staging texture of this size, 4 bytes a pixel; the mapped rows are read
+    // within the pitch while mapped.
+    unsafe {
+        ctx.Map(staging, 0, D3D11_MAP_READ, 0, Some(&mut m))
+            .map_err(|e| other("capture", &e))?;
+        let row = width as usize * 4;
+        let mut bgra = Vec::with_capacity(row * height as usize);
+        for y in 0..height as usize {
+            let p = m.pData.cast::<u8>().add(y * m.RowPitch as usize);
+            bgra.extend_from_slice(std::slice::from_raw_parts(p, row));
+        }
+        ctx.Unmap(staging, 0);
+        Ok(bgra)
     }
 }
 

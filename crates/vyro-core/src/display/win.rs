@@ -177,6 +177,15 @@ fn advanced_color(adapter: LUID, id: u32) -> Option<AdvancedColor> {
     })
 }
 
+/// The SDR white level of the display GDI calls `gdi` (`\\.\DISPLAY1`; 1000 is 80 nits): where
+/// Windows puts SDR white on an HDR desktop.
+pub fn sdr_white_level(gdi: &str) -> Option<u32> {
+    paths()
+        .into_iter()
+        .find(|(r, _)| r.gdi_name.as_deref() == Some(gdi))
+        .and_then(|(r, _)| r.sdr_white_level)
+}
+
 /// Active paths with the monitor's PnP instance id (for the registry EDID).
 fn paths() -> Vec<(RawDisplay, Option<String>)> {
     let (mut np, mut nm) = (0u32, 0u32);

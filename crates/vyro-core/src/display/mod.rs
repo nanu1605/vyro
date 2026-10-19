@@ -8,7 +8,7 @@ mod pnp;
 mod win;
 
 #[cfg(windows)]
-pub use win::{collect, watch};
+pub use win::{collect, sdr_white_level, watch};
 
 use crate::info::{DisplayInfo, EdidInfo, HdrInfo, LocalOnly, VrrInfo};
 use edid::{Edid, VrrSource};

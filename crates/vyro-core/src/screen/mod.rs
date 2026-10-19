@@ -8,6 +8,8 @@ pub mod capture;
 pub mod encode;
 pub mod frames;
 #[cfg(windows)]
+pub mod hdr;
+#[cfg(windows)]
 pub mod inject;
 pub mod input;
 #[cfg(windows)]
