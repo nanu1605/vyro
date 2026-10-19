@@ -66,5 +66,5 @@ If a step fails: note the message on the row, then send the app's log from
 | Devices tab with a Bluetooth device connected | works | The owner, 2026-10-19, on bbc8120: the list shows and stays (stuck on 3095d4f) |
 | 1. Connected or not | works | The owner, 2026-10-19, on bbc8120: each device's state matches Windows Settings; the speaker turned off and on is followed; the headphones disconnected in Settings are followed; no device shows "Paired" |
 | 2. Connect and Disconnect | works | The owner, 2026-10-19, on bbc8120: headphones and speaker, both ways (headset microphone and mouse/keyboard not reported) |
-| 3. Low battery |  |  |
+| 3. Low battery | works | The owner, 2026-10-19, on bbc8120: the Dashboard strip and the dot on Devices show, and go when the device charges |
 | 4. Nothing else changed |  |  |
