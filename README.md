@@ -501,14 +501,14 @@ Measured against the spec §8 budget with the built-in "Vyro itself" card (Dashb
 which counts the sensor service, the app and its WebView2 processes. Reference PC: Ryzen 7
 9700X, RTX 5060 Ti, Windows 11, 144 Hz display; Desktop profile (1 s polling).
 
-| Metric | Target | 0.1.4 | 0.2.0 | 0.3.0 | 1.0.0 | 1.1.0 | 1.2.0 | 1.4.0 |
-|---|---|---|---|---|---|---|---|---|
-| CPU (average, window visible) | < 1.5 % | 0.68 % | 0.46 % | not re-measured | within target, not written down | within target, not written down | not measured | not reported |
-| RAM (private working set, window visible) | < 120 MB | 120 MB | 125 MB | not re-measured | within budget, not written down | within budget, not written down | not measured | not reported |
-| RAM peak | — | 132 MB after visiting every tab | 125–150 MB with History open | not re-measured | not written down | not written down | not measured | not reported |
-| RAM (closed to the tray) | — | ≈ 40 MB (service 33 MB, app 7 MB, WebView2 suspended) | not re-measured | not re-measured | not written down | not written down | not measured | not reported |
-| Startup to first data | < 2 s | 0.76 s | 1.02 s | not re-measured | within target, not written down | within target, not written down | not measured | not reported |
-| Installer | < 60 MB (< 20 MB before 1.1) | 9.5 MB | 9.7 MB | 9.9 MB | 11.3 MB | 11.4 MB | 11.4 MB | 11.6 MB |
+| Metric | Target | 0.1.4 | 0.2.0 | 0.3.0 | 1.0.0 | 1.1.0 | 1.2.0 | 1.4.0 | 1.4.1 |
+|---|---|---|---|---|---|---|---|---|---|
+| CPU (average, window visible) | < 1.5 % | 0.68 % | 0.46 % | not re-measured | within target, not written down | within target, not written down | not measured | not reported | as 1.4.0, not written down |
+| RAM (private working set, window visible) | < 120 MB | 120 MB | 125 MB | not re-measured | within budget, not written down | within budget, not written down | not measured | not reported | as 1.4.0, not written down |
+| RAM peak | — | 132 MB after visiting every tab | 125–150 MB with History open | not re-measured | not written down | not written down | not measured | not reported | not measured |
+| RAM (closed to the tray) | — | ≈ 40 MB (service 33 MB, app 7 MB, WebView2 suspended) | not re-measured | not re-measured | not written down | not written down | not measured | not reported | not measured |
+| Startup to first data | < 2 s | 0.76 s | 1.02 s | not re-measured | within target, not written down | within target, not written down | not measured | not reported | not measured |
+| Installer | < 60 MB (< 20 MB before 1.1) | 9.5 MB | 9.7 MB | 9.9 MB | 11.3 MB | 11.4 MB | 11.4 MB | 11.6 MB | 11.6 MB |
 
 In 0.2.0, of the visible figure, WebView2 takes 85 MB (five processes), the service 33 MB and
 the app 7 MB. Animation runs at most 60 fps and only while values move. For 0.3.0 the field
@@ -521,3 +521,5 @@ It was within the budgets there; the figures go into the table when they are wri
 1.2.0's field check (2026-10-17) compared only the CPU with 1.1.0: in the tray with widgets
 showing, and on My PC with Airflow on. It was no higher; the figures were not written down.
 1.4.0's field check (2026-10-18) did not report the footprint, so it has no result yet.
+1.4.1's field check (2026-10-19) found Vyro's idle CPU and memory as with 1.4.0, with the
+device list now read in the background; the figures were not written down.
