@@ -4,12 +4,13 @@
 //   pnpm build:phone && pnpm --dir relay install && node scripts/relay-e2e.mjs
 //
 // It pairs a phone from the PC's link and reads live readings; opens the other tabs (1.5) and
-// finds a phone that may only look offered no changes; lets it control the PC and has it lock
-// the PC and end a process (the example PC only prints what it was asked); finds the same link
-// refused the second time; checks that nothing on the wire between the phone and the relay is
-// readable; signs the phone out from the PC; shows a PC that went away as asleep; and runs axe
-// on each screen at phone and desktop width. Exits 1 on any failure. With SHOTS=<folder>, it
-// also saves a screenshot of each screen there.
+// finds a phone that may only look offered no changes; switches tabs quickly, which asks for more
+// at once than the relay takes, without the relay cutting the phone off; lets it control the PC
+// and has it lock the PC and end a process (the example PC only prints what it was asked); finds
+// the same link refused the second time; checks that nothing on the wire between the phone and
+// the relay is readable; signs the phone out from the PC; shows a PC that went away as asleep;
+// and runs axe on each screen at phone and desktop width. Exits 1 on any failure. With
+// SHOTS=<folder>, it also saves a screenshot of each screen there.
 
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -142,6 +143,17 @@ async function axeBoth(page, where) {
 /** A phone: its own browser storage, with every WebSocket frame kept. */
 async function phone(browser, name) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  // How each of the page's sockets closed.
+  await ctx.addInitScript(() => {
+    const Native = window.WebSocket;
+    window.__closes = [];
+    window.WebSocket = class extends Native {
+      constructor(...args) {
+        super(...args);
+        this.addEventListener('close', (e) => window.__closes.push({ code: e.code, reason: e.reason }));
+      }
+    };
+  });
   const page = await ctx.newPage();
   const frames = [];
   page.on('websocket', (ws) => {
@@ -211,6 +223,11 @@ async function main() {
     if (await a.page.getByRole('heading', { name: 'Power' }).count()) problem('view only', 'Power is offered');
     else ok('…without Power for a phone that may only look');
     await axeBoth(a.page, 'phone app, more (view only)');
+    // Tabs opened in quick succession ask for more at once than the relay takes (checked below).
+    for (let i = 0; i < 3; i++) {
+      await tab('Health');
+      await tab('More');
+    }
 
     // The owner lets it control the PC: the phone hears at once.
     pc.say('control');
@@ -232,6 +249,9 @@ async function main() {
       (e) => problem('end', e.message),
     );
     await tab('Live');
+    const cut = (await a.page.evaluate(() => window.__closes)).filter((c) => c.code === 1008);
+    if (cut.length) problem('pace', `the relay cut phone A off: ${cut.map((c) => c.reason).join(', ')}`);
+    else ok('the relay never cut the phone off for asking too fast');
 
     // 2. The link works once.
     const b = await phone(browser, 'phone B');

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { RemoteView } from '../types';
 import { confirmNext, type PairedPc } from './pcs';
 import { PcLink, RequestError, type LinkState, type PhoneInfo } from './relay';
@@ -227,6 +227,43 @@ describe('a phone and its PC through the relay', () => {
     await expect(lost).rejects.toBeInstanceOf(RequestError);
     t.link.stop();
   });
+
+  it('asks no faster than the relay takes: a burst waits its turn instead of being cut off', async () => {
+    const t = setup({ room: ROOM, phone: PHONE, secret: S1, name: 'DESKTOP-7', used: 1 });
+    const pc1 = await pcSide(S1);
+    t.link.start();
+    await flush();
+    const s = t.sockets[0]!;
+    const at: number[] = [];
+    const send = s.send.bind(s);
+    s.send = (d) => {
+      at.push(Date.now());
+      send(d);
+    };
+    s.open();
+    s.text('{"t":"pc","online":true}');
+    await flush();
+    s.binary(await pc1.frame({ t: 'info', pc: 'DESKTOP-7', protocol: 2, session: 'abc', methods: ['processes'] }));
+    await flush();
+    // A tab opening asks for more at once than the relay takes in one go.
+    for (let i = 0; i < 24; i++) void t.link.request('processes').catch(() => {});
+    await vi.waitFor(() => expect(s.sent).toHaveLength(26), { timeout: 5000, interval: 50 });
+    // The relay's rule (`PHONE_RATE` and `allow` in relay/src/rules.ts): 20 at once, then 5 a second.
+    let tokens = 20;
+    let last = at[0]!;
+    const refused = at.filter((when) => {
+      tokens = Math.min(20, tokens + ((when - last) / 1000) * 5);
+      last = when;
+      if (tokens < 1) return true;
+      tokens -= 1;
+      return false;
+    });
+    expect(refused).toEqual([]);
+    // Every one went, in order.
+    const counts = await Promise.all(s.sent.slice(1).map(async (f) => (await pc1.read(f))?.n));
+    expect(counts).toEqual(Array.from({ length: 25 }, (_, i) => i + 1));
+    t.link.stop();
+  }, 10_000);
 
   it('shows a protocol 1 PC, but asks it nothing', async () => {
     const t = setup({ room: ROOM, phone: PHONE, secret: S1, name: 'DESKTOP-7', used: 1 });
