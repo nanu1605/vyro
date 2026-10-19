@@ -10,6 +10,9 @@ use windows::Win32::Graphics::Direct3D11::{
     D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_READ, D3D11_SDK_VERSION,
     D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
 };
+use windows::Win32::Graphics::Dxgi::Common::{
+    DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
+};
 use windows::Win32::Graphics::Dxgi::{
     CreateDXGIFactory1, IDXGIAdapter, IDXGIAdapter1, IDXGIFactory1, IDXGIOutput, IDXGIOutput1,
     IDXGIOutputDuplication, DXGI_ERROR_ACCESS_DENIED, DXGI_ERROR_ACCESS_LOST,
@@ -94,6 +97,37 @@ pub fn monitors() -> Vec<Monitor> {
     outputs().into_iter().map(|(_, _, m)| m).collect()
 }
 
+/// 8-bit BGRA: what Desktop Duplication gives and the conversion reads.
+fn readable(f: DXGI_FORMAT) -> bool {
+    f == DXGI_FORMAT_B8G8R8A8_UNORM || f == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB
+}
+
+/// Logs what Windows duplicates: a field report then says what the PC's capture was given.
+fn describe(monitor: &Monitor, dup: &IDXGIOutputDuplication) {
+    // SAFETY: a live duplication.
+    let d = unsafe { dup.GetDesc() };
+    log::info!(
+        "screen: duplicating {} at {}x{}: {}x{}, pixel format {}{}, rotation {}, {}",
+        monitor.name,
+        monitor.rect.left,
+        monitor.rect.top,
+        d.ModeDesc.Width,
+        d.ModeDesc.Height,
+        d.ModeDesc.Format.0,
+        if readable(d.ModeDesc.Format) {
+            " (8-bit BGRA)"
+        } else {
+            ""
+        },
+        d.Rotation.0,
+        if d.DesktopImageInSystemMemory.as_bool() {
+            "in system memory"
+        } else {
+            "in video memory"
+        }
+    );
+}
+
 pub struct Capture {
     ctx: ID3D11DeviceContext,
     device: ID3D11Device,
@@ -140,6 +174,7 @@ impl Capture {
         // SAFETY: a live output and device.
         let dup =
             unsafe { output.DuplicateOutput(&device) }.map_err(|e| other("duplication", &e))?;
+        describe(&monitor, &dup);
         Ok(Self {
             ctx,
             device,
@@ -156,6 +191,7 @@ impl Capture {
         // SAFETY: as in `open`.
         self.dup = unsafe { self.output.DuplicateOutput(&self.device) }
             .map_err(|e| other("duplication", &e))?;
+        describe(&self.monitor, &self.dup);
         self.staging = None;
         self.seen = false;
         Ok(())
@@ -183,6 +219,13 @@ impl Capture {
             let mut desc = D3D11_TEXTURE2D_DESC::default();
             // SAFETY: a live texture.
             unsafe { tex.GetDesc(&mut desc) };
+            if !readable(desc.Format) {
+                // Windows promises 8-bit BGRA here; anything else would go out as noise.
+                return Err(CaptureError::Other(format!(
+                    "the screen's pixel format ({}) cannot be read",
+                    desc.Format.0
+                )));
+            }
             let staging = match &self.staging {
                 Some(s) => s.clone(),
                 None => {

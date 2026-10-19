@@ -121,6 +121,29 @@ pub fn bgra_to_bgr(src: &[u8], sw: u32, sh: u32, pitch: usize, dw: u32, dh: u32)
     }
 }
 
+/// How bright an NV12 picture is (its mean luma, 0–255) and how much that varies across it (the
+/// standard deviation; 0 is one flat colour), from a grid of its pixels: a black picture reads
+/// (16, 0) or so.
+pub fn brightness(nv12: &[u8], w: u32, h: u32) -> (u8, u8) {
+    let (w, h) = (w as usize, h as usize);
+    if w == 0 || h == 0 || nv12.len() < w * h {
+        return (0, 0);
+    }
+    let (cols, rows) = (w.min(64), h.min(36));
+    let mut values = Vec::with_capacity(cols * rows);
+    for r in 0..rows {
+        let y = (r * h + h / 2) / rows;
+        for c in 0..cols {
+            let x = (c * w + w / 2) / cols;
+            values.push(f64::from(nv12[y.min(h - 1) * w + x.min(w - 1)]));
+        }
+    }
+    let n = values.len() as f64;
+    let mean = values.iter().sum::<f64>() / n;
+    let spread = (values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / n).sqrt();
+    (mean.round() as u8, spread.round().min(255.0) as u8)
+}
+
 /// A moving test picture (BGRA, `w`×`h`, tightly packed): colour bars and a bar that slides with
 /// `n`, so a stalled stream shows.
 pub fn test_pattern(w: u32, h: u32, n: u32) -> Vec<u8> {

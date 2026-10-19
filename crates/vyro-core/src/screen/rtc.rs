@@ -4,7 +4,7 @@
 //! that secure it travel in the sealed offer and answer, so the relay cannot step in.
 
 use std::net::{IpAddr, SocketAddr, UdpSocket};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -80,12 +80,17 @@ struct State {
     closed: bool,
     /// The newest note for the phone, and whether it still has to go.
     note: Option<(String, bool)>,
+    /// The newest report for the phone (what went out lately), likewise; kept apart so a report
+    /// never takes a note's place.
+    report: Option<(String, bool)>,
 }
 
 /// A running session. Dropping it ends it.
 pub struct Session {
     frames: SyncSender<Frame>,
     keyframe: Arc<AtomicBool>,
+    /// Keyframes the phone asked for (it lost a picture, or could not decode one).
+    asked: Arc<AtomicU32>,
     /// A frame was dropped: the phone cannot decode the ones after it until a keyframe.
     gap: Arc<AtomicBool>,
     stop: Arc<AtomicBool>,
@@ -114,6 +119,11 @@ impl Session {
         self.keyframe.swap(false, Ordering::SeqCst)
     }
 
+    /// How many keyframes the phone has asked for since the session began.
+    pub fn keyframes_asked(&self) -> u32 {
+        self.asked.load(Ordering::SeqCst)
+    }
+
     pub fn connected(&self) -> bool {
         crate::lock(&self.state).connected
     }
@@ -123,6 +133,13 @@ impl Session {
     /// gets it then.
     pub fn tell(&self, note: String) {
         crate::lock(&self.state).note = Some((note, true));
+    }
+
+    /// Tells the phone what went out lately (JSON); only the newest matters, as with [`tell`].
+    ///
+    /// [`tell`]: Session::tell
+    pub fn report(&self, report: String) {
+        crate::lock(&self.state).report = Some((report, true));
     }
 
     pub fn closed(&self) -> bool {
@@ -221,12 +238,14 @@ pub fn start(
         .map_err(|e| format!("the phone's offer: {e}"))?;
     let (tx, rx) = mpsc::sync_channel(QUEUE);
     let keyframe = Arc::new(AtomicBool::new(true));
+    let asked = Arc::new(AtomicU32::new(0));
     let gap = Arc::new(AtomicBool::new(false));
     let stop = Arc::new(AtomicBool::new(false));
     let state = Arc::new(Mutex::new(State::default()));
     let thread = {
         let flags = Flags {
             keyframe: Arc::clone(&keyframe),
+            asked: Arc::clone(&asked),
             gap: Arc::clone(&gap),
             stop: Arc::clone(&stop),
         };
@@ -244,6 +263,7 @@ pub fn start(
         Session {
             frames: tx,
             keyframe,
+            asked,
             gap,
             stop,
             state,
@@ -274,14 +294,16 @@ fn h264_pt(rtc: &mut Rtc, mid: Mid) -> Option<str0m::format::PayloadParams> {
     best.map(|(_, p)| p)
 }
 
-/// Writes the note still due to the phone's channel; whether there was one.
+/// Writes the note (or else the report) still due to the phone's channel; whether there was one.
 fn send_note(rtc: &mut Rtc, id: ChannelId, state: &Mutex<State>) -> bool {
-    let note = match &mut crate::lock(state).note {
-        Some((text, due)) if *due => {
-            *due = false;
-            text.clone()
-        }
-        _ => return false,
+    let note = {
+        let mut s = crate::lock(state);
+        let State { note, report, .. } = &mut *s;
+        let Some((text, due)) = [note, report].into_iter().flatten().find(|(_, due)| *due) else {
+            return false;
+        };
+        *due = false;
+        text.clone()
     };
     if let Some(mut ch) = rtc.channel(id) {
         if let Err(e) = ch.write(false, note.as_bytes()) {
@@ -295,6 +317,8 @@ fn send_note(rtc: &mut Rtc, id: ChannelId, state: &Mutex<State>) -> bool {
 struct Flags {
     /// The next picture should be a keyframe.
     keyframe: Arc<AtomicBool>,
+    /// Keyframes the phone asked for.
+    asked: Arc<AtomicU32>,
     /// A frame was dropped before it was sent.
     gap: Arc<AtomicBool>,
     stop: Arc<AtomicBool>,
@@ -311,6 +335,7 @@ fn run(
 ) -> String {
     let Flags {
         keyframe,
+        asked,
         gap,
         stop,
     } = flags;
@@ -348,10 +373,15 @@ fn run(
                             return "the phone cannot play H.264 video".into();
                         }
                     }
-                    Event::KeyframeRequest(_) => keyframe.store(true, Ordering::SeqCst),
+                    Event::KeyframeRequest(_) => {
+                        asked.fetch_add(1, Ordering::SeqCst);
+                        keyframe.store(true, Ordering::SeqCst);
+                    }
                     Event::ChannelOpen(id, _) => {
                         channel = Some(id);
-                        if let Some((_, due)) = &mut crate::lock(state).note {
+                        let mut s = crate::lock(state);
+                        let State { note, report, .. } = &mut *s;
+                        for (_, due) in [note, report].into_iter().flatten() {
                             *due = true;
                         }
                     }
@@ -361,6 +391,7 @@ fn run(
                         match input::parse(&text) {
                             Ok(input::Input::Picture) => {
                                 log::info!("screen: the phone asked for a whole picture");
+                                asked.fetch_add(1, Ordering::SeqCst);
                                 keyframe.store(true, Ordering::SeqCst);
                             }
                             Ok(i) => events(SessionEvent::Input(i)),

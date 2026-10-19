@@ -24,6 +24,28 @@
     secure?: boolean;
     left: number;
   }
+  /** What the PC sent lately (every 2 s): sizes, rates a second, bits a second, and how bright
+   * the picture it took is (luma 16–235) and how much that varies. */
+  interface Report {
+    from: [number, number];
+    sent: [number, number];
+    taken: number;
+    encoded: number;
+    keyframes: number;
+    bitrate: number;
+    luma: number;
+    spread: number;
+    asked: number;
+  }
+  interface Received {
+    w: number;
+    h: number;
+    fps: number;
+    keys: number;
+    lost: number;
+    /** How bright the decoded picture is, on the PC's scale; null when it cannot be read. */
+    look: { luma: number; spread: number } | null;
+  }
   type Mode = 'idle' | 'connecting' | 'direct' | 'slow' | 'ended';
   type Mod = 'Control' | 'Alt' | 'Shift' | 'Meta';
 
@@ -75,8 +97,9 @@
   let slowLeft = $state<number | null>(null);
   /** The direct connection dropped and may come back. */
   let reconnecting = $state(false);
-  /** What arrives, as the browser decodes it: size and pictures a second. */
-  let received = $state<{ w: number; h: number; fps: number } | null>(null);
+  /** What arrives, as the browser decodes it. */
+  let received = $state.raw<Received | null>(null);
+  let report = $state.raw<Report | null>(null);
   let slowUrl = $state<string | null>(null);
   let pointer = $state<Pt | null>(null);
   let zoom = $state(1);
@@ -103,6 +126,42 @@
   const showing = $derived(mode === 'connecting' || mode === 'direct' || mode === 'slow');
   /** Where the picture sits in the surface, before zooming. */
   const box = $derived(size ? contentBox({ left: 0, top: 0, width: sw, height: sh }, size.w, size.h) : null);
+  /** A picture that is black: dark and one flat colour. */
+  const black = (l: { luma: number; spread: number }) => l.luma < 24 && l.spread < 3;
+  /** Where a black picture goes wrong, when it does. */
+  const verdict = $derived.by(() => {
+    if (mode !== 'direct' || !received?.look || !black(received.look) || received.fps === 0) return null;
+    if (report && black(report)) return `The picture ${pc} takes of its screen is black, so the trouble is on the PC.`;
+    if (report) return `${pc} sends a picture, but it comes out black on this phone.`;
+    return null;
+  });
+  const percent = (luma: number) => Math.round((Math.min(235, Math.max(16, luma)) - 16) / 2.19);
+  const lookText = (l: { luma: number; spread: number }) =>
+    `brightness ${percent(l.luma)} %${l.spread < 3 ? ', one flat colour' : ''}`;
+
+  /** A small copy of the video, to read how bright it is (the PC's scale: luma 16–235). */
+  let probe: HTMLCanvasElement | null = null;
+  function look(v: HTMLVideoElement | null): Received['look'] {
+    if (!v?.videoWidth) return null;
+    try {
+      probe ??= document.createElement('canvas');
+      probe.width = 32;
+      probe.height = 18;
+      const g = probe.getContext('2d', { willReadFrequently: true });
+      if (!g) return null;
+      g.drawImage(v, 0, 0, 32, 18);
+      const px = g.getImageData(0, 0, 32, 18).data;
+      const ys: number[] = [];
+      for (let i = 0; i + 2 < px.length; i += 4) {
+        ys.push(16 + (66 * (px[i] ?? 0) + 129 * (px[i + 1] ?? 0) + 25 * (px[i + 2] ?? 0)) / 256);
+      }
+      const mean = ys.reduce((a, b) => a + b, 0) / ys.length;
+      const spread = Math.sqrt(ys.reduce((a, b) => a + (b - mean) ** 2, 0) / ys.length);
+      return { luma: Math.round(mean), spread: Math.round(spread) };
+    } catch {
+      return null;
+    }
+  }
 
   $effect(() => {
     if (!allowed) return;
@@ -121,13 +180,22 @@
     const t = setInterval(async () => {
       const p = peer;
       if (!p) return;
-      let v: { framesDecoded?: number; frameWidth?: number; frameHeight?: number; framesPerSecond?: number } | null = null;
+      let v: {
+        framesDecoded?: number;
+        frameWidth?: number;
+        frameHeight?: number;
+        framesPerSecond?: number;
+        keyFramesDecoded?: number;
+        packetsLost?: number;
+      } | null = null;
       (await p.getStats().catch(() => null))?.forEach((r) => {
         if (r.type === 'inbound-rtp' && r.kind === 'video') v = r;
       });
       if (!v) return;
-      const { framesDecoded = 0, frameWidth = 0, frameHeight = 0, framesPerSecond = 0 } = v;
-      received = frameWidth ? { w: frameWidth, h: frameHeight, fps: Math.round(framesPerSecond) } : null;
+      const { framesDecoded = 0, frameWidth = 0, frameHeight = 0, framesPerSecond = 0, keyFramesDecoded = 0, packetsLost = 0 } = v;
+      received = frameWidth
+        ? { w: frameWidth, h: frameHeight, fps: Math.round(framesPerSecond), keys: keyFramesDecoded, lost: packetsLost, look: look(video) }
+        : null;
       const now = performance.now();
       if (framesDecoded !== frames) {
         frames = framesDecoded;
@@ -252,6 +320,7 @@
     secure = false;
     reconnecting = false;
     received = null;
+    report = null;
     size = null;
     pointer = null;
     zoom = 1;
@@ -309,7 +378,7 @@
 
   /** What the PC says over the data channel. */
   function note(raw: string): void {
-    let n: { t?: string; w?: number; h?: number; why?: string };
+    let n: { t?: string; w?: number; h?: number; why?: string } & Partial<Report>;
     try {
       n = JSON.parse(raw);
     } catch {
@@ -320,6 +389,7 @@
       size = { w: n.w, h: n.h };
     } else if (n.t === 'secure') secure = true;
     else if (n.t === 'end') finish(n.why ?? 'the PC ended it');
+    else if (n.t === 'report' && n.from && n.sent) report = n as Report;
   }
 
   function videoSize(): void {
@@ -468,7 +538,23 @@
         {/if}
       </p>
       {#if mode === 'direct' && received}
-        <p class="muted small">Receiving {received.w}×{received.h}, {received.fps} pictures a second.</p>
+        <details class="arrives">
+          <summary class="muted small">Receiving {received.w}×{received.h}, {received.fps} pictures a second.</summary>
+          <ul class="muted small">
+            <li>
+              Here: {received.look ? lookText(received.look) : 'brightness unknown'}; {received.keys} whole
+              {received.keys === 1 ? 'picture' : 'pictures'}; {received.lost} packets lost.
+            </li>
+            {#if report}
+              <li>
+                {pc}: its screen {report.from[0]}×{report.from[1]}, sent as {report.sent[0]}×{report.sent[1]};
+                {report.taken} new and {report.encoded} sent pictures a second, {(report.bitrate / 1e6).toFixed(1)} Mbit/s;
+                {lookText(report)}; {report.asked} whole pictures asked for.
+              </li>
+            {/if}
+          </ul>
+        </details>
+        {#if verdict}<p class="note" role="status">{verdict}</p>{/if}
       {/if}
       <div
         class="surface"
@@ -611,6 +697,13 @@
   }
   .sorts button[aria-pressed='true'] {
     border-color: var(--accent);
+  }
+  .arrives summary {
+    cursor: pointer;
+  }
+  .arrives ul {
+    margin: 0.25rem 0 0;
+    padding-left: 1.1rem;
   }
   .visually-hidden {
     position: absolute;

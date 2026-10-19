@@ -8,7 +8,8 @@
 //! `--test WxH` sends a moving test pattern of that size instead of the monitor (on Windows still
 //! through Windows' encoder: a monitor larger than 1080p is scaled as the app scales it).
 //! `--dump FILE` writes every picture the encoder gives out to FILE (Annex B) and a line per
-//! picture to FILE.txt (time, bytes, NAL unit types), for reading the H.264 elsewhere.
+//! picture to FILE.txt (time, bytes, NAL unit types, each unit's first bytes in hex), for reading
+//! the H.264 elsewhere.
 //!
 //! ```sh
 //! node scripts/screen-check.mjs   # builds and runs this
@@ -29,6 +30,33 @@ use vyro_core::screen::share::Note;
 #[path = "common/openh264.rs"]
 mod openh264_encoder;
 
+/// The first bytes of each NAL unit in Annex B data, in hex: enough to read the SPS, the PPS and
+/// each slice's header from a CI log.
+fn heads(data: &[u8]) -> String {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i + 3 < data.len() {
+        if data[i..i + 3] == [0, 0, 1] {
+            let start = i + 3;
+            let end = (start + 48).min(data.len());
+            let next = data[start..end]
+                .windows(3)
+                .position(|w| w == [0, 0, 1])
+                .map_or(end, |p| start + p);
+            out.push(
+                data[start..next]
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>(),
+            );
+            i = start;
+        } else {
+            i += 1;
+        }
+    }
+    out.join(",")
+}
+
 /// An encoder whose pictures are also written to a file.
 struct Dump<E> {
     inner: E,
@@ -48,10 +76,11 @@ impl<E: Encode> Encode for Dump<E> {
                 let _ = h264.write_all(&e.data);
                 let _ = writeln!(
                     list,
-                    "{} {} {:?}",
+                    "{} {} {:?} {}",
                     e.time_100ns,
                     e.data.len(),
-                    frames::nal_types(&e.data)
+                    frames::nal_types(&e.data),
+                    heads(&e.data)
                 );
             }
         }
@@ -133,6 +162,10 @@ fn main() -> Result<(), String> {
                     println!("sending {width}x{height}");
                 }
                 Status::Secure => println!("secure"),
+                Status::Report(r) => {
+                    session.report(Note::report(&r).json());
+                    println!("report {r}");
+                }
             };
             let settings = producer::Settings::default();
             // Off Windows there is no monitor: always a test screen.

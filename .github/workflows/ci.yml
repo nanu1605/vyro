@@ -158,6 +158,10 @@ jobs:
         # A moving 2560×1440 test screen sent as the app sends it (scaled to 1920×1080); the
         # H.264 Windows' encoder gave out is kept for reading.
         run: node scripts/screen-check.mjs --test 2560x1440 --dump screen-2560.h264
+      - name: The H.264 Windows' encoder gave out (each picture's headers, for reading)
+        if: always()
+        shell: pwsh
+        run: Get-Content screen-2560.h264.txt -TotalCount 80 -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@v4
         if: always()
         with:

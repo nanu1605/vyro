@@ -107,8 +107,8 @@ fn moving() -> &'static Arc<AtomicBool> {
 
 /// The session's video: the app's producer, from the monitor (Windows) or a moving test pattern.
 fn video(session: &rtc::Session, stop: &AtomicBool) -> Result<(), String> {
-    let status = |s: Status| {
-        if let Status::Sending { width, height, .. } = s {
+    let status = |s: Status| match s {
+        Status::Sending { width, height, .. } => {
             session.tell(
                 Note::Sending {
                     w: width,
@@ -118,6 +118,8 @@ fn video(session: &rtc::Session, stop: &AtomicBool) -> Result<(), String> {
             );
             println!("screen: sending {width}x{height}");
         }
+        Status::Report(r) => session.report(Note::report(&r).json()),
+        Status::Secure => {}
     };
     #[cfg(windows)]
     return producer::run(session, &producer::Settings::default(), stop, &status);

@@ -473,6 +473,7 @@ mod win {
                     monitor,
                     ..producer::Settings::default()
                 };
+                let reports = std::sync::atomic::AtomicU32::new(0);
                 let status = |s: producer::Status| match s {
                     producer::Status::Sending {
                         width,
@@ -489,6 +490,14 @@ mod win {
                         );
                     }
                     producer::Status::Secure => session.tell(Note::Secure.json()),
+                    producer::Status::Report(r) => {
+                        session.report(Note::report(&r).json());
+                        // The first few, then one every half minute.
+                        let n = reports.fetch_add(1, Ordering::SeqCst);
+                        if n < 3 || n.is_multiple_of(15) {
+                            log::info!("screen: {r}");
+                        }
+                    }
                 };
                 if let Err(e) = producer::run(&session, &settings, &stop, &status) {
                     let why = format!("the screen could not be sent: {e}");

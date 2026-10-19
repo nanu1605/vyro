@@ -47,7 +47,7 @@ if ($Reset) {
 $modes = @()
 for ($i = 0; ; $i++) {
     $dm = [VyroDisplay]::Blank()
-    if (-not [VyroDisplay]::EnumDisplaySettings($null, $i, [ref]$dm)) { break }
+    if (-not [VyroDisplay]::EnumDisplaySettings([NullString]::Value, $i, [ref]$dm)) { break }
     if ($dm.dmBitsPerPel -eq 32) { $modes += $dm }
 }
 $sizes = $modes | ForEach-Object { "$($_.dmPelsWidth)x$($_.dmPelsHeight)" } | Sort-Object -Unique
@@ -65,6 +65,6 @@ if ($best) {
 
 $now = [VyroDisplay]::Blank()
 # -1: the size in use now.
-[void][VyroDisplay]::EnumDisplaySettings($null, -1, [ref]$now)
+[void][VyroDisplay]::EnumDisplaySettings([NullString]::Value, -1, [ref]$now)
 Write-Host "::notice title=Desktop size::$($now.dmPelsWidth)x$($now.dmPelsHeight) (on offer: $($sizes -join ', '))"
 exit 0

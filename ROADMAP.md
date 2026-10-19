@@ -2827,6 +2827,28 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       CI's Windows runner, `scripts/screen-check.mjs` plays the app's own capture and Windows'
       encoder in the runner's Chrome: the first picture (a keyframe) 0.4 s after connecting,
       the screen as it was (not blank), a still screen once a second, a keyframe when asked.
+- [ ] **Still black on both phones** (field check, 2026-10-19, test build 7207f8f): Android and
+      iPhone both showed "Receiving 1920×1080, 30 pictures a second" over a black picture, from
+      a 2560×1440 main monitor (a second one at 3840×2160). The phones decode, so the video
+      arrives; what it holds, or how the page draws it, is the question. Ruled out so far:
+      - the scaling and Windows' encoder: CI's Windows runner now sends a moving 2560×1440 test
+        screen through Windows' encoder, scaled to 1920×1080 as the app does, into Chrome: the
+        picture decodes, not blank (`scripts/screen-check.mjs --test`). Each picture's headers
+        are printed in the run for reading against what phones' hardware decoders take (CI's
+        Chrome decodes in software; a phone in hardware);
+      - the same on Linux with OpenH264.
+      Not yet testable on CI: a real GPU's capture (the runner has none; its desktop is now made
+      as large as it offers for the checks, `scripts/ci-display.ps1`), and phones' hardware
+      decoders. So the next test build says where the picture goes black:
+      - every 2 s the PC tells the phone what it sent: its screen's size and the size sent, new
+        and sent pictures a second, Mbit/s, keyframes, **how bright the picture it took is**,
+        and how many whole pictures the phone asked for; the app's log keeps the first few and
+        one every half minute, and what Windows hands over for the screen (size, pixel format,
+        rotation, video or system memory). A pixel format other than 8-bit BGRA now ends the
+        session with a reason rather than sending noise;
+      - the phone reads how bright the picture it decodes is, and under "Receiving…" (tap it)
+        shows both; when the picture is black it says whether the PC's own picture was black
+        (the trouble is on the PC) or the PC sent a picture that comes out black on the phone.
 - [ ] Field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)): Android Chrome
       and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU; the secure screen,
       an administrator window, two monitors, the slow view, the idle end; 1.4.1 to 1.6 released

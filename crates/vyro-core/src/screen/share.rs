@@ -7,6 +7,8 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use super::producer::Report;
+
 /// A session nobody uses this long (no input, no keyframe asked) ends.
 pub const IDLE: Duration = Duration::from_secs(10 * 60);
 /// The slow view through the relay: this many seconds a day (UTC), counted per PC.
@@ -65,11 +67,59 @@ pub enum Note {
     Secure,
     /// The session ended, and why.
     End { why: String },
+    /// What went out lately ([`Report`]): sizes as `[w, h]`, rates a second, bits a second.
+    Report {
+        from: [u32; 2],
+        sent: [u32; 2],
+        taken: u32,
+        encoded: u32,
+        keyframes: u32,
+        bitrate: u32,
+        luma: u8,
+        spread: u8,
+        asked: u32,
+    },
 }
 
 impl Note {
     pub fn json(&self) -> String {
         serde_json::to_string(self).unwrap_or_default()
+    }
+
+    pub fn report(r: &Report) -> Self {
+        Self::Report {
+            from: [r.from.0, r.from.1],
+            sent: [r.sent.0, r.sent.1],
+            taken: r.taken,
+            encoded: r.encoded,
+            keyframes: r.keyframes,
+            bitrate: r.bitrate,
+            luma: r.luma,
+            spread: r.spread,
+            asked: r.asked,
+        }
+    }
+}
+
+impl std::fmt::Display for Report {
+    /// One line for the app's log.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}x{} sent as {}x{}: {} new and {} encoded a second, {} keyframes, {} kbit/s, \
+             brightness {} varying {}, {} keyframes asked for",
+            self.from.0,
+            self.from.1,
+            self.sent.0,
+            self.sent.1,
+            self.taken,
+            self.encoded,
+            self.keyframes,
+            self.bitrate / 1000,
+            self.luma,
+            self.spread,
+            self.asked
+        )
     }
 }
 

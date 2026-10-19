@@ -47,7 +47,35 @@ pub enum Status {
     Sending { width: u32, height: u32, rect: Rect },
     /// Windows shows its secure desktop: nothing can be sent until it goes.
     Secure,
+    /// What went out lately, every [`REPORT`].
+    Report(Report),
 }
+
+/// What a session sent over the last few seconds: for the phone's details and the app's log,
+/// so a picture that does not show can be traced to where it went wrong.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Report {
+    /// The monitor's picture as taken.
+    pub from: (u32, u32),
+    /// The size sent.
+    pub sent: (u32, u32),
+    /// New pictures of the monitor a second.
+    pub taken: u32,
+    /// Pictures encoded a second (a still screen's repeats too).
+    pub encoded: u32,
+    /// Keyframes encoded in the period.
+    pub keyframes: u32,
+    /// Bits a second out of the encoder.
+    pub bitrate: u32,
+    /// The latest picture's brightness and how much it varies ([`frames::brightness`]).
+    pub luma: u8,
+    pub spread: u8,
+    /// Keyframes the phone asked for since the session began.
+    pub asked: u32,
+}
+
+/// How often the producer reports.
+pub const REPORT: Duration = Duration::from_secs(2);
 
 /// A BGRA picture, rows packed.
 pub struct Picture {
@@ -169,6 +197,8 @@ pub fn drive<S: Source, E: Encode>(
     let mut last: Option<(Vec<u8>, Instant)> = None;
     let mut settle_until = Instant::now();
     let mut secure = false;
+    let mut report = Report::default();
+    let mut counted = Instant::now();
     while !stop.load(Ordering::SeqCst) && !session.closed() {
         let tick = Instant::now();
         let picture = match cap.next(interval.as_millis() as u32) {
@@ -217,7 +247,13 @@ pub fn drive<S: Source, E: Encode>(
                     });
                 }
                 settle_until = Instant::now() + SETTLE;
-                frames::bgra_to_nv12(&p.bgra, p.width, p.height, p.width as usize * 4, w, h)
+                let nv12 =
+                    frames::bgra_to_nv12(&p.bgra, p.width, p.height, p.width as usize * 4, w, h);
+                report.from = (p.width, p.height);
+                report.sent = (w, h);
+                report.taken += 1;
+                (report.luma, report.spread) = frames::brightness(&nv12, w, h);
+                nv12
             }
             // A still screen: the last picture again, while it settles, now and then, or when a
             // keyframe is due.
@@ -239,7 +275,12 @@ pub fn drive<S: Source, E: Encode>(
         let at = started.elapsed();
         let time_100ns = i64::try_from(at.as_nanos() / 100).unwrap_or(i64::MAX);
         let fresh = last.is_none() || keyframe || made;
+        report.encoded += 1;
         for e in encoder.encode(&nv12, time_100ns, fresh)? {
+            report.bitrate = report
+                .bitrate
+                .saturating_add(u32::try_from(e.data.len() * 8).unwrap_or(u32::MAX));
+            report.keyframes += u32::from(frames::is_keyframe(&e.data));
             // Each picture's own time: one the encoder held back keeps the time it was taken.
             let rtp_90khz = u64::try_from(e.time_100ns).unwrap_or(0) * 9 / 1000;
             let captured = tick
@@ -254,6 +295,25 @@ pub fn drive<S: Source, E: Encode>(
             });
         }
         last = Some((nv12, Instant::now()));
+        let period = counted.elapsed();
+        if period >= REPORT {
+            let per_sec = |n: u32| (f64::from(n) / period.as_secs_f64()).round() as u32;
+            status(Status::Report(Report {
+                taken: per_sec(report.taken),
+                encoded: per_sec(report.encoded),
+                bitrate: per_sec(report.bitrate),
+                asked: session.keyframes_asked(),
+                ..report
+            }));
+            report = Report {
+                from: report.from,
+                sent: report.sent,
+                luma: report.luma,
+                spread: report.spread,
+                ..Report::default()
+            };
+            counted = Instant::now();
+        }
         if let Some(rest) = interval.checked_sub(tick.elapsed()) {
             std::thread::sleep(rest);
         }

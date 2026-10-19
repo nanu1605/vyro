@@ -24,7 +24,12 @@ through the relay where it cannot.
 - Show the screen. Within a few seconds the phone shows the PC's desktop and "Tap to click…",
   and below the picture "Receiving W×H, N pictures a second" (note both: on a still screen about
   one a second is right). Leave the PC alone for a minute: the picture stays, sharp, never
-  black. The PC shows the **Your screen is shared** banner on every view, a notification, and
+  black.
+- Tap "Receiving…": it opens two lines. **Here** is how bright the picture this phone decodes
+  is; **the PC's** line is what the PC sent (its screen's size and the size sent, pictures a
+  second, Mbit/s, how bright the picture it took is, whole pictures asked for). If the picture
+  is black, a line under it says whether the PC's own picture was black or the PC sent one that
+  comes out black on the phone. Screenshot both lines on each phone, picture or not. The PC shows the **Your screen is shared** banner on every view, a notification, and
   the tray menu has **Stop sharing the screen with *phone***.
 - Move a window around on the PC: the phone follows. Note the delay (a stopwatch on the PC's
   screen, filmed beside the phone, or by eye) and the PC's CPU in Task Manager for Vyro.

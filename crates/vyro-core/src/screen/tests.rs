@@ -261,12 +261,12 @@ impl Encode for HoldingEncoder {
 
 /// A phone (str0m) connected to a PC session on localhost, with the PC's screen sent by the
 /// producer from a test screen through `encoder`s; collects what the phone receives for `secs`.
-/// Returns each picture received and when, and whether the screen was moving.
+/// Returns each picture received and when, and the producer's reports.
 fn watch_screen(
     still: bool,
     secs: u64,
     encoder: impl Fn() -> HoldingEncoder + Send + 'static,
-) -> Vec<(Instant, Vec<u8>)> {
+) -> (Vec<(Instant, Vec<u8>)>, Vec<producer::Report>) {
     let mut phone = RtcConfig::new()
         .clear_codecs()
         .enable_h264(true)
@@ -290,14 +290,21 @@ fn watch_screen(
     screen
         .moving
         .store(!still, std::sync::atomic::Ordering::SeqCst);
+    let reports = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let producing = {
-        let (session, stop) = (
+        let (session, stop, reports) = (
             std::sync::Arc::clone(&session),
             std::sync::Arc::clone(&stop),
+            std::sync::Arc::clone(&reports),
         );
         std::thread::spawn(move || {
             let settings = producer::Settings::default();
-            producer::drive(&session, &settings, &stop, &|_| {}, screen, |_, _, _, _| {
+            let status = |s: producer::Status| {
+                if let producer::Status::Report(r) = s {
+                    reports.lock().unwrap().push(r);
+                }
+            };
+            producer::drive(&session, &settings, &stop, &status, screen, |_, _, _, _| {
                 Ok(encoder())
             })
         })
@@ -342,14 +349,15 @@ fn watch_screen(
     }
     stop.store(true, std::sync::atomic::Ordering::SeqCst);
     producing.join().unwrap().unwrap();
-    got
+    let reports = reports.lock().unwrap().clone();
+    (got, reports)
 }
 
 /// The phone's first picture is a keyframe, though the encoder made pictures before the phone
 /// connected and gives each out four pictures late: one the phone cannot decode is never sent.
 #[test]
 fn the_phone_gets_a_keyframe_first() {
-    let got = watch_screen(false, 4, || HoldingEncoder {
+    let (got, reports) = watch_screen(false, 4, || HoldingEncoder {
         latency: 4,
         held: Default::default(),
         n: 0,
@@ -360,6 +368,16 @@ fn the_phone_gets_a_keyframe_first() {
         "first: {:?}",
         frames::nal_types(&got[0].1)
     );
+    // Every two seconds, what went out: the test screen's size, new pictures, a keyframe and
+    // a picture that is not one flat colour.
+    let first = reports.first().expect("no report");
+    assert_eq!((first.from, first.sent), ((64, 36), (64, 36)), "{first:?}");
+    assert!(first.taken > 5 && first.encoded >= first.taken, "{first:?}");
+    assert!(first.bitrate > 0 && first.spread > 20, "{first:?}");
+    assert!(
+        reports.iter().map(|r| r.keyframes).sum::<u32>() >= 1,
+        "{reports:?}"
+    );
 }
 
 /// A still screen: the keyframe made when the phone connected reaches it within about a second,
@@ -368,7 +386,7 @@ fn the_phone_gets_a_keyframe_first() {
 #[test]
 fn a_still_screen_reaches_the_phone_at_once() {
     let started = Instant::now() + Duration::from_millis(500);
-    let got = watch_screen(true, 6, || HoldingEncoder {
+    let (got, reports) = watch_screen(true, 6, || HoldingEncoder {
         latency: 4,
         held: Default::default(),
         n: 0,
@@ -386,6 +404,10 @@ fn a_still_screen_reaches_the_phone_at_once() {
         "a still screen is sent again now and then ({} pictures)",
         got.len()
     );
+    // Taken once, then repeated: no new pictures in the later reports, but some encoded.
+    let later = reports.last().expect("no report");
+    assert_eq!(later.taken, 0, "{reports:?}");
+    assert!(later.encoded >= 1, "{reports:?}");
 }
 
 #[test]
@@ -577,6 +599,26 @@ fn notes_for_the_phone() {
         r#"{"t":"sending","w":1280,"h":720}"#
     );
     assert_eq!(Note::Secure.json(), r#"{"t":"secure"}"#);
+    let r = super::producer::Report {
+        from: (2560, 1440),
+        sent: (1920, 1080),
+        taken: 30,
+        encoded: 30,
+        keyframes: 1,
+        bitrate: 5_000_000,
+        luma: 120,
+        spread: 60,
+        asked: 2,
+    };
+    assert_eq!(
+        Note::report(&r).json(),
+        r#"{"t":"report","from":[2560,1440],"sent":[1920,1080],"taken":30,"encoded":30,"keyframes":1,"bitrate":5000000,"luma":120,"spread":60,"asked":2}"#
+    );
+    assert_eq!(
+        r.to_string(),
+        "2560x1440 sent as 1920x1080: 30 new and 30 encoded a second, 1 keyframes, 5000 kbit/s, \
+         brightness 120 varying 60, 2 keyframes asked for"
+    );
     assert_eq!(
         Note::End {
             why: "stopped on the PC".into()
@@ -584,6 +626,26 @@ fn notes_for_the_phone() {
         .json(),
         r#"{"t":"end","why":"stopped on the PC"}"#
     );
+}
+
+/// A black picture reads dark and flat; the test pattern bright and varied; nothing to read, zero.
+#[test]
+fn brightness_tells_a_black_picture() {
+    let (w, h) = (64u32, 36u32);
+    let black = [
+        vec![16u8; (w * h) as usize],
+        vec![128; (w * h / 2) as usize],
+    ]
+    .concat();
+    assert_eq!(frames::brightness(&black, w, h), (16, 0));
+    let bars = frames::test_pattern(w, h, 0);
+    let nv12 = frames::bgra_to_nv12(&bars, w, h, w as usize * 4, w, h);
+    let (luma, spread) = frames::brightness(&nv12, w, h);
+    assert!(luma > 60 && spread > 20, "{luma} {spread}");
+    assert_eq!(frames::brightness(&[], w, h), (0, 0));
+    // Larger than the grid: sampled, not every pixel.
+    let big = [vec![200u8; 1920 * 1080], vec![128; 1920 * 540]].concat();
+    assert_eq!(frames::brightness(&big, 1920, 1080), (200, 0));
 }
 
 #[test]
