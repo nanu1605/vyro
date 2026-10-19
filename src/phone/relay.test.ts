@@ -268,21 +268,19 @@ describe('a phone and its PC through the relay', () => {
     const t = setup({ room: ROOM, phone: PHONE, secret: S1, name: 'DESKTOP-7', used: 1 });
     const pc1 = await pcSide(S1);
     t.link.start();
-    await flush();
-    const s = t.sockets[0]!;
+    const s = await socket(t, 0);
     s.open();
     s.text('{"t":"pc","online":true}');
-    await flush();
     s.binary(await pc1.frame({ t: 'info', pc: 'DESKTOP-7', protocol: 2, session: 'abc', methods: ['screen.slow'], screen: true }));
-    await flush();
-    expect(t.infos.at(-1)?.screen).toBe(true);
+    await until(() => expect(t.infos.at(-1)?.screen).toBe(true));
     const waiting = t.link.request('screen.slow');
-    await flush();
+    // Hello, watch, then the request.
+    await sent(s, 3);
     s.text('{"t":"full"}');
     await expect(waiting).rejects.toThrow(FULL);
-    const sent = s.sent.length;
+    const count = s.sent.length;
     await expect(t.link.request('screen.slow')).rejects.toThrow(FULL);
-    expect(s.sent.length).toBe(sent);
+    expect(s.sent.length).toBe(count);
     t.link.stop();
   });
 
