@@ -262,11 +262,11 @@ mod tests {
     /// Takes a picture where the test runs on a desktop; CI's runner may have none, and says so.
     #[test]
     fn captures_the_primary_monitor_where_there_is_one() {
-        eprintln!("monitors: {:?}", monitors());
+        eprintln!("screen: monitors {:?}", monitors());
         let mut c = match Capture::open(0) {
             Ok(c) => c,
             Err(e) => {
-                eprintln!("no capture here: {e}");
+                eprintln!("screen: no capture here: {e}");
                 return;
             }
         };
@@ -274,16 +274,16 @@ mod tests {
             match c.next(100) {
                 Ok(Some(p)) => {
                     assert_eq!(p.bgra.len(), p.width as usize * p.height as usize * 4);
-                    eprintln!("captured {}x{}", p.width, p.height);
+                    eprintln!("screen: captured {}x{}", p.width, p.height);
                     return;
                 }
                 Ok(None) => {}
                 Err(e) => {
-                    eprintln!("capture: {e}");
+                    eprintln!("screen: capture failed: {e}");
                     return;
                 }
             }
         }
-        eprintln!("the screen did not change in 2 s");
+        eprintln!("screen: the screen did not change in 2 s");
     }
 }

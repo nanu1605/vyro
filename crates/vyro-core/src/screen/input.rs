@@ -66,6 +66,9 @@ pub enum Input {
         k: Key,
         down: bool,
     },
+    /// The phone still shows the screen (sent every 30 s while it does): a session the phone
+    /// stopped showing ends after a while.
+    Here,
 }
 
 /// Reads and checks one message.

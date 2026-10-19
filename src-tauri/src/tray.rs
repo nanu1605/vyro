@@ -297,6 +297,19 @@ pub fn set_widgets_checked(app: &AppHandle, on: bool) {
 pub struct FanItem(MenuItem<Wry>);
 /// "Return GPU to stock", enabled while the GPU runs tuned (1.6).
 pub struct GpuItem(MenuItem<Wry>);
+/// "Stop sharing the screen", enabled while a phone sees it (1.7).
+pub struct ScreenItem(MenuItem<Wry>);
+
+/// Shows who sees the screen in the tray menu; `None`: nobody.
+pub fn set_screen_item(app: &AppHandle, phone: Option<&str>) {
+    if let Some(item) = app.try_state::<ScreenItem>() {
+        let _ = item.0.set_enabled(phone.is_some());
+        let _ = item.0.set_text(match phone {
+            Some(p) => format!("Stop sharing the screen with {p}"),
+            None => "Stop sharing the screen".into(),
+        });
+    }
+}
 
 /// What the tray shows: fan control, GPU tuning, the remote companion (P26) and the alerts that
 /// ask to be named (P18).
@@ -468,6 +481,14 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     app.manage(FanItem(fans.clone()));
     let gpu = MenuItem::with_id(app, "gpu-stock", "Return GPU to stock", false, None::<&str>)?;
     app.manage(GpuItem(gpu.clone()));
+    let screen = MenuItem::with_id(
+        app,
+        "screen-stop",
+        "Stop sharing the screen",
+        false,
+        None::<&str>,
+    )?;
+    app.manage(ScreenItem(screen.clone()));
 
     let show = MenuItem::with_id(app, "show", "Show Vyro", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Vyro", true, None::<&str>)?;
@@ -475,7 +496,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::with_items(
         app,
         &[
-            &show, &profiles, &overlay, &widgets, &fans, &gpu, &sep, &quit,
+            &show, &profiles, &overlay, &widgets, &fans, &gpu, &screen, &sep, &quit,
         ],
     )?;
     let mut tray = TrayIconBuilder::with_id("main")
@@ -500,6 +521,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
                     }
                 }
             }
+            "screen-stop" => crate::screen::end_all(app, "stopped on the PC"),
             "widgets" => crate::widgets::toggle_shown(app),
             "overlay" => {
                 if let Some(store) = app.try_state::<SettingsStore>() {

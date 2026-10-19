@@ -11,6 +11,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use str0m::change::{SdpAnswer, SdpOffer};
+use str0m::channel::ChannelId;
 use str0m::format::Codec;
 use str0m::media::{MediaKind, MediaTime, Mid};
 use str0m::net::{Protocol, Receive};
@@ -73,6 +74,8 @@ pub type EventSink = Box<dyn Fn(SessionEvent) + Send>;
 struct State {
     connected: bool,
     closed: bool,
+    /// The newest note for the phone, and whether it still has to go.
+    note: Option<(String, bool)>,
 }
 
 /// A running session. Dropping it ends it.
@@ -102,8 +105,20 @@ impl Session {
         crate::lock(&self.state).connected
     }
 
+    /// Tells the phone something over the data channel (the screen's state, as JSON). Only the
+    /// newest note matters: one not yet sent is replaced, and a phone whose channel opens later
+    /// gets it then.
+    pub fn tell(&self, note: String) {
+        crate::lock(&self.state).note = Some((note, true));
+    }
+
     pub fn closed(&self) -> bool {
         crate::lock(&self.state).closed
+    }
+
+    /// Ends the session from any thread; it closes soon after.
+    pub fn end(&self) {
+        self.stop.store(true, Ordering::SeqCst);
     }
 
     pub fn stop(&mut self) {
@@ -241,6 +256,23 @@ fn h264_pt(rtc: &mut Rtc, mid: Mid) -> Option<str0m::format::PayloadParams> {
     best.map(|(_, p)| p)
 }
 
+/// Writes the note still due to the phone's channel; whether there was one.
+fn send_note(rtc: &mut Rtc, id: ChannelId, state: &Mutex<State>) -> bool {
+    let note = match &mut crate::lock(state).note {
+        Some((text, due)) if *due => {
+            *due = false;
+            text.clone()
+        }
+        _ => return false,
+    };
+    if let Some(mut ch) = rtc.channel(id) {
+        if let Err(e) = ch.write(false, note.as_bytes()) {
+            log::debug!("screen: note not sent: {e}");
+        }
+    }
+    true
+}
+
 /// The session's loop; returns why it ended.
 fn run(
     mut rtc: Rtc,
@@ -254,6 +286,7 @@ fn run(
     let started = Instant::now();
     let local = socket.local_addr().ok();
     let mut video: Option<(Mid, str0m::format::PayloadParams)> = None;
+    let mut channel: Option<ChannelId> = None;
     let mut buf = vec![0u8; 2000];
     loop {
         // Everything str0m has to say, until it waits for time or input.
@@ -280,6 +313,13 @@ fn run(
                         }
                     }
                     Event::KeyframeRequest(_) => keyframe.store(true, Ordering::SeqCst),
+                    Event::ChannelOpen(id, _) => {
+                        channel = Some(id);
+                        if let Some((_, due)) = &mut crate::lock(state).note {
+                            *due = true;
+                        }
+                    }
+                    Event::ChannelClose(id) if channel == Some(id) => channel = None,
                     Event::ChannelData(d) => {
                         let text = String::from_utf8_lossy(&d.data);
                         match input::parse(&text) {
@@ -293,10 +333,22 @@ fn run(
             }
         };
         if stop.load(Ordering::SeqCst) {
+            // A last note (why it ended) still goes, once.
+            if let Some(id) = channel {
+                if send_note(&mut rtc, id, state) {
+                    while let Ok(Output::Transmit(t)) = rtc.poll_output() {
+                        let _ = socket.send_to(&t.contents, t.destination);
+                    }
+                }
+            }
             return "stopped".into();
         }
         if !crate::lock(state).connected && started.elapsed() > CONNECT_TIMEOUT {
             return "the phone could not reach the PC directly".into();
+        }
+        // A note for the phone, once its channel is open.
+        if channel.is_some_and(|id| send_note(&mut rtc, id, state)) {
+            continue;
         }
         // A frame to send: one mutation, then back to draining the output.
         if let Ok(f) = frames.try_recv() {

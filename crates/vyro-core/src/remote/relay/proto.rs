@@ -111,6 +111,8 @@ pub struct Access {
     pub session: String,
     /// The phone may control the PC.
     pub control: bool,
+    /// The phone may see and use the PC's screen (1.7).
+    pub screen: bool,
     /// The requests it may make.
     pub methods: Vec<&'static str>,
 }

@@ -153,6 +153,7 @@ fn inputs(i: &Input, monitor: Rect, desk: Rect) -> Vec<INPUT> {
             }
             vec![key(code, 0, f)]
         }
+        Input::Here => Vec::new(),
     }
 }
 

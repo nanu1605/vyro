@@ -105,6 +105,9 @@ pub struct RemoteDevice {
     /// May control the PC (1.5); only phones paired through the relay can.
     #[serde(default)]
     pub control: bool,
+    /// May see and use the PC's screen (1.7); only phones paired through the relay can.
+    #[serde(default)]
+    pub screen: bool,
 }
 
 /// The current pairing code.

@@ -35,6 +35,9 @@ pub struct StoredPhone {
     /// May control the PC (1.5); phones paired before may only look.
     #[serde(default)]
     pub control: bool,
+    /// May see and use the PC's screen (1.7); off until the owner turns it on.
+    #[serde(default)]
+    pub screen: bool,
 }
 
 /// `remote.json`'s `relay`.
@@ -65,6 +68,7 @@ struct Phone {
     /// Still on the pairing link's secret.
     pending: bool,
     control: bool,
+    screen: bool,
 }
 
 /// What a phone's `hello` did.
@@ -137,6 +141,7 @@ impl Phones {
                     last_seen: p.last_seen,
                     pending: false,
                     control: p.control,
+                    screen: p.screen,
                 })
             })
             .take(MAX_DEVICES)
@@ -173,6 +178,7 @@ impl Phones {
                         expires: p.expires,
                         last_seen: p.last_seen,
                         control: p.control,
+                        screen: p.screen,
                     })
                 })
                 .collect(),
@@ -232,6 +238,7 @@ impl Phones {
             last_seen: None,
             pending: true,
             control: false,
+            screen: false,
         });
         self.generation += 1;
         Ok(())
@@ -258,6 +265,29 @@ impl Phones {
         self.phones
             .iter()
             .any(|p| &p.id == id && !p.pending && p.control)
+    }
+
+    /// Lets a phone see and use the PC's screen, or not; `false` when there is no such phone.
+    /// Only the owner, on the PC, calls this.
+    pub fn set_screen(&mut self, id: &str, on: bool) -> bool {
+        let Some(p) = self.phones.iter_mut().find(|p| hex(&p.id) == id) else {
+            return false;
+        };
+        if p.screen != on {
+            p.screen = on;
+            self.dirty = true;
+            if !p.pending && !self.info_due.contains(&p.id) {
+                self.info_due.push(p.id);
+            }
+        }
+        true
+    }
+
+    /// May the phone see and use the PC's screen.
+    pub fn may_screen(&self, id: &PhoneId) -> bool {
+        self.phones
+            .iter()
+            .any(|p| &p.id == id && !p.pending && p.screen)
     }
 
     /// Phones to send their `info` again, since it changed.
@@ -394,6 +424,7 @@ impl Phones {
                     last_address: None,
                     anywhere: true,
                     control: p.control,
+                    screen: p.screen,
                 }
             })
             .collect()

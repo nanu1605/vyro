@@ -19,7 +19,7 @@
   import CoolingPanel from './components/CoolingPanel.svelte';
   import { animator } from './anim';
   import { loadUpdates, update } from './updates.svelte';
-  import { cancelPowerAction, getBackendStatus, getHardwareChanges, getLowBatteries, getPawnIoStatus, getPowerState, getRemoteBrief, inTauri, onBackendStatus, onHardwareChanged, onLowBattery, onOpenView, onPowerPending, onRemote, onSensors, onWindowOpened, restoreFans, restoreGpu, setUiVisible } from './ipc';
+  import { cancelPowerAction, getBackendStatus, getScreenStatus, onScreenShare, stopScreenShare, getHardwareChanges, getLowBatteries, getPawnIoStatus, getPowerState, getRemoteBrief, inTauri, onBackendStatus, onHardwareChanged, onLowBattery, onOpenView, onPowerPending, onRemote, onSensors, onWindowOpened, restoreFans, restoreGpu, setUiVisible } from './ipc';
   import { lowNotice } from './devices';
   import { loadSeen, newestId, saveSeen } from './changes';
   import { loadSeenKeys, markSeen, unseen } from './insights';
@@ -29,7 +29,7 @@
   import Sidebar, { type Dot } from './components/shell/Sidebar.svelte';
   import TopBar from './components/shell/TopBar.svelte';
   import LiveRail from './components/shell/LiveRail.svelte';
-  import type { AlertFired, BackendStatus, DeviceInfo, PawnIoStatus, PendingPower, RemoteBrief, SensorSnapshot } from './types';
+  import type { AlertFired, BackendStatus, DeviceInfo, PawnIoStatus, PendingPower, RemoteBrief, ScreenShare, SensorSnapshot } from './types';
 
   function lastTab(): Tab {
     try {
@@ -176,6 +176,16 @@
   }
   const POWER_WORD: Record<string, string> = { shutDown: 'Shutting down', restart: 'Restarting' };
 
+  // The screen shared with a phone (1.7): shown on every view while it lasts, with Stop.
+  let screenShare = $state.raw<ScreenShare | null>(null);
+  async function stopScreen(): Promise<void> {
+    try {
+      screenShare = (await stopScreenShare()).share;
+    } catch {
+      // The event brings the state.
+    }
+  }
+
   // Remote companion (P26): the header says so while it is on, from any tab.
   let remote = $state.raw<RemoteBrief | null>(null);
   function openRemote(): void {
@@ -253,6 +263,7 @@
     let stopRemote: (() => void) | undefined;
     let stopLow: (() => void) | undefined;
     let stopPower: (() => void) | undefined;
+    let stopScreen: (() => void) | undefined;
     let stopView: (() => void) | undefined;
     let disposed = false;
     // Opened again from the tray: back to the Dashboard unless "Last tab" is chosen.
@@ -295,6 +306,13 @@
     void onPowerPending((p) => (pendingPower = p.pending)).then((fn) => {
       if (disposed) fn();
       else stopPower = fn;
+    });
+    getScreenStatus()
+      .then((s) => (screenShare = s.share))
+      .catch(() => {});
+    void onScreenShare((s) => (screenShare = s.share)).then((fn) => {
+      if (disposed) fn();
+      else stopScreen = fn;
     });
     void onRemote((b) => (remote = b)).then((fn) => {
       if (disposed) fn();
@@ -345,6 +363,7 @@
       stopRemote?.();
       stopLow?.();
       stopPower?.();
+      stopScreen?.();
       stopView?.();
       document.removeEventListener('visibilitychange', onVisibility);
     };
@@ -379,6 +398,15 @@
             })}, asked from {pendingPower.by}.{powerError ? ` ${powerError}` : ''}
           </span>
           <button type="button" onclick={() => void cancelPower()}>Cancel</button>
+        </div>
+      {/if}
+      {#if screenShare}
+        <div class="power-banner screen-banner" role="status">
+          <span>
+            <b>Your screen is shared</b> with {screenShare.phone}{screenShare.slow ? ' (slow view)' : ''}: it sees this screen and can use the
+            mouse and keyboard.
+          </span>
+          <button type="button" onclick={() => void stopScreen()}>Stop sharing</button>
         </div>
       {/if}
       {#if visited.cooling}
@@ -662,6 +690,10 @@
     background: color-mix(in srgb, var(--hot) 10%, var(--panel));
     color: var(--text);
     font-size: 0.9rem;
+  }
+  .screen-banner {
+    border-color: color-mix(in srgb, var(--warn) 55%, var(--line));
+    background: color-mix(in srgb, var(--warn) 10%, var(--panel));
   }
   .health-strip {
     display: flex;

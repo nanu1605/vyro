@@ -23,4 +23,8 @@ anywhere: boolean,
 /**
  * May control the PC (1.5); only phones paired through the relay can.
  */
-control: boolean, };
+control: boolean, 
+/**
+ * May see and use the PC's screen (1.7); only phones paired through the relay can.
+ */
+screen: boolean, };

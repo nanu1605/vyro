@@ -215,6 +215,7 @@ impl Session {
                 let refused = match api::access(&m) {
                     None => Some(api::UNKNOWN),
                     Some(Access::Control) if !phones.may_control(&id) => Some(api::VIEW_ONLY),
+                    Some(Access::Screen) if !phones.may_screen(&id) => Some(api::NO_SCREEN),
                     Some(_) => None,
                 };
                 match refused {
@@ -264,10 +265,12 @@ impl Session {
         };
         let access = self.conns.get(id).map(|c| {
             let control = phones.may_control(id);
+            let screen = phones.may_screen(id);
             proto::Access {
                 session: b64url(&c.session),
                 control,
-                methods: api::allowed(control),
+                screen,
+                methods: api::allowed(control, screen),
             }
         });
         seal_to(

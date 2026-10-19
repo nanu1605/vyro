@@ -335,6 +335,7 @@ impl Auth {
                 watching: watching.contains(&d.id),
                 anywhere: false,
                 control: false,
+                screen: false,
             })
             .collect()
     }

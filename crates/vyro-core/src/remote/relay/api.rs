@@ -1,6 +1,7 @@
 //! What a phone may ask of the PC through the relay (1.5): each request by name, and whether it
-//! only reads (any paired phone) or changes the PC (only a phone the owner allowed to control
-//! it, in Settings → Remote on the PC). Anything not listed is refused. The app answers them
+//! only reads (any paired phone), changes the PC (only a phone the owner allowed to control
+//! it, in Settings → Remote on the PC) or shows and uses its screen (1.7: only a phone the owner
+//! allowed that, separately). Anything not listed is refused. The app answers them
 //! (`src-tauri/src/remote_api.rs`); the LAN page stays read-only.
 
 use serde::{Deserialize, Serialize};
@@ -13,6 +14,8 @@ pub enum Access {
     View,
     /// A phone allowed to control the PC.
     Control,
+    /// A phone allowed to see and use the PC's screen (1.7).
+    Screen,
 }
 
 /// Every request a phone may make.
@@ -53,6 +56,13 @@ pub const METHODS: &[(&str, Access)] = &[
     // GPU tuning (1.6): only Stock and presets that passed the stability test.
     ("gpu.preset", Access::Control),
     ("gpu.stock", Access::Control),
+    // The screen (1.7): the monitors, a direct session (the phone's WebRTC offer in, the PC's
+    // answer out), and the slow view through the relay when no direct path exists.
+    ("screen.monitors", Access::Screen),
+    ("screen.start", Access::Screen),
+    ("screen.stop", Access::Screen),
+    ("screen.slow", Access::Screen),
+    ("screen.input", Access::Screen),
 ];
 
 /// Who may make `method`; `None`: no such request.
@@ -61,10 +71,14 @@ pub fn access(method: &str) -> Option<Access> {
 }
 
 /// The requests a phone may make, for its `info`.
-pub fn allowed(control: bool) -> Vec<&'static str> {
+pub fn allowed(control: bool, screen: bool) -> Vec<&'static str> {
     METHODS
         .iter()
-        .filter(|(_, a)| control || *a == Access::View)
+        .filter(|(_, a)| match a {
+            Access::View => true,
+            Access::Control => control,
+            Access::Screen => screen,
+        })
         .map(|(m, _)| *m)
         .collect()
 }
@@ -73,6 +87,8 @@ pub fn allowed(control: bool) -> Vec<&'static str> {
 pub const UNKNOWN: &str = "This PC's Vyro does not know that request. Update Vyro on the PC.";
 pub const VIEW_ONLY: &str =
     "This phone may only look. To let it control the PC: Settings → Remote on the PC.";
+pub const NO_SCREEN: &str =
+    "This phone may not see the PC's screen. To allow it: Settings → Remote on the PC.";
 
 /// Something a phone changed on the PC, as Settings → Remote lists it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]

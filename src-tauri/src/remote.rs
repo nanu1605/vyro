@@ -573,6 +573,20 @@ impl Remote {
         Ok(())
     }
 
+    /// Lets a phone see and use the screen, or not (1.7). The phone hears at once.
+    fn set_phone_screen(&self, id: &str, on: bool) -> Result<(), String> {
+        let phones = lock(&self.phones).clone().ok_or("No phone is paired.")?;
+        if !lock(&phones).set_screen(id, on) {
+            return Err("That phone is no longer paired.".into());
+        }
+        log::info!(
+            "remote: a phone may {}see the screen",
+            if on { "" } else { "no longer " }
+        );
+        self.save();
+        Ok(())
+    }
+
     fn set_wake(&self, on: bool) {
         lock(&self.relay).wake = on;
         self.save();
@@ -805,7 +819,11 @@ pub async fn cancel_remote_pairing(app: AppHandle) -> Result<RemoteStatus, Strin
 /// `id`: one device; none: every device.
 #[tauri::command]
 pub async fn sign_out_remote(app: AppHandle, id: Option<String>) -> Result<RemoteStatus, String> {
-    change(app, move |_, r| {
+    change(app, move |app, r| {
+        match id.as_deref() {
+            Some(id) => crate::screen::end_phone(app, id, "the phone was signed out"),
+            None => crate::screen::end_all(app, "every phone was signed out"),
+        }
         r.sign_out(id.as_deref());
         Ok(())
     })
@@ -820,6 +838,9 @@ pub fn get_remote_brief(remote: tauri::State<'_, Remote>) -> RemoteBrief {
 #[tauri::command]
 pub async fn set_relay_enabled(app: AppHandle, enabled: bool) -> Result<RemoteStatus, String> {
     change(app, move |app, r| {
+        if !enabled {
+            crate::screen::end_all(app, "reach from anywhere was turned off");
+        }
         r.set_relay_enabled(app, enabled);
         Ok(())
     })
@@ -846,6 +867,23 @@ pub async fn set_phone_control(
     control: bool,
 ) -> Result<RemoteStatus, String> {
     change(app, move |_, r| r.set_phone_control(&id, control)).await
+}
+
+/// Lets a phone paired through the relay see and use the screen, or not (1.7); taking it back
+/// ends the phone's session at once.
+#[tauri::command]
+pub async fn set_phone_screen(
+    app: AppHandle,
+    id: String,
+    on: bool,
+) -> Result<RemoteStatus, String> {
+    change(app, move |app, r| {
+        if !on {
+            crate::screen::end_phone(app, &id, "the screen is no longer allowed");
+        }
+        r.set_phone_screen(&id, on)
+    })
+    .await
 }
 
 /// "Wake from phone" (1.5).
@@ -890,7 +928,11 @@ pub async fn cancel_relay_pairing(app: AppHandle) -> Result<RemoteStatus, String
 
 #[tauri::command]
 pub async fn reset_relay(app: AppHandle) -> Result<RemoteStatus, String> {
-    change(app, |app, r| r.reset_relay(app)).await
+    change(app, |app, r| {
+        crate::screen::end_all(app, "the relay was reset");
+        r.reset_relay(app)
+    })
+    .await
 }
 
 #[cfg(test)]

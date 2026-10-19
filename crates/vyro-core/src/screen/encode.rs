@@ -314,6 +314,12 @@ mod tests {
             "{first:?}"
         );
         let keys = pictures.iter().filter(|p| frames::is_keyframe(p)).count();
+        eprintln!(
+            "screen: encoded {} pictures, {keys} keyframes, first {} bytes, total {} bytes",
+            pictures.len(),
+            pictures[0].len(),
+            pictures.iter().map(Vec::len).sum::<usize>()
+        );
         assert!(keys >= 2, "{keys} keyframes");
         assert!(pictures
             .iter()

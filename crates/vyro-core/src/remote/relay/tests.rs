@@ -642,10 +642,100 @@ fn every_request_has_one_access_and_changes_need_control() {
     assert_eq!(api::access("process.end"), Some(api::Access::Control));
     assert_eq!(api::access("processes"), Some(api::Access::View));
     assert_eq!(api::access("nope"), None);
-    assert!(api::allowed(false)
+    assert!(api::allowed(false, false)
         .iter()
         .all(|m| api::access(m) == Some(api::Access::View)));
-    assert_eq!(api::allowed(true).len(), api::METHODS.len());
+    assert_eq!(api::allowed(true, true).len(), api::METHODS.len());
+    // The screen is its own permission: control does not bring it, nor it control.
+    assert!(!api::allowed(true, false).contains(&"screen.start"));
+    let screen_only = api::allowed(false, true);
+    assert!(screen_only.contains(&"screen.start") && !screen_only.contains(&"power"));
+    for m in [
+        "screen.monitors",
+        "screen.start",
+        "screen.stop",
+        "screen.slow",
+        "screen.input",
+    ] {
+        assert_eq!(api::access(m), Some(api::Access::Screen), "{m}");
+    }
+}
+
+#[test]
+fn the_screen_is_off_until_the_owner_allows_it_and_is_kept() {
+    let mut p = paired();
+    assert!(p.set_control("0a1b2c3d", true));
+    assert!(!p.may_screen(&ID), "control does not bring the screen");
+    assert!(p.set_screen("0a1b2c3d", true));
+    assert!(!p.set_screen("ffffffff", true));
+    assert!(p.may_screen(&ID));
+    assert!(p.devices(&[])[0].screen);
+    let stored = p.stored(true, None);
+    assert!(stored.phones[0].screen);
+    assert!(Phones::load(&stored, NOW).unwrap().may_screen(&ID));
+
+    // A 1.6 file has no `screen`: off.
+    let mut json: serde_json::Value = serde_json::to_value(&stored).unwrap();
+    json["phones"][0].as_object_mut().unwrap().remove("screen");
+    let old: StoredRelay = serde_json::from_value(json).unwrap();
+    let old = Phones::load(&old, NOW).unwrap();
+    assert!(!old.may_screen(&ID) && old.may_control(&ID));
+
+    // Not before the phone has paired.
+    let mut q = Phones::fresh(ROOM, PC_KEY);
+    q.start_pairing(NOW, LINK_SECRET, ID).unwrap();
+    assert!(q.set_screen("0a1b2c3d", true));
+    assert!(!q.may_screen(&ID));
+}
+
+#[test]
+fn screen_requests_need_the_screen_permission() {
+    let mut p = paired();
+    assert!(p.set_control("0a1b2c3d", true));
+    let mut s = Session::new();
+    let info_fn = info;
+    let phone = TestPhone::new(ID, &OWN_SECRET);
+    let (session, info) = hello2(&mut s, &mut p, &phone);
+    assert_eq!(
+        (info["control"].as_bool(), info["screen"].as_bool()),
+        (Some(true), Some(false))
+    );
+
+    let (outs, _, reqs) = s.on_frame(
+        &mut p,
+        &phone.frame(&req(&session, 1, 1, "screen.start")),
+        &now(&info_fn, None),
+    );
+    assert!(reqs.is_empty());
+    assert_eq!(phone.read(&outs[0]).unwrap()["err"], api::NO_SCREEN);
+
+    // Allowed on the PC: the phone hears at once, with the screen requests, and may.
+    assert!(p.set_screen("0a1b2c3d", true));
+    let outs = s.refresh(&mut p, &now(&info_fn, None));
+    let info = phone.read(&outs[0]).unwrap();
+    assert_eq!(info["screen"].as_bool(), Some(true));
+    assert!(info["methods"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|m| m == "screen.start"));
+    let (_, _, reqs) = s.on_frame(
+        &mut p,
+        &phone.frame(&req(&session, 2, 2, "screen.start")),
+        &now(&info_fn, None),
+    );
+    assert_eq!(reqs[0].method, "screen.start");
+
+    // Taken back: refused again.
+    assert!(p.set_screen("0a1b2c3d", false));
+    let _ = s.refresh(&mut p, &now(&info_fn, None));
+    let (outs, _, reqs) = s.on_frame(
+        &mut p,
+        &phone.frame(&req(&session, 3, 3, "screen.input")),
+        &now(&info_fn, None),
+    );
+    assert!(reqs.is_empty());
+    assert_eq!(phone.read(&outs[0]).unwrap()["err"], api::NO_SCREEN);
 }
 
 #[test]

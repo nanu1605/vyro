@@ -44,6 +44,7 @@ fn stun_request_and_xor_mapped_address() {
 
 #[test]
 fn input_messages_are_checked() {
+    assert_eq!(input::parse(r#"{"t":"here"}"#), Ok(input::Input::Here));
     assert_eq!(
         input::parse(r#"{"t":"move","x":0.5,"y":0.25}"#),
         Ok(input::Input::Move { x: 0.5, y: 0.25 })
@@ -116,6 +117,7 @@ fn a_phone_receives_video_and_sends_input() {
     )
     .unwrap();
     assert!(answer.contains("H264"), "{answer}");
+    session.tell(r#"{"t":"sending","w":2,"h":2}"#.into());
     phone
         .sdp_api()
         .accept_answer(pending, SdpAnswer::from_sdp_string(&answer).unwrap())
@@ -124,12 +126,13 @@ fn a_phone_receives_video_and_sends_input() {
     let until = Instant::now() + Duration::from_secs(15);
     let mut got_video = None;
     let mut sent_input = false;
+    let mut note = None;
     let mut n = 0u8;
     let mut buf = vec![0u8; 2000];
-    while got_video.is_none() || !sent_input {
+    while got_video.is_none() || !sent_input || note.is_none() {
         if Instant::now() >= until {
             let seen: Vec<SessionEvent> = events.try_iter().collect();
-            panic!("timed out (video {got_video:?}, input {sent_input}, connected {}, closed {}, events {seen:?})", session.connected(), session.closed());
+            panic!("timed out (video {got_video:?}, input {sent_input}, note {note:?}, connected {}, closed {}, events {seen:?})", session.connected(), session.closed());
         }
         let deadline = loop {
             match phone.poll_output().unwrap() {
@@ -144,6 +147,9 @@ fn a_phone_receives_video_and_sends_input() {
                     sent_input = true;
                 }
                 Output::Event(Event::MediaData(d)) => got_video = Some(d.data.to_vec()),
+                Output::Event(Event::ChannelData(d)) => {
+                    note = Some(String::from_utf8_lossy(&d.data).into_owned());
+                }
                 Output::Event(_) => {}
             }
         };
@@ -173,6 +179,11 @@ fn a_phone_receives_video_and_sends_input() {
         };
         phone.handle_input(input).unwrap();
     }
+    assert_eq!(
+        note.as_deref(),
+        Some(r#"{"t":"sending","w":2,"h":2}"#),
+        "the PC's note"
+    );
     let video = got_video.unwrap();
     assert!(
         video.windows(5).any(|w| w == [0, 0, 1, 0x65, 0x88])
@@ -326,4 +337,65 @@ fn positions_land_on_the_shared_monitor() {
     let (x, y) = input::absolute(1.0, 1.0, primary, desktop);
     assert_eq!(x, 65535);
     assert_eq!(y, 49140, "the primary monitor is shorter");
+}
+
+#[test]
+fn an_unused_session_ends_after_ten_minutes() {
+    use super::share::idle;
+    assert!(!idle(Duration::from_secs(9 * 60 + 59)));
+    assert!(idle(Duration::from_secs(10 * 60)));
+}
+
+#[test]
+fn the_slow_view_has_twenty_minutes_a_day() {
+    use super::share::{SlowAllowance, SLOW_DAILY_SECS};
+    let day = 20_000 * 86_400;
+    let mut a = SlowAllowance::default();
+    assert_eq!(a.left(day + 10), SLOW_DAILY_SECS);
+    assert!(a.spend(day + 10, 19 * 60));
+    assert_eq!(a.left(day + 20), 60);
+    assert!(a.spend(day + 30, 120), "the last bit is taken, capped");
+    assert_eq!(a.left(day + 40), 0);
+    assert!(!a.spend(day + 50, 1));
+    // The next day (UTC) starts over.
+    assert_eq!(a.left(day + 86_400), SLOW_DAILY_SECS);
+    assert!(a.spend(day + 86_400, 1));
+    // As kept in remote.json.
+    let back: SlowAllowance = serde_json::from_str(&serde_json::to_string(&a).unwrap()).unwrap();
+    assert_eq!(back, a);
+    assert_eq!(
+        serde_json::from_str::<SlowAllowance>("{}").unwrap(),
+        SlowAllowance::default()
+    );
+}
+
+#[test]
+fn notes_for_the_phone() {
+    use super::share::Note;
+    assert_eq!(
+        Note::Sending { w: 1280, h: 720 }.json(),
+        r#"{"t":"sending","w":1280,"h":720}"#
+    );
+    assert_eq!(Note::Secure.json(), r#"{"t":"secure"}"#);
+    assert_eq!(
+        Note::End {
+            why: "stopped on the PC".into()
+        }
+        .json(),
+        r#"{"t":"end","why":"stopped on the PC"}"#
+    );
+}
+
+#[test]
+fn the_slow_view_scales_to_bgr() {
+    // 4×2 BGRA: each pixel's blue is its index; halved to 2×1, the left pixel of each pair.
+    let src: Vec<u8> = (0..8u8).flat_map(|i| [i, 100 + i, 200 + i, 255]).collect();
+    assert_eq!(
+        frames::bgra_to_bgr(&src, 4, 2, 16, 2, 1),
+        vec![0, 100, 200, 2, 102, 202]
+    );
+    assert_eq!(frames::bgra_to_bgr(&src, 4, 2, 16, 4, 2).len(), 4 * 2 * 3);
+    // Too short a picture: black, not a panic.
+    assert_eq!(frames::bgra_to_bgr(&src[..8], 4, 2, 16, 2, 1), vec![0; 6]);
+    assert_eq!(frames::fit(1920, 1080, 960, 600), (960, 540));
 }

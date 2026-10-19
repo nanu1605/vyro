@@ -8,7 +8,7 @@ import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
 import { savedLook, type AccentChoice, type OpenOn, type ThemeId } from './themes';
 import { EMPTY as NO_WIDGETS, type Widgets } from './widgets';
-import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Control, Dashboard, DeviceInfo, Devices, LinkState, PhoneAction, PowerState, WakeReadiness, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo, GpuTestDone, GpuTestKind, GpuTestProgress, TuneConfig, TuneEvent, TuneSettings, TuneStatus } from './types';
+import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Control, Dashboard, DeviceInfo, Devices, LinkState, PhoneAction, PowerState, ScreenStatus, WakeReadiness, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo, GpuTestDone, GpuTestKind, GpuTestProgress, TuneConfig, TuneEvent, TuneSettings, TuneStatus } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -844,6 +844,35 @@ export async function startRelayPairing(control: boolean): Promise<RemoteStatus>
 export async function setPhoneControl(id: string, control: boolean): Promise<RemoteStatus> {
   if (!inTauri) return (await import('./sim-remote')).simPhoneControl(id, control);
   return invoke<RemoteStatus>('set_phone_control', { id, control });
+}
+
+/** Lets a phone paired from anywhere see and use the screen, or not (1.7). */
+export async function setPhoneScreen(id: string, on: boolean): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simPhoneScreen(id, on);
+  return invoke<RemoteStatus>('set_phone_screen', { id, on });
+}
+
+/** The screen shared with a phone now, and its settings (1.7). */
+export async function getScreenStatus(): Promise<ScreenStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simScreenStatus();
+  return invoke<ScreenStatus>('get_screen_status');
+}
+
+/** Stop, at the PC. */
+export async function stopScreenShare(): Promise<ScreenStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simStopScreen();
+  return invoke<ScreenStatus>('stop_screen_share');
+}
+
+/** "Lock the PC when a screen session ends". */
+export async function setScreenLock(on: boolean): Promise<ScreenStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simScreenLock(on);
+  return invoke<ScreenStatus>('set_screen_lock', { on });
+}
+
+export async function onScreenShare(cb: (s: ScreenStatus) => void): Promise<() => void> {
+  if (!inTauri) return (await import('./sim-remote')).onSimScreen(cb);
+  return listen<ScreenStatus>('screen-share', (e) => cb(e.payload));
 }
 
 /** "Wake from phone" (1.5): phones are told this PC's wired address. */

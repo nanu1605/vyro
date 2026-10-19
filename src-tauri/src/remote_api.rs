@@ -103,15 +103,35 @@ pub fn handle(app: &AppHandle, r: Request, reply: Reply) {
 }
 
 fn record(app: &AppHandle, r: &Request, result: &Result<Value, String>) {
+    keep(
+        app,
+        PhoneAction {
+            at: unix_now(),
+            phone: r.name.clone(),
+            what: api::describe(&r.method, &r.params),
+            error: result.as_ref().err().cloned(),
+        },
+    );
+}
+
+/// Something a phone did that is not one request (a screen session's start and end).
+pub fn log_action(app: &AppHandle, phone: &str, what: String) {
+    keep(
+        app,
+        PhoneAction {
+            at: unix_now(),
+            phone: phone.to_owned(),
+            what,
+            error: None,
+        },
+    );
+}
+
+fn keep(app: &AppHandle, action: PhoneAction) {
     let Some(state) = app.try_state::<PhoneState>() else {
         return;
     };
-    state.record(PhoneAction {
-        at: unix_now(),
-        phone: r.name.clone(),
-        what: api::describe(&r.method, &r.params),
-        error: result.as_ref().err().cloned(),
-    });
+    state.record(action);
     if let Err(e) = app.emit(ACTIONS_EVENT, ()) {
         log::debug!("emit {ACTIONS_EVENT}: {e}");
     }
@@ -139,6 +159,10 @@ fn notify(app: &AppHandle, title: &str, body: &str) {
 }
 
 fn call(app: &AppHandle, r: &Request) -> Result<Value, String> {
+    // The screen (1.7) keeps its own record of sessions.
+    if api::access(&r.method) == Some(Access::Screen) {
+        return crate::screen::handle(app, r);
+    }
     let engine = app.state::<Engine>();
     let e: &dyn EngineApi = engine.api.as_ref();
     let p = &r.params;
@@ -287,7 +311,7 @@ fn gpu_preset(e: &dyn EngineApi, id: &str) -> Result<(), String> {
 }
 
 /// This PC's IPv4 addresses with their prefix lengths, to send wake packets from.
-fn wake_sources() -> Vec<(std::net::Ipv4Addr, u8)> {
+pub fn wake_sources() -> Vec<(std::net::Ipv4Addr, u8)> {
     crate::commands::collect_network()
         .iter()
         .filter(|a| a.connected && !a.virtual_adapter)

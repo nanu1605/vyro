@@ -10,11 +10,16 @@
     cancelRemotePairing,
     getPhoneActions,
     getRemoteStatus,
+    getScreenStatus,
     getWakeReadiness,
     onPhoneActions,
     onRemote,
+    onScreenShare,
     resetRelay,
     setPhoneControl,
+    setPhoneScreen,
+    setScreenLock,
+    stopScreenShare,
     setRelayEnabled,
     setRelayUrl,
     setRemoteEnabled,
@@ -24,7 +29,7 @@
     startRelayPairing,
     startRemotePairing,
   } from '../ipc';
-  import type { PhoneAction, RemoteStatus, WakeReadiness } from '../types';
+  import type { PhoneAction, RemoteStatus, ScreenStatus, WakeReadiness } from '../types';
 
   interface Props {
     active: boolean;
@@ -49,6 +54,7 @@
   let pairControl = $state(false);
   let actions = $state.raw<PhoneAction[]>([]);
   let readiness = $state.raw<WakeReadiness | null>(null);
+  let screen = $state.raw<ScreenStatus | null>(null);
 
   function loadActions(): void {
     getPhoneActions()
@@ -69,6 +75,33 @@
       stop?.();
     };
   });
+  // The screen (1.7): who sees it now, the lock-on-end choice, the slow view left today.
+  $effect(() => {
+    if (!active) return;
+    untrack(() =>
+      getScreenStatus()
+        .then((s) => (screen = s))
+        .catch(() => {}),
+    );
+    let stop: (() => void) | undefined;
+    let disposed = false;
+    void onScreenShare((s) => (screen = s)).then((fn) => {
+      if (disposed) fn();
+      else stop = fn;
+    });
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  });
+  async function screenCall(f: () => Promise<ScreenStatus>): Promise<void> {
+    try {
+      screen = await f();
+      error = null;
+    } catch (e) {
+      error = String(e).replace(/^Error: /, '');
+    }
+  }
   $effect(() => {
     if (!active || !status?.relay.wake) return;
     untrack(() =>
@@ -411,6 +444,15 @@
                   >
                     {d.control ? 'May change this PC' : 'Only looks'}
                   </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    aria-pressed={d.screen}
+                    aria-label="{d.name} may see and use the screen"
+                    onclick={() => void run(() => setPhoneScreen(d.id, !d.screen))}
+                  >
+                    {d.screen ? 'Sees the screen' : 'No screen'}
+                  </button>
                 {/if}
                 <button type="button" disabled={busy} aria-label="Sign out {d.name}" onclick={() => void run(() => signOutRemote(d.id))}>
                   Sign out
@@ -465,6 +507,36 @@
           {#if readiness.laptop}<li>Laptops mostly wake only from sleep, on a cable and plugged in.</li>{/if}
         </ul>
       {/if}
+    {/if}
+
+    {#if relayOn && screen}
+      <h3 id="remote-screen">Screen</h3>
+      {#if screen.share}
+        <p class="shared" role="status">
+          Shared now with <b>{screen.share.phone}</b>{screen.share.slow ? ' (slow view)' : ''}.
+          <button type="button" onclick={() => void screenCall(stopScreenShare)}>Stop sharing</button>
+        </p>
+      {/if}
+      <p class="note">
+        A phone marked “Sees the screen” can watch this PC's screen and use its mouse and keyboard, one phone at a time.
+        This PC shows a banner while it lasts, and a session nobody uses for 10 minutes ends. Windows' sign-in and
+        administrator prompts cannot be seen or used, and Ctrl+Alt+Del cannot be sent.
+      </p>
+      <label class="check">
+        <input
+          type="checkbox"
+          checked={screen.lockOnEnd}
+          onchange={(e) => {
+            const on = e.currentTarget.checked;
+            void screenCall(() => setScreenLock(on));
+          }}
+        />
+        Lock this PC when a phone's session ends
+      </label>
+      <p class="note">
+        Where a phone cannot reach this PC directly, it shows the screen a picture at a time through the relay:
+        {Math.round(screen.slowLeft / 60)} of 20 minutes left today.
+      </p>
     {/if}
 
     {#if actions.length}
@@ -591,6 +663,14 @@
   .note {
     color: var(--muted);
     font-size: 0.78rem;
+  }
+  .shared {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding-left: 0.5rem;
+    border-left: 3px solid var(--warn);
   }
   .note.warn {
     color: var(--text);

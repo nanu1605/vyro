@@ -89,6 +89,8 @@ export type { PhoneAction } from './bindings/PhoneAction';
 export type { PowerAction } from './bindings/PowerAction';
 export type { PowerRequest } from './bindings/PowerRequest';
 export type { PowerState } from './bindings/PowerState';
+export type { ScreenShare } from './bindings/ScreenShare';
+export type { ScreenStatus } from './bindings/ScreenStatus';
 export type { PendingPower } from './bindings/PendingPower';
 export type { WakeReadiness } from './bindings/WakeReadiness';
 export type { WakeTarget } from './bindings/WakeTarget';

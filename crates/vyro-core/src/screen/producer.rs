@@ -63,8 +63,10 @@ pub fn run(
         let tick = Instant::now();
         let picture = match cap.next(interval.as_millis() as u32) {
             Ok(p) => {
-                if secure {
+                if secure && p.is_some() {
+                    // The secure desktop went: a fresh encoder says so, with a keyframe.
                     secure = false;
+                    enc = None;
                 }
                 p
             }
@@ -90,11 +92,14 @@ pub fn run(
             Err(CaptureError::Other(e)) => return Err(e),
         };
         let keyframe = session.take_keyframe_request();
+        // A new encoder starts with a keyframe.
+        let mut made = false;
         let nv12 = match picture {
             Some(p) => {
                 let (w, h) = frames::fit(p.width, p.height, s.max_width, s.max_height);
                 if enc.as_ref().is_none_or(|(_, ew, eh)| (*ew, *eh) != (w, h)) {
                     enc = Some((Encoder::new(w, h, s.fps, s.bitrate)?, w, h));
+                    made = true;
                     status(Status::Sending {
                         width: w,
                         height: h,
@@ -114,7 +119,7 @@ pub fn run(
         };
         let at = started.elapsed();
         let time_100ns = i64::try_from(at.as_nanos() / 100).unwrap_or(i64::MAX);
-        let fresh = last.is_none() || keyframe;
+        let fresh = last.is_none() || keyframe || made;
         for data in encoder.encode(&nv12, time_100ns, fresh)? {
             session.send(Frame {
                 data,

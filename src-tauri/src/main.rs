@@ -15,6 +15,7 @@ mod overlay;
 mod pin;
 mod remote;
 mod remote_api;
+mod screen;
 mod share;
 mod smoke;
 mod snap;
@@ -73,6 +74,7 @@ fn main() {
             app.manage(widgets::WidgetStore::load(app.handle()));
             app.manage(device_watch::DeviceWatch::default());
             app.manage(remote_api::PhoneState::load(app.handle()));
+            app.manage(screen::ScreenState::load(app.handle()));
             tray::build(app.handle())?;
             let settings = app.state::<tray::SettingsStore>().get();
             if let Err(e) = tray::apply(app.handle(), settings) {
@@ -185,6 +187,10 @@ fn main() {
             remote::cancel_relay_pairing,
             remote::reset_relay,
             remote::set_phone_control,
+            remote::set_phone_screen,
+            screen::get_screen_status,
+            screen::stop_screen_share,
+            screen::set_screen_lock,
             remote::set_wake_from_phone,
             remote::get_wake_readiness,
             share::save_share_card,
@@ -202,6 +208,7 @@ fn main() {
             bench::stop_and_wait(handle, "Vyro quit.", std::time::Duration::from_secs(3));
             // Ends a GPU stability test, so its trial ends now rather than in half a minute.
             gpu_tune::stop_and_wait(handle, std::time::Duration::from_secs(3));
+            screen::end_all(handle, "Vyro closed");
             if let Some(remote) = handle.try_state::<remote::Remote>() {
                 remote.stop();
                 remote.stop_relay();
