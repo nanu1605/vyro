@@ -19,26 +19,18 @@ pub const SENSORS_EVENT: &str = "sensors";
 /// Emitted (no payload) when the display configuration changes.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub const DISPLAYS_EVENT: &str = "displays-changed";
-/// Emitted (no payload) when a device arrives, leaves, connects or disconnects (P22).
-#[cfg_attr(not(windows), allow(dead_code))]
-pub const DEVICES_EVENT: &str = "devices-changed";
 /// Emitted with a [`BackendStatus`] when the service connection changes.
 pub const BACKEND_EVENT: &str = "backend-status";
 
 /// Starts the device hot-plug watch, at launch with the background device reader (1.4.1);
-/// later calls do nothing. Each change tells the window and the reader.
+/// later calls do nothing. Each change wakes the reader, which sends the window the list.
 pub fn watch_devices(app: &AppHandle) {
     #[cfg(windows)]
     {
         static STARTED: std::sync::Once = std::sync::Once::new();
         STARTED.call_once(|| {
             let app = app.clone();
-            vyro_core::devices::watch(move || {
-                if let Err(e) = app.emit(DEVICES_EVENT, ()) {
-                    log::debug!("emit {DEVICES_EVENT}: {e}");
-                }
-                crate::device_watch::poke(&app);
-            });
+            vyro_core::devices::watch(move || crate::device_watch::poke(&app));
         });
     }
     #[cfg(not(windows))]
