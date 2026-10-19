@@ -102,8 +102,11 @@
       error = String(e).replace(/^Error: /, '');
     }
   }
+  // Read when "Wake from phone" is turned on or Settings shows, not on every status reload (it
+  // reads the adapters and Wi-Fi).
+  const wakeOn = $derived(!!status?.relay.wake);
   $effect(() => {
-    if (!active || !status?.relay.wake) return;
+    if (!active || !wakeOn) return;
     untrack(() =>
       getWakeReadiness()
         .then((r) => (readiness = r))
