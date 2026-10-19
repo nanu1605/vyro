@@ -168,7 +168,8 @@ deleted 90 days after the PC was last seen.
   connection.
 - **A day's allowance** (1.7): the relay passes a PC's frames to its phones up to 1 GB a day
   (UTC), far more than a day of readings or the screen's slow view, and drops the rest, telling
-  the phones once; it stops one room from using the shared plan up.
+  each phone once, the first time something for it is held back (a phone that connects later
+  hears it too); it stops one room from using the shared plan up.
 
 ### Running your own relay
 

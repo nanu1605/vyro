@@ -63,8 +63,10 @@ export class Room extends DurableObject {
   private buckets = new WeakMap<WebSocket, Bucket>();
   /** What the PC sent its phones today; read from storage once after waking. */
   private usage: Usage | null = null;
-  /** The day the phones were told the day's allowance is used up. */
-  private toldFull = -1;
+  /** The day the count was saved as it ran out. */
+  private savedFull = -1;
+  /** The day each phone socket was told the day's allowance is used up. */
+  private toldFull = new WeakMap<WebSocket, number>();
   private readonly limit: number;
   private readonly ttl: number;
 
@@ -77,18 +79,21 @@ export class Room extends DurableObject {
     this.ttl = Number(vars.ROOM_TTL_MS) || ROOM_TTL_MS;
   }
 
-  /** Whether `n` more bytes may go to phones today; tells them once when they may not. */
-  private async allowOut(n: number): Promise<boolean> {
+  /** Whether `n` more bytes may go to the phone sockets `to` today; tells each of them once a day
+   * when they may not, so a phone that connects later hears it too. */
+  private async allowOut(n: number, to: WebSocket[]): Promise<boolean> {
     this.usage ??= (await this.ctx.storage.get<Usage>('usage')) ?? { day: 0, bytes: 0 };
     const r = spend(this.usage, Date.now(), n, this.limit);
     this.usage = r.usage;
-    if (r.save) await this.ctx.storage.put('usage', r.usage);
-    if (!r.ok && this.toldFull !== r.usage.day) {
-      this.toldFull = r.usage.day;
-      await this.ctx.storage.put('usage', r.usage);
-      this.toPhones({ t: 'full' });
+    if (r.save || (!r.ok && this.savedFull !== r.usage.day)) await this.ctx.storage.put('usage', r.usage);
+    if (r.ok) return true;
+    this.savedFull = r.usage.day;
+    for (const ws of to) {
+      if (this.toldFull.get(ws) === r.usage.day) continue;
+      this.toldFull.set(ws, r.usage.day);
+      ws.send(JSON.stringify({ t: 'full' }));
     }
-    return r.ok;
+    return false;
   }
 
   /** Accepts only to close at once with `code`: a browser cannot read an HTTP refusal, but it can
@@ -185,7 +190,7 @@ export class Room extends DurableObject {
       if (!frameFits(bytes.length, PHONE_ID_BYTES)) return ws.close(1009, 'Frame size');
       const body = bytes.slice(PHONE_ID_BYTES);
       const to = this.open(`phone:${hex(bytes.subarray(0, PHONE_ID_BYTES))}`);
-      if (!to.length || !(await this.allowOut(body.length * to.length))) return;
+      if (!to.length || !(await this.allowOut(body.length * to.length, to))) return;
       for (const p of to) p.send(body);
       return;
     }

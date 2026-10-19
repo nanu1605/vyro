@@ -2775,6 +2775,18 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       It covers the slow view as well: its pictures (2 a second) and a drag's input (up to 3 a
       second) are more than the relay takes (5 a second), so a long drag would have been cut off
       after about a minute.
+- [x] **Testing the relay before its release** (2026-10-19). Its tests, a deploy dry run (the
+      Worker 14 KiB, the phone app 428 KiB), edge cases against it run locally, the 1.7 phone
+      app against a 1.4.0, 1.5, 1.6 and 1.7 PC (each shows what that PC offers; with 1.4.0, live
+      readings, view only), and a phone holding the 1.4 app opening it after the relay is
+      deployed (the new app the first time, the old files deleted, the new ones opening
+      offline). Found and fixed: on 1.5, long answers that grew past the relay's frame and a
+      room forgotten too soon (both merged here); here, a phone that connected after the day's
+      allowance ran out was never told, and its requests waited for an answer that could not
+      come: the relay now tells each phone once a day, the first time something for it is held
+      back. Left for the field check: run locally, the relay's closes reach a browser about 2 s
+      late (the local server's, not the relay's code); on the real relay, signing a phone out
+      on the PC should show on the phone at once.
 - [ ] Field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)): Android Chrome
       and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU; the secure screen,
       an administrator window, two monitors, the slow view, the idle end; 1.4.1 to 1.6 released

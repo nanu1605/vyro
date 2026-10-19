@@ -115,7 +115,8 @@ describe('phones', () => {
     const r = room();
     const p = await pc(r, key());
     const a = { id: '0000000a', auth: key() };
-    await register(p, [a]);
+    const b = { id: '0000000b', auth: key() };
+    await register(p, [a, b]);
     const sa = sock(`/phone/${r}/${a.id}`, a.auth);
     await sa.json();
     await p.json();
@@ -131,7 +132,16 @@ describe('phones', () => {
     // The phone still reaches the PC.
     sa.ws.send(sealed(9));
     expect(await p.next()).toEqual(new Uint8Array([0, 0, 0, 0x0a, ...sealed(9)]));
+    // A phone that connects later is told too, the first time something for it is held back.
+    const sb = sock(`/phone/${r}/${b.id}`, b.auth);
+    expect(await sb.json()).toEqual({ t: 'pc', online: true });
+    p.ws.send(new Uint8Array([0, 0, 0, 0x0b, ...sealed(4)]));
+    expect(await sb.json()).toEqual({ t: 'full' });
+    p.ws.send(new Uint8Array([0, 0, 0, 0x0b, ...sealed(4)]));
+    expect(await sb.quiet()).toBe(true);
+    expect(await sa.quiet()).toBe(true);
     sa.close();
+    sb.close();
     p.close();
   });
 
