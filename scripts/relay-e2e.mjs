@@ -170,6 +170,16 @@ async function seeText(page, text, where, ms = 20_000) {
   }
 }
 
+/** For a failure's message: what the phone says now, and what the PC printed last (without its
+ * pairing links, which carry a phone's secret). */
+async function scene(page, pc) {
+  const says = (await page.locator('[role=status], [role=alert]').allInnerTexts().catch(() => []))
+    .map((s) => s.trim().replace(/\s+/g, ' '))
+    .filter(Boolean);
+  const said = pc.out.seen.filter((l) => !l.startsWith('link:')).slice(-12);
+  return `the phone says: ${says.join(' | ') || 'nothing'}; the PC last printed: ${said.join(' | ')}`;
+}
+
 async function main() {
   if (!existsSync(`${root}/relay/public/index.html`)) throw new Error('relay/public is empty: run `pnpm build:phone` first');
   const wrangler = run(`${root}/relay/node_modules/.bin/wrangler`, ['dev', '--port', String(PORT), '--ip', '127.0.0.1', '--log-level', 'warn'], {
@@ -266,11 +276,14 @@ async function main() {
     if (surface) await a.page.touchscreen.tap(surface.x + surface.width / 2, surface.y + surface.height / 2);
     await clicked.then(
       () => ok('a tap reaches the PC as a click'),
-      (e) => problem('slow view', e.message),
+      async (e) => problem('slow view', `${e.message}; ${await scene(a.page, pc)}`),
     );
     await axeBoth(a.page, 'phone app, screen (slow view)');
-    await a.page.getByRole('button', { name: 'Stop', exact: true }).click();
-    await seeText(a.page, 'The session ended: you stopped it', '…and Stop ends it');
+    const stop = a.page.getByRole('button', { name: 'Stop', exact: true });
+    if (await stop.waitFor({ timeout: 10_000 }).then(() => true, () => false)) {
+      await stop.click();
+      await seeText(a.page, 'The session ended: you stopped it', '…and Stop ends it');
+    } else problem('slow view', `no Stop: the session is no longer shown; ${await scene(a.page, pc)}`);
     await tab('Live');
 
     // 2. The link works once.
