@@ -2827,8 +2827,9 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       CI's Windows runner, `scripts/screen-check.mjs` plays the app's own capture and Windows'
       encoder in the runner's Chrome: the first picture (a keyframe) 0.4 s after connecting,
       the screen as it was (not blank), a still screen once a second, a keyframe when asked.
-- [ ] **Still black on both phones**: cause found, HDR (below); fixed in the next test build, to
-      be checked on the owner's PC (field check, 2026-10-19, test build 7207f8f): Android and
+- [x] **Still black on both phones**: cause found, HDR (below); fixed in test build c87dd2d and
+      confirmed on the owner's PC, the screen shows on both phones (with the relay deployed from
+      60eda87, run 39265388166) (field check, 2026-10-19, test build 7207f8f): Android and
       iPhone both showed "Receiving 1920×1080, 30 pictures a second" over a black picture, from
       a 2560×1440 main monitor (a second one at 3840×2160). The phones decode, so the video
       arrives; what it holds, or how the page draws it, is the question. Ruled out so far:
