@@ -4,7 +4,9 @@
 //!
 //! Once the main page has loaded, `smoke.js` calls the commands the pages call (hardware,
 //! system, sensors, devices, widgets) through the real IPC, asks to disconnect a device that does
-//! not exist (it must be refused at once), then saves a widget as the Widgets page does. [`smoke_report`] then checks that the widget's window opened, shows without having
+//! not exist (it must be refused at once), then saves a widget as the Widgets page does and reads
+//! the remote status, which must not announce a change (Settings → Remote reads it again on each
+//! one: after 1.7's field check). [`smoke_report`] then checks that the widget's window opened, shows without having
 //! taken focus and loaded its page. On Windows it also checks that the widget stays over the
 //! desktop through Show desktop (`pin.rs`; skipped where the runner has no desktop to show),
 //! snaps when dragged with the mouse near the screen's corner and follows the pointer out again
@@ -28,8 +30,9 @@ const ENV: &str = "VYRO_SMOKE";
 /// The widget `smoke.js` saves.
 pub const WIDGET: &str = "smoke1";
 /// The commands `smoke.js` must report, in order. `set_device_connected` passes when it refuses
-/// an unknown device at once (through the service, on the runner).
-const STEPS: [&str; 7] = [
+/// an unknown device at once (through the service, on the runner); `get_remote_status` when it
+/// answers without announcing a change (Settings → Remote reads again on each one).
+const STEPS: [&str; 8] = [
     "get_hardware_id",
     "get_system_info",
     "get_sensor_tree",
@@ -37,6 +40,7 @@ const STEPS: [&str; 7] = [
     "set_device_connected",
     "get_widgets",
     "set_widgets",
+    "get_remote_status",
 ];
 /// From start to the result, whatever happens.
 const DEADLINE: Duration = Duration::from_secs(120);
