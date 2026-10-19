@@ -2,9 +2,9 @@
 //! user; the secure desktop (sign-in, lock screen, administrator prompts) cannot be captured and
 //! is reported as such. The mouse pointer is not part of the picture: the phone draws its own.
 //!
-//! On some PCs Desktop Duplication hands over pictures of nothing but zeros. A blank picture is
-//! then taken again through GDI, as Chrome falls back to it; when GDI sees the screen, the rest
-//! of the session is taken through GDI.
+//! On some PCs Desktop Duplication hands over pictures of nothing but zeros. A picture that stays
+//! blank is then taken again through GDI, as Chrome falls back to it; when GDI sees the screen,
+//! the rest of the session is taken through GDI.
 
 use std::time::{Duration, Instant};
 
@@ -148,9 +148,11 @@ pub struct Capture {
     staging: Option<ID3D11Texture2D>,
     /// A picture was taken since the duplication opened (until then every frame is one).
     seen: bool,
-    /// GDI instead, once Desktop Duplication gave a blank picture that GDI could fill.
+    /// GDI instead, once Desktop Duplication's picture stayed blank and GDI could fill it.
     gdi: Option<Gdi>,
-    /// When a blank picture was last taken again through GDI.
+    /// Since when Desktop Duplication's latest picture is blank.
+    blank_since: Option<Instant>,
+    /// When the monitor was last taken through GDI to see whether it really is blank.
     tried: Option<Instant>,
     pub monitor: Monitor,
 }
@@ -158,9 +160,11 @@ pub struct Capture {
 // SAFETY: the device, duplication and GDI objects are used from one thread at a time.
 unsafe impl Send for Capture {}
 
-/// A blank picture is taken again through GDI at most this often (a screen that really is black
-/// is not grabbed twice for every picture).
-const RETRY: Duration = Duration::from_secs(2);
+/// Desktop Duplication's picture blank this long (one blank picture as it starts is not enough):
+/// the monitor is taken through GDI to see whether it really is.
+const BLANK_FOR: Duration = Duration::from_secs(1);
+/// And again at most this often while GDI sees it blank too (a screen that really is black).
+const RETRY: Duration = Duration::from_secs(5);
 
 /// The monitor through GDI: a copy of its part of the screen into a bitmap of our own.
 struct Gdi {
@@ -312,6 +316,7 @@ impl Capture {
             staging: None,
             seen: false,
             gdi: None,
+            blank_since: None,
             tried: None,
             monitor,
         })
@@ -324,6 +329,7 @@ impl Capture {
             .map_err(|e| other("duplication", &e))?;
         describe(&self.monitor, &self.dup);
         self.staging = None;
+        self.blank_since = None;
         self.seen = false;
         Ok(())
     }
@@ -343,18 +349,24 @@ impl Capture {
             return g.next(timeout_ms);
         }
         let picture = self.duplicated(timeout_ms)?;
-        if let Some(p) = &picture {
-            if frames::blank(&p.bgra) && self.tried.is_none_or(|t| t.elapsed() >= RETRY) {
-                self.tried = Some(Instant::now());
-                if let Some((g, q)) = self.through_gdi() {
-                    log::warn!(
-                        "screen: Desktop Duplication gives {} a blank picture; GDI sees it, so \
-                         the session goes on through GDI",
-                        self.monitor.name
-                    );
-                    self.gdi = Some(g);
-                    return Ok(Some(q));
-                }
+        match &picture {
+            Some(p) if frames::blank(&p.bgra) => {
+                self.blank_since.get_or_insert_with(Instant::now);
+            }
+            Some(_) => self.blank_since = None,
+            None => {}
+        }
+        let blank = self.blank_since.is_some_and(|t| t.elapsed() >= BLANK_FOR);
+        if blank && self.tried.is_none_or(|t| t.elapsed() >= RETRY) {
+            self.tried = Some(Instant::now());
+            if let Some((g, q)) = self.through_gdi() {
+                log::warn!(
+                    "screen: Desktop Duplication gives {} a blank picture; GDI sees it, so the \
+                     session goes on through GDI",
+                    self.monitor.name
+                );
+                self.gdi = Some(g);
+                return Ok(Some(q));
             }
         }
         Ok(picture)

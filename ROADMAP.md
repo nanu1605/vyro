@@ -2856,8 +2856,8 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       And one likely cause is handled already: Desktop Duplication hands over pictures of
       nothing but zeros on some PCs (reported with NVIDIA on Windows 11), which the conversion
       turns into exactly this black (not the green of broken video). A picture that is all
-      zeros on a grid across it is now taken again through GDI, as Chrome falls back to it; if
-      GDI sees the screen, the rest of the session goes through GDI and the log and the phone's
+      zeros on a grid across it, and stays so for a second, is now taken again through GDI, as
+      Chrome falls back to it; if GDI sees the screen, the rest of the session goes through GDI and the log and the phone's
       details say "through GDI". CI's runner captures its desktop through GDI too.
 - [ ] Field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)): Android Chrome
       and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU; the secure screen,
