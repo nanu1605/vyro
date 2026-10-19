@@ -76,6 +76,11 @@ const PING_MS = 25_000;
 const DEAD_MS = 60_000;
 const WAIT_MIN = 1000;
 const WAIT_MAX = 30_000;
+/** The relay closes a phone's socket that sends more than 20 messages at once, or more than 5 a
+ * second after that (`PHONE_RATE` in `relay/src/rules.ts`). Messages wait their turn a little
+ * under that, so a phone that asks a lot at once (tabs opened in quick succession, a long drag
+ * in the slow view) is slowed down, not cut off. */
+const PACE = { perSecond: 4, burst: 16 };
 
 export class PcLink {
   private ws: WebSocket | null = null;
@@ -100,6 +105,9 @@ export class PcLink {
   private count = 0;
   private nextId = 1;
   private outgoing: Promise<void> = Promise.resolve();
+  /** Messages this socket may send now (`PACE`), as of `paceAt`. */
+  private allowance = PACE.burst;
+  private paceAt = 0;
   private waiting = new Map<number, { ok: (v: unknown) => void; fail: (e: Error) => void; parts: string[] }>();
 
   constructor(
@@ -218,6 +226,9 @@ export class PcLink {
     }
     ws.binaryType = 'arraybuffer';
     this.ws = ws;
+    // The relay counts each socket afresh.
+    this.allowance = PACE.burst;
+    this.paceAt = Date.now();
     ws.onopen = () => {
       this.heard = Date.now();
       this.startPing(ws);
@@ -393,10 +404,26 @@ export class PcLink {
   private async sendNow(msg: { t: string } & Record<string, unknown>): Promise<void> {
     const ws = this.ws;
     if (!ws || ws.readyState !== 1 || !this.keys) return;
+    if (!(await this.turn(ws))) return;
     // After hello, protocol 2 stamps every message with the session and the next count.
     const stamped = msg.t !== 'hello' && this.session ? { ...msg, s: this.session, n: ++this.count } : msg;
     const frame = await seal(this.keys, this.aadOut, new TextEncoder().encode(JSON.stringify(stamped)));
     if (ws === this.ws && ws.readyState === 1) ws.send(frame);
+  }
+
+  /** Waits until `ws` may send one more message (`PACE`) and counts it; false if it closed. */
+  private async turn(ws: WebSocket): Promise<boolean> {
+    for (;;) {
+      if (ws !== this.ws || ws.readyState !== 1) return false;
+      const now = Date.now();
+      this.allowance = Math.min(PACE.burst, this.allowance + ((now - this.paceAt) / 1000) * PACE.perSecond);
+      this.paceAt = now;
+      if (this.allowance >= 1) {
+        this.allowance -= 1;
+        return true;
+      }
+      await new Promise((r) => setTimeout(r, ((1 - this.allowance) / PACE.perSecond) * 1000));
+    }
   }
 }
 

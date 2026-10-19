@@ -50,6 +50,8 @@ through the relay where it cannot.
   another network, until "No direct path" shows.
 - The picture refreshes about twice a second when something changes; taps and typing still work,
   a little slower. Settings → Remote → Screen shows the minutes left today going down.
+- Drag around the PC's screen for a minute or more: the session goes on, and the top of the phone
+  keeps saying **Live**.
 
 ## 5. What it cannot do
 

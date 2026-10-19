@@ -2616,6 +2616,15 @@ show on the phone).
       `vyro-windows-a0f48c6`. Locally: fmt, clippy (Linux and windows-gnu), 681 core tests,
       209 frontend tests, 17 relay tests, the builds, the budgets, the phone app's end-to-end
       test (44 checks) and the accessibility sweep (666 checks).
+- [x] **The phone waits its turn instead of being cut off** (found by 1.7's end-to-end test on
+      CI, 2026-10-19). The relay closes the connection of a phone that sends more than 20
+      messages at once, or more than 5 a second after that. Opening More asks the PC 8 things at
+      once, and again when the owner changes what the phone may do, so tabs opened in quick
+      succession could pass that: the phone lost its connection, what it had asked failed, and it
+      reconnected a second later. The phone now sends a little under the relay's limit (16 at
+      once, then 4 a second); later messages wait. A test replays its sends through the relay's
+      own rule, and the end-to-end test switches tabs quickly and fails if the relay ever cuts
+      the phone off.
 - [ ] Field check 1.5 ([`docs/field-check-1.5.md`](docs/field-check-1.5.md)); 1.4.1 released
       first; the owner's go. Then the relay is deployed (`relay.yml`), which serves the new
       phone app.
@@ -2740,6 +2749,15 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       747 core tests, 48 app tests, 228 frontend tests, 20 relay tests, the builds, the budgets
       (the Screen tab is its own 6 kB chunk; the phone app's start stays at 33.8 kB), the end to
       end test (56 checks) and the accessibility sweep (703 checks).
+- [x] **The slow view stays on** (2026-10-19). After 1.4.1's fix was merged here, the end to end
+      test failed twice on CI: just as the slow view started, the phone lost its connection and
+      the session ended. The test now says, when that step fails, what the phone showed, how its
+      connection closed and what it had sent before, and that found it here: the relay had cut
+      the phone off for sending too fast (close 1008, "Too many messages"), as the tabs opened
+      before it had asked for a lot at once. 1.5's fix, merged here, has the phone wait its turn.
+      It covers the slow view as well: its pictures (2 a second) and a drag's input (up to 3 a
+      second) are more than the relay takes (5 a second), so a long drag would have been cut off
+      after about a minute.
 - [ ] Field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)): Android Chrome
       and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU; the secure screen,
       an administrator window, two monitors, the slow view, the idle end; 1.4.1 to 1.6 released

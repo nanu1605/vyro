@@ -4,12 +4,13 @@
 //   pnpm build:phone && pnpm --dir relay install && node scripts/relay-e2e.mjs
 //
 // It pairs a phone from the PC's link and reads live readings; opens the other tabs (1.5) and
-// finds a phone that may only look offered no changes; lets it control the PC and has it lock
-// the PC and end a process (the example PC only prints what it was asked); finds the same link
-// refused the second time; checks that nothing on the wire between the phone and the relay is
-// readable; signs the phone out from the PC; shows a PC that went away as asleep; and runs axe
-// on each screen at phone and desktop width. Exits 1 on any failure. With SHOTS=<folder>, it
-// also saves a screenshot of each screen there.
+// finds a phone that may only look offered no changes; switches tabs quickly, which asks for more
+// at once than the relay takes, without the relay cutting the phone off; lets it control the PC
+// and has it lock the PC and end a process (the example PC only prints what it was asked); finds
+// the same link refused the second time; checks that nothing on the wire between the phone and
+// the relay is readable; signs the phone out from the PC; shows a PC that went away as asleep;
+// and runs axe on each screen at phone and desktop width. Exits 1 on any failure. With
+// SHOTS=<folder>, it also saves a screenshot of each screen there.
 
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -77,9 +78,14 @@ function lines(child, label) {
       }
     }
   });
-  child.stderr.on('data', (d) => process.env.VERBOSE && process.stderr.write(`  [${label}] ${d}`));
+  const errors = [];
+  child.stderr.on('data', (d) => {
+    errors.push(...String(d).split('\n').map((l) => l.trim()).filter(Boolean));
+    if (process.env.VERBOSE) process.stderr.write(`  [${label}] ${d}`);
+  });
   return {
     seen,
+    errors,
     wait(re, ms = 30_000) {
       const old = seen.map((l) => re.exec(l)).find(Boolean);
       if (old) return Promise.resolve(old);
@@ -150,11 +156,22 @@ async function axeBoth(page, where) {
 /** A phone: its own browser storage, with every WebSocket frame kept. */
 async function phone(browser, name) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  // How each of the page's sockets closed.
+  await ctx.addInitScript(() => {
+    const Native = window.WebSocket;
+    window.__closes = [];
+    window.WebSocket = class extends Native {
+      constructor(...args) {
+        super(...args);
+        this.addEventListener('close', (e) => window.__closes.push({ at: Date.now(), code: e.code, reason: e.reason }));
+      }
+    };
+  });
   const page = await ctx.newPage();
   const frames = [];
   page.on('websocket', (ws) => {
-    ws.on('framesent', (f) => frames.push({ dir: 'sent', payload: f.payload }));
-    ws.on('framereceived', (f) => frames.push({ dir: 'received', payload: f.payload }));
+    ws.on('framesent', (f) => frames.push({ dir: 'sent', payload: f.payload, at: Date.now() }));
+    ws.on('framereceived', (f) => frames.push({ dir: 'received', payload: f.payload, at: Date.now() }));
   });
   page.on('pageerror', (e) => problem(name, `page error: ${e.message}`));
   page.on('console', (m) => m.type() === 'error' && !/WebSocket|ERR_|status of 4/.test(m.text()) && problem(name, `console: ${m.text()}`));
@@ -170,14 +187,27 @@ async function seeText(page, text, where, ms = 20_000) {
   }
 }
 
-/** For a failure's message: what the phone says now, and what the PC printed last (without its
- * pairing links, which carry a phone's secret). */
-async function scene(page, pc) {
-  const says = (await page.locator('[role=status], [role=alert]').allInnerTexts().catch(() => []))
-    .map((s) => s.trim().replace(/\s+/g, ' '))
-    .filter(Boolean);
+/** For a failure's message: what the phone shows and says now, how its sockets closed (with what
+ * it sent in the 5 s before), what the PC printed last (without its pairing links, which carry a
+ * phone's secret), and what the relay complained of. */
+async function scene(phone, pc, relay) {
+  const { page, frames } = phone;
+  const flat = (s) => s.trim().replace(/\s+/g, ' ');
+  const says = (await page.locator('[role=status], [role=alert]').allInnerTexts().catch(() => [])).map(flat).filter(Boolean);
+  const shows = flat((await page.locator('main').innerText().catch(() => '')).slice(0, 300));
+  const closes = (await page.evaluate(() => window.__closes ?? []).catch(() => [])).map((c) => {
+    const sent = frames.filter((f) => f.dir === 'sent' && f.at <= c.at && f.at > c.at - 5000).length;
+    return `${c.code}${c.reason ? ` "${c.reason}"` : ''} after sending ${sent} in 5 s`;
+  });
   const said = pc.out.seen.filter((l) => !l.startsWith('link:')).slice(-12);
-  return `the phone says: ${says.join(' | ') || 'nothing'}; the PC last printed: ${said.join(' | ')}`;
+  const relayed = relay.errors.slice(-6).map(flat);
+  return [
+    `the phone says: ${says.join(' | ') || 'nothing'}`,
+    `shows: ${shows || 'nothing'}`,
+    `its sockets closed: ${closes.join(', ') || 'none'}`,
+    `the PC last printed: ${said.join(' | ')}`,
+    `the relay: ${relayed.join(' | ') || 'nothing'}`,
+  ].join('; ');
 }
 
 async function main() {
@@ -186,7 +216,7 @@ async function main() {
     cwd: `${root}/relay`,
     env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: 'true' },
   });
-  lines(wrangler, 'relay');
+  const relay = lines(wrangler, 'relay');
   await relayUp();
   ok('the relay serves the phone app');
 
@@ -229,6 +259,11 @@ async function main() {
     if (await a.page.getByRole('heading', { name: 'Power' }).count()) problem('view only', 'Power is offered');
     else ok('…without Power for a phone that may only look');
     await axeBoth(a.page, 'phone app, more (view only)');
+    // Tabs opened in quick succession ask for more at once than the relay takes (checked below).
+    for (let i = 0; i < 3; i++) {
+      await tab('Health');
+      await tab('More');
+    }
 
     // The owner lets it control the PC: the phone hears at once.
     pc.say('control');
@@ -276,15 +311,18 @@ async function main() {
     if (surface) await a.page.touchscreen.tap(surface.x + surface.width / 2, surface.y + surface.height / 2);
     await clicked.then(
       () => ok('a tap reaches the PC as a click'),
-      async (e) => problem('slow view', `${e.message}; ${await scene(a.page, pc)}`),
+      async (e) => problem('slow view', `${e.message}; ${await scene(a, pc, relay)}`),
     );
     await axeBoth(a.page, 'phone app, screen (slow view)');
     const stop = a.page.getByRole('button', { name: 'Stop', exact: true });
     if (await stop.waitFor({ timeout: 10_000 }).then(() => true, () => false)) {
       await stop.click();
       await seeText(a.page, 'The session ended: you stopped it', '…and Stop ends it');
-    } else problem('slow view', `no Stop: the session is no longer shown; ${await scene(a.page, pc)}`);
+    } else problem('slow view', `no Stop: the session is no longer shown; ${await scene(a, pc, relay)}`);
     await tab('Live');
+    const cut = (await a.page.evaluate(() => window.__closes)).filter((c) => c.code === 1008);
+    if (cut.length) problem('pace', `the relay cut phone A off: ${cut.map((c) => c.reason).join(', ')}`);
+    else ok('the relay never cut the phone off for asking too fast');
 
     // 2. The link works once.
     const b = await phone(browser, 'phone B');
