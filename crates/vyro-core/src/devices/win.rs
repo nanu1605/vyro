@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{mpsc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -23,9 +23,10 @@ use windows::Win32::Devices::DeviceAndDriverInstallation::{
 };
 use windows::Win32::Devices::DeviceQuery::{
     DevCreateObjectQuery, DevFreeObjects, DevGetObjects, DevObjectTypeAEP, DevObjectTypeDevice,
-    DevObjectTypeDeviceContainer, DevQueryFlagLocalize, DevQueryResultStateChange,
-    DevQueryStateEnumCompleted, DEVPROP_FILTER_EXPRESSION, DEVPROP_OPERATOR_EQUALS, DEV_OBJECT,
-    DEV_OBJECT_TYPE, DEV_QUERY_RESULT_ACTION_DATA, HDEVQUERY,
+    DevObjectTypeDeviceContainer, DevQueryFlagLocalize, DevQueryResultAdd,
+    DevQueryResultStateChange, DevQueryResultUpdate, DevQueryStateEnumCompleted,
+    DEVPROP_FILTER_EXPRESSION, DEVPROP_OPERATOR_EQUALS, DEV_OBJECT, DEV_OBJECT_TYPE,
+    DEV_QUERY_RESULT_ACTION_DATA, HDEVQUERY,
 };
 use windows::Win32::Devices::FunctionDiscovery::{
     PKEY_Device_ContainerId, PKEY_Device_FriendlyName,
@@ -56,7 +57,8 @@ use windows::Win32::System::Com::StructuredStorage::{
     PropVariantClear, PROPVARIANT, PROPVARIANT_0_0,
 };
 use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, CoTaskMemFree, CLSCTX_ALL, COINIT_MULTITHREADED, STGM_READ,
+    CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_ALL,
+    COINIT_MULTITHREADED, STGM_READ,
 };
 use windows::Win32::System::Variant::{VT_CLSID, VT_LPWSTR, VT_UI4};
 use windows::Win32::UI::Input::XboxController::{
@@ -65,6 +67,7 @@ use windows::Win32::UI::Input::XboxController::{
 use windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore;
 
 use super::bounded::Bounded;
+use super::watch::{Connections, Seen};
 use super::{
     bt_state, build, gatt_wanted, key, norm_guid, plain_text, Devices, LinkState, Raw, RawAep,
     RawContainer, RawEndpoint, RawHid, RawNode, RawPad,
@@ -110,26 +113,39 @@ const GATT_FRESH: Duration = Duration::from_secs(55);
 /// Battery Service reads stop after this much time in one collection.
 const GATT_BUDGET: Duration = Duration::from_secs(3);
 
-/// The current list. Blocking (well under 100 ms; up to 5 s more for each battery read that
-/// has to reach a device); call it off the UI thread.
+/// The current list. Blocking (well under 100 ms; at most [`LIST_WAIT`] and [`BATTERY_WAIT`]
+/// when Windows or a device does not answer); call it off the UI thread.
 pub fn collect() -> Devices {
     let start = Instant::now();
-    let containers = containers();
-    let (nodes, instances) = nodes();
+    // Each part asks Windows on a thread of its own, all at once. One that does not answer in
+    // time leaves that part as last read (1.4.1 field check: with a Bluetooth device
+    // connected, the Devices tab stayed on "Reading devices…").
+    let reads = (
+        CONTAINERS.start(containers),
+        NODES.start(nodes),
+        AEPS.start(aeps),
+        ENDPOINTS.start(endpoints),
+        PADS.start(pads),
+    );
+    let until = start + LIST_WAIT;
+    let (nodes, instances) = NODES.wait(reads.1, until);
     let mut raw = Raw {
-        containers,
+        containers: CONTAINERS.wait(reads.0, until),
         nodes,
-        aeps: aeps(),
+        aeps: AEPS.wait(reads.2, until),
         // Before the Battery Service reads: an audio device's endpoints tell whether it is
         // connected.
-        endpoints: endpoints(&instances),
+        endpoints: endpoint_containers(ENDPOINTS.wait(reads.3, until), &instances),
+        pads: PADS.wait(reads.4, until),
         ..Raw::default()
     };
     let wanted = gatt_wanted(&raw);
     let known = instances.clone();
-    raw.gatt = GATT_READ.run(BATTERY_WAIT, move || gatt_batteries(&wanted, &known));
-    raw.hid = HID_READ.run(BATTERY_WAIT, move || super::hid_win::batteries(&instances));
-    raw.pads = pads();
+    let gatt = GATT.start(move || gatt_batteries(&wanted, &known));
+    let hid = HID.start(move || super::hid_win::batteries(&instances));
+    let until = Instant::now() + BATTERY_WAIT;
+    raw.gatt = GATT.wait(gatt, until);
+    raw.hid = HID.wait(hid, until);
     let devices = build(&raw);
     if start.elapsed() > SLOW_READ {
         log::info!(
@@ -141,11 +157,18 @@ pub fn collect() -> Devices {
     devices
 }
 
-/// Battery reads ask the devices themselves, and one that does not answer must not hold up
-/// the list (1.4.1 field check: the Devices tab stayed on "Reading devices…").
-static GATT_READ: Bounded<Vec<(String, u8)>> = Bounded::new("the Bluetooth battery read");
-static HID_READ: Bounded<Vec<RawHid>> = Bounded::new("the wireless battery read");
-/// How long a list waits for each battery read: longer than their own budgets (3 s).
+/// The parts of the list, each read on its own (see [`collect`]).
+static CONTAINERS: Bounded<Vec<RawContainer>> = Bounded::new("the device containers");
+static NODES: Bounded<(Vec<RawNode>, HashMap<String, String>)> = Bounded::new("the device nodes");
+static AEPS: Bounded<Vec<RawAep>> = Bounded::new("the paired Bluetooth devices");
+static ENDPOINTS: Bounded<Vec<RawEndpoint>> = Bounded::new("the sound devices");
+static PADS: Bounded<Vec<RawPad>> = Bounded::new("the XInput controllers");
+/// Battery reads ask the devices themselves.
+static GATT: Bounded<Vec<(String, u8)>> = Bounded::new("the Bluetooth battery read");
+static HID: Bounded<Vec<RawHid>> = Bounded::new("the wireless battery read");
+/// How long a list waits for Windows' answers (each well under 100 ms when it answers).
+const LIST_WAIT: Duration = Duration::from_secs(4);
+/// How long a list waits for the battery reads: longer than their own budgets (3 s).
 const BATTERY_WAIT: Duration = Duration::from_secs(5);
 /// A list that takes longer is logged.
 const SLOW_READ: Duration = Duration::from_secs(2);
@@ -153,16 +176,23 @@ const SLOW_READ: Duration = Duration::from_secs(2);
 /// One paired Bluetooth device's connection, read without battery reads: what Connect and
 /// Disconnect check after asking (1.4.1). `None`: no such device.
 pub fn state_of(id: &str) -> Option<LinkState> {
-    let containers = containers();
+    let reads = (
+        CONTAINERS.start(containers),
+        AEPS.start(aeps),
+        ENDPOINTS.start(endpoints),
+    );
+    let until = Instant::now() + LIST_WAIT;
+    let containers = CONTAINERS.wait(reads.0, until);
+    let aeps = AEPS.wait(reads.1, until);
+    let endpoints = ENDPOINTS.wait(reads.2, until);
     let c = containers.iter().find(|c| key(&norm_guid(&c.id)) == id)?;
     let target = norm_guid(&c.id);
     let ours =
         |container: Option<&str>| container.map(norm_guid).as_deref() == Some(target.as_str());
-    let aep = aeps()
+    let aep = aeps
         .into_iter()
         .find(|a| ours(a.container.as_deref()))
         .and_then(|a| a.connected);
-    let endpoints = endpoints(&HashMap::new());
     let audio: Vec<&RawEndpoint> = endpoints
         .iter()
         .filter(|e| ours(e.container.as_deref()))
@@ -789,9 +819,30 @@ fn prop<T>(
     out
 }
 
-fn endpoints(instances: &HashMap<String, String>) -> Vec<RawEndpoint> {
-    // SAFETY: COM for this thread (the multithreaded apartment, as the other COM readers).
-    let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+/// COM for this thread (the multithreaded apartment, as the other COM readers), until dropped.
+/// Declared before any COM object, so it goes after them.
+struct Com(bool);
+
+impl Com {
+    fn new() -> Self {
+        // SAFETY: plain COM start for this thread; balanced in Drop when it worked.
+        Self(unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }.is_ok())
+    }
+}
+
+impl Drop for Com {
+    fn drop(&mut self) {
+        if self.0 {
+            // SAFETY: balances the CoInitializeEx above, after this thread's COM objects.
+            unsafe { CoUninitialize() };
+        }
+    }
+}
+
+/// Sound devices; their containers as their property stores give them (see
+/// [`endpoint_containers`]).
+fn endpoints() -> Vec<RawEndpoint> {
+    let _com = Com::new();
     // SAFETY: standard Core Audio entry point.
     let Ok(en) = (unsafe {
         CoCreateInstance::<_, IMMDeviceEnumerator>(&MMDeviceEnumerator, None, CLSCTX_ALL)
@@ -845,22 +896,15 @@ fn endpoints(instances: &HashMap<String, String>) -> Vec<RawEndpoint> {
                 (v.vt == VT_UI4).then_some(unsafe { v.Anonymous.ulVal })
             })
         });
-        let container = store
-            .as_ref()
-            .and_then(|s| {
-                prop(s, &PKEY_Device_ContainerId, |v| {
-                    // SAFETY: `puuid` is the member for VT_CLSID; checked for null.
-                    let g = unsafe { v.Anonymous.puuid.as_ref() };
-                    (v.vt == VT_CLSID)
-                        .then(|| g.map(|g| format!("{g:?}")))
-                        .flatten()
-                })
+        let container = store.as_ref().and_then(|s| {
+            prop(s, &PKEY_Device_ContainerId, |v| {
+                // SAFETY: `puuid` is the member for VT_CLSID; checked for null.
+                let g = unsafe { v.Anonymous.puuid.as_ref() };
+                (v.vt == VT_CLSID)
+                    .then(|| g.map(|g| format!("{g:?}")))
+                    .flatten()
             })
-            .or_else(|| {
-                instances
-                    .get(&format!("SWD\\MMDEVAPI\\{id}").to_ascii_uppercase())
-                    .cloned()
-            });
+        });
         out.push(RawEndpoint {
             default: defaults.iter().any(|d| d.as_deref() == Some(id.as_str())),
             name: name.unwrap_or_else(|| "Audio device".into()),
@@ -874,16 +918,53 @@ fn endpoints(instances: &HashMap<String, String>) -> Vec<RawEndpoint> {
     out
 }
 
+/// An endpoint whose store gives no container takes its software device node's.
+fn endpoint_containers(
+    mut list: Vec<RawEndpoint>,
+    instances: &HashMap<String, String>,
+) -> Vec<RawEndpoint> {
+    for e in list.iter_mut().filter(|e| e.container.is_none()) {
+        e.container = instances
+            .get(&format!("SWD\\MMDEVAPI\\{}", e.id).to_ascii_uppercase())
+            .cloned();
+    }
+    list
+}
+
 // ---------------------------------------------------------------------------------------------
 // Hot add / remove
 // ---------------------------------------------------------------------------------------------
 
 static POKE: OnceLock<mpsc::SyncSender<()>> = OnceLock::new();
-/// Each watch query has finished its first listing; its later results are changes.
-static CONTAINERS_LISTED: AtomicBool = AtomicBool::new(false);
-static AEPS_LISTED: [AtomicBool; 2] = [const { AtomicBool::new(false) }; 2];
 
-fn poke() {
+/// One watch query: the connection property it watches, and what it has seen of it.
+struct Watched {
+    key: DEVPROPKEY,
+    seen: Mutex<Connections>,
+}
+
+impl Watched {
+    const fn new(key: DEVPROPKEY) -> Self {
+        Self {
+            key,
+            seen: Mutex::new(Connections::new()),
+        }
+    }
+}
+
+static CONTAINERS_WATCHED: Watched = Watched::new(DEVPKEY_DeviceContainer_IsConnected);
+/// What Settings shows as Connected (1.4.1), one query per Bluetooth protocol.
+static AEPS_WATCHED: [Watched; 2] = [Watched::new(AEP_CONNECTED), Watched::new(AEP_CONNECTED)];
+
+/// Changes so far by where they came from, for the log when they keep coming.
+static FROM_INTERFACES: AtomicU32 = AtomicU32::new(0);
+static FROM_CONNECTIONS: AtomicU32 = AtomicU32::new(0);
+/// Changes this close together, this many times in a row, are logged once.
+const BUSY_GAP: Duration = Duration::from_secs(10);
+const BUSY_LOGGED: u32 = 20;
+
+fn poke(from: &AtomicU32) {
+    from.fetch_add(1, Ordering::Relaxed);
     if let Some(tx) = POKE.get() {
         // Full means a change is already waiting: nothing to add.
         let _ = tx.try_send(());
@@ -897,7 +978,7 @@ unsafe extern "system" fn on_interface(
     _: *const CM_NOTIFY_EVENT_DATA,
     _: u32,
 ) -> u32 {
-    poke();
+    poke(&FROM_INTERFACES);
     0
 }
 
@@ -907,31 +988,50 @@ unsafe extern "system" fn on_result(
     data: *const DEV_QUERY_RESULT_ACTION_DATA,
 ) {
     // SAFETY: Windows passes a valid action for the duration of the call; the context is one
-    // of the static flags above.
-    let (Some(d), Some(listed)) = (unsafe { data.as_ref() }, unsafe {
-        context.cast::<AtomicBool>().as_ref()
+    // of the static watches above.
+    let (Some(d), Some(w)) = (unsafe { data.as_ref() }, unsafe {
+        context.cast::<Watched>().as_ref()
     }) else {
         return;
     };
-    if d.Action == DevQueryResultStateChange {
+    let (id, seen) = if d.Action == DevQueryResultStateChange {
         // SAFETY: `State` is the member for a state change.
-        if unsafe { d.Data.State } == DevQueryStateEnumCompleted {
-            listed.store(true, Ordering::SeqCst);
+        if unsafe { d.Data.State } != DevQueryStateEnumCompleted {
+            return;
         }
-    } else if listed.load(Ordering::SeqCst) {
-        poke();
+        (String::new(), Seen::Listed)
+    } else {
+        // SAFETY: `DeviceObject` is the member for an object added, updated or removed.
+        let o = unsafe { &d.Data.DeviceObject };
+        let props: &[DEVPROPERTY] = if o.pProperties.is_null() {
+            &[]
+        } else {
+            // SAFETY: `cPropertyCount` properties at `pProperties`, alive for the call.
+            unsafe { std::slice::from_raw_parts(o.pProperties, o.cPropertyCount as usize) }
+        };
+        let connected = Props(props).bool(&w.key);
+        let seen = if d.Action == DevQueryResultAdd {
+            Seen::Added(connected)
+        } else if d.Action == DevQueryResultUpdate {
+            Seen::Updated(connected)
+        } else {
+            Seen::Removed
+        };
+        (wide_str(o.pszObjectId), seen)
+    };
+    if crate::lock(&w.seen).note(&id, seen) {
+        poke(&FROM_CONNECTIONS);
     }
 }
 
-/// A query that stays open and reports changes to `keys`.
+/// A query that stays open and reports the objects' connection, `watched.key`.
 fn watch_query(
     kind: DEV_OBJECT_TYPE,
-    keys: &[DEVPROPKEY],
     filter: Option<&[DEVPROP_FILTER_EXPRESSION]>,
-    listed: &'static AtomicBool,
+    watched: &'static Watched,
     what: &str,
 ) {
-    let keys: Vec<DEVPROPCOMPKEY> = keys.iter().copied().map(comp).collect();
+    let keys = [comp(watched.key)];
     // SAFETY: the callback is a plain function and its context a static; the filter points at
     // statics; the query lives for the process (`HDEVQUERY` is not closed on drop).
     match unsafe {
@@ -943,7 +1043,7 @@ fn watch_query(
             Some(&keys),
             filter,
             Some(on_result),
-            Some(std::ptr::from_ref(listed).cast::<c_void>()),
+            Some(std::ptr::from_ref(watched).cast::<c_void>()),
         )
     } {
         Ok(_) => {}
@@ -954,7 +1054,8 @@ fn watch_query(
 /// Calls `on_change` (from its own thread) once things settle after a device arrives, leaves,
 /// connects or disconnects. Interface arrivals and removals cover plugging in and out (and a
 /// Bluetooth device's functions starting); the container and paired-entry queries cover
-/// Bluetooth connection. Starts once; later calls do nothing.
+/// Bluetooth connection, when it changes (not each time Windows reports a device again).
+/// Starts once; later calls do nothing.
 pub fn watch(on_change: impl Fn() + Send + 'static) {
     let (tx, rx) = mpsc::sync_channel::<()>(1);
     if POKE.set(tx).is_err() {
@@ -963,12 +1064,28 @@ pub fn watch(on_change: impl Fn() + Send + 'static) {
     let spawned = std::thread::Builder::new()
         .name("device-watch".into())
         .spawn(move || {
+            let mut last: Option<Instant> = None;
+            let mut busy = 0;
             while rx.recv().is_ok() {
                 // A plug-in is a burst of interfaces: wait for a quiet moment (at most 3 s).
                 let start = Instant::now();
                 while rx.recv_timeout(Duration::from_millis(600)).is_ok()
                     && start.elapsed() < Duration::from_secs(3)
                 {}
+                busy = if last.is_some_and(|t| t.elapsed() < BUSY_GAP) {
+                    busy + 1
+                } else {
+                    0
+                };
+                last = Some(Instant::now());
+                if busy == BUSY_LOGGED {
+                    log::info!(
+                        "devices: changes keep coming ({} from device interfaces, {} from \
+                         connections since launch)",
+                        FROM_INTERFACES.load(Ordering::Relaxed),
+                        FROM_CONNECTIONS.load(Ordering::Relaxed)
+                    );
+                }
                 on_change();
             }
         });
@@ -993,19 +1110,16 @@ pub fn watch(on_change: impl Fn() + Send + 'static) {
 
     watch_query(
         DevObjectTypeDeviceContainer,
-        &[DEVPKEY_DeviceContainer_IsConnected],
         None,
-        &CONTAINERS_LISTED,
+        &CONTAINERS_WATCHED,
         "connection",
     );
-    // What Settings shows as Connected (1.4.1).
-    for (protocol, listed) in AEP_BLUETOOTH.iter().zip(&AEPS_LISTED) {
+    for (protocol, watched) in AEP_BLUETOOTH.iter().zip(&AEPS_WATCHED) {
         let filter = paired_filter(protocol);
         watch_query(
             DevObjectTypeAEP,
-            &[AEP_CONNECTED],
             Some(&filter),
-            listed,
+            watched,
             "Bluetooth connection",
         );
     }

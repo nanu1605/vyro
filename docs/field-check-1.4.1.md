@@ -15,6 +15,9 @@ Bluetooth mouse or keyboard, and a wireless device whose battery is under 20 %.
 
 ## 1. Connected or not, as Windows says
 
+- With a Bluetooth device connected (headphones, a mouse), open Devices: the list shows within
+  a few seconds and stays, with the Bluetooth device in it. On 3095d4f it stayed on "Reading
+  devices…" until the Bluetooth device was disconnected.
 - Open Devices. Each paired Bluetooth device shows **Connected** or **Not connected**, matching
   Windows Settings → Bluetooth & devices.
 - Turn the speaker off: within a few seconds its row says **Not connected** and offers
