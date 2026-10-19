@@ -10,10 +10,10 @@ use std::sync::OnceLock;
 use windows::core::{Interface, GUID, HRESULT};
 use windows::Win32::Media::MediaFoundation::{
     eAVEncCommonRateControlMode_CBR, eAVEncH264VProfile_Base, eAVEncH264VProfile_ConstrainedBase,
-    CLSID_MSH264EncoderMFT, CODECAPI_AVEncCommonRateControlMode, CODECAPI_AVEncMPVGOPSize,
-    CODECAPI_AVEncVideoForceKeyFrame, CODECAPI_AVLowLatencyMode, ICodecAPI, IMFMediaBuffer,
-    IMFMediaType, IMFSample, IMFTransform, MFMediaType_Video, MFVideoFormat_H264,
-    MFVideoFormat_NV12, MFVideoInterlace_Progressive, MFSTARTUP_LITE,
+    CLSID_MSH264EncoderMFT, CODECAPI_AVEncCommonMeanBitRate, CODECAPI_AVEncCommonRateControlMode,
+    CODECAPI_AVEncMPVGOPSize, CODECAPI_AVEncVideoForceKeyFrame, CODECAPI_AVLowLatencyMode,
+    ICodecAPI, IMFMediaBuffer, IMFMediaType, IMFSample, IMFTransform, MFMediaType_Video,
+    MFVideoFormat_H264, MFVideoFormat_NV12, MFVideoInterlace_Progressive, MFSTARTUP_LITE,
     MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, MFT_MESSAGE_NOTIFY_END_OF_STREAM,
     MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFT_OUTPUT_DATA_BUFFER,
     MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES, MFT_OUTPUT_STREAM_PROVIDES_SAMPLES, MF_E_NOTACCEPTING,
@@ -256,6 +256,16 @@ impl Encoder {
         Ok(out)
     }
 
+    /// Changes the bit rate from the next picture on (Windows' encoder takes it while encoding
+    /// since Windows 8); false when the encoder refuses it.
+    pub fn set_bitrate(&mut self, bitrate: u32) -> bool {
+        let Some(c) = &self.codec else {
+            return false;
+        };
+        // SAFETY: a plain property set on the live encoder.
+        unsafe { c.SetValue(&CODECAPI_AVEncCommonMeanBitRate, &VARIANT::from(bitrate)) }.is_ok()
+    }
+
     /// Every picture the encoder has ready.
     fn drain(&mut self, out: &mut Vec<Encoded>) -> Result<(), String> {
         loop {
@@ -435,6 +445,38 @@ mod tests {
             .iter()
             .filter(|p| frames::is_keyframe(p))
             .all(|p| frames::nal_types(p).contains(&7)));
+    }
+
+    /// The bit rate changes while encoding, without a new encoder or a keyframe: a moving
+    /// picture comes out far smaller at a fifth of the rate.
+    #[test]
+    fn the_bit_rate_changes_while_encoding() {
+        let (w, h) = (640, 360);
+        let mut enc = Encoder::new(w, h, 30, 2_500_000).expect("the H.264 encoder");
+        let mut bytes = [0usize; 2];
+        let mut keys = 0;
+        for n in 0..120u32 {
+            if n == 60 {
+                assert!(enc.set_bitrate(500_000), "the encoder takes a new rate");
+            }
+            let bgra = frames::test_pattern(w, h, n);
+            let nv12 = frames::bgra_to_nv12(&bgra, w, h, w as usize * 4, w, h);
+            for e in enc.encode(&nv12, i64::from(n) * 333_333, n == 0).unwrap() {
+                // The second half's last 30 pictures: the new rate has taken hold.
+                if n < 60 {
+                    bytes[0] += e.data.len();
+                } else if n >= 90 {
+                    bytes[1] += e.data.len() * 2;
+                }
+                keys += usize::from(frames::is_keyframe(&e.data));
+            }
+        }
+        eprintln!(
+            "screen: 2.5 Mbit/s gave {} bytes in 2 s, 0.5 Mbit/s about {}",
+            bytes[0], bytes[1]
+        );
+        assert!(bytes[1] * 2 < bytes[0], "{bytes:?}");
+        assert_eq!(keys, 1, "no keyframe for the change");
     }
 
     #[test]

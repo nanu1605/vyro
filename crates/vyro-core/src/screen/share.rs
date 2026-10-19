@@ -76,6 +76,7 @@ pub enum Note {
         encoded: u32,
         keyframes: u32,
         bitrate: u32,
+        allowed: u32,
         luma: u8,
         spread: u8,
         asked: u32,
@@ -96,6 +97,7 @@ impl Note {
             encoded: r.encoded,
             keyframes: r.keyframes,
             bitrate: r.bitrate,
+            allowed: r.allowed,
             luma: r.luma,
             spread: r.spread,
             asked: r.asked,
@@ -109,7 +111,8 @@ impl std::fmt::Display for Report {
         write!(
             f,
             "{}x{} through {}, sent as {}x{}: {} new and {} encoded a second, {} keyframes, \
-             {} kbit/s, brightness {} varying {}, {} keyframes asked for",
+             {} kbit/s (the connection carries {}), brightness {} varying {}, {} keyframes \
+             asked for",
             self.from.0,
             self.from.1,
             self.capture,
@@ -119,6 +122,11 @@ impl std::fmt::Display for Report {
             self.encoded,
             self.keyframes,
             self.bitrate / 1000,
+            if self.allowed == 0 {
+                "not known yet".to_string()
+            } else {
+                format!("{} kbit/s", self.allowed / 1000)
+            },
             self.luma,
             self.spread,
             self.asked

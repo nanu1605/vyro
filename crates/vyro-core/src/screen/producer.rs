@@ -4,6 +4,10 @@
 //! second so the phone stays current. A keyframe goes out whenever the phone asks. The secure
 //! desktop and screen changes are waited out.
 //!
+//! What goes out follows what the connection carries ([`Session::estimate`], [`Adapt`]): the
+//! bit rate within a step, and on a slow connection fewer, smaller pictures that stay sharp
+//! rather than large ones that blur and fall behind.
+//!
 //! The rules are the same whatever makes the pictures and the H.264 ([`Source`], [`Encode`]):
 //! the monitor and Windows' encoder in the app ([`run`]), a test screen and another encoder in
 //! the tests and the example PC.
@@ -69,6 +73,8 @@ pub struct Report {
     pub keyframes: u32,
     /// Bits a second out of the encoder.
     pub bitrate: u32,
+    /// Bits a second the connection carries, as estimated (0: not known yet).
+    pub allowed: u32,
     /// The latest picture's brightness and how much it varies ([`frames::brightness`]).
     pub luma: u8,
     pub spread: u8,
@@ -138,6 +144,115 @@ pub trait Encode {
         time_100ns: i64,
         keyframe: bool,
     ) -> Result<Vec<Encoded>, String>;
+
+    /// Changes the bit rate while encoding; false when this encoder cannot (the new rate then
+    /// waits for the next encoder).
+    fn set_bitrate(&mut self, _bitrate: u32) -> bool {
+        false
+    }
+}
+
+/// The video's share of what the connection carries: the rest is the input channel, packet
+/// headers, resent packets and the estimate's own probing.
+const SHARE: f64 = 0.85;
+/// The least bit rate asked of the encoder.
+pub const LEAST: u32 = 300_000;
+/// A larger step waits until the connection has carried enough for it this long; a smaller
+/// one is taken at once.
+const UP_AFTER: Duration = Duration::from_secs(5);
+/// Within a step the bit rate follows at most this often, and only a change of a tenth or more.
+const RETUNE: Duration = Duration::from_millis(500);
+const RETUNE_BY: f64 = 0.1;
+
+/// The largest size sent and the pictures a second, for a bit rate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Step {
+    pub max_width: u32,
+    pub max_height: u32,
+    pub fps: u32,
+}
+
+impl Step {
+    fn rank(&self) -> u64 {
+        u64::from(self.max_width) * u64::from(self.max_height) * u64::from(self.fps)
+    }
+}
+
+/// The step for `bitrate`: everything from 2 Mbit/s, then 720p, then 720p at 15 a second, then
+/// 540p at 10, never more than `s` asks for.
+pub fn step(bitrate: u32, s: &Settings) -> Step {
+    let (w, h, fps) = match bitrate {
+        2_000_000.. => (s.max_width, s.max_height, s.fps),
+        1_000_000.. => (1280, 720, s.fps),
+        500_000.. => (1280, 720, 15),
+        _ => (960, 540, 10),
+    };
+    Step {
+        max_width: w.min(s.max_width),
+        max_height: h.min(s.max_height),
+        fps: fps.min(s.fps).max(1),
+    }
+}
+
+/// Follows what the connection carries: the bit rate to encode at and the step.
+#[derive(Debug, Clone)]
+pub struct Adapt {
+    pub bitrate: u32,
+    pub step: Step,
+    /// Since when a larger step has been allowed.
+    up_since: Option<Instant>,
+    retuned: Instant,
+}
+
+/// What [`Adapt::update`] changed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Change {
+    pub bitrate: bool,
+    pub step: bool,
+}
+
+impl Adapt {
+    /// Everything `s` asks for, until the connection says otherwise.
+    pub fn new(s: &Settings, now: Instant) -> Self {
+        Self {
+            bitrate: s.bitrate,
+            step: step(s.bitrate, s),
+            up_since: None,
+            retuned: now,
+        }
+    }
+
+    /// Takes the connection's latest estimate (`None`: none yet, so as `s` asks).
+    pub fn update(&mut self, estimate: Option<u32>, s: &Settings, now: Instant) -> Change {
+        let target = estimate.map_or(s.bitrate, |e| {
+            ((f64::from(e) * SHARE) as u32).clamp(LEAST.min(s.bitrate), s.bitrate)
+        });
+        let mut change = Change::default();
+        let want = step(target, s);
+        if want.rank() < self.step.rank() {
+            self.step = want;
+            self.up_since = None;
+            change.step = true;
+        } else if want.rank() > self.step.rank() {
+            let since = *self.up_since.get_or_insert(now);
+            if now.duration_since(since) >= UP_AFTER {
+                self.step = want;
+                self.up_since = None;
+                change.step = true;
+            }
+        } else {
+            self.up_since = None;
+        }
+        let off =
+            (f64::from(target) - f64::from(self.bitrate)).abs() / f64::from(self.bitrate.max(1));
+        let due = off >= RETUNE_BY && now.duration_since(self.retuned) >= RETUNE;
+        if target != self.bitrate && (change.step || due) {
+            self.bitrate = target;
+            self.retuned = now;
+            change.bitrate = true;
+        }
+        change
+    }
 }
 
 /// A still screen is sent again after this long.
@@ -188,6 +303,9 @@ impl Encode for super::encode::Encoder {
     ) -> Result<Vec<Encoded>, String> {
         super::encode::Encoder::encode(self, nv12, time_100ns, keyframe)
     }
+    fn set_bitrate(&mut self, bitrate: u32) -> bool {
+        super::encode::Encoder::set_bitrate(self, bitrate)
+    }
 }
 
 /// Sends `cap`'s pictures to `session`, encoded by encoders `make` makes for a size
@@ -200,8 +318,9 @@ pub fn drive<S: Source, E: Encode>(
     mut cap: S,
     mut make: impl FnMut(u32, u32, u32, u32) -> Result<E, String>,
 ) -> Result<(), String> {
-    let mut enc: Option<(E, u32, u32)> = None;
-    let interval = Duration::from_secs(1) / s.fps.max(1);
+    // The encoder, with the size and pictures a second it was made for.
+    let mut enc: Option<(E, u32, u32, u32)> = None;
+    let mut adapt = Adapt::new(s, Instant::now());
     let started = Instant::now();
     let mut last: Option<(Vec<u8>, Instant)> = None;
     let mut settle_until = Instant::now();
@@ -210,6 +329,25 @@ pub fn drive<S: Source, E: Encode>(
     let mut counted = Instant::now();
     while !stop.load(Ordering::SeqCst) && !session.closed() {
         let tick = Instant::now();
+        let change = adapt.update(session.estimate(), s, tick);
+        if change.step {
+            log::info!(
+                "screen: the connection carries {} kbit/s: up to {}x{} at {} a second, {} kbit/s",
+                session.estimate().unwrap_or(0) / 1000,
+                adapt.step.max_width,
+                adapt.step.max_height,
+                adapt.step.fps,
+                adapt.bitrate / 1000
+            );
+        }
+        if change.bitrate {
+            if let Some((e, ..)) = enc.as_mut() {
+                // An encoder that cannot change its rate gets the new one when the next is made
+                // (a new step, or the next picture of another size).
+                e.set_bitrate(adapt.bitrate);
+            }
+        }
+        let interval = Duration::from_secs(1) / adapt.step.fps;
         let picture = match cap.next(interval.as_millis() as u32) {
             Ok(p) => {
                 if secure && p.is_some() {
@@ -245,9 +383,13 @@ pub fn drive<S: Source, E: Encode>(
         let mut made = false;
         let nv12 = match picture {
             Some(p) => {
-                let (w, h) = frames::fit(p.width, p.height, s.max_width, s.max_height);
-                if enc.as_ref().is_none_or(|(_, ew, eh)| (*ew, *eh) != (w, h)) {
-                    enc = Some((make(w, h, s.fps, s.bitrate)?, w, h));
+                let step = adapt.step;
+                let (w, h) = frames::fit(p.width, p.height, step.max_width, step.max_height);
+                if enc
+                    .as_ref()
+                    .is_none_or(|(_, ew, eh, ef)| (*ew, *eh, *ef) != (w, h, step.fps))
+                {
+                    enc = Some((make(w, h, step.fps, adapt.bitrate)?, w, h, step.fps));
                     made = true;
                     status(Status::Sending {
                         width: w,
@@ -278,7 +420,7 @@ pub fn drive<S: Source, E: Encode>(
         if keyframe {
             settle_until = Instant::now() + SETTLE;
         }
-        let Some((encoder, _, _)) = enc.as_mut() else {
+        let Some((encoder, ..)) = enc.as_mut() else {
             continue;
         };
         let at = started.elapsed();
@@ -312,6 +454,7 @@ pub fn drive<S: Source, E: Encode>(
                 taken: per_sec(report.taken),
                 encoded: per_sec(report.encoded),
                 bitrate: per_sec(report.bitrate),
+                allowed: session.estimate().unwrap_or(0),
                 asked: session.keyframes_asked(),
                 ..report
             }));

@@ -2,6 +2,10 @@
 //! answers with its own addresses and the public one STUN reports, and from then on video goes
 //! to the phone and input comes back directly, over WebRTC (str0m, no OpenSSL). The fingerprints
 //! that secure it travel in the sealed offer and answer, so the relay cannot step in.
+//!
+//! The phone reports how the video arrives (transport-wide congestion control); from that
+//! str0m estimates what the connection carries, paces what goes out, and the producer encodes
+//! to fit ([`Session::estimate`]).
 
 use std::net::{IpAddr, SocketAddr, UdpSocket};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -10,6 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
+use str0m::bwe::{Bitrate, BweKind};
 use str0m::change::{SdpAnswer, SdpOffer};
 use str0m::channel::ChannelId;
 use str0m::format::Codec;
@@ -30,6 +35,10 @@ pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 /// A connection that drops (the phone's Wi-Fi stalls, it changes networks) may come back; the
 /// session ends when it has not within this time.
 const RECONNECT: Duration = Duration::from_secs(10);
+/// What the connection is thought to carry before the phone has said, bits a second.
+const START_ESTIMATE: u64 = 3_000_000;
+/// The most the estimate looks for: the producer's top rate with room for the rest.
+const WANTED: u64 = 6_000_000;
 
 /// Where the session finds its addresses.
 #[derive(Debug, Clone)]
@@ -93,6 +102,8 @@ pub struct Session {
     asked: Arc<AtomicU32>,
     /// A frame was dropped: the phone cannot decode the ones after it until a keyframe.
     gap: Arc<AtomicBool>,
+    /// What the connection carries, bits a second (0: not known yet).
+    estimate: Arc<AtomicU32>,
     stop: Arc<AtomicBool>,
     state: Arc<Mutex<State>>,
     thread: Option<JoinHandle<()>>,
@@ -126,6 +137,12 @@ impl Session {
 
     pub fn connected(&self) -> bool {
         crate::lock(&self.state).connected
+    }
+
+    /// What the connection to the phone carries, bits a second, as estimated from the phone's
+    /// reports; `None` until there is an estimate.
+    pub fn estimate(&self) -> Option<u32> {
+        Some(self.estimate.load(Ordering::SeqCst)).filter(|&b| b > 0)
     }
 
     /// Tells the phone something over the data channel (the screen's state, as JSON). Only the
@@ -222,7 +239,9 @@ pub fn start(
     let mut rtc = RtcConfig::new()
         .clear_codecs()
         .enable_h264(true)
+        .enable_bwe(Some(Bitrate::bps(START_ESTIMATE)))
         .build(Instant::now());
+    rtc.bwe().set_desired_bitrate(Bitrate::bps(WANTED));
     let c = Candidate::host(local, "udp").map_err(|e| format!("this PC's address: {e}"))?;
     rtc.add_local_candidate(c);
     if !host.is_loopback() {
@@ -240,6 +259,7 @@ pub fn start(
     let keyframe = Arc::new(AtomicBool::new(true));
     let asked = Arc::new(AtomicU32::new(0));
     let gap = Arc::new(AtomicBool::new(false));
+    let estimate = Arc::new(AtomicU32::new(0));
     let stop = Arc::new(AtomicBool::new(false));
     let state = Arc::new(Mutex::new(State::default()));
     let thread = {
@@ -247,6 +267,7 @@ pub fn start(
             keyframe: Arc::clone(&keyframe),
             asked: Arc::clone(&asked),
             gap: Arc::clone(&gap),
+            estimate: Arc::clone(&estimate),
             stop: Arc::clone(&stop),
         };
         let state = Arc::clone(&state);
@@ -265,6 +286,7 @@ pub fn start(
             keyframe,
             asked,
             gap,
+            estimate,
             stop,
             state,
             thread: Some(thread),
@@ -321,6 +343,8 @@ struct Flags {
     asked: Arc<AtomicU32>,
     /// A frame was dropped before it was sent.
     gap: Arc<AtomicBool>,
+    /// What the connection carries, bits a second.
+    estimate: Arc<AtomicU32>,
     stop: Arc<AtomicBool>,
 }
 
@@ -337,6 +361,7 @@ fn run(
         keyframe,
         asked,
         gap,
+        estimate,
         stop,
     } = flags;
     let started = Instant::now();
@@ -376,6 +401,12 @@ fn run(
                     Event::KeyframeRequest(_) => {
                         asked.fetch_add(1, Ordering::SeqCst);
                         keyframe.store(true, Ordering::SeqCst);
+                    }
+                    Event::EgressBitrateEstimate(
+                        BweKind::Twcc { estimate: b, .. } | BweKind::Remb { estimate: b, .. },
+                    ) => {
+                        let b = u32::try_from(b.as_u64()).unwrap_or(u32::MAX);
+                        estimate.store(b.max(1), Ordering::SeqCst);
                     }
                     Event::ChannelOpen(id, _) => {
                         channel = Some(id);

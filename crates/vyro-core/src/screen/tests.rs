@@ -607,18 +607,27 @@ fn notes_for_the_phone() {
         encoded: 30,
         keyframes: 1,
         bitrate: 5_000_000,
+        allowed: 6_200_000,
         luma: 120,
         spread: 60,
         asked: 2,
     };
     assert_eq!(
         Note::report(&r).json(),
-        r#"{"t":"report","capture":"GDI","from":[2560,1440],"sent":[1920,1080],"taken":30,"encoded":30,"keyframes":1,"bitrate":5000000,"luma":120,"spread":60,"asked":2}"#
+        r#"{"t":"report","capture":"GDI","from":[2560,1440],"sent":[1920,1080],"taken":30,"encoded":30,"keyframes":1,"bitrate":5000000,"allowed":6200000,"luma":120,"spread":60,"asked":2}"#
     );
     assert_eq!(
         r.to_string(),
         "2560x1440 through GDI, sent as 1920x1080: 30 new and 30 encoded a second, 1 keyframes, \
-         5000 kbit/s, brightness 120 varying 60, 2 keyframes asked for"
+         5000 kbit/s (the connection carries 6200 kbit/s), brightness 120 varying 60, 2 \
+         keyframes asked for"
+    );
+    let unknown = super::producer::Report { allowed: 0, ..r };
+    assert!(
+        unknown
+            .to_string()
+            .contains("(the connection carries not known yet)"),
+        "{unknown}"
     );
     assert_eq!(
         Note::End {
@@ -679,4 +688,326 @@ fn the_slow_view_scales_to_bgr() {
     // Too short a picture: black, not a panic.
     assert_eq!(frames::bgra_to_bgr(&src[..8], 4, 2, 16, 2, 1), vec![0; 6]);
     assert_eq!(frames::fit(1920, 1080, 960, 600), (960, 540));
+}
+
+/// The size and pictures a second for each bit rate, never above what the settings ask.
+#[test]
+fn the_step_follows_the_bit_rate() {
+    use producer::{step, Settings, Step};
+    let s = Settings::default();
+    let at = |w, h, fps| Step {
+        max_width: w,
+        max_height: h,
+        fps,
+    };
+    assert_eq!(step(5_000_000, &s), at(1920, 1080, 30));
+    assert_eq!(step(2_000_000, &s), at(1920, 1080, 30));
+    assert_eq!(step(1_999_999, &s), at(1280, 720, 30));
+    assert_eq!(step(1_000_000, &s), at(1280, 720, 30));
+    assert_eq!(step(800_000, &s), at(1280, 720, 15));
+    assert_eq!(step(300_000, &s), at(960, 540, 10));
+    let small = Settings {
+        max_width: 640,
+        max_height: 360,
+        fps: 12,
+        ..s
+    };
+    assert_eq!(step(5_000_000, &small), at(640, 360, 12));
+    assert_eq!(step(300_000, &small), at(640, 360, 10));
+}
+
+/// The bit rate and step follow the connection: down at once, up only once the connection has
+/// carried more for a while, and the bit rate not for every small change.
+#[test]
+fn quality_follows_the_connection() {
+    use producer::{Adapt, Change, Settings};
+    let s = Settings::default();
+    let t0 = Instant::now();
+    let at = |ms: u64| t0 + Duration::from_millis(ms);
+    let mut a = Adapt::new(&s, t0);
+    // No estimate yet: everything the settings ask.
+    assert_eq!(a.update(None, &s, at(100)), Change::default());
+    assert_eq!((a.bitrate, a.step.fps), (5_000_000, 30));
+    // A slow connection: 85 % of it, 720p at 15 a second, at once.
+    let c = a.update(Some(1_000_000), &s, at(200));
+    assert_eq!(
+        c,
+        Change {
+            bitrate: true,
+            step: true
+        }
+    );
+    assert_eq!(a.bitrate, 850_000);
+    assert_eq!((a.step.max_height, a.step.fps), (720, 15));
+    // A few per cent more changes nothing; a fifth more does, but not sooner than half a
+    // second after the last change.
+    assert_eq!(a.update(Some(1_050_000), &s, at(500)), Change::default());
+    assert_eq!(a.update(Some(1_200_000), &s, at(600)), Change::default());
+    let c = a.update(Some(1_200_000), &s, at(1000));
+    assert!(c.bitrate && !c.step, "{c:?}");
+    assert_eq!(a.bitrate, 1_020_000);
+    // A fast connection: the bit rate follows within the step; a larger step waits until a
+    // larger one has been allowed for 5 s (here since 600 ms).
+    let c = a.update(Some(8_000_000), &s, at(1600));
+    assert!(c.bitrate && !c.step, "{c:?}");
+    assert_eq!(a.bitrate, 5_000_000, "never above the settings");
+    assert_eq!(a.step.max_height, 720);
+    assert!(!a.update(Some(8_000_000), &s, at(5599)).step);
+    let c = a.update(Some(8_000_000), &s, at(5600));
+    assert!(c.step && !c.bitrate, "{c:?}");
+    assert_eq!((a.step.max_height, a.step.fps), (1080, 30));
+    // A dip: the step goes down at once, and back up only after 5 s.
+    assert!(a.update(Some(200_000), &s, at(7000)).step);
+    assert_eq!(a.bitrate, producer::LEAST, "never below the least");
+    assert_eq!((a.step.max_height, a.step.fps), (540, 10));
+    assert!(!a.update(Some(8_000_000), &s, at(8000)).step);
+    assert!(!a.update(Some(8_000_000), &s, at(12_999)).step);
+    assert!(a.update(Some(8_000_000), &s, at(13_000)).step);
+}
+
+/// An encoder whose pictures are as large as its bit rate makes them (the contents do not
+/// matter to the transport), and which takes a new rate while encoding.
+struct SizedEncoder {
+    fps: u32,
+    bitrate: u32,
+    n: u8,
+}
+
+impl Encode for SizedEncoder {
+    fn encode(&mut self, _: &[u8], time_100ns: i64, key: bool) -> Result<Vec<Encoded>, String> {
+        self.n = self.n.wrapping_add(1);
+        let mut data = if key {
+            keyframe(self.n)
+        } else {
+            vec![0, 0, 0, 1, 0x41, 0x9a]
+        };
+        // No zeros: nothing in it reads as a start code.
+        let size = (self.bitrate / 8 / self.fps.max(1)) as usize;
+        data.resize(data.len().max(size), 0x80 | self.n);
+        Ok(vec![Encoded { data, time_100ns }])
+    }
+    fn set_bitrate(&mut self, bitrate: u32) -> bool {
+        self.bitrate = bitrate;
+        true
+    }
+}
+
+/// How long a packet waited in [`slow_link`]'s queue, and when it came.
+type Waits = std::sync::Arc<std::sync::Mutex<Vec<(Instant, Duration)>>>;
+
+/// A link from the PC to the phone that carries `bps` and holds up to half a second of packets,
+/// as a mobile network does; beyond that they are lost. The phone's packets pass as they come.
+/// Returns the address the phone sends to, and each packet's wait in the queue.
+fn slow_link(
+    pc: SocketAddr,
+    bps: u64,
+    stop: &std::sync::Arc<std::sync::atomic::AtomicBool>,
+) -> (SocketAddr, Waits) {
+    use std::sync::atomic::Ordering;
+    use std::sync::{Arc, Mutex};
+    const HOLDS: Duration = Duration::from_millis(500);
+    let near = UdpSocket::bind("127.0.0.1:0").unwrap();
+    let far = UdpSocket::bind("127.0.0.1:0").unwrap();
+    let addr = near.local_addr().unwrap();
+    let phone: Arc<Mutex<Option<SocketAddr>>> = Arc::default();
+    let waits: Waits = Arc::default();
+    {
+        let (near, far, phone, stop) = (
+            near.try_clone().unwrap(),
+            far.try_clone().unwrap(),
+            Arc::clone(&phone),
+            Arc::clone(stop),
+        );
+        std::thread::spawn(move || {
+            let mut buf = vec![0u8; 2000];
+            near.set_read_timeout(Some(Duration::from_millis(20)))
+                .unwrap();
+            while !stop.load(Ordering::SeqCst) {
+                if let Ok((n, from)) = near.recv_from(&mut buf) {
+                    *phone.lock().unwrap() = Some(from);
+                    let _ = far.send_to(&buf[..n], pc);
+                }
+            }
+        });
+    }
+    {
+        let (waits, stop) = (Arc::clone(&waits), Arc::clone(stop));
+        std::thread::spawn(move || {
+            let mut queue = std::collections::VecDeque::<(Instant, Vec<u8>)>::new();
+            let mut free = Instant::now();
+            let mut buf = vec![0u8; 2000];
+            while !stop.load(Ordering::SeqCst) {
+                let now = Instant::now();
+                while queue.front().is_some_and(|(at, _)| *at <= now) {
+                    let (_, p) = queue.pop_front().unwrap();
+                    if let Some(to) = *phone.lock().unwrap() {
+                        let _ = near.send_to(&p, to);
+                    }
+                }
+                let wait = queue.front().map_or(Duration::from_millis(5), |(at, _)| {
+                    at.saturating_duration_since(now)
+                });
+                far.set_read_timeout(Some(wait.max(Duration::from_micros(200))))
+                    .unwrap();
+                if let Ok((n, _)) = far.recv_from(&mut buf) {
+                    let now = Instant::now();
+                    let gone = free.max(now) + Duration::from_secs_f64((n * 8) as f64 / bps as f64);
+                    let wait = gone - now;
+                    if wait <= HOLDS {
+                        free = gone;
+                        queue.push_back((gone, buf[..n].to_vec()));
+                        waits.lock().unwrap().push((now, wait));
+                    }
+                }
+            }
+        });
+    }
+    (addr, waits)
+}
+
+/// On a connection that carries 800 kbit/s (a slow mobile network), the PC soon sends less
+/// than that, in fewer pictures, and the delay stays low: without it, 2.5 Mbit/s and more would
+/// fill the network's queue, and the picture would fall seconds behind and lose pieces.
+#[test]
+fn a_slow_connection_gets_less_and_stays_current() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex};
+    let mut phone = RtcConfig::new()
+        .clear_codecs()
+        .enable_h264(true)
+        .build(Instant::now());
+    let sock = UdpSocket::bind("127.0.0.1:0").unwrap();
+    let local = sock.local_addr().unwrap();
+    phone.add_local_candidate(Candidate::host(local, "udp").unwrap());
+    let mut api = phone.sdp_api();
+    api.add_media(MediaKind::Video, Direction::RecvOnly, None, None, None);
+    api.add_channel("input".into());
+    let (offer, pending) = api.apply().unwrap();
+    // The PC learns the phone's address from its first check, which comes through the link.
+    let offer = offer.to_sdp_string().replace(
+        &local.ip().to_string(),
+        "4a1b2c3d-1234-4678-9abc-def012345678.local",
+    );
+    let opts = Options {
+        hosts: vec!["127.0.0.1".parse().unwrap()],
+        stun: Vec::new(),
+        stun_timeout: Duration::ZERO,
+    };
+    let (session, answer) = rtc::start(&offer, &opts, Box::new(|_| {})).unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let candidate = answer
+        .lines()
+        .find(|l| l.starts_with("a=candidate:"))
+        .expect("the PC's address");
+    let f: Vec<&str> = candidate.split_whitespace().collect();
+    let pc: SocketAddr = format!("{}:{}", f[4], f[5]).parse().unwrap();
+    let (link, waits) = slow_link(pc, 800_000, &stop);
+    let answer = answer.replace(
+        &format!("{} {} typ", f[4], f[5]),
+        &format!("{} {} typ", link.ip(), link.port()),
+    );
+    let session = Arc::new(session);
+    let reports = Arc::new(Mutex::new(Vec::new()));
+    let producing = {
+        let (session, stop, reports) = (
+            Arc::clone(&session),
+            Arc::clone(&stop),
+            Arc::clone(&reports),
+        );
+        std::thread::spawn(move || {
+            let status = |s: producer::Status| {
+                if let producer::Status::Report(r) = s {
+                    reports.lock().unwrap().push(r);
+                }
+            };
+            producer::drive(
+                &session,
+                &producer::Settings::default(),
+                &stop,
+                &status,
+                TestScreen::new(64, 36),
+                |_, _, fps, bitrate| Ok(SizedEncoder { fps, bitrate, n: 0 }),
+            )
+        })
+    };
+    phone
+        .sdp_api()
+        .accept_answer(pending, SdpAnswer::from_sdp_string(&answer).unwrap())
+        .unwrap();
+    let started = Instant::now();
+    let until = started + Duration::from_secs(16);
+    let mut got = Vec::new();
+    let mut buf = vec![0u8; 2000];
+    while Instant::now() < until {
+        let deadline = loop {
+            match phone.poll_output().unwrap() {
+                Output::Timeout(t) => break t,
+                Output::Transmit(t) => {
+                    sock.send_to(&t.contents, t.destination).unwrap();
+                }
+                Output::Event(Event::MediaData(_)) => got.push(Instant::now()),
+                Output::Event(_) => {}
+            }
+        };
+        let wait = deadline
+            .saturating_duration_since(Instant::now())
+            .clamp(Duration::from_millis(1), Duration::from_millis(10));
+        sock.set_read_timeout(Some(wait)).unwrap();
+        let input = match sock.recv_from(&mut buf) {
+            Ok((len, source)) => Input::Receive(
+                Instant::now(),
+                Receive {
+                    proto: Protocol::Udp,
+                    source,
+                    destination: local,
+                    contents: buf[..len].try_into().unwrap(),
+                },
+            ),
+            Err(_) => Input::Timeout(Instant::now()),
+        };
+        phone.handle_input(input).unwrap();
+    }
+    stop.store(true, Ordering::SeqCst);
+    producing.join().unwrap().unwrap();
+    let reports = reports.lock().unwrap().clone();
+    for r in &reports {
+        eprintln!(
+            "screen: {} a second, {} kbit/s sent, the connection carries {} kbit/s",
+            r.encoded,
+            r.bitrate / 1000,
+            r.allowed / 1000
+        );
+    }
+    let waits = waits.lock().unwrap().clone();
+    let mean = |from: Instant, to: Instant| {
+        let w: Vec<Duration> = waits
+            .iter()
+            .filter(|(at, _)| (from..to).contains(at))
+            .map(|(_, w)| *w)
+            .collect();
+        w.iter().sum::<Duration>() / u32::try_from(w.len().max(1)).unwrap()
+    };
+    let end = started + Duration::from_secs(12);
+    eprintln!(
+        "screen: packets waited {:?} in the link on average in the first 4 s, {:?} in the last \
+         4 s; the phone got {} pictures",
+        mean(started, started + Duration::from_secs(4)),
+        mean(end, until),
+        got.len()
+    );
+    let last = reports.last().expect("no report");
+    assert!(
+        last.allowed > 0 && last.allowed < 1_300_000,
+        "the estimate follows the link: {last:?}"
+    );
+    assert!(last.bitrate < 900_000, "less than the link: {last:?}");
+    assert!(
+        mean(end, until) < Duration::from_millis(250),
+        "the queue drains: {:?}",
+        mean(end, until)
+    );
+    assert!(
+        got.iter().filter(|t| **t >= end).count() >= 10,
+        "pictures still arrive"
+    );
 }

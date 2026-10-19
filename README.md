@@ -346,10 +346,11 @@ the PC (1.5).
   to click, hold for a right click, drag, two fingers to scroll, pinch to zoom, a key bar and a
   box to type into, and a choice of monitor. It connects straight to the PC where it can (fast,
   encrypted end to end, the relay only introduces them); where it cannot, a slow view sends a
-  picture at a time through the relay, 20 minutes a day. One phone at a time; the PC shows a
-  banner and a tray item with Stop while it lasts, and a session left alone ends after 10
-  minutes. Windows' sign-in and administrator prompts cannot be seen or used, and Ctrl+Alt+Del
-  cannot be sent. Optionally the PC locks when a phone's session ends.
+  picture at a time through the relay, 20 minutes a day. The picture follows the connection: on
+  a slow one (mobile data) it is sent smaller and less often so it stays current. One phone at
+  a time; the PC shows a banner and a tray item with Stop while it lasts, and a session left
+  alone ends after 10 minutes. Windows' sign-in and administrator prompts cannot be seen or
+  used, and Ctrl+Alt+Del cannot be sent. Optionally the PC locks when a phone's session ends.
 - **Waking the PC (1.5).** A phone cannot send the wake signal itself (web pages cannot send it),
   so another Vyro PC on the same network sends it: turn on **Wake from phone** in Settings on
   the PC to be woken, and keep another PC paired with the phone. Settings says what Windows

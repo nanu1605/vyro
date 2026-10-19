@@ -35,6 +35,9 @@
     encoded: number;
     keyframes: number;
     bitrate: number;
+    /** Bits a second the connection carries, as the PC estimates it (0: not yet; older PCs
+     * leave it out). */
+    allowed?: number;
     luma: number;
     spread: number;
     asked: number;
@@ -550,7 +553,7 @@
             {#if report}
               <li>
                 {pc}: its screen {report.from[0]}×{report.from[1]} through {report.capture}, sent as {report.sent[0]}×{report.sent[1]};
-                {report.taken} new and {report.encoded} sent pictures a second, {(report.bitrate / 1e6).toFixed(1)} Mbit/s;
+                {report.taken} new and {report.encoded} sent pictures a second, {(report.bitrate / 1e6).toFixed(1)} Mbit/s{report.allowed ? ` of the ${(report.allowed / 1e6).toFixed(1)} the connection carries` : ''};
                 {lookText(report)}; {report.asked} whole pictures asked for.
               </li>
             {/if}

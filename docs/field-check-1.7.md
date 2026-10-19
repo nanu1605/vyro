@@ -58,6 +58,11 @@ through the relay where it cannot.
 - Show the screen again. Note whether it connects directly (the hint "Tap to click") or falls
   back to the slow view after about 15 seconds ("No direct path…"). Either is fine; write down
   which, and the network (operator, home router).
+- Directly: move a window around for a minute. The delay may be a little longer than on Wi-Fi,
+  but it stays the same rather than growing. "Receiving…" shows what the connection carries
+  ("… Mbit/s of the N the connection carries"); on a slow one the picture is sent smaller and
+  less often (720p, then 15 or 10 a second) and comes back to full size within seconds once
+  the connection allows it.
 
 ## 4. The slow view
 

@@ -2873,6 +2873,22 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       cannot convert, moves the session to GDI rather than ending it. CI converts a known HDR
       picture through the shader on WARP and checks each colour, the byte order and the
       clipping; a real HDR desktop is the field check's.
+- [ ] **The delay grew on mobile data** (field check, 2026-10-19, c87dd2d; on Wi-Fi a delay of
+      milliseconds and 10 % CPU at most): the video went out at a fixed 5 Mbit/s whatever the
+      connection carried, so a slower link queued it up and the picture fell behind. Now it
+      follows the connection: the phone's browser reports how the video arrives
+      (transport-wide congestion control), str0m estimates what the connection carries (Google
+      Congestion Control) and paces the packets, and the producer encodes at 85 % of it
+      (`screen/producer.rs` → `Adapt`): within a step the bit rate follows every half second
+      (Windows' encoder takes a new rate without a keyframe), and below 2 Mbit/s fewer, smaller
+      pictures that stay sharp (720p, then 720p at 15 a second below 1 Mbit/s, then 540p at 10
+      below 500 kbit/s, never under 300 kbit/s); a smaller step at once, a larger one after 5 s.
+      The phone's details add "of the N the connection carries". A test sends the screen
+      through an 800 kbit/s link holding half a second of packets: packets wait about 270 ms
+      at first and about 20 ms after 12 s, and the pictures keep coming; with the estimate off
+      they wait about 490 ms and two pictures arrive in 16 s. A test on CI's Windows runner
+      checks that Windows' encoder takes a new rate while encoding, without a keyframe. To check
+      on the owner's phones on mobile data.
 - [ ] Field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)): Android Chrome
       and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU; the secure screen,
       an administrator window, two monitors, the slow view, the idle end; 1.4.1 to 1.6 released
