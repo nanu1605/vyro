@@ -1,17 +1,19 @@
 # Field check: 1.5 (control from the phone)
 
-Status: **to do.** Test build: **`vyro-windows-a0f48c6`** (CI run 39156961292, every job
-green), version 1.5.0, or the artifact of any later green run on `claude/vyro-1.5`. Install the
-MSI over 1.4.1. About 40 minutes.
+Status: **to do.** Test build: **`vyro-windows-3095d4f`**, the 1.7 test build (CI run
+39272496314, every job green, version 1.7.0), by the owner's choice (2026-10-19): it carries
+every change of 1.5, and the owner already runs it. 1.5's own build, `vyro-windows-a0f48c6`
+(CI run 39156961292), is not tried by itself. About 40 minutes.
 
 1.5 answers the owner's request to check and run anything Vyro does from the phone, shut the PC
 down from it, wake it, and see what runs on it (ROADMAP → 1.5.0, decision 36,
 [`remote.md`](remote.md)). The PC's screen on the phone comes in 1.7.
 
-**The phone app** comes from the relay. For this check, deploy the relay from this branch first
-(Actions → **Relay** → Run workflow, `ref`: `claude/vyro-1.5`), then open the app on the phone and
-pull to refresh (or close and reopen it) so it loads the new version. A phone on the old app
-still shows readings.
+**The phone app** comes from the relay. On the 1.7 build, use the relay as it is, deployed from
+1.7 (2e42a83, run 39298073589): its phone app has everything below, plus 1.7's Screen tab
+between Health and More. (For 1.5's own build, deploy the relay from this branch first: Actions → **Relay** → Run
+workflow, `ref`: `claude/vyro-1.5`.) Pull to refresh (or close and reopen the app) so it loads
+the new version. A phone on the old app still shows readings.
 
 Have at hand: the PC with Vyro and Reach from anywhere on, a phone already paired (from 1.4),
 and, for waking, a second PC with Vyro on the same wired network, if you have one.
