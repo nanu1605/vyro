@@ -32,6 +32,9 @@
   const DIRECT_MS = 15_000;
   /** The longest wait for the phone's own addresses before offering. */
   const GATHER_MS = 3000;
+  /** No new picture decoded for this long (a still screen comes again every second): ask the PC
+   * for a whole one. */
+  const STALL_MS = 3000;
   /** "Still here", while the screen shows (the PC ends a session left 10 minutes). */
   const HERE_MS = 30_000;
   /** The slow view's pace: a picture at most this often, input at most this often. */
@@ -70,6 +73,10 @@
   /** The picture's size: the shape touches map onto. */
   let size = $state<{ w: number; h: number } | null>(null);
   let slowLeft = $state<number | null>(null);
+  /** The direct connection dropped and may come back. */
+  let reconnecting = $state(false);
+  /** What arrives, as the browser decodes it: size and pictures a second. */
+  let received = $state<{ w: number; h: number; fps: number } | null>(null);
   let slowUrl = $state<string | null>(null);
   let pointer = $state<Pt | null>(null);
   let zoom = $state(1);
@@ -102,6 +109,35 @@
     ask<Monitor[]>('screen.monitors')
       .then((m) => (monitors = m))
       .catch(() => {});
+  });
+
+  // A direct picture: what arrives, and a whole picture asked for when none has for a while (one
+  // was lost, or the phone could not decode what came).
+  $effect(() => {
+    if (mode !== 'direct') return;
+    let frames = -1;
+    let at = performance.now();
+    let asked = 0;
+    const t = setInterval(async () => {
+      const p = peer;
+      if (!p) return;
+      let v: { framesDecoded?: number; frameWidth?: number; frameHeight?: number; framesPerSecond?: number } | null = null;
+      (await p.getStats().catch(() => null))?.forEach((r) => {
+        if (r.type === 'inbound-rtp' && r.kind === 'video') v = r;
+      });
+      if (!v) return;
+      const { framesDecoded = 0, frameWidth = 0, frameHeight = 0, framesPerSecond = 0 } = v;
+      received = frameWidth ? { w: frameWidth, h: frameHeight, fps: Math.round(framesPerSecond) } : null;
+      const now = performance.now();
+      if (framesDecoded !== frames) {
+        frames = framesDecoded;
+        at = now;
+      } else if (now - at > STALL_MS && now - asked > STALL_MS && channel?.readyState === 'open') {
+        asked = now;
+        channel.send(JSON.stringify({ t: 'picture' }));
+      }
+    }, 1000);
+    return () => clearInterval(t);
   });
 
   // While the screen shows: "still here" now and then, and the long-press clock.
@@ -214,6 +250,8 @@
     error = null;
     why = null;
     secure = false;
+    reconnecting = false;
+    received = null;
     size = null;
     pointer = null;
     zoom = 1;
@@ -244,6 +282,9 @@
       };
       p.onconnectionstatechange = () => {
         if (my !== run) return;
+        // A dropped connection may come back (Wi-Fi stalls, the phone changes networks): it says
+        // so, and the PC waits a while too.
+        reconnecting = p.connectionState === 'disconnected';
         if (p.connectionState === 'connected') mode = 'direct';
         else if (p.connectionState === 'failed' && mode === 'connecting') void slow(my);
         else if ((p.connectionState === 'failed' || p.connectionState === 'closed') && mode === 'direct')
@@ -416,6 +457,8 @@
       <p class="muted small" role="status">
         {#if mode === 'connecting'}
           Connecting to {pc}…
+        {:else if reconnecting}
+          The connection to {pc} dropped. Reconnecting…
         {:else if mode === 'slow'}
           No direct path to {pc}: the slow view, a picture at a time.{slowLeft !== null
             ? ` ${Math.round(slowLeft / 60)} min left today.`
@@ -424,6 +467,9 @@
           Tap to click, hold for a right click, drag to drag; two fingers scroll, pinch to zoom.
         {/if}
       </p>
+      {#if mode === 'direct' && received}
+        <p class="muted small">Receiving {received.w}×{received.h}, {received.fps} pictures a second.</p>
+      {/if}
       <div
         class="surface"
         bind:this={surface}

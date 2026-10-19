@@ -8,6 +8,7 @@ use str0m::net::{Protocol, Receive};
 use str0m::{Candidate, Event, Input, Output, RtcConfig};
 
 use super::input::{self, Button, Key};
+use super::producer::{self, Encode, Encoded, TestScreen};
 use super::rtc::{self, Frame, Options, SessionEvent};
 use super::stun;
 
@@ -232,6 +233,161 @@ fn loopback(mdns: bool) {
     assert!(session.closed());
 }
 
+/// An encoder that, like Windows' own, holds back `latency` pictures before giving each out:
+/// SPS, PPS and an IDR slice for a keyframe, a P slice otherwise, each carrying its number.
+struct HoldingEncoder {
+    latency: usize,
+    held: std::collections::VecDeque<(i64, bool, u8)>,
+    n: u8,
+}
+
+impl Encode for HoldingEncoder {
+    fn encode(&mut self, _: &[u8], time_100ns: i64, key: bool) -> Result<Vec<Encoded>, String> {
+        self.n = self.n.wrapping_add(1);
+        self.held.push_back((time_100ns, key, self.n));
+        let mut out = Vec::new();
+        while self.held.len() > self.latency {
+            let (time_100ns, key, n) = self.held.pop_front().unwrap();
+            let data = if key {
+                keyframe(n)
+            } else {
+                vec![0, 0, 0, 1, 0x41, 0x9a, n, n, n]
+            };
+            out.push(Encoded { data, time_100ns });
+        }
+        Ok(out)
+    }
+}
+
+/// A phone (str0m) connected to a PC session on localhost, with the PC's screen sent by the
+/// producer from a test screen through `encoder`s; collects what the phone receives for `secs`.
+/// Returns each picture received and when, and whether the screen was moving.
+fn watch_screen(
+    still: bool,
+    secs: u64,
+    encoder: impl Fn() -> HoldingEncoder + Send + 'static,
+) -> Vec<(Instant, Vec<u8>)> {
+    let mut phone = RtcConfig::new()
+        .clear_codecs()
+        .enable_h264(true)
+        .build(Instant::now());
+    let sock = UdpSocket::bind("127.0.0.1:0").unwrap();
+    let local = sock.local_addr().unwrap();
+    phone.add_local_candidate(Candidate::host(local, "udp").unwrap());
+    let mut api = phone.sdp_api();
+    api.add_media(MediaKind::Video, Direction::RecvOnly, None, None, None);
+    api.add_channel("input".into());
+    let (offer, pending) = api.apply().unwrap();
+    let opts = Options {
+        hosts: vec!["127.0.0.1".parse().unwrap()],
+        stun: Vec::new(),
+        stun_timeout: Duration::ZERO,
+    };
+    let (session, answer) = rtc::start(&offer.to_sdp_string(), &opts, Box::new(|_| {})).unwrap();
+    let session = std::sync::Arc::new(session);
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let screen = TestScreen::new(64, 36);
+    screen
+        .moving
+        .store(!still, std::sync::atomic::Ordering::SeqCst);
+    let producing = {
+        let (session, stop) = (
+            std::sync::Arc::clone(&session),
+            std::sync::Arc::clone(&stop),
+        );
+        std::thread::spawn(move || {
+            let settings = producer::Settings::default();
+            producer::drive(&session, &settings, &stop, &|_| {}, screen, |_, _, _, _| {
+                Ok(encoder())
+            })
+        })
+    };
+    // The PC encodes from the start; the phone takes a moment to connect, as over a network.
+    std::thread::sleep(Duration::from_millis(500));
+    phone
+        .sdp_api()
+        .accept_answer(pending, SdpAnswer::from_sdp_string(&answer).unwrap())
+        .unwrap();
+    let until = Instant::now() + Duration::from_secs(secs);
+    let mut got = Vec::new();
+    let mut buf = vec![0u8; 2000];
+    while Instant::now() < until {
+        let deadline = loop {
+            match phone.poll_output().unwrap() {
+                Output::Timeout(t) => break t,
+                Output::Transmit(t) => {
+                    sock.send_to(&t.contents, t.destination).unwrap();
+                }
+                Output::Event(Event::MediaData(d)) => got.push((Instant::now(), d.data.to_vec())),
+                Output::Event(_) => {}
+            }
+        };
+        let wait = deadline
+            .saturating_duration_since(Instant::now())
+            .clamp(Duration::from_millis(1), Duration::from_millis(10));
+        sock.set_read_timeout(Some(wait)).unwrap();
+        let input = match sock.recv_from(&mut buf) {
+            Ok((len, source)) => Input::Receive(
+                Instant::now(),
+                Receive {
+                    proto: Protocol::Udp,
+                    source,
+                    destination: local,
+                    contents: buf[..len].try_into().unwrap(),
+                },
+            ),
+            Err(_) => Input::Timeout(Instant::now()),
+        };
+        phone.handle_input(input).unwrap();
+    }
+    stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    producing.join().unwrap().unwrap();
+    got
+}
+
+/// The phone's first picture is a keyframe, though the encoder made pictures before the phone
+/// connected and gives each out four pictures late: one the phone cannot decode is never sent.
+#[test]
+fn the_phone_gets_a_keyframe_first() {
+    let got = watch_screen(false, 4, || HoldingEncoder {
+        latency: 4,
+        held: Default::default(),
+        n: 0,
+    });
+    assert!(got.len() > 10, "{} pictures", got.len());
+    assert!(
+        frames::is_keyframe(&got[0].1),
+        "first: {:?}",
+        frames::nal_types(&got[0].1)
+    );
+}
+
+/// A still screen: the keyframe made when the phone connected reaches it within about a second,
+/// though the encoder holds four pictures back (fed once a second, it took four), and the
+/// picture goes on arriving now and then.
+#[test]
+fn a_still_screen_reaches_the_phone_at_once() {
+    let started = Instant::now() + Duration::from_millis(500);
+    let got = watch_screen(true, 6, || HoldingEncoder {
+        latency: 4,
+        held: Default::default(),
+        n: 0,
+    });
+    let first = got.first().expect("no picture at all");
+    assert!(frames::is_keyframe(&first.1));
+    let after = first.0 - started;
+    assert!(
+        after < Duration::from_millis(2500),
+        "the first picture came after {after:?}"
+    );
+    let last = got.last().unwrap().0;
+    assert!(
+        last > first.0 + Duration::from_secs(2),
+        "a still screen is sent again now and then ({} pictures)",
+        got.len()
+    );
+}
+
 #[test]
 fn a_bad_offer_is_refused() {
     let opts = Options {
@@ -296,6 +452,27 @@ fn bgra_becomes_nv12_at_the_sent_size() {
         &[235; 4]
     );
     assert_eq!(frames::bgra_to_nv12(&[0; 3], 2, 2, 8, 2, 2), vec![0; 6]);
+}
+
+/// A monitor sent smaller keeps thin lines: one-pixel black lines every third column of a white
+/// picture, scaled to half, still darken every column they fall in (picking the nearest pixel
+/// lost half of them).
+#[test]
+fn thin_lines_survive_scaling() {
+    let (sw, sh) = (12u32, 2u32);
+    let src: Vec<u8> = (0..sh)
+        .flat_map(|_| (0..sw).flat_map(|x| if x % 3 == 1 { [0, 0, 0, 255] } else { [255; 4] }))
+        .collect();
+    let bgr = frames::bgra_to_bgr(&src, sw, sh, sw as usize * 4, 6, 2);
+    let row: Vec<u8> = bgr[..6 * 3].iter().step_by(3).copied().collect();
+    let lines = sw as usize / 3;
+    assert!(row.iter().filter(|&&v| v < 200).count() >= lines, "{row:?}");
+    let nv12 = frames::bgra_to_nv12(&src, sw, sh, sw as usize * 4, 6, 2);
+    assert!(
+        nv12[..6].iter().filter(|&&v| v < 200).count() >= lines,
+        "{:?}",
+        &nv12[..6]
+    );
 }
 
 #[test]
@@ -411,11 +588,11 @@ fn notes_for_the_phone() {
 
 #[test]
 fn the_slow_view_scales_to_bgr() {
-    // 4×2 BGRA: each pixel's blue is its index; halved to 2×1, the left pixel of each pair.
+    // 4×2 BGRA: each pixel's blue is its index; halved to 2×1, the average of each 2×2 block.
     let src: Vec<u8> = (0..8u8).flat_map(|i| [i, 100 + i, 200 + i, 255]).collect();
     assert_eq!(
         frames::bgra_to_bgr(&src, 4, 2, 16, 2, 1),
-        vec![0, 100, 200, 2, 102, 202]
+        vec![3, 103, 203, 5, 105, 205]
     );
     assert_eq!(frames::bgra_to_bgr(&src, 4, 2, 16, 4, 2).len(), 4 * 2 * 3);
     // Too short a picture: black, not a panic.

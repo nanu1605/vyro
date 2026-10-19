@@ -161,7 +161,7 @@ fn inputs(i: &Input, monitor: Rect, desk: Rect) -> Vec<INPUT> {
                 key(code, 0, KEYEVENTF_KEYUP),
             ]
         }
-        Input::Here => Vec::new(),
+        Input::Here | Input::Picture => Vec::new(),
     }
 }
 

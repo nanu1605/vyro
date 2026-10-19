@@ -74,6 +74,8 @@ pub enum Input {
     /// The phone still shows the screen (sent every 30 s while it does): a session the phone
     /// stopped showing ends after a while.
     Here,
+    /// The phone's picture stopped (it lost part of one, or has none yet): send a whole one.
+    Picture,
 }
 
 /// Reads and checks one message.

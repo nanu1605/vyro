@@ -1,12 +1,17 @@
-//! A session's video (1.7): pictures of the monitor, scaled and encoded, at a steady rate. A
-//! still screen is sent again once a second so the phone stays current; a keyframe goes out
-//! whenever the phone asks. The secure desktop and screen changes are waited out.
+//! A session's video (1.7): pictures of the monitor, scaled and encoded, at a steady rate. After
+//! a change (and a keyframe) the picture goes on being sent at that rate for a moment, so the
+//! encoder gives out what it holds and sharpens it; a still screen is then sent again once a
+//! second so the phone stays current. A keyframe goes out whenever the phone asks. The secure
+//! desktop and screen changes are waited out.
+//!
+//! The rules are the same whatever makes the pictures and the H.264 ([`Source`], [`Encode`]):
+//! the monitor and Windows' encoder in the app ([`run`]), a test screen and another encoder in
+//! the tests and the example PC.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use super::capture::{Capture, CaptureError};
-use super::encode::Encoder;
 use super::frames;
 use super::input::Rect;
 use super::rtc::{Frame, Session};
@@ -24,12 +29,13 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
+        // A 1080p monitor goes as it is (text stays sharp); larger ones are scaled to fit.
         Self {
             monitor: 0,
-            max_width: 1280,
-            max_height: 720,
+            max_width: 1920,
+            max_height: 1080,
             fps: 30,
-            bitrate: 2_500_000,
+            bitrate: 5_000_000,
         }
     }
 }
@@ -43,21 +49,125 @@ pub enum Status {
     Secure,
 }
 
+/// A BGRA picture, rows packed.
+pub struct Picture {
+    pub bgra: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Why a picture could not be taken.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CaptureError {
+    /// Windows shows its secure desktop (sign-in, lock screen, an administrator prompt).
+    Secure,
+    /// The duplication ended (a mode change, a full-screen game, the secure desktop came and
+    /// went): open it again.
+    Lost,
+    Other(String),
+}
+
+impl std::fmt::Display for CaptureError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Secure => f.write_str("the PC is showing a secure screen"),
+            Self::Lost => f.write_str("the screen changed"),
+            Self::Other(m) => f.write_str(m),
+        }
+    }
+}
+
+/// Where the pictures come from.
+pub trait Source {
+    /// The next picture, waiting at most `timeout_ms`; `None` when the screen did not change.
+    fn next(&mut self, timeout_ms: u32) -> Result<Option<Picture>, CaptureError>;
+    /// Starts again after [`CaptureError::Lost`] or [`CaptureError::Secure`].
+    fn reopen(&mut self) -> Result<(), CaptureError>;
+    /// Where the pictures are on the desktop (input goes there).
+    fn rect(&self) -> Rect;
+}
+
+/// One encoded picture and the time of the picture it came from (100 ns units), which can be
+/// an earlier one than the last given: an encoder may hold a few.
+pub struct Encoded {
+    pub data: Vec<u8>,
+    pub time_100ns: i64,
+}
+
+/// What makes H.264 (Annex B; a keyframe with its SPS and PPS) of NV12 pictures.
+pub trait Encode {
+    /// Encodes one picture taken at `time_100ns`; returns the pictures that came out. With
+    /// `keyframe`, the next one is a keyframe.
+    fn encode(
+        &mut self,
+        nv12: &[u8],
+        time_100ns: i64,
+        keyframe: bool,
+    ) -> Result<Vec<Encoded>, String>;
+}
+
 /// A still screen is sent again after this long.
 const REPEAT: Duration = Duration::from_secs(1);
+/// After a change or a keyframe, the picture goes on at full rate this long: the encoder holds a
+/// few pictures before giving them out, and refines a still one with each it is given.
+const SETTLE: Duration = Duration::from_secs(1);
 
-/// Sends the monitor to `session` until `stop` or the session ends.
+/// Sends the monitor to `session` until `stop` or the session ends (Windows: Desktop
+/// Duplication and Windows' own H.264 encoder).
+#[cfg(windows)]
 pub fn run(
     session: &Session,
     s: &Settings,
     stop: &AtomicBool,
     status: &dyn Fn(Status),
 ) -> Result<(), String> {
-    let mut cap = open(s.monitor, stop, status)?;
-    let mut enc: Option<(Encoder, u32, u32)> = None;
+    use super::encode::Encoder;
+    let cap = open(s.monitor, stop, status)?;
+    drive(session, s, stop, status, cap, |w, h, fps, bitrate| {
+        Encoder::new(w, h, fps, bitrate)
+    })
+}
+
+#[cfg(windows)]
+impl Source for super::capture::Capture {
+    fn next(&mut self, timeout_ms: u32) -> Result<Option<Picture>, CaptureError> {
+        super::capture::Capture::next(self, timeout_ms)
+    }
+    fn reopen(&mut self) -> Result<(), CaptureError> {
+        super::capture::Capture::reopen(self)
+    }
+    fn rect(&self) -> Rect {
+        self.monitor.rect
+    }
+}
+
+#[cfg(windows)]
+impl Encode for super::encode::Encoder {
+    fn encode(
+        &mut self,
+        nv12: &[u8],
+        time_100ns: i64,
+        keyframe: bool,
+    ) -> Result<Vec<Encoded>, String> {
+        super::encode::Encoder::encode(self, nv12, time_100ns, keyframe)
+    }
+}
+
+/// Sends `cap`'s pictures to `session`, encoded by encoders `make` makes for a size
+/// (`w`, `h`, `fps`, `bitrate`), until `stop` or the session ends.
+pub fn drive<S: Source, E: Encode>(
+    session: &Session,
+    s: &Settings,
+    stop: &AtomicBool,
+    status: &dyn Fn(Status),
+    mut cap: S,
+    mut make: impl FnMut(u32, u32, u32, u32) -> Result<E, String>,
+) -> Result<(), String> {
+    let mut enc: Option<(E, u32, u32)> = None;
     let interval = Duration::from_secs(1) / s.fps.max(1);
     let started = Instant::now();
     let mut last: Option<(Vec<u8>, Instant)> = None;
+    let mut settle_until = Instant::now();
     let mut secure = false;
     while !stop.load(Ordering::SeqCst) && !session.closed() {
         let tick = Instant::now();
@@ -98,33 +208,49 @@ pub fn run(
             Some(p) => {
                 let (w, h) = frames::fit(p.width, p.height, s.max_width, s.max_height);
                 if enc.as_ref().is_none_or(|(_, ew, eh)| (*ew, *eh) != (w, h)) {
-                    enc = Some((Encoder::new(w, h, s.fps, s.bitrate)?, w, h));
+                    enc = Some((make(w, h, s.fps, s.bitrate)?, w, h));
                     made = true;
                     status(Status::Sending {
                         width: w,
                         height: h,
-                        rect: cap.monitor.rect,
+                        rect: cap.rect(),
                     });
                 }
+                settle_until = Instant::now() + SETTLE;
                 frames::bgra_to_nv12(&p.bgra, p.width, p.height, p.width as usize * 4, w, h)
             }
-            // A still screen: the last picture again, now and then or when a keyframe is due.
+            // A still screen: the last picture again, while it settles, now and then, or when a
+            // keyframe is due.
             None => match &last {
-                Some((nv12, at)) if keyframe || at.elapsed() >= REPEAT => nv12.clone(),
+                Some((nv12, at))
+                    if keyframe || Instant::now() < settle_until || at.elapsed() >= REPEAT =>
+                {
+                    nv12.clone()
+                }
                 _ => continue,
             },
         };
+        if keyframe {
+            settle_until = Instant::now() + SETTLE;
+        }
         let Some((encoder, _, _)) = enc.as_mut() else {
             continue;
         };
         let at = started.elapsed();
         let time_100ns = i64::try_from(at.as_nanos() / 100).unwrap_or(i64::MAX);
         let fresh = last.is_none() || keyframe || made;
-        for data in encoder.encode(&nv12, time_100ns, fresh)? {
+        for e in encoder.encode(&nv12, time_100ns, fresh)? {
+            // Each picture's own time: one the encoder held back keeps the time it was taken.
+            let rtp_90khz = u64::try_from(e.time_100ns).unwrap_or(0) * 9 / 1000;
+            let captured = tick
+                .checked_sub(Duration::from_nanos(
+                    u64::try_from(time_100ns - e.time_100ns).unwrap_or(0) * 100,
+                ))
+                .unwrap_or(tick);
             session.send(Frame {
-                data,
-                rtp_90khz: (at.as_micros() * 9 / 100) as u64,
-                captured: tick,
+                data: e.data,
+                rtp_90khz,
+                captured,
             });
         }
         last = Some((nv12, Instant::now()));
@@ -136,7 +262,13 @@ pub fn run(
 }
 
 /// Opens the monitor, waiting out the secure desktop.
-fn open(monitor: usize, stop: &AtomicBool, status: &dyn Fn(Status)) -> Result<Capture, String> {
+#[cfg(windows)]
+fn open(
+    monitor: usize,
+    stop: &AtomicBool,
+    status: &dyn Fn(Status),
+) -> Result<super::capture::Capture, String> {
+    use super::capture::Capture;
     let mut told = false;
     loop {
         match Capture::open(monitor) {
@@ -149,6 +281,57 @@ fn open(monitor: usize, stop: &AtomicBool, status: &dyn Fn(Status)) -> Result<Ca
                 std::thread::sleep(Duration::from_millis(500));
             }
             Err(e) => return Err(e.to_string()),
+        }
+    }
+}
+
+/// A test screen: the moving test pattern ([`frames::test_pattern`]) while `moving` is set,
+/// otherwise still. For the tests and the example PC, which have no monitor to send.
+pub struct TestScreen {
+    width: u32,
+    height: u32,
+    /// Change the picture on every look (true), or keep it still.
+    pub moving: Arc<AtomicBool>,
+    /// Pictures made so far (each one a step of the pattern).
+    pub made: Arc<AtomicU32>,
+    shown: bool,
+}
+
+impl TestScreen {
+    pub fn new(width: u32, height: u32) -> Self {
+        Self {
+            width,
+            height,
+            moving: Arc::new(AtomicBool::new(true)),
+            made: Arc::new(AtomicU32::new(0)),
+            shown: false,
+        }
+    }
+}
+
+impl Source for TestScreen {
+    fn next(&mut self, timeout_ms: u32) -> Result<Option<Picture>, CaptureError> {
+        if self.shown && !self.moving.load(Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_millis(u64::from(timeout_ms)));
+            return Ok(None);
+        }
+        self.shown = true;
+        let n = self.made.fetch_add(1, Ordering::SeqCst);
+        Ok(Some(Picture {
+            bgra: frames::test_pattern(self.width, self.height, n),
+            width: self.width,
+            height: self.height,
+        }))
+    }
+    fn reopen(&mut self) -> Result<(), CaptureError> {
+        Ok(())
+    }
+    fn rect(&self) -> Rect {
+        Rect {
+            left: 0,
+            top: 0,
+            width: self.width as i32,
+            height: self.height as i32,
         }
     }
 }

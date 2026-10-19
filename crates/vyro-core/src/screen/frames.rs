@@ -28,30 +28,67 @@ fn yuv(b: u32, g: u32, r: u32) -> (u8, u8, u8) {
     )
 }
 
-/// Converts a BGRA picture (`pitch` bytes a row) to NV12 at `dw`×`dh` (even), sampling the
-/// nearest source pixel; chroma is the average of each 2×2 block.
+/// For each of `d` positions across a side `s` long, the source span it covers (at least one).
+fn spans(s: usize, d: usize) -> Vec<(usize, usize)> {
+    (0..d)
+        .map(|i| {
+            let a = (i * s / d).min(s - 1);
+            (a, ((i + 1) * s / d).clamp(a + 1, s))
+        })
+        .collect()
+}
+
+/// Each pixel of a `dw`×`dh` picture as the average blue, green and red of the source pixels it
+/// covers, so text stays readable when a large monitor is sent smaller (picking one pixel in
+/// three drops whole strokes). `None` when `src` is too short.
+fn scaled(
+    src: &[u8],
+    sw: u32,
+    sh: u32,
+    pitch: usize,
+    dw: usize,
+    dh: usize,
+) -> Option<Vec<[u8; 3]>> {
+    let (sw, sh) = (sw as usize, sh as usize);
+    if sw == 0 || sh == 0 || src.len() < pitch * (sh - 1) + sw * 4 {
+        return None;
+    }
+    let xs = spans(sw, dw);
+    let mut out = Vec::with_capacity(dw * dh);
+    for (y0, y1) in spans(sh, dh) {
+        for &(x0, x1) in &xs {
+            let mut sum = [0u32; 3];
+            for y in y0..y1 {
+                let row = &src[y * pitch + x0 * 4..y * pitch + x1 * 4];
+                for px in row.as_chunks::<4>().0 {
+                    sum[0] += u32::from(px[0]);
+                    sum[1] += u32::from(px[1]);
+                    sum[2] += u32::from(px[2]);
+                }
+            }
+            let n = ((x1 - x0) * (y1 - y0)) as u32;
+            out.push(sum.map(|v| ((v + n / 2) / n) as u8));
+        }
+    }
+    Some(out)
+}
+
+/// Converts a BGRA picture (`pitch` bytes a row) to NV12 at `dw`×`dh` (even), each pixel the
+/// average of the source pixels it covers; chroma is the average of each 2×2 block.
 pub fn bgra_to_nv12(src: &[u8], sw: u32, sh: u32, pitch: usize, dw: u32, dh: u32) -> Vec<u8> {
     let (dw, dh) = (dw as usize, dh as usize);
     let mut out = vec![0u8; dw * dh * 3 / 2];
-    if sw == 0 || sh == 0 || src.len() < pitch * (sh as usize - 1) + sw as usize * 4 {
+    let Some(px) = scaled(src, sw, sh, pitch, dw, dh) else {
         return out;
-    }
-    let xs: Vec<usize> = (0..dw)
-        .map(|x| (x * sw as usize / dw).min(sw as usize - 1) * 4)
-        .collect();
+    };
     let (luma, chroma) = out.split_at_mut(dw * dh);
     for y in (0..dh).step_by(2) {
-        let rows = [y, y + 1].map(|yy| (yy * sh as usize / dh).min(sh as usize - 1) * pitch);
         for x in (0..dw).step_by(2) {
             let (mut su, mut sv) = (0u32, 0u32);
-            for (dy, row) in rows.iter().enumerate() {
+            for dy in 0..2 {
                 for dx in 0..2 {
-                    let p = row + xs[x + dx];
-                    let (yy, u, v) = yuv(
-                        u32::from(src[p]),
-                        u32::from(src[p + 1]),
-                        u32::from(src[p + 2]),
-                    );
+                    let [b, g, r] = px[(y + dy) * dw + x + dx];
+                    let (yy, u, v) = yuv(u32::from(b), u32::from(g), u32::from(r));
                     luma[(y + dy) * dw + x + dx] = yy;
                     su += u32::from(u);
                     sv += u32::from(v);
@@ -65,24 +102,14 @@ pub fn bgra_to_nv12(src: &[u8], sw: u32, sh: u32, pitch: usize, dw: u32, dh: u32
     out
 }
 
-/// Converts a BGRA picture (`pitch` bytes a row) to packed BGR at `dw`×`dh`, sampling the
-/// nearest source pixel (the slow view's pictures, before JPEG).
+/// Converts a BGRA picture (`pitch` bytes a row) to packed BGR at `dw`×`dh`, each pixel the
+/// average of the source pixels it covers (the slow view's pictures, before JPEG).
 pub fn bgra_to_bgr(src: &[u8], sw: u32, sh: u32, pitch: usize, dw: u32, dh: u32) -> Vec<u8> {
     let (dw, dh) = (dw as usize, dh as usize);
-    let mut out = vec![0u8; dw * dh * 3];
-    if sw == 0 || sh == 0 || src.len() < pitch * (sh as usize - 1) + sw as usize * 4 {
-        return out;
+    match scaled(src, sw, sh, pitch, dw, dh) {
+        Some(px) => px.concat(),
+        None => vec![0u8; dw * dh * 3],
     }
-    let xs: Vec<usize> = (0..dw)
-        .map(|x| (x * sw as usize / dw).min(sw as usize - 1) * 4)
-        .collect();
-    for (y, line) in out.chunks_exact_mut(dw * 3).enumerate() {
-        let row = (y * sh as usize / dh).min(sh as usize - 1) * pitch;
-        for (i, x) in xs.iter().enumerate() {
-            line[i * 3..i * 3 + 3].copy_from_slice(&src[row + x..row + x + 3]);
-        }
-    }
-    out
 }
 
 /// A moving test picture (BGRA, `w`×`h`, tightly packed): colour bars and a bar that slides with

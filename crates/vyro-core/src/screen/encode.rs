@@ -27,6 +27,7 @@ use windows::Win32::System::Com::{
 use windows::Win32::System::Variant::VARIANT;
 
 use super::frames;
+pub use super::producer::Encoded;
 use crate::live::dll::Library;
 
 /// Media Foundation's functions, from System32's `mfplat.dll` when there is one: Windows "N"
@@ -117,6 +118,24 @@ pub struct Encoder {
 // (the session's producer).
 unsafe impl Send for Encoder {}
 
+/// Low latency (a picture out for each picture in, as far as the encoder allows), a steady bit
+/// rate and a keyframe at least every `gop` pictures. Set before the media types too: some
+/// settings only count then.
+///
+/// # Safety
+/// `c` is the encoder's live codec interface.
+unsafe fn tune(c: &ICodecAPI, gop: u32) {
+    // SAFETY: plain property sets; an encoder without one of these still encodes.
+    unsafe {
+        let _ = c.SetValue(&CODECAPI_AVLowLatencyMode, &VARIANT::from(true));
+        let _ = c.SetValue(
+            &CODECAPI_AVEncCommonRateControlMode,
+            &VARIANT::from(eAVEncCommonRateControlMode_CBR.0 as u32),
+        );
+        let _ = c.SetValue(&CODECAPI_AVEncMPVGOPSize, &VARIANT::from(gop));
+    }
+}
+
 impl Encoder {
     /// An encoder for `w`×`h` NV12 pictures (even sides) at `fps`, `bitrate` bits a second.
     pub fn new(w: u32, h: u32, fps: u32, bitrate: u32) -> Result<Self, String> {
@@ -130,6 +149,10 @@ impl Encoder {
             let mft: IMFTransform =
                 CoCreateInstance(&CLSID_MSH264EncoderMFT, None, CLSCTX_INPROC_SERVER)
                     .map_err(|e| err("the H.264 encoder", &e))?;
+            let codec: Option<ICodecAPI> = mft.cast().ok();
+            if let Some(c) = &codec {
+                tune(c, fps * 10);
+            }
             let video = |sub: &GUID| -> windows::core::Result<IMFMediaType> {
                 let t = mf.media_type()?;
                 t.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
@@ -163,15 +186,8 @@ impl Encoder {
             let input = video(&MFVideoFormat_NV12).map_err(|e| err("input type", &e))?;
             mft.SetInputType(0, &input, 0)
                 .map_err(|e| err("input type", &e))?;
-            let codec: Option<ICodecAPI> = mft.cast().ok();
             if let Some(c) = &codec {
-                // Best effort: an encoder without one of these still encodes.
-                let _ = c.SetValue(&CODECAPI_AVLowLatencyMode, &VARIANT::from(true));
-                let _ = c.SetValue(
-                    &CODECAPI_AVEncCommonRateControlMode,
-                    &VARIANT::from(eAVEncCommonRateControlMode_CBR.0 as u32),
-                );
-                let _ = c.SetValue(&CODECAPI_AVEncMPVGOPSize, &VARIANT::from(fps * 10));
+                tune(c, fps * 10);
             }
             mft.ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)
                 .map_err(|e| err("starting", &e))?;
@@ -194,14 +210,14 @@ impl Encoder {
     }
 
     /// Encodes one NV12 picture taken at `time_100ns`; returns the pictures that came out (often
-    /// one, sometimes none while the encoder fills up). With `keyframe`, the next one is a
-    /// keyframe.
+    /// one, sometimes none while the encoder fills up), each with its own picture's time. With
+    /// `keyframe`, the next one is a keyframe.
     pub fn encode(
         &mut self,
         nv12: &[u8],
         time_100ns: i64,
         keyframe: bool,
-    ) -> Result<Vec<Vec<u8>>, String> {
+    ) -> Result<Vec<Encoded>, String> {
         // SAFETY: the buffer is locked only while copied into, within its length.
         let sample = unsafe {
             if keyframe {
@@ -241,7 +257,7 @@ impl Encoder {
     }
 
     /// Every picture the encoder has ready.
-    fn drain(&mut self, out: &mut Vec<Vec<u8>>) -> Result<(), String> {
+    fn drain(&mut self, out: &mut Vec<Encoded>) -> Result<(), String> {
         loop {
             // SAFETY: the output buffer struct owns at most one sample and one collection, taken
             // back out right after the call; a sample's buffer is locked only while copied.
@@ -272,7 +288,14 @@ impl Encoder {
                         if let Some(s) = sample {
                             let data = bytes(&s)?;
                             if !data.is_empty() {
-                                out.push(self.complete(data));
+                                // The input's time comes through; failing that, the latest one.
+                                let time_100ns = s
+                                    .GetSampleTime()
+                                    .unwrap_or_else(|_| out.last().map_or(0, |e| e.time_100ns));
+                                out.push(Encoded {
+                                    data: self.complete(data),
+                                    time_100ns,
+                                });
                             }
                         }
                     }
@@ -374,15 +397,26 @@ mod tests {
         let (w, h) = (320, 180);
         let mut enc = Encoder::new(w, h, 30, 1_000_000).expect("the H.264 encoder");
         let mut pictures = Vec::new();
+        let mut times = Vec::new();
+        let mut late = 0;
         for n in 0..30u32 {
             let bgra = frames::test_pattern(w, h, n);
             let nv12 = frames::bgra_to_nv12(&bgra, w, h, w as usize * 4, w, h);
             let want_key = n == 20;
-            pictures.extend(
-                enc.encode(&nv12, i64::from(n) * 333_333, n == 0 || want_key)
-                    .unwrap(),
-            );
+            let out = enc
+                .encode(&nv12, i64::from(n) * 333_333, n == 0 || want_key)
+                .unwrap();
+            late = late.max((n as usize + 1).saturating_sub(pictures.len() + out.len()));
+            for e in out {
+                times.push(e.time_100ns);
+                pictures.push(e.data);
+            }
         }
+        eprintln!("screen: the encoder held back at most {late} pictures");
+        assert!(
+            times.windows(2).all(|t| t[0] < t[1]),
+            "each picture has its own time, in order: {times:?}"
+        );
         assert!(pictures.len() >= 20, "{} pictures", pictures.len());
         let first = frames::nal_types(&pictures[0]);
         assert!(

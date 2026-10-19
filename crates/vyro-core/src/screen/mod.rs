@@ -12,7 +12,6 @@ pub mod inject;
 pub mod input;
 #[cfg(windows)]
 pub mod jpeg;
-#[cfg(windows)]
 pub mod producer;
 pub mod rtc;
 pub mod share;

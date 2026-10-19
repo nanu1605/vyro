@@ -13,8 +13,10 @@
 //! one, `out` signs every phone out, `control` lets every phone control it and `view` only
 //! look, `screen` lets every phone see its screen, `q` quits. It answers a phone's requests (1.5)
 //! with simulated data; actions are only printed (`asked: power {…}`), never done. Its screen
-//! (1.7) is a test picture in the slow view; a direct session connects and takes input (printed
-//! as `screen input: {…}`) but sends no video, since only Windows encodes H.264 here.
+//! (1.7) is a test picture in the slow view; a direct session sends real H.264 the way the app
+//! does (the app's own producer): on Windows the monitor through Windows' encoder, elsewhere a
+//! moving test pattern through OpenH264 (`still` stops it moving, `moving` starts it again).
+//! Input is printed (`screen input: {…}`), never done.
 //!
 //! ```sh
 //! cargo run -p vyro-core --example companion -- --relay http://127.0.0.1:8787
@@ -23,12 +25,20 @@
 use std::io::BufRead;
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use vyro_core::engine::{ClientPids, EngineApi, EngineConfig, LocalEngine};
 use vyro_core::remote::relay::proto::{pairing_link, relay_base};
 use vyro_core::remote::relay::{Phones, RelayClient, RelayHooks, Request};
 use vyro_core::remote::{net, random, Auth, Hooks, RemoteInfo, RemoteServer, ServerConfig};
+use vyro_core::screen::producer::{self, Status};
+
+#[cfg(not(windows))]
+#[path = "common/openh264.rs"]
+mod openh264_encoder;
+#[cfg(not(windows))]
+use openh264_encoder::openh264;
 use vyro_core::screen::rtc::{self, SessionEvent};
 use vyro_core::screen::share::Note;
 use vyro_core::units::TempUnit;
@@ -73,8 +83,55 @@ fn engine(
 
 /// The slow view's picture.
 const SCREEN_JPEG: &[u8] = include_bytes!("screen-test.jpg");
+/// A direct screen session: its connection, and what ends its video.
+struct Live {
+    session: Arc<rtc::Session>,
+    stop: Arc<AtomicBool>,
+}
+
+impl Drop for Live {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+        self.session.end();
+    }
+}
+
 /// The direct screen session, while there is one.
-static SCREEN: Mutex<Option<rtc::Session>> = Mutex::new(None);
+static SCREEN: Mutex<Option<Live>> = Mutex::new(None);
+
+/// Whether the test screen moves (off Windows; `still` and `moving` on stdin).
+fn moving() -> &'static Arc<AtomicBool> {
+    static MOVING: OnceLock<Arc<AtomicBool>> = OnceLock::new();
+    MOVING.get_or_init(|| Arc::new(AtomicBool::new(true)))
+}
+
+/// The session's video: the app's producer, from the monitor (Windows) or a moving test pattern.
+fn video(session: &rtc::Session, stop: &AtomicBool) -> Result<(), String> {
+    let status = |s: Status| {
+        if let Status::Sending { width, height, .. } = s {
+            session.tell(
+                Note::Sending {
+                    w: width,
+                    h: height,
+                }
+                .json(),
+            );
+            println!("screen: sending {width}x{height}");
+        }
+    };
+    #[cfg(windows)]
+    return producer::run(session, &producer::Settings::default(), stop, &status);
+    #[cfg(not(windows))]
+    {
+        let mut screen = producer::TestScreen::new(640, 360);
+        screen.moving = Arc::clone(moving());
+        let settings = producer::Settings {
+            bitrate: 1_000_000,
+            ..producer::Settings::default()
+        };
+        producer::drive(session, &settings, stop, &status, screen, openh264)
+    }
+}
 
 /// This machine's address on its network (no packet is sent); loopback without one.
 fn local_ipv4() -> std::net::IpAddr {
@@ -106,8 +163,17 @@ fn screen_start(r: &Request) -> Result<serde_json::Value, String> {
             SessionEvent::Closed(why) => println!("screen: closed ({why})"),
         }),
     )?;
-    session.tell(Note::Sending { w: 320, h: 180 }.json());
-    *vyro_core::lock(&SCREEN) = Some(session);
+    let session = Arc::new(session);
+    let stop = Arc::new(AtomicBool::new(false));
+    std::thread::spawn({
+        let (session, stop) = (Arc::clone(&session), Arc::clone(&stop));
+        move || {
+            if let Err(e) = video(&session, &stop) {
+                println!("screen: no video: {e}");
+            }
+        }
+    });
+    *vyro_core::lock(&SCREEN) = Some(Live { session, stop });
     Ok(serde_json::json!({ "answer": answer }))
 }
 
@@ -210,6 +276,10 @@ fn relay(url: &str, theme: String) -> Result<(), String> {
                     p.set_screen(&d.id, true);
                 }
                 println!("phones may see the screen");
+            }
+            Ok(which @ ("still" | "moving")) => {
+                moving().store(which == "moving", Ordering::SeqCst);
+                println!("the screen is {which}");
             }
             Ok(_) => show(),
         }

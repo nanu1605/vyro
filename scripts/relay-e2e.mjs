@@ -166,6 +166,17 @@ async function phone(browser, name) {
         this.addEventListener('close', (e) => window.__closes.push({ at: Date.now(), code: e.code, reason: e.reason }));
       }
     };
+    // Its direct connections, to read what the video brought.
+    const Peer = window.RTCPeerConnection;
+    window.__peers = [];
+    if (Peer) {
+      window.RTCPeerConnection = class extends Peer {
+        constructor(...args) {
+          super(...args);
+          window.__peers.push(this);
+        }
+      };
+    }
   });
   const page = await ctx.newPage();
   const frames = [];
@@ -345,10 +356,10 @@ async function main() {
     else ok(`${a.frames.length} frames between phone and relay, ${sealed} sealed, none readable`);
 
     // 3b. A direct session (1.7), where the browser plays H.264 (Google Chrome, as CI's runner
-    // has; not Playwright's Chromium): offer and answer through the relay, then straight to the
-    // PC on this machine. The example PC sends no video (only Windows encodes it here), but the
-    // connection, its notes and the input are the real ones.
-    let chrome = await chromium.launch({ channel: 'chrome' }).catch(() => null);
+    // has, or the one CHROME names; not Playwright's Chromium): offer and answer through the
+    // relay, then straight to the PC on this machine, which sends a moving test pattern through
+    // the app's own producer (OpenH264 standing in for Windows' encoder).
+    let chrome = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : { channel: 'chrome' }).catch(() => null);
     if (chrome) {
       const probe = await chrome.newPage();
       const h264 = await probe.evaluate(() =>
@@ -382,6 +393,38 @@ async function main() {
           (e) => problem('direct', e.message),
         );
         await seeText(d.page, 'Tap to click', '…and the phone knows it is direct');
+        // The picture: decoded, not blank, and still there when the screen stops changing.
+        await seeText(d.page, /Receiving \d+×\d+/, '…and plays the PC\'s video');
+        const picture = () =>
+          d.page.evaluate(async () => {
+            const v = document.querySelector('.surface video');
+            const stats = { decoded: 0 };
+            (await window.__peers?.at(-1)?.getStats())?.forEach((r) => {
+              if (r.type === 'inbound-rtp' && r.kind === 'video') stats.decoded = r.framesDecoded ?? 0;
+            });
+            if (!v || !v.videoWidth) return { spread: 0, ...stats };
+            const c = document.createElement('canvas');
+            c.width = 64;
+            c.height = 36;
+            const g = c.getContext('2d', { willReadFrequently: true });
+            g.drawImage(v, 0, 0, 64, 36);
+            const px = g.getImageData(0, 0, 64, 36).data;
+            const luma = [];
+            for (let i = 0; i < px.length; i += 4) luma.push(0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]);
+            const mean = luma.reduce((a, b) => a + b, 0) / luma.length;
+            const spread = Math.sqrt(luma.reduce((a, b) => a + (b - mean) ** 2, 0) / luma.length);
+            return { spread: Math.round(spread), ...stats };
+          });
+        const moving = await picture();
+        if (moving.spread < 20) problem('direct video', `the picture is blank (spread ${moving.spread})`);
+        else ok(`the phone shows the PC's picture (spread ${moving.spread}, ${moving.decoded} decoded)`);
+        pc.say('still');
+        await d.page.waitForTimeout(4000);
+        const still = await picture();
+        if (still.spread < 20) problem('still screen', `the picture went blank on a still screen (spread ${still.spread})`);
+        else if (still.decoded <= moving.decoded) problem('still screen', `no picture arrived in 4 s of a still screen (${still.decoded} decoded)`);
+        else ok(`a still screen stays on the phone and is sent again (${still.decoded - moving.decoded} pictures in 4 s)`);
+        pc.say('moving');
         const box = await d.page.locator('.surface').boundingBox();
         const pressed = pc.out.next(/^screen input: Button/);
         if (box) await d.page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);

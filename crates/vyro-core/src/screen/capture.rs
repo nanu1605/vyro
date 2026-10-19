@@ -18,27 +18,7 @@ use windows::Win32::Graphics::Dxgi::{
 };
 
 use super::input::Rect;
-
-/// Why a picture could not be taken.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CaptureError {
-    /// Windows shows its secure desktop (sign-in, lock screen, an administrator prompt).
-    Secure,
-    /// The duplication ended (a mode change, a full-screen game, the secure desktop came and
-    /// went): open it again.
-    Lost,
-    Other(String),
-}
-
-impl std::fmt::Display for CaptureError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Secure => f.write_str("the PC is showing a secure screen"),
-            Self::Lost => f.write_str("the screen changed"),
-            Self::Other(m) => f.write_str(m),
-        }
-    }
-}
+pub use super::producer::{CaptureError, Picture};
 
 fn other(what: &str, e: &windows::core::Error) -> CaptureError {
     if e.code() == DXGI_ERROR_ACCESS_DENIED {
@@ -112,13 +92,6 @@ fn outputs() -> Vec<(IDXGIAdapter1, IDXGIOutput, Monitor)> {
 
 pub fn monitors() -> Vec<Monitor> {
     outputs().into_iter().map(|(_, _, m)| m).collect()
-}
-
-/// A BGRA picture, rows packed.
-pub struct Picture {
-    pub bgra: Vec<u8>,
-    pub width: u32,
-    pub height: u32,
 }
 
 pub struct Capture {
@@ -279,7 +252,19 @@ mod tests {
             match c.next(100) {
                 Ok(Some(p)) => {
                     assert_eq!(p.bgra.len(), p.width as usize * p.height as usize * 4);
-                    eprintln!("screen: captured {}x{}", p.width, p.height);
+                    let zero = p.bgra.iter().all(|&b| b == 0);
+                    let mean =
+                        p.bgra.iter().map(|&b| u64::from(b)).sum::<u64>() / p.bgra.len() as u64;
+                    eprintln!(
+                        "screen: captured {}x{}, mean byte {mean}{}",
+                        p.width,
+                        p.height,
+                        if zero {
+                            ", all zero (no picture yet)"
+                        } else {
+                            ""
+                        }
+                    );
                     return;
                 }
                 Ok(None) => {}

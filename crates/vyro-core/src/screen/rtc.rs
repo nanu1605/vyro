@@ -17,6 +17,7 @@ use str0m::media::{MediaKind, MediaTime, Mid};
 use str0m::net::{Protocol, Receive};
 use str0m::{Candidate, Event, IceConnectionState, Input, Output, Rtc, RtcConfig};
 
+use super::frames;
 use super::input;
 use super::stun;
 
@@ -26,6 +27,9 @@ const QUEUE: usize = 4;
 const TICK: Duration = Duration::from_millis(4);
 /// A session that does not connect within this time ends.
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
+/// A connection that drops (the phone's Wi-Fi stalls, it changes networks) may come back; the
+/// session ends when it has not within this time.
+const RECONNECT: Duration = Duration::from_secs(10);
 
 /// Where the session finds its addresses.
 #[derive(Debug, Clone)]
@@ -82,16 +86,25 @@ struct State {
 pub struct Session {
     frames: SyncSender<Frame>,
     keyframe: Arc<AtomicBool>,
+    /// A frame was dropped: the phone cannot decode the ones after it until a keyframe.
+    gap: Arc<AtomicBool>,
     stop: Arc<AtomicBool>,
     state: Arc<Mutex<State>>,
     thread: Option<JoinHandle<()>>,
 }
 
 impl Session {
-    /// Queues a frame; false when the session has ended (a full queue drops the frame).
+    /// Queues a frame; false when the session has ended. A full queue drops the frame, and as
+    /// each picture builds on the one before, nothing more goes until the next keyframe, which
+    /// is asked for.
     pub fn send(&self, frame: Frame) -> bool {
         match self.frames.try_send(frame) {
-            Ok(()) | Err(TrySendError::Full(_)) => !self.closed(),
+            Ok(()) => !self.closed(),
+            Err(TrySendError::Full(_)) => {
+                self.gap.store(true, Ordering::SeqCst);
+                self.keyframe.store(true, Ordering::SeqCst);
+                !self.closed()
+            }
             Err(TrySendError::Disconnected(_)) => false,
         }
     }
@@ -208,16 +221,20 @@ pub fn start(
         .map_err(|e| format!("the phone's offer: {e}"))?;
     let (tx, rx) = mpsc::sync_channel(QUEUE);
     let keyframe = Arc::new(AtomicBool::new(true));
+    let gap = Arc::new(AtomicBool::new(false));
     let stop = Arc::new(AtomicBool::new(false));
     let state = Arc::new(Mutex::new(State::default()));
     let thread = {
-        let keyframe = Arc::clone(&keyframe);
-        let stop = Arc::clone(&stop);
+        let flags = Flags {
+            keyframe: Arc::clone(&keyframe),
+            gap: Arc::clone(&gap),
+            stop: Arc::clone(&stop),
+        };
         let state = Arc::clone(&state);
         std::thread::Builder::new()
             .name("vyro-screen-rtc".into())
             .spawn(move || {
-                let why = run(rtc, &socket, &rx, &keyframe, &stop, &state, &events);
+                let why = run(rtc, &socket, &rx, &flags, &state, &events);
                 crate::lock(&state).closed = true;
                 events(SessionEvent::Closed(why));
             })
@@ -227,6 +244,7 @@ pub fn start(
         Session {
             frames: tx,
             keyframe,
+            gap,
             stop,
             state,
             thread: Some(thread),
@@ -273,20 +291,37 @@ fn send_note(rtc: &mut Rtc, id: ChannelId, state: &Mutex<State>) -> bool {
     true
 }
 
+/// What the producer and the session's loop share.
+struct Flags {
+    /// The next picture should be a keyframe.
+    keyframe: Arc<AtomicBool>,
+    /// A frame was dropped before it was sent.
+    gap: Arc<AtomicBool>,
+    stop: Arc<AtomicBool>,
+}
+
 /// The session's loop; returns why it ended.
 fn run(
     mut rtc: Rtc,
     socket: &UdpSocket,
     frames: &Receiver<Frame>,
-    keyframe: &AtomicBool,
-    stop: &AtomicBool,
+    flags: &Flags,
     state: &Mutex<State>,
     events: &EventSink,
 ) -> String {
+    let Flags {
+        keyframe,
+        gap,
+        stop,
+    } = flags;
     let started = Instant::now();
     let local = socket.local_addr().ok();
     let mut video: Option<(Mid, str0m::format::PayloadParams)> = None;
     let mut channel: Option<ChannelId> = None;
+    // Until a keyframe goes, the phone can decode nothing (pictures build on the one before):
+    // none is sent before it, after connecting and after a frame was lost.
+    let mut need_key = true;
+    let mut dropped_since: Option<Instant> = None;
     let mut buf = vec![0u8; 2000];
     loop {
         // Everything str0m has to say, until it waits for time or input.
@@ -304,8 +339,9 @@ fn run(
                         events(SessionEvent::Connected);
                     }
                     Event::IceConnectionStateChange(IceConnectionState::Disconnected) => {
-                        return "the phone went away".into();
+                        dropped_since.get_or_insert_with(Instant::now);
                     }
+                    Event::IceConnectionStateChange(_) => dropped_since = None,
                     Event::MediaAdded(m) if m.kind == MediaKind::Video => {
                         video = h264_pt(&mut rtc, m.mid).map(|p| (m.mid, p));
                         if video.is_none() {
@@ -323,6 +359,10 @@ fn run(
                     Event::ChannelData(d) => {
                         let text = String::from_utf8_lossy(&d.data);
                         match input::parse(&text) {
+                            Ok(input::Input::Picture) => {
+                                log::info!("screen: the phone asked for a whole picture");
+                                keyframe.store(true, Ordering::SeqCst);
+                            }
                             Ok(i) => events(SessionEvent::Input(i)),
                             Err(e) => log::debug!("screen: input refused: {e}"),
                         }
@@ -346,22 +386,39 @@ fn run(
         if !crate::lock(state).connected && started.elapsed() > CONNECT_TIMEOUT {
             return "the phone could not reach the PC directly".into();
         }
+        if dropped_since.is_some_and(|t| t.elapsed() > RECONNECT) {
+            return "the phone went away".into();
+        }
+        if gap.swap(false, Ordering::SeqCst) {
+            need_key = true;
+        }
         // A note for the phone, once its channel is open.
         if channel.is_some_and(|id| send_note(&mut rtc, id, state)) {
             continue;
         }
         // A frame to send: one mutation, then back to draining the output.
         if let Ok(f) = frames.try_recv() {
-            if let (Some((mid, p)), true) = (&video, crate::lock(state).connected) {
+            let connected = crate::lock(state).connected;
+            if !connected {
+                // Made before the phone was there: a keyframe follows once it is.
+                need_key = true;
+            } else if need_key && !frames::is_keyframe(&f.data) {
+                keyframe.store(true, Ordering::SeqCst);
+            } else if let Some((mid, p)) = &video {
                 if let Some(w) = rtc.writer(*mid) {
                     let wallclock = f.captured;
-                    if let Err(e) = w.write(
+                    match w.write(
                         p.pt(),
                         wallclock,
                         MediaTime::from_90khz(f.rtp_90khz),
                         f.data,
                     ) {
-                        log::debug!("screen: frame not sent: {e}");
+                        Ok(()) => need_key = false,
+                        Err(e) => {
+                            log::debug!("screen: frame not sent: {e}");
+                            need_key = true;
+                            keyframe.store(true, Ordering::SeqCst);
+                        }
                     }
                 }
             }

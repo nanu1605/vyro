@@ -2791,6 +2791,38 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       run 39227795520), so phones get the 1.7 app for the field checks. It works with a 1.4.0
       PC (view only) and with 1.5 and 1.6, so the 1.5 and 1.6 field checks need no deploy of
       their own.
+- [x] **Field result: the CPU while pairing** (2026-10-19). On the test build of 603270c the
+      owner saw Vyro and Windows' DNS Client stay low while pairing and with a phone paired
+      (1.4.1's fix to Settings → Remote, merged here); an earlier 1.7 build had shown 60 %.
+- [x] **The screen shows on the phone** (field check, 2026-10-19: on Android the PC's screen
+      showed for a second, blurred, then went black; on the iPhone it stayed black). No test had
+      ever played the PC's video: the example PC sent none, and the loopback test sent stand-in
+      bytes. Played for real (str0m and an H.264 encoder into Google Chrome), the causes showed:
+      - Windows' encoder holds about four pictures before giving one out (CI's run printed 26
+        out for 30 in). A still screen was fed one picture a second, so the keyframe the phone
+        waited for came out four seconds late, and every change after it lagged as much. The
+        picture now goes on at full rate for a second after any change or keyframe, so the
+        encoder gives out what it holds and refines a still picture, then once a second.
+      - Right after connecting, the first pictures out were ones made before the phone was
+        there, which build on pictures it never got: it could decode nothing (an iPhone stops
+        there). Nothing is sent now until a keyframe, after connecting and after any picture is
+        lost; a full queue no longer drops one silently but asks for a keyframe.
+      - Every picture out of one call took that moment's time, so two could share one. Each
+        now keeps its own picture's time.
+      - Text was blurred: the monitor was sent at 1280×720, picking one pixel in three. A 1080p
+        monitor now goes as it is (5 Mbit/s); larger ones are scaled by averaging the pixels.
+      - A moment's loss of the connection ended the session at once; it now has 10 s to come
+        back, and the phone says "Reconnecting…". A phone whose picture stops for 3 s asks for
+        a whole one, and it shows what arrives ("Receiving 1920×1080, 30 pictures a second").
+      Tests: the producer is no longer Windows-only, so tests drive it with a test screen and an
+      encoder that holds four pictures back, as Windows' does: the phone's first picture is a
+      keyframe (it was a P picture), and a still screen's keyframe arrives within a second (it
+      took 3.3 s). The example PC now sends real H.264 through the same producer (OpenH264, a
+      tests-only stand-in for Windows' encoder), and the end-to-end test checks the phone app
+      decodes it, that the picture is not blank, and that a still screen keeps arriving. On
+      CI's Windows runner, `scripts/screen-check.mjs` plays the app's own capture and Windows'
+      encoder in the runner's Chrome: pictures from the start, never blank, a still screen,
+      a keyframe when asked.
 - [ ] Field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)): Android Chrome
       and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU; the secure screen,
       an administrator window, two monitors, the slow view, the idle end; 1.4.1 to 1.6 released

@@ -21,9 +21,11 @@ through the relay where it cannot.
 
 ## 2. Direct, on Wi-Fi (the same network as the PC)
 
-- Show the screen. Within a few seconds the phone shows the PC's desktop and "Tap to click…".
-  The PC shows the **Your screen is shared** banner on every view, a notification, and the tray
-  menu has **Stop sharing the screen with *phone***.
+- Show the screen. Within a few seconds the phone shows the PC's desktop and "Tap to click…",
+  and below the picture "Receiving W×H, N pictures a second" (note both: on a still screen about
+  one a second is right). Leave the PC alone for a minute: the picture stays, sharp, never
+  black. The PC shows the **Your screen is shared** banner on every view, a notification, and
+  the tray menu has **Stop sharing the screen with *phone***.
 - Move a window around on the PC: the phone follows. Note the delay (a stopwatch on the PC's
   screen, filmed beside the phone, or by eye) and the PC's CPU in Task Manager for Vyro.
 - **Tap** an icon: it is clicked where the pointer dot shows. **Hold** on the desktop: the
