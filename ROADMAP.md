@@ -2586,7 +2586,9 @@ first) and 1.7 (the PC's screen on the phone), each with its own field check.
       the list waits up to 4 s for Windows' parts and 5 s for the battery reads, goes on with a
       late part's last answer, and does not wait again for a part already late
       (`devices/bounded.rs`, tested with reads side by side). The log names any part that takes
-      over 2 s or does not answer, and, when changes keep coming, where they come from.
+      over 2 s or does not answer, and, when changes keep coming, where they come from. The
+      owner confirmed it on 1.7's build bbc8120 (2026-10-19): the list shows with Bluetooth
+      connected.
 - [ ] Field check 1.4.1 ([`docs/field-check-1.4.1.md`](docs/field-check-1.4.1.md)); the owner's
       go.
 
