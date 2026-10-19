@@ -3,17 +3,19 @@
 //! a keyframe whenever the phone asks. It runs on the CPU; the GPU's encoder is a later step if
 //! the field check finds this too costly.
 
+use std::ffi::c_void;
 use std::mem::ManuallyDrop;
+use std::sync::OnceLock;
 
-use windows::core::{Interface, GUID};
+use windows::core::{Interface, GUID, HRESULT};
 use windows::Win32::Media::MediaFoundation::{
     eAVEncCommonRateControlMode_CBR, eAVEncH264VProfile_Base, eAVEncH264VProfile_ConstrainedBase,
     CLSID_MSH264EncoderMFT, CODECAPI_AVEncCommonRateControlMode, CODECAPI_AVEncMPVGOPSize,
-    CODECAPI_AVEncVideoForceKeyFrame, CODECAPI_AVLowLatencyMode, ICodecAPI, IMFMediaType,
-    IMFSample, IMFTransform, MFCreateMediaType, MFCreateMemoryBuffer, MFCreateSample,
-    MFMediaType_Video, MFShutdown, MFStartup, MFVideoFormat_H264, MFVideoFormat_NV12,
-    MFVideoInterlace_Progressive, MFSTARTUP_LITE, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING,
-    MFT_MESSAGE_NOTIFY_END_OF_STREAM, MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFT_OUTPUT_DATA_BUFFER,
+    CODECAPI_AVEncVideoForceKeyFrame, CODECAPI_AVLowLatencyMode, ICodecAPI, IMFMediaBuffer,
+    IMFMediaType, IMFSample, IMFTransform, MFMediaType_Video, MFVideoFormat_H264,
+    MFVideoFormat_NV12, MFVideoInterlace_Progressive, MFSTARTUP_LITE,
+    MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, MFT_MESSAGE_NOTIFY_END_OF_STREAM,
+    MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFT_OUTPUT_DATA_BUFFER,
     MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES, MFT_OUTPUT_STREAM_PROVIDES_SAMPLES, MF_E_NOTACCEPTING,
     MF_E_TRANSFORM_NEED_MORE_INPUT, MF_E_TRANSFORM_STREAM_CHANGE, MF_MT_AVG_BITRATE,
     MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE, MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE,
@@ -25,6 +27,71 @@ use windows::Win32::System::Com::{
 use windows::Win32::System::Variant::VARIANT;
 
 use super::frames;
+use crate::live::dll::Library;
+
+/// Media Foundation's functions, from System32's `mfplat.dll` when there is one: Windows "N"
+/// editions without the Media Feature Pack have none, and Vyro must still start there (only the
+/// screen's direct view is then missing).
+struct Mf {
+    startup: unsafe extern "system" fn(u32, u32) -> HRESULT,
+    shutdown: unsafe extern "system" fn() -> HRESULT,
+    media_type: unsafe extern "system" fn(*mut *mut c_void) -> HRESULT,
+    memory_buffer: unsafe extern "system" fn(u32, *mut *mut c_void) -> HRESULT,
+    sample: unsafe extern "system" fn(*mut *mut c_void) -> HRESULT,
+}
+
+fn mf() -> Result<&'static Mf, String> {
+    static MF: OnceLock<Option<Mf>> = OnceLock::new();
+    MF.get_or_init(|| {
+        let lib = Library::system32("mfplat.dll")?;
+        // SAFETY: each type is the export's documented signature.
+        unsafe {
+            Some(Mf {
+                startup: lib.get(c"MFStartup")?,
+                shutdown: lib.get(c"MFShutdown")?,
+                media_type: lib.get(c"MFCreateMediaType")?,
+                memory_buffer: lib.get(c"MFCreateMemoryBuffer")?,
+                sample: lib.get(c"MFCreateSample")?,
+            })
+        }
+    })
+    .as_ref()
+    .ok_or_else(|| {
+        "Windows' media features are not installed (a Windows \"N\" edition needs the Media \
+         Feature Pack)"
+            .into()
+    })
+}
+
+impl Mf {
+    /// A COM object an `MFCreate…` call made.
+    ///
+    /// # Safety
+    /// `make` must store an owned `T` in its argument on success.
+    unsafe fn make<T: Interface>(
+        make: impl FnOnce(*mut *mut c_void) -> HRESULT,
+    ) -> windows::core::Result<T> {
+        let mut p = std::ptr::null_mut();
+        make(&mut p).ok()?;
+        // SAFETY: the call succeeded and handed over a reference.
+        Ok(unsafe { T::from_raw(p) })
+    }
+
+    unsafe fn media_type(&self) -> windows::core::Result<IMFMediaType> {
+        // SAFETY: MFCreateMediaType hands back an owned IMFMediaType.
+        unsafe { Self::make(|p| (self.media_type)(p)) }
+    }
+
+    unsafe fn memory_buffer(&self, len: u32) -> windows::core::Result<IMFMediaBuffer> {
+        // SAFETY: MFCreateMemoryBuffer hands back an owned IMFMediaBuffer.
+        unsafe { Self::make(|p| (self.memory_buffer)(len, p)) }
+    }
+
+    unsafe fn sample(&self) -> windows::core::Result<IMFSample> {
+        // SAFETY: MFCreateSample hands back an owned IMFSample.
+        unsafe { Self::make(|p| (self.sample)(p)) }
+    }
+}
 
 /// Two 32-bit values in one attribute, as `MFSetAttributeSize` packs them.
 fn pack(hi: u32, lo: u32) -> u64 {
@@ -53,15 +120,18 @@ unsafe impl Send for Encoder {}
 impl Encoder {
     /// An encoder for `w`×`h` NV12 pictures (even sides) at `fps`, `bitrate` bits a second.
     pub fn new(w: u32, h: u32, fps: u32, bitrate: u32) -> Result<Self, String> {
+        let mf = mf()?;
         // SAFETY: plain COM and Media Foundation calls; every object is owned by its wrapper.
         unsafe {
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-            MFStartup(MF_VERSION, MFSTARTUP_LITE).map_err(|e| err("Media Foundation", &e))?;
+            (mf.startup)(MF_VERSION, MFSTARTUP_LITE)
+                .ok()
+                .map_err(|e| err("Media Foundation", &e))?;
             let mft: IMFTransform =
                 CoCreateInstance(&CLSID_MSH264EncoderMFT, None, CLSCTX_INPROC_SERVER)
                     .map_err(|e| err("the H.264 encoder", &e))?;
             let video = |sub: &GUID| -> windows::core::Result<IMFMediaType> {
-                let t = MFCreateMediaType()?;
+                let t = mf.media_type()?;
                 t.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
                 t.SetGUID(&MF_MT_SUBTYPE, sub)?;
                 t.SetUINT64(&MF_MT_FRAME_SIZE, pack(w, h))?;
@@ -140,14 +210,15 @@ impl Encoder {
                 }
             }
             let len = u32::try_from(nv12.len()).map_err(|_| "picture too large")?;
-            let buf = MFCreateMemoryBuffer(len).map_err(|e| err("buffer", &e))?;
+            let mf = mf()?;
+            let buf = mf.memory_buffer(len).map_err(|e| err("buffer", &e))?;
             let mut p = std::ptr::null_mut();
             buf.Lock(&mut p, None, None)
                 .map_err(|e| err("buffer", &e))?;
             std::ptr::copy_nonoverlapping(nv12.as_ptr(), p, nv12.len());
             buf.Unlock().map_err(|e| err("buffer", &e))?;
             buf.SetCurrentLength(len).map_err(|e| err("buffer", &e))?;
-            let s = MFCreateSample().map_err(|e| err("sample", &e))?;
+            let s = mf.sample().map_err(|e| err("sample", &e))?;
             s.AddBuffer(&buf).map_err(|e| err("sample", &e))?;
             s.SetSampleTime(time_100ns).map_err(|e| err("sample", &e))?;
             s.SetSampleDuration(10_000_000 / i64::from(self.fps))
@@ -178,8 +249,11 @@ impl Encoder {
                 let mine = if self.provides {
                     None
                 } else {
-                    let buf = MFCreateMemoryBuffer(self.out_size).map_err(|e| err("buffer", &e))?;
-                    let s = MFCreateSample().map_err(|e| err("sample", &e))?;
+                    let mf = mf()?;
+                    let buf = mf
+                        .memory_buffer(self.out_size)
+                        .map_err(|e| err("buffer", &e))?;
+                    let s = mf.sample().map_err(|e| err("sample", &e))?;
                     s.AddBuffer(&buf).map_err(|e| err("sample", &e))?;
                     Some(s)
                 };
@@ -232,7 +306,9 @@ impl Drop for Encoder {
         // SAFETY: plain calls on a live MFT; MFShutdown pairs the MFStartup in `new`.
         unsafe {
             let _ = self.mft.ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0);
-            let _ = MFShutdown();
+            if let Ok(mf) = mf() {
+                let _ = (mf.shutdown)();
+            }
         }
     }
 }
