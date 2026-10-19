@@ -37,6 +37,12 @@ function ok(where) {
   console.log(`✓ ${where}`);
 }
 
+/** Something worth seeing on the run's page (on CI, a notice there too). */
+function note(text) {
+  console.log(`· ${text}`);
+  if (process.env.GITHUB_ACTIONS) console.log(`::notice title=End to end::${text}`);
+}
+
 const children = [];
 function run(cmd, args, opts = {}) {
   const child = spawn(cmd, args, { cwd: root, stdio: ['pipe', 'pipe', 'pipe'], ...opts });
@@ -301,9 +307,9 @@ async function main() {
       if (!h264) {
         await chrome.close();
         chrome = null;
-        console.log('· this Google Chrome plays no H.264: the direct session is not tried');
+        note('this Google Chrome plays no H.264: the direct session is not tried');
       }
-    } else console.log('· no Google Chrome here: the direct session is not tried');
+    } else note('no Google Chrome here: the direct session is not tried');
     if (chrome) {
       try {
         pc.say('');
@@ -318,7 +324,10 @@ async function main() {
         const connected = pc.out.next(/^screen: connected$/, 30_000);
         await start.click();
         await connected.then(
-          () => ok('the phone connects to the PC directly'),
+          () => {
+            ok('the phone connects to the PC directly');
+            note('a direct session (Google Chrome) connected to the example PC');
+          },
           (e) => problem('direct', e.message),
         );
         await seeText(d.page, 'Tap to click', '…and the phone knows it is direct');

@@ -1,7 +1,8 @@
 # Field check: 1.7 (the PC's screen on the phone)
 
-Status: **to do.** Test build: the artifact of the first green CI run on `claude/vyro-1.7`
-(version 1.7.0). Install the MSI over 1.6, and open the phone app from the relay this branch
+Status: **to do.** Test build: **`vyro-windows-e0e76b5`** (CI run 39191304470, every job green),
+version 1.7.0, or the artifact of any later green run on `claude/vyro-1.7`. Install the MSI over
+1.6, and open the phone app from the relay this branch
 deploys (or the branch's own relay; see `docs/remote.md` → Running your own relay). About 60
 minutes, with an Android phone (Chrome) and an iPhone (Safari, the Home Screen app).
 

@@ -2697,7 +2697,9 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       the start, the start and end in Settings → Remote's record. It ends after 10 minutes with
       no input and the phone not showing it (the phone says it is there every 30 s while it
       does); "Lock this PC when a phone's session ends" is an option. Nothing captures without a
-      session.
+      session. Media Foundation is looked up in System32 when a session starts, so Vyro still
+      starts on a Windows "N" edition without the Media Feature Pack (only the direct view is
+      missing there, and the phone uses the slow view).
 - [x] **The slow view**: if the phone has no direct path in 15 s, or plays no H.264, it asks for
       one picture at a time through the relay: JPEG at most 960×600, at most 2 a second, only
       when the screen changed; input in batches. 20 minutes a day per PC, counted on the PC
@@ -2716,11 +2718,22 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       in its rules and in the running relay. End to end: the Screen tab asks for the permission,
       the slow view shows the example PC's picture and a tap reaches it as a click, Stop ends
       it; with Google Chrome (CI's runner), a direct session connects on the runner and a tap
-      arrives as input. Accessibility: the Screen tab's states, and the banner.
-- [ ] CI green, then field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)):
-      Android Chrome and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU;
-      the secure screen, an administrator window, two monitors, the slow view, the idle end;
-      1.4.1 to 1.6 released first; the owner's go.
+      arrives as input. Accessibility: the Screen tab's states, and the banner. CI's
+      installed-app test caught a hang at start (the screen status took one lock twice); a test
+      now fails within seconds if it hangs.
+- [x] **CI green** on e0e76b5 (run 39191304470): Linux, Windows with the installed-app smoke
+      test and the screen tests on the runner's desktop (it captured 1024×768, encoded 26
+      pictures with 2 keyframes, and made a 3.9 kB JPEG), the relay and phone app with the end
+      to end test, accessibility. Test build `vyro-windows-e0e76b5`; its archive grew from
+      29.2 MB (1.6) to 36.1 MB, as `vyro.exe` and the installer each carry the WebRTC code, and
+      the installer stays inside the 60 MB budget. Locally: fmt, clippy (Linux and windows-gnu),
+      747 core tests, 48 app tests, 228 frontend tests, 20 relay tests, the builds, the budgets
+      (the Screen tab is its own 6 kB chunk; the phone app's start stays at 33.8 kB), the end to
+      end test (56 checks) and the accessibility sweep (703 checks).
+- [ ] Field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)): Android Chrome
+      and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU; the secure screen,
+      an administrator window, two monitors, the slow view, the idle end; 1.4.1 to 1.6 released
+      first; the owner's go.
 
 ## Risks
 
