@@ -174,7 +174,7 @@ pub fn answer_messages(id: u64, result: &Result<serde_json::Value, String>) -> V
     if text.len() <= PART {
         return vec![text];
     }
-    let pieces = split_utf8(&text, PART);
+    let pieces = split_json_str(&text, PART);
     let n = pieces.len();
     pieces
         .iter()
@@ -183,18 +183,27 @@ pub fn answer_messages(id: u64, result: &Result<serde_json::Value, String>) -> V
         .collect()
 }
 
-/// `text` in pieces of at most `max` bytes, never splitting a character.
-fn split_utf8(text: &str, max: usize) -> Vec<&str> {
+/// `text` in pieces that each take at most `max` bytes once written as a JSON string, never
+/// splitting a character. Each piece goes out as a `part`'s `d`, where a quote or a backslash
+/// takes two bytes and a control character up to six: an answer full of Windows paths or short
+/// strings would otherwise grow past the relay's frame, and the relay would drop the PC.
+fn split_json_str(text: &str, max: usize) -> Vec<&str> {
     let mut out = Vec::new();
-    let mut rest = text;
-    while !rest.is_empty() {
-        let mut end = rest.len().min(max);
-        while !rest.is_char_boundary(end) {
-            end -= 1;
+    let (mut start, mut size) = (0, 0);
+    for (i, c) in text.char_indices() {
+        let n = match c {
+            '"' | '\\' | '\n' | '\r' | '\t' | '\u{8}' | '\u{c}' => 2,
+            c if (c as u32) < 0x20 => 6,
+            c => c.len_utf8(),
+        };
+        if size + n > max && i > start {
+            out.push(&text[start..i]);
+            (start, size) = (i, 0);
         }
-        let (head, tail) = rest.split_at(end);
-        out.push(head);
-        rest = tail;
+        size += n;
+    }
+    if start < text.len() {
+        out.push(&text[start..]);
     }
     out
 }

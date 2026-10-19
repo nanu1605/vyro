@@ -2623,6 +2623,15 @@ show on the phone).
       once, then 4 a second); later messages wait. A test replays its sends through the relay's
       own rule, and the end-to-end test switches tabs quickly and fails if the relay ever cuts
       the phone off.
+- [x] **Long answers always fit the relay's frame** (found testing the relay before its
+      release, 2026-10-19). An answer over 48 KiB goes in parts, each a JSON string, where every
+      quote and backslash takes two bytes: an answer full of Windows paths or short strings
+      (a diagnostics report, a device list) could grow a part past the relay's 64 KiB frame, and
+      the relay then dropped the PC, again on every try. Parts are now cut by their written
+      size. A test sends answers full of paths, quotes and control characters and checks every
+      frame fits. The same testing found nothing else to fix in protocol 2 against the relay:
+      the 1.7 phone app works with a 1.4.0, 1.5 and 1.6 PC, and a phone holding the 1.4 app
+      gets the new one the first time it opens after the relay is deployed.
 - [ ] Field check 1.5 ([`docs/field-check-1.5.md`](docs/field-check-1.5.md)); 1.4.1 released
       first; the owner's go. Then the relay is deployed (`relay.yml`), which serves the new
       phone app.
