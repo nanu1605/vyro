@@ -27,7 +27,8 @@ through the relay where it cannot.
   black.
 - Tap "Receiving…": it opens two lines. **Here** is how bright the picture this phone decodes
   is; **the PC's** line is what the PC sent (its screen's size, how it took it: "Desktop
-  Duplication", or "GDI" when Desktop Duplication gave blank pictures; the size sent, pictures a
+  Duplication", "Desktop Duplication (HDR)" on a monitor with HDR on, or "GDI" when Desktop
+  Duplication gave blank pictures or ones it cannot convert; the size sent, pictures a
   second, Mbit/s, how bright the picture it took is, whole pictures asked for). If the picture
   is black, a line under it says whether the PC's own picture was black or the PC sent one that
   comes out black on the phone. Screenshot both lines on each phone, picture or not. The PC shows the **Your screen is shared** banner on every view, a notification, and
@@ -43,6 +44,12 @@ through the relay where it cannot.
   windows switch. **Win**: the Start menu opens.
 - With two monitors: the screen buttons list both; choosing the other one shows it, and taps
   land on it.
+- **HDR** (Settings → System → Display → Use HDR, on the monitor shown): the picture shows with
+  its usual colours, neither black, dark nor washed out, and the PC's line says "Desktop
+  Duplication (HDR)". Move the "SDR content brightness" slider, then show the screen again: white
+  windows stay white. Turn HDR off and on while the screen is shown: the picture comes back each
+  time. The app's log has "screen: … is HDR; its pictures are converted with SDR white at N
+  nits".
 - **Stop** on the phone: the banner goes, the record in Settings → Remote shows the session's
   start and end with its length.
 

@@ -2827,7 +2827,8 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       CI's Windows runner, `scripts/screen-check.mjs` plays the app's own capture and Windows'
       encoder in the runner's Chrome: the first picture (a keyframe) 0.4 s after connecting,
       the screen as it was (not blank), a still screen once a second, a keyframe when asked.
-- [ ] **Still black on both phones** (field check, 2026-10-19, test build 7207f8f): Android and
+- [ ] **Still black on both phones**: cause found, HDR (below); fixed in the next test build, to
+      be checked on the owner's PC (field check, 2026-10-19, test build 7207f8f): Android and
       iPhone both showed "Receiving 1920×1080, 30 pictures a second" over a black picture, from
       a 2560×1440 main monitor (a second one at 3840×2160). The phones decode, so the video
       arrives; what it holds, or how the page draws it, is the question. Ruled out so far:
@@ -2848,8 +2849,8 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
         and sent pictures a second, Mbit/s, keyframes, **how bright the picture it took is**,
         and how many whole pictures the phone asked for; the app's log keeps the first few and
         one every half minute, and what Windows hands over for the screen (size, pixel format,
-        rotation, video or system memory). A pixel format other than 8-bit BGRA now ends the
-        session with a reason rather than sending noise;
+        rotation, video or system memory). A pixel format other than 8-bit BGRA ended the
+        session with a reason rather than sending noise (which is how the cause was found);
       - the phone reads how bright the picture it decodes is, and under "Receiving…" (tap it)
         shows both; when the picture is black it says whether the PC's own picture was black
         (the trouble is on the PC) or the PC sent a picture that comes out black on the phone.
@@ -2859,6 +2860,18 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       zeros on a grid across it, and stays so for a second, is now taken again through GDI, as
       Chrome falls back to it; if GDI sees the screen, the rest of the session goes through GDI and the log and the phone's
       details say "through GDI". CI's runner captures its desktop through GDI too.
+      **Found** (field check on aacf437, the same day): the session ended at once with "the
+      screen's pixel format (10) cannot be read". Format 10 is 16-bit float: the main monitor
+      runs with HDR on, and Desktop Duplication hands over the desktop as Windows composes it,
+      in linear scRGB (1.0 is 80 nits, SDR white at the display's SDR white level). Read as
+      8-bit, as every build before did, those bytes went out as the black both phones showed.
+      Now a compute shader on the duplication's device converts each picture to 8-bit sRGB
+      (`screen/hdr.rs`): SDR white, from DisplayConfig's SDR white level (200 nits when Windows
+      does not say), becomes 255, and brighter highlights are clipped; the PC's line reads
+      "through Desktop Duplication (HDR)". A picture in any other format, or one the shader
+      cannot convert, moves the session to GDI rather than ending it. CI converts a known HDR
+      picture through the shader on WARP and checks each colour, the byte order and the
+      clipping; a real HDR desktop is the field check's.
 - [ ] Field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)): Android Chrome
       and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU; the secure screen,
       an administrator window, two monitors, the slow view, the idle end; 1.4.1 to 1.6 released
