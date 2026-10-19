@@ -65,6 +65,6 @@ If a step fails: note the message on the row, then send the app's log from
 | --- | --- | --- |
 | Devices tab with a Bluetooth device connected | works | The owner, 2026-10-19, on bbc8120: the list shows and stays (stuck on 3095d4f) |
 | 1. Connected or not |  |  |
-| 2. Connect and Disconnect |  |  |
+| 2. Connect and Disconnect | works | The owner, 2026-10-19, on bbc8120: headphones and speaker, both ways (headset microphone and mouse/keyboard not reported) |
 | 3. Low battery |  |  |
 | 4. Nothing else changed |  |  |
