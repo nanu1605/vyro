@@ -64,9 +64,10 @@ use windows::Win32::UI::Input::XboxController::{
 };
 use windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore;
 
+use super::bounded::Bounded;
 use super::{
     bt_state, build, gatt_wanted, key, norm_guid, plain_text, Devices, LinkState, Raw, RawAep,
-    RawContainer, RawEndpoint, RawNode, RawPad,
+    RawContainer, RawEndpoint, RawHid, RawNode, RawPad,
 };
 use crate::live::dll::Library;
 
@@ -109,9 +110,10 @@ const GATT_FRESH: Duration = Duration::from_secs(55);
 /// Battery Service reads stop after this much time in one collection.
 const GATT_BUDGET: Duration = Duration::from_secs(3);
 
-/// The current list. Blocking (well under 100 ms, more when a Battery Service read has to
-/// reach the device); call it off the UI thread.
+/// The current list. Blocking (well under 100 ms; up to 5 s more for each battery read that
+/// has to reach a device); call it off the UI thread.
 pub fn collect() -> Devices {
+    let start = Instant::now();
     let containers = containers();
     let (nodes, instances) = nodes();
     let mut raw = Raw {
@@ -123,11 +125,30 @@ pub fn collect() -> Devices {
         endpoints: endpoints(&instances),
         ..Raw::default()
     };
-    raw.gatt = gatt_batteries(&gatt_wanted(&raw), &instances);
-    raw.hid = super::hid_win::batteries(&instances);
+    let wanted = gatt_wanted(&raw);
+    let known = instances.clone();
+    raw.gatt = GATT_READ.run(BATTERY_WAIT, move || gatt_batteries(&wanted, &known));
+    raw.hid = HID_READ.run(BATTERY_WAIT, move || super::hid_win::batteries(&instances));
     raw.pads = pads();
-    build(&raw)
+    let devices = build(&raw);
+    if start.elapsed() > SLOW_READ {
+        log::info!(
+            "devices: the list took {:.1} s ({} devices)",
+            start.elapsed().as_secs_f32(),
+            devices.devices.len()
+        );
+    }
+    devices
 }
+
+/// Battery reads ask the devices themselves, and one that does not answer must not hold up
+/// the list (1.4.1 field check: the Devices tab stayed on "Reading devices…").
+static GATT_READ: Bounded<Vec<(String, u8)>> = Bounded::new("the Bluetooth battery read");
+static HID_READ: Bounded<Vec<RawHid>> = Bounded::new("the wireless battery read");
+/// How long a list waits for each battery read: longer than their own budgets (3 s).
+const BATTERY_WAIT: Duration = Duration::from_secs(5);
+/// A list that takes longer is logged.
+const SLOW_READ: Duration = Duration::from_secs(2);
 
 /// One paired Bluetooth device's connection, read without battery reads: what Connect and
 /// Disconnect check after asking (1.4.1). `None`: no such device.
