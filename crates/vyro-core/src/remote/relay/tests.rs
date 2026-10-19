@@ -597,6 +597,26 @@ fn long_answers_go_in_parts_and_only_to_paired_phones() {
     let res: serde_json::Value = serde_json::from_str(&joined).unwrap();
     assert_eq!(res["ok"], big);
 
+    // Quotes and backslashes take two bytes each in a part: answers full of them still fit.
+    let paths = serde_json::json!({
+        "paths": vec![r"C:\Windows\System32\drivers\a.sys"; 3000],
+        "pairs": vec![serde_json::json!({ "k": "a", "v": "\"" }); 3000],
+        "worst": "\\\"\u{1}".repeat(20_000),
+    });
+    let outs = s.answer(&p, "0a1b2c3d", 4, &Ok(paths.clone()));
+    let mut joined = String::new();
+    for o in &outs {
+        let Out::Binary(b) = o else { panic!() };
+        assert!(
+            b.len() <= 4 + 64 * 1024,
+            "{} bytes fit a relay frame",
+            b.len()
+        );
+        joined.push_str(phone.read(o).unwrap()["d"].as_str().unwrap());
+    }
+    let res: serde_json::Value = serde_json::from_str(&joined).unwrap();
+    assert_eq!(res["ok"], paths);
+
     // Signed out in the meantime: nothing goes.
     let mut gone = paired();
     gone.sign_out("0a1b2c3d");
