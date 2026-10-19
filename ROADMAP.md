@@ -2873,7 +2873,7 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       cannot convert, moves the session to GDI rather than ending it. CI converts a known HDR
       picture through the shader on WARP and checks each colour, the byte order and the
       clipping; a real HDR desktop is the field check's.
-- [ ] **The delay grew on mobile data** (field check, 2026-10-19, c87dd2d; on Wi-Fi a delay of
+- [x] **The delay grew on mobile data** (field check, 2026-10-19, c87dd2d; on Wi-Fi a delay of
       milliseconds and 10 % CPU at most): the video went out at a fixed 5 Mbit/s whatever the
       connection carried, so a slower link queued it up and the picture fell behind. Now it
       follows the connection: the phone's browser reports how the video arrives
@@ -2890,7 +2890,8 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       too. On the same runner Windows' encoder, fed noise, sends less than half as much after
       its rate drops from 2.5 to 0.5 Mbit/s mid-stream, with no keyframe (CI run 39272496314,
       3095d4f). The relay serves the phone app with that line since the owner's go (deployed
-      from 2e42a83, run 39298073589). To check on the owner's phones on mobile data.
+      from 2e42a83, run 39298073589). The owner, 2026-10-19, on 3095d4f with that relay:
+      "mobile data works now, lag stays low".
 - [ ] Field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)): Android Chrome
       and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU; the secure screen,
       an administrator window, two monitors, the slow view, the idle end; 1.4.1 to 1.6 released
