@@ -25,6 +25,9 @@ and, for waking, a second PC with Vyro on the same wired network, if you have on
 - **More:** profile, fans, benchmark, diagnostics, updates.
 - A phone paired before 1.5 may only look: the top says "view only", and no End, Power or other
   change is offered.
+- Tap between tabs quickly (Health, More, Health, More, a few times): the top keeps saying
+  **Live**, never "Can't reach the relay" or "Connecting…", and each tab fills in, perhaps a
+  moment later.
 
 ## 2. Letting the phone change the PC
 

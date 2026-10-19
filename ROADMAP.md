@@ -2615,6 +2615,15 @@ show on the phone).
       `vyro-windows-a0f48c6`. Locally: fmt, clippy (Linux and windows-gnu), 681 core tests,
       209 frontend tests, 17 relay tests, the builds, the budgets, the phone app's end-to-end
       test (44 checks) and the accessibility sweep (666 checks).
+- [x] **The phone waits its turn instead of being cut off** (found by 1.7's end-to-end test on
+      CI, 2026-10-19). The relay closes the connection of a phone that sends more than 20
+      messages at once, or more than 5 a second after that. Opening More asks the PC 8 things at
+      once, and again when the owner changes what the phone may do, so tabs opened in quick
+      succession could pass that: the phone lost its connection, what it had asked failed, and it
+      reconnected a second later. The phone now sends a little under the relay's limit (16 at
+      once, then 4 a second); later messages wait. A test replays its sends through the relay's
+      own rule, and the end-to-end test switches tabs quickly and fails if the relay ever cuts
+      the phone off.
 - [ ] Field check 1.5 ([`docs/field-check-1.5.md`](docs/field-check-1.5.md)); 1.4.1 released
       first; the owner's go. Then the relay is deployed (`relay.yml`), which serves the new
       phone app.
