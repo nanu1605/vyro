@@ -851,8 +851,19 @@ impl Worker {
         self.shared.flush_events();
     }
 
-    /// Puts `want` on the card and keeps the marker in step.
+    /// Puts `want` on the card and keeps the marker in step: it goes down before tuned values
+    /// reach the card, so a crash in between is still seen at the next start, and it is gone
+    /// once the card is at stock.
     fn write(&mut self, want: &Written) {
+        let marker = (!want.settings.is_stock()).then(|| Marker {
+            since: crate::unix_now(),
+            preset: want.preset.clone().unwrap_or_default(),
+            settings: want.settings,
+            trial: want.trial,
+        });
+        if let Some(m) = &marker {
+            self.mark(Some(m));
+        }
         let result = self.dev.apply(&want.settings);
         let read = self.dev.read().ok();
         let clocks = self.dev.clocks();
@@ -901,24 +912,27 @@ impl Worker {
             .written
             .as_ref()
             .is_some_and(|w| !w.settings.is_stock());
-        let marker = tuned.then(|| Marker {
-            since: crate::unix_now(),
-            preset: want.preset.clone().unwrap_or_default(),
-            settings: want.settings,
-            trial: want.trial,
-        });
         drop(inner);
+        let marker = marker.filter(|_| tuned);
         self.since = marker.as_ref().map(|m| m.since);
-        if let Some(path) = &self.shared.marker_path {
-            match marker {
-                Some(m) => {
-                    if let Err(e) = crate::files::write_json(path, &m) {
-                        log::warn!("gpu tuning: {}: {e}", path.display());
-                    }
+        if marker.is_none() {
+            self.mark(None);
+        }
+    }
+
+    /// Writes the marker, or removes it.
+    fn mark(&self, marker: Option<&Marker>) {
+        let Some(path) = &self.shared.marker_path else {
+            return;
+        };
+        match marker {
+            Some(m) => {
+                if let Err(e) = crate::files::write_json(path, m) {
+                    log::warn!("gpu tuning: {}: {e}", path.display());
                 }
-                None => {
-                    let _ = std::fs::remove_file(path);
-                }
+            }
+            None => {
+                let _ = std::fs::remove_file(path);
             }
         }
     }
