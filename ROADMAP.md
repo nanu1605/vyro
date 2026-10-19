@@ -2890,8 +2890,8 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       too. On the same runner Windows' encoder, fed noise, sends less than half as much after
       its rate drops from 2.5 to 0.5 Mbit/s mid-stream, with no keyframe (CI run 39272496314,
       3095d4f). The relay serves the phone app with that line since the owner's go (deployed
-      from 2e42a83, run 39298073589). The owner, 2026-10-19, on 3095d4f with that relay:
-      "mobile data works now, lag stays low".
+      from 2e42a83, run 39298073589). The owner, 2026-10-19, on 3095d4f with that relay, on
+      both phones over the direct path: "mobile data works now, lag stays low".
 - [ ] Field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)): Android Chrome
       and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU; the secure screen,
       an administrator window, two monitors, the slow view, the idle end; 1.4.1 to 1.6 released

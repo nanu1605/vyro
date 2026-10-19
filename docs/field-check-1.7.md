@@ -113,7 +113,7 @@ The owner, 2026-10-19, on `vyro-windows-c87dd2d` with the relay deployed from 60
 | Typing, Ctrl+A, Alt+Tab, Win | works | works | |
 | Two monitors | works | works | 2560×1440 (HDR) and 3840×2160 |
 | HDR on and off, SDR brightness | works | works | |
-| Mobile data: direct or slow | see notes | see notes | on c87dd2d the delay grew; on `vyro-windows-3095d4f` with the relay from 2e42a83, "mobile data works now, lag stays low" (which phone, and direct or slow, not noted) |
+| Mobile data: direct or slow | works, direct | works, direct | on c87dd2d the delay grew; on `vyro-windows-3095d4f` with the relay from 2e42a83, "mobile data works now, lag stays low" |
 | Slow view | | | |
 | Secure screen, administrator window | | | |
 | Stop, lock on end, idle end, permission off | | | |
