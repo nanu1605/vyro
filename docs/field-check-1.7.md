@@ -1,6 +1,6 @@
 # Field check: 1.7 (the PC's screen on the phone)
 
-Status: **to do.** Test build: **`vyro-windows-3095d4f`** (CI run 39272496314, every job green),
+Status: **done, 2026-10-19, except the slow view (not tried).** Test build: **`vyro-windows-3095d4f`** (CI run 39272496314, every job green),
 version 1.7.0, or the artifact of any later green run on `claude/vyro-1.7`. Install the MSI over
 1.6, and open the phone app from the relay this branch deploys (or the branch's own relay; see
 `docs/remote.md` → Running your own relay). The relay was last deployed from 2e42a83 (run
@@ -103,17 +103,19 @@ through the relay where it cannot.
 
 The owner, 2026-10-19, on `vyro-windows-c87dd2d` with the relay deployed from 60eda87 (run
 39265388166). Builds before it showed a black picture: the main monitor runs with HDR on (ROADMAP
-→ 1.7, "Still black on both phones").
+→ 1.7, "Still black on both phones"). The later checks (mobile data again, the permission, the
+secure screen and administrator window, ending a session) on `vyro-windows-3095d4f` with the
+relay deployed from 2e42a83 (run 39298073589).
 
 | Check | Android | iPhone | Notes |
 |---|---|---|---|
-| Permission | | | |
+| Permission | works | works | "permission and admin window both work" |
 | Direct on Wi-Fi: picture, delay, CPU | works | works | a delay of milliseconds; Vyro at 10 % CPU at most |
 | Taps, hold, drag, scroll, zoom | works | works | "everything working" |
 | Typing, Ctrl+A, Alt+Tab, Win | works | works | |
 | Two monitors | works | works | 2560×1440 (HDR) and 3840×2160 |
 | HDR on and off, SDR brightness | works | works | |
 | Mobile data: direct or slow | works, direct | works, direct | on c87dd2d the delay grew; on `vyro-windows-3095d4f` with the relay from 2e42a83, "mobile data works now, lag stays low" |
-| Slow view | | | |
-| Secure screen, administrator window | works | works | an administrator prompt (UAC) can't be seen ("not able to see admin permission yes or no"); the phone shows the secure-screen line, as designed. The owner keeps it so for 1.7. The administrator window not noted |
+| Slow view | not tried | not tried | both phones always found a direct path; CI's end-to-end test (`scripts/relay-e2e.mjs`) plays the slow view in Chromium through the relay |
+| Secure screen, administrator window | works | works | an administrator prompt (UAC) can't be seen ("not able to see admin permission yes or no"); the phone shows the secure-screen line, as designed. The owner keeps it so for 1.7. The administrator window shows on the phone and keeps its input out: works |
 | Stop, lock on end, idle end, permission off | works | works | "session ending work on both phones" |

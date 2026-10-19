@@ -2899,7 +2899,9 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
 - [ ] Field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)): Android Chrome
       and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU; the secure screen,
       an administrator window, two monitors, the slow view, the idle end; 1.4.1 to 1.6 released
-      first; the owner's go.
+      first; the owner's go. Done by the owner on 2026-10-19 (3095d4f, relay from 2e42a83), every
+      check working except the slow view, not tried (both phones found a direct path; CI's
+      end-to-end test covers it). Waits for 1.4.1 to 1.6 and the owner's go.
 
 ## Risks
 
