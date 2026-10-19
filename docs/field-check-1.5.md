@@ -1,7 +1,7 @@
 # Field check: 1.5 (control from the phone)
 
-Status: **to do.** Test build: **`vyro-windows-10fbbd1`**, the 1.7 test build (CI run
-39308554689, every job green, version 1.7.0), by the owner's choice (2026-10-19): it carries
+Status: **to do.** Test build: **`vyro-windows-bbc8120`**, the 1.7 test build (CI run
+39314060726, every job green, version 1.7.0), by the owner's choice (2026-10-19): it carries
 every change of 1.5. 1.5's own build is not tried by itself. About 40 minutes.
 
 1.5 answers the owner's request to check and run anything Vyro does from the phone, shut the PC
