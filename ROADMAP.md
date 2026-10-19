@@ -2549,6 +2549,16 @@ first) and 1.7 (the PC's screen on the phone), each with its own field check.
       test, the relay and phone app, accessibility. Test build `vyro-windows-72a2571`. Locally:
       fmt, clippy (Linux and windows-gnu), 666 core tests, 206 frontend tests, the builds, the
       budgets and the accessibility sweep (665 checks).
+- [x] **Settings → Remote no longer reads in a loop** (found in 1.7's field check,
+      2026-10-19; in every version since P26). Reading the remote status announced a change,
+      and Settings → Remote reads the status again on each change: while it showed, the two kept
+      each other going, and each later change (Pair, a phone joining or watching) started one
+      more round. Every read asks Windows for the network adapters, which goes through its DNS
+      Client service: the owner saw that service take 23 % of the CPU on opening Vyro (it opened
+      on Settings), 50 % while pairing and 85 % with the phone paired, and all of it stop when
+      the window went to the tray. A read now only reads; the installed-app smoke test calls it
+      and fails if it announces a change (and if saving a widget is not heard, so silence means
+      something).
 - [ ] Field check 1.4.1 ([`docs/field-check-1.4.1.md`](docs/field-check-1.4.1.md)); the owner's
       go.
 
