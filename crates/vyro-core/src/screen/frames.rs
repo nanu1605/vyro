@@ -53,6 +53,15 @@ fn scaled(
     if sw == 0 || sh == 0 || src.len() < pitch * (sh - 1) + sw * 4 {
         return None;
     }
+    if (sw, sh) == (dw, dh) {
+        // Sent as it is (a 1080p monitor): each pixel once, nothing to average.
+        return Some(
+            (0..sh)
+                .flat_map(|y| src[y * pitch..y * pitch + sw * 4].as_chunks::<4>().0)
+                .map(|p| [p[0], p[1], p[2]])
+                .collect(),
+        );
+    }
     let xs = spans(sw, dw);
     let mut out = Vec::with_capacity(dw * dh);
     for (y0, y1) in spans(sh, dh) {

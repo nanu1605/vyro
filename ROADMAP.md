@@ -2798,11 +2798,13 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       showed for a second, blurred, then went black; on the iPhone it stayed black). No test had
       ever played the PC's video: the example PC sent none, and the loopback test sent stand-in
       bytes. Played for real (str0m and an H.264 encoder into Google Chrome), the causes showed:
-      - Windows' encoder holds about four pictures before giving one out (CI's run printed 26
-        out for 30 in). A still screen was fed one picture a second, so the keyframe the phone
-        waited for came out four seconds late, and every change after it lagged as much. The
-        picture now goes on at full rate for a second after any change or keyframe, so the
-        encoder gives out what it holds and refines a still picture, then once a second.
+      - Windows' encoder held about four pictures before giving one out (CI printed 26 out for
+        30 in): its low-latency setting was made after its formats, where it does not count.
+        A still screen was fed one picture a second, so the keyframe the phone waited for came
+        out four seconds late, and every change after it lagged as much. The setting now comes
+        first (CI: none held back), and the picture goes on at full rate for a second after any
+        change or keyframe, so any encoder gives out what it holds and refines a still picture,
+        then once a second.
       - Right after connecting, the first pictures out were ones made before the phone was
         there, which build on pictures it never got: it could decode nothing (an iPhone stops
         there). Nothing is sent now until a keyframe, after connecting and after any picture is
@@ -2821,8 +2823,8 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       tests-only stand-in for Windows' encoder), and the end-to-end test checks the phone app
       decodes it, that the picture is not blank, and that a still screen keeps arriving. On
       CI's Windows runner, `scripts/screen-check.mjs` plays the app's own capture and Windows'
-      encoder in the runner's Chrome: pictures from the start, never blank, a still screen,
-      a keyframe when asked.
+      encoder in the runner's Chrome: the first picture (a keyframe) 0.4 s after connecting,
+      the screen as it was (not blank), a still screen once a second, a keyframe when asked.
 - [ ] Field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)): Android Chrome
       and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU; the secure screen,
       an administrator window, two monitors, the slow view, the idle end; 1.4.1 to 1.6 released
