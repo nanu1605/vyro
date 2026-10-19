@@ -2590,8 +2590,9 @@ first) and 1.7 (the PC's screen on the phone), each with its own field check.
       over 2 s or does not answer, and, when changes keep coming, where they come from. The
       owner confirmed it on 1.7's build bbc8120 (2026-10-19): the list shows with Bluetooth
       connected.
-- [ ] Field check 1.4.1 ([`docs/field-check-1.4.1.md`](docs/field-check-1.4.1.md)); the owner's
-      go.
+- [x] Field check 1.4.1 ([`docs/field-check-1.4.1.md`](docs/field-check-1.4.1.md)): done
+      2026-10-19 on 1.7's test build bbc8120 (the owner's choice), every step works.
+- [ ] The owner's go, then the release.
 
 ### 1.5.0 — control from the phone: what runs, power, wake
 
