@@ -1,10 +1,9 @@
 # Field check: 1.6 (GPU tuning)
 
-Status: **to do.** Test build: **`vyro-windows-3095d4f`**, the 1.7 test build (CI run
-39272496314, every job green, version 1.7.0), by the owner's choice (2026-10-19): it carries
-every change of 1.6, including the crash marker fix (2276a08), and the owner already runs it.
-1.6's own build, `vyro-windows-eca77e0` (CI run 39161727115), is not tried by itself. Install
-the same MSI on the laptop. About 90 minutes on the desktop
+Status: **to do.** Test build: **`vyro-windows-10fbbd1`**, the 1.7 test build (CI run
+39308554689, every job green, version 1.7.0), by the owner's choice (2026-10-19): it carries
+every change of 1.6, including the crash marker fix (2276a08). 1.6's own build is not tried by
+itself. Install the same MSI on the laptop. About 90 minutes on the desktop
 (most of it Find my best, which can run unattended) and 30 on the laptop.
 
 1.6 answers the owner's request for GPU overclocking with presets made for the installed card and
