@@ -13,6 +13,8 @@ mod control;
 pub mod hid;
 #[cfg(windows)]
 mod hid_win;
+#[cfg(any(windows, test))]
+mod watch;
 #[cfg(windows)]
 mod win;
 

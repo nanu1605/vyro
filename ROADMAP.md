@@ -2575,6 +2575,19 @@ first) and 1.7 (the PC's screen on the phone), each with its own field check.
       it and going on with the last answer (`devices/bounded.rs`, tested with a read that
       hangs). The log now says when a list takes over 2 s, when a battery read is late and
       when changes keep coming for a minute.
+- [x] **…and it stayed there while a Bluetooth device was connected** (the owner, 2026-10-19:
+      with any Bluetooth device connected the tab stuck; disconnecting it in Windows Settings
+      let the list show the wired devices). Windows reports a connected Bluetooth device again
+      and again (its container and its paired entry) with nothing changed, and each report
+      counted as a change that read the whole list again: on 3095d4f each of those reads threw
+      the one before away. The watch queries now keep each device's connection and wake the
+      reader only when it changes, or when a device arrives or leaves (`devices/watch.rs`,
+      tested). Every part of the list (containers, nodes, paired Bluetooth devices, sound
+      devices, XInput and both battery reads) is now read on a thread of its own, all at once:
+      the list waits up to 4 s for Windows' parts and 5 s for the battery reads, goes on with a
+      late part's last answer, and does not wait again for a part already late
+      (`devices/bounded.rs`, tested with reads side by side). The log names any part that takes
+      over 2 s or does not answer, and, when changes keep coming, where they come from.
 - [ ] Field check 1.4.1 ([`docs/field-check-1.4.1.md`](docs/field-check-1.4.1.md)); the owner's
       go.
 
