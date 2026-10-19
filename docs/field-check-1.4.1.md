@@ -1,10 +1,11 @@
 # Field check: 1.4.1 (Connect and Disconnect, low batteries)
 
-Status: **to do.** Test build: **`vyro-windows-10fbbd1`**, the 1.7 test build (CI run
-39308554689, every job green, version 1.7.0), by the owner's choice (2026-10-19): it carries
-every change of 1.4.1. 1.4.1's own build is not tried by itself. On the build before
-(`vyro-windows-3095d4f`) the Devices tab stayed on "Reading devices…" (ROADMAP → 1.4.1); this
-one has the fix. About 20 minutes.
+Status: **to do.** Test build: **`vyro-windows-bbc8120`**, the 1.7 test build (CI run
+39314060726, every job green, version 1.7.0), by the owner's choice (2026-10-19): it carries
+every change of 1.4.1. 1.4.1's own build is not tried by itself. On `vyro-windows-3095d4f` the
+Devices tab stayed on "Reading devices…" while a Bluetooth device was connected (ROADMAP →
+1.4.1); `10fbbd1` had the first fix, and this one also reads again only on a real change and
+gives every part of the list a time limit. About 20 minutes.
 
 1.4.1 answers the owner's report after 1.4.0: Connect and Disconnect did nothing on headphones,
 earbuds and a speaker, and a device that was disconnected still showed Connected. It also adds
