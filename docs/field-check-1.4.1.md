@@ -1,6 +1,6 @@
 # Field check: 1.4.1 (Connect and Disconnect, low batteries)
 
-Status: **to do.** Test build: **`vyro-windows-bbc8120`**, the 1.7 test build (CI run
+Status: **done, 2026-10-19: every step works** (Results below). Test build: **`vyro-windows-bbc8120`**, the 1.7 test build (CI run
 39314060726, every job green, version 1.7.0), by the owner's choice (2026-10-19): it carries
 every change of 1.4.1. 1.4.1's own build is not tried by itself. On `vyro-windows-3095d4f` the
 Devices tab stayed on "Reading devices…" while a Bluetooth device was connected (ROADMAP →
@@ -67,4 +67,4 @@ If a step fails: note the message on the row, then send the app's log from
 | 1. Connected or not | works | The owner, 2026-10-19, on bbc8120: each device's state matches Windows Settings; the speaker turned off and on is followed; the headphones disconnected in Settings are followed; no device shows "Paired" |
 | 2. Connect and Disconnect | works | The owner, 2026-10-19, on bbc8120: headphones and speaker, both ways (headset microphone and mouse/keyboard not reported) |
 | 3. Low battery | works | The owner, 2026-10-19, on bbc8120: the Dashboard strip and the dot on Devices show, and go when the device charges |
-| 4. Nothing else changed |  |  |
+| 4. Nothing else changed | works | The owner, 2026-10-19, on bbc8120: idle footprint as before, the phone app shows readings, Settings → Remote stays quiet |
