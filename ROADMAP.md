@@ -2787,6 +2787,10 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       back. Left for the field check: run locally, the relay's closes reach a browser about 2 s
       late (the local server's, not the relay's code); on the real relay, signing a phone out
       on the PC should show on the phone at once.
+- [x] **The relay deployed from this branch** (603270c, 2026-10-19, at the owner's go; Actions
+      run 39227795520), so phones get the 1.7 app for the field checks. It works with a 1.4.0
+      PC (view only) and with 1.5 and 1.6, so the 1.5 and 1.6 field checks need no deploy of
+      their own.
 - [ ] Field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)): Android Chrome
       and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU; the secure screen,
       an administrator window, two monitors, the slow view, the idle end; 1.4.1 to 1.6 released
