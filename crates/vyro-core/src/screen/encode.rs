@@ -455,11 +455,20 @@ mod tests {
         let mut enc = Encoder::new(w, h, 30, 2_500_000).expect("the H.264 encoder");
         let mut bytes = [0usize; 2];
         let mut keys = 0;
+        // Noise: no picture compresses, so what comes out follows the rate given.
+        let mut seed = 0x9e37_79b9u32;
         for n in 0..120u32 {
             if n == 60 {
                 assert!(enc.set_bitrate(500_000), "the encoder takes a new rate");
             }
-            let bgra = frames::test_pattern(w, h, n);
+            let bgra: Vec<u8> = (0..w * h * 4)
+                .map(|_| {
+                    seed ^= seed << 13;
+                    seed ^= seed >> 17;
+                    seed ^= seed << 5;
+                    seed as u8
+                })
+                .collect();
             let nv12 = frames::bgra_to_nv12(&bgra, w, h, w as usize * 4, w, h);
             for e in enc.encode(&nv12, i64::from(n) * 333_333, n == 0).unwrap() {
                 // The second half's last 30 pictures: the new rate has taken hold.
