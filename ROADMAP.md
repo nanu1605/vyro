@@ -2833,13 +2833,17 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       arrives; what it holds, or how the page draws it, is the question. Ruled out so far:
       - the scaling and Windows' encoder: CI's Windows runner now sends a moving 2560×1440 test
         screen through Windows' encoder, scaled to 1920×1080 as the app does, into Chrome: the
-        picture decodes, not blank (`scripts/screen-check.mjs --test`). Each picture's headers
-        are printed in the run for reading against what phones' hardware decoders take (CI's
-        Chrome decodes in software; a phone in hardware);
-      - the same on Linux with OpenH264.
-      Not yet testable on CI: a real GPU's capture (the runner has none; its desktop is now made
-      as large as it offers for the checks, `scripts/ci-display.ps1`), and phones' hardware
-      decoders. So the next test build says where the picture goes black:
+        picture decodes, not blank (`scripts/screen-check.mjs --test`); the same on Linux with
+        OpenH264;
+      - the H.264 itself: CI prints each picture's headers. Windows' encoder gives each picture
+        out whole (a delimiter, SPS, PPS, two SEI, then four slices of 17 macroblock rows):
+        constrained baseline, level 4.0, one reference picture, POC type 2, cropped to 1080
+        lines. Nothing a phone's hardware decoder refuses, and the phones did decode it;
+      - capture at 1080p: the runner's desktop is now set to the largest size it offers
+        (1920×1080, `scripts/ci-display.ps1`) for the checks; it is captured and plays in Chrome
+        (brightness 120, varying 63).
+      Not testable on CI: a real GPU's capture (the runner has none) and phones' hardware
+      decoding and drawing. So the next test build says where the picture goes black:
       - every 2 s the PC tells the phone what it sent: its screen's size and the size sent, new
         and sent pictures a second, Mbit/s, keyframes, **how bright the picture it took is**,
         and how many whole pictures the phone asked for; the app's log keeps the first few and
