@@ -2892,6 +2892,10 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       3095d4f). The relay serves the phone app with that line since the owner's go (deployed
       from 2e42a83, run 39298073589). The owner, 2026-10-19, on 3095d4f with that relay, on
       both phones over the direct path: "mobile data works now, lag stays low".
+- Administrator prompts stay unseen in 1.7, by the owner's choice (field check, 2026-10-19:
+  the phone shows its secure-screen line, as designed). Seeing and answering them would need
+  the service to capture and type on the secure desktop as SYSTEM, behind its own permission;
+  an idea for after 1.7, not planned.
 - [ ] Field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)): Android Chrome
       and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU; the secure screen,
       an administrator window, two monitors, the slow view, the idle end; 1.4.1 to 1.6 released
