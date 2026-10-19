@@ -1,104 +1,25 @@
 // The relay run as it is deployed (workerd, through Wrangler's test harness), with PCs and
 // phones played by WebSockets. The frames here are stand-ins: the relay never opens them.
 
-import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createTestHarness, type TestHarness } from 'wrangler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { MIN_SEALED } from '../src/rules';
-
-type Msg = string | Uint8Array;
-
-class Sock {
-  readonly ws: WebSocket;
-  private queue: Msg[] = [];
-  private waiters: Array<(m: Msg) => void> = [];
-  closed: Promise<{ code: number; reason: string }>;
-  opened: Promise<void>;
-
-  constructor(url: string, protocols: string[]) {
-    this.ws = new WebSocket(url, protocols);
-    this.ws.binaryType = 'arraybuffer';
-    this.opened = new Promise((resolve, reject) => {
-      this.ws.addEventListener('open', () => resolve());
-      this.ws.addEventListener('error', () => reject(new Error('socket failed')));
-    });
-    this.closed = new Promise((resolve) => this.ws.addEventListener('close', (e) => resolve({ code: e.code, reason: e.reason })));
-    this.ws.addEventListener('message', (e) => {
-      const m: Msg = typeof e.data === 'string' ? e.data : new Uint8Array(e.data as ArrayBuffer);
-      const w = this.waiters.shift();
-      if (w) w(m);
-      else this.queue.push(m);
-    });
-  }
-
-  next(ms = 5000): Promise<Msg> {
-    const q = this.queue.shift();
-    if (q !== undefined) return Promise.resolve(q);
-    return new Promise((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error('no message')), ms);
-      this.waiters.push((m) => {
-        clearTimeout(t);
-        resolve(m);
-      });
-    });
-  }
-
-  async json(ms?: number): Promise<unknown> {
-    const m = await this.next(ms);
-    if (typeof m !== 'string') throw new Error('expected text');
-    return JSON.parse(m) as unknown;
-  }
-
-  /** Nothing arrives for `ms`. */
-  async quiet(ms = 300): Promise<boolean> {
-    try {
-      await this.next(ms);
-      return false;
-    } catch {
-      return true;
-    }
-  }
-
-  close(): void {
-    this.ws.close();
-  }
-}
-
-const b64url = (b: Uint8Array) => Buffer.from(b).toString('base64url');
-const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
-const room = () => randomBytes(16).toString('hex');
-const key = () => new Uint8Array(randomBytes(32));
-/** A stand-in for a sealed frame (version, nonce, ciphertext, tag). */
-const sealed = (fill: number, n = MIN_SEALED + 8) => new Uint8Array(n).fill(fill);
+import { MAX_FRAME, MIN_SEALED } from '../src/rules';
+import { key, relayAt, room, sealed, sha } from './sockets';
 
 let server: TestHarness;
-let base: string;
+let sock: ReturnType<typeof relayAt>['sock'];
+let pc: ReturnType<typeof relayAt>['pc'];
+let register: ReturnType<typeof relayAt>['register'];
 
 beforeAll(async () => {
   server = createTestHarness({ workers: [{ configPath: fileURLToPath(new URL('./wrangler.test.jsonc', import.meta.url)) }] });
-  base = (await server.listen()).url.toString().replace(/\/$/, '');
+  ({ sock, pc, register } = relayAt((await server.listen()).url.toString().replace(/\/$/, '')));
 });
 
 afterAll(async () => {
   await server.close();
 });
-
-function sock(path: string, k?: Uint8Array): Sock {
-  return new Sock(`${base.replace(/^http/, 'ws')}${path}`, k ? ['vyro.1', `k.${b64url(k)}`] : ['vyro.1']);
-}
-
-async function pc(r: string, k: Uint8Array): Promise<Sock> {
-  const s = sock(`/pc/${r}`, k);
-  await s.opened;
-  expect(await s.json()).toEqual({ t: 'here', phones: [] });
-  return s;
-}
-
-async function register(p: Sock, phones: Array<{ id: string; auth: Uint8Array }>): Promise<void> {
-  p.ws.send(JSON.stringify({ t: 'phones', list: phones.map((x) => ({ id: x.id, hash: sha(x.auth) })) }));
-  expect(await p.json()).toMatchObject({ t: 'here', listed: true });
-}
 
 describe("the phone app's files", () => {
   it('come with the security headers; sockets have their own paths', async () => {
@@ -223,5 +144,68 @@ describe('phones', () => {
     for (let i = 0; i < 40; i++) s3!.ws.send(sealed(i));
     expect((await s3!.closed).code).toBe(1008);
     p.close();
+  });
+});
+
+describe('limits and comings and goings', () => {
+  it('a frame of up to 64 KiB passes either way; a larger one from the PC closes it', async () => {
+    const r = room();
+    const p = await pc(r, key());
+    const a = { id: '0000000a', auth: key() };
+    await register(p, [a]);
+    const sa = sock(`/phone/${r}/${a.id}`, a.auth);
+    await sa.json();
+    await p.json();
+    p.ws.send(new Uint8Array([0, 0, 0, 0x0a, ...sealed(1, MAX_FRAME)]));
+    expect((await sa.next()) as Uint8Array).toHaveLength(MAX_FRAME);
+    sa.ws.send(sealed(2, MAX_FRAME));
+    expect((await p.next()) as Uint8Array).toHaveLength(4 + MAX_FRAME);
+    p.ws.send(new Uint8Array([0, 0, 0, 0x0a, ...sealed(3, MAX_FRAME + 1)]));
+    expect((await p.closed).code).toBe(1009);
+    expect(await sa.json()).toEqual({ t: 'pc', online: false });
+    sa.close();
+  });
+
+  it('a PC may send a burst of frames at once, and is cut off well past its rate', async () => {
+    const r = room();
+    const p = await pc(r, key());
+    const a = { id: '0000000a', auth: key() };
+    await register(p, [a]);
+    const sa = sock(`/phone/${r}/${a.id}`, a.auth);
+    await sa.json();
+    await p.json();
+    for (let i = 0; i < 195; i++) p.ws.send(new Uint8Array([0, 0, 0, 0x0a, ...sealed(i)]));
+    for (let i = 0; i < 195; i++) expect(await sa.next()).toEqual(sealed(i));
+    for (let i = 0; i < 260; i++) p.ws.send(new Uint8Array([0, 0, 0, 0x0a, ...sealed(1)]));
+    expect((await p.closed).code).toBe(1008);
+    sa.close();
+  });
+
+  it("a phone that connects while the PC is away waits quietly, and hears when it is back; a PC's reconnect is not an absence", async () => {
+    const r = room();
+    const k = key();
+    const p = await pc(r, k);
+    const a = { id: '0000000a', auth: key() };
+    await register(p, [a]);
+    p.close();
+    await new Promise((done) => setTimeout(done, 200));
+    const sa = sock(`/phone/${r}/${a.id}`, a.auth);
+    expect(await sa.json()).toEqual({ t: 'pc', online: false });
+    sa.ws.send(sealed(1));
+    expect(await sa.quiet()).toBe(true);
+
+    const back = sock(`/pc/${r}`, k);
+    expect(await back.json()).toEqual({ t: 'here', phones: [a.id] });
+    expect(await sa.json()).toEqual({ t: 'pc', online: true });
+    sa.ws.send(sealed(2));
+    expect(await back.next()).toEqual(new Uint8Array([0, 0, 0, 0x0a, ...sealed(2)]));
+
+    const again = sock(`/pc/${r}`, k);
+    expect(await again.json()).toEqual({ t: 'here', phones: [a.id] });
+    expect((await back.closed).code).toBe(4000);
+    expect(await sa.json()).toEqual({ t: 'pc', online: true });
+    expect(await sa.quiet(500)).toBe(true);
+    again.close();
+    sa.close();
   });
 });
