@@ -115,5 +115,5 @@ The owner, 2026-10-19, on `vyro-windows-c87dd2d` with the relay deployed from 60
 | HDR on and off, SDR brightness | works | works | |
 | Mobile data: direct or slow | works, direct | works, direct | on c87dd2d the delay grew; on `vyro-windows-3095d4f` with the relay from 2e42a83, "mobile data works now, lag stays low" |
 | Slow view | | | |
-| Secure screen, administrator window | | | |
-| Stop, lock on end, idle end, permission off | | | |
+| Secure screen, administrator window | as designed | as designed | an administrator prompt (UAC) can't be seen from the phone: "not able to see admin permission yes or no"; the administrator window not noted |
+| Stop, lock on end, idle end, permission off | works | works | "session ending work on both phones" |
