@@ -36,6 +36,9 @@ and, for waking, a second PC with Vyro on the same wired network, if you have on
   **Power**.
 - Pair another phone (or the same one again after signing it out) with **Look and change this PC**
   chosen above Pair a phone: it can change the PC at once. With **Only look**, it cannot.
+- Sign a phone out on the PC with the phone app open: within a second or two the phone says it
+  was signed out (run locally, the relay's closes reached a browser about 2 s late; note how long
+  it takes on the real one).
 
 ## 3. Doing things from the phone
 
