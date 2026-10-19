@@ -2886,9 +2886,10 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       The phone's details add "of the N the connection carries". A test sends the screen
       through an 800 kbit/s link holding half a second of packets: packets wait about 270 ms
       at first and about 20 ms after 12 s, and the pictures keep coming; with the estimate off
-      they wait about 490 ms and two pictures arrive in 16 s. A test on CI's Windows runner
-      checks that Windows' encoder takes a new rate while encoding, without a keyframe. To check
-      on the owner's phones on mobile data.
+      they wait about 490 ms and two pictures arrive in 16 s; on CI's Windows runner it passes
+      too. On the same runner Windows' encoder, fed noise, sends less than half as much after
+      its rate drops from 2.5 to 0.5 Mbit/s mid-stream, with no keyframe (CI run 39272496314,
+      3095d4f). To check on the owner's phones on mobile data.
 - [ ] Field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)): Android Chrome
       and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU; the secure screen,
       an administrator window, two monitors, the slow view, the idle end; 1.4.1 to 1.6 released
