@@ -184,3 +184,35 @@ export function outcome(p: Pending, now: DeviceInfo | undefined): string | null 
 export function ownerName(d: Devices, id: string | null): string | null {
   return id == null ? null : (d.devices.find((x) => x.id === id)?.name ?? null);
 }
+
+/** Reads the list one at a time (1.4.1 field check): a read asked for while one runs follows
+ * it, so every read shows and the newest comes last. Dropping all but the newest kept the
+ * Devices tab on "Reading devices…" while new reads kept starting. Returns the function that
+ * asks for a read; `busy` is true from the first read until the last one ends. */
+export function oneAtATime<T>(
+  read: () => Promise<T>,
+  show: (value: T) => void,
+  fail: (error: unknown) => void,
+  busy: (reading: boolean) => void,
+): () => void {
+  let reading = false;
+  let again = false;
+  const load = (): void => {
+    if (reading) {
+      again = true;
+      return;
+    }
+    reading = true;
+    busy(true);
+    read()
+      .then(show, fail)
+      .finally(() => {
+        reading = false;
+        if (again) {
+          again = false;
+          load();
+        } else busy(false);
+      });
+  };
+  return load;
+}

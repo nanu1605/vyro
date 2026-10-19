@@ -684,13 +684,15 @@ export async function onLowBattery(cb: (low: DeviceInfo[]) => void): Promise<() 
   return listen<DeviceInfo[]>('low-battery', (e) => cb(e.payload));
 }
 
-/** Fires once things settle after a device arrives, leaves, connects or disconnects. */
-export async function onDevicesChanged(cb: () => void): Promise<() => void> {
+/** Fires with the list read after a device arrives, leaves, connects or disconnects, and with
+ * the background reads (1.4.1). */
+export async function onDevicesRead(cb: (devices: Devices) => void): Promise<() => void> {
   if (!inTauri) {
-    previewChanged.add(cb);
-    return () => previewChanged.delete(cb);
+    const again = () => void getDevices().then(cb);
+    previewChanged.add(again);
+    return () => previewChanged.delete(again);
   }
-  return listen('devices-changed', () => cb());
+  return listen<Devices>('devices-read', (e) => cb(e.payload));
 }
 
 /** Saved Dashboard layouts (P24); null before the first save (the Dashboard then starts from

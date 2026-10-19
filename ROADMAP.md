@@ -2562,6 +2562,20 @@ first) and 1.7 (the PC's screen on the phone), each with its own field check.
       the window went to the tray. A read now only reads; the installed-app smoke test calls it
       and fails if it announces a change (and if saving a widget is not heard, so silence means
       something).
+- [x] **The Devices tab stayed on "Reading devices…"** (found by the owner on 1.7's build
+      3095d4f, 2026-10-19, at the start of this check; the dot on Devices showed, so the
+      background reader had read the list). The tab kept only its newest read, and with the
+      background reader 1.4.1 started reading on every change: a change during a read threw the
+      read away, so changes that kept coming kept the list from ever showing. Separately, the
+      Bluetooth battery read (and one HID read) waits on the device with no limit, under a lock
+      every later list waits for. Which of the two held the owner's tab is not known (no log
+      was taken), so both are fixed: the tab reads one at a time and shows every read
+      (`devices.ts` → `oneAtATime`, with a test of changes that keep coming); after a change
+      only the background reader reads, at most every 5 s, and the tab shows its list
+      (`devices-read`); and each battery read runs on its own thread, the list waiting 5 s for
+      it and going on with the last answer (`devices/bounded.rs`, tested with a read that
+      hangs). The log now says when a list takes over 2 s, when a battery read is late and
+      when changes keep coming for a minute.
 - [ ] Field check 1.4.1 ([`docs/field-check-1.4.1.md`](docs/field-check-1.4.1.md)); the owner's
       go.
 
