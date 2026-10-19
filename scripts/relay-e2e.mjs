@@ -421,7 +421,7 @@ async function main() {
         // What arrives, both ends: the phone's own reading of the picture and the PC's report.
         await d.page.locator('details.arrives summary').click();
         await seeText(d.page, /Here: brightness \d+ %/, '…and says how bright the picture is here');
-        await seeText(d.page, /its screen \d+×\d+, sent as \d+×\d+/, '…and what the PC sent');
+        await seeText(d.page, /its screen \d+×\d+ through [\w ]+,\s+sent as \d+×\d+/, '…and what the PC sent');
         pc.say('still');
         await d.page.waitForTimeout(4000);
         const still = await picture();

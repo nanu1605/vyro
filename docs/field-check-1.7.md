@@ -26,7 +26,8 @@ through the relay where it cannot.
   one a second is right). Leave the PC alone for a minute: the picture stays, sharp, never
   black.
 - Tap "Receiving…": it opens two lines. **Here** is how bright the picture this phone decodes
-  is; **the PC's** line is what the PC sent (its screen's size and the size sent, pictures a
+  is; **the PC's** line is what the PC sent (its screen's size, how it took it: "Desktop
+  Duplication", or "GDI" when Desktop Duplication gave blank pictures; the size sent, pictures a
   second, Mbit/s, how bright the picture it took is, whole pictures asked for). If the picture
   is black, a line under it says whether the PC's own picture was black or the PC sent one that
   comes out black on the phone. Screenshot both lines on each phone, picture or not. The PC shows the **Your screen is shared** banner on every view, a notification, and

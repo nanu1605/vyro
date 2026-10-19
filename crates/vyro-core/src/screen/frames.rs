@@ -121,6 +121,17 @@ pub fn bgra_to_bgr(src: &[u8], sw: u32, sh: u32, pitch: usize, dw: u32, dh: u32)
     }
 }
 
+/// Whether a BGRA picture holds nothing: every pixel of a grid across it black with no colour
+/// (alpha aside, which GDI leaves at 0). Desktop Duplication hands such pictures over on some
+/// PCs; a real desktop is never wholly (0, 0, 0).
+pub fn blank(bgra: &[u8]) -> bool {
+    let pixels = bgra.len() / 4;
+    let step = (pixels / 65_536).max(1);
+    (0..pixels)
+        .step_by(step)
+        .all(|i| bgra[i * 4..i * 4 + 3] == [0, 0, 0])
+}
+
 /// How bright an NV12 picture is (its mean luma, 0–255) and how much that varies across it (the
 /// standard deviation; 0 is one flat colour), from a grid of its pixels: a black picture reads
 /// (16, 0) or so.

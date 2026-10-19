@@ -600,6 +600,7 @@ fn notes_for_the_phone() {
     );
     assert_eq!(Note::Secure.json(), r#"{"t":"secure"}"#);
     let r = super::producer::Report {
+        capture: "GDI",
         from: (2560, 1440),
         sent: (1920, 1080),
         taken: 30,
@@ -612,12 +613,12 @@ fn notes_for_the_phone() {
     };
     assert_eq!(
         Note::report(&r).json(),
-        r#"{"t":"report","from":[2560,1440],"sent":[1920,1080],"taken":30,"encoded":30,"keyframes":1,"bitrate":5000000,"luma":120,"spread":60,"asked":2}"#
+        r#"{"t":"report","capture":"GDI","from":[2560,1440],"sent":[1920,1080],"taken":30,"encoded":30,"keyframes":1,"bitrate":5000000,"luma":120,"spread":60,"asked":2}"#
     );
     assert_eq!(
         r.to_string(),
-        "2560x1440 sent as 1920x1080: 30 new and 30 encoded a second, 1 keyframes, 5000 kbit/s, \
-         brightness 120 varying 60, 2 keyframes asked for"
+        "2560x1440 through GDI, sent as 1920x1080: 30 new and 30 encoded a second, 1 keyframes, \
+         5000 kbit/s, brightness 120 varying 60, 2 keyframes asked for"
     );
     assert_eq!(
         Note::End {
@@ -626,6 +627,24 @@ fn notes_for_the_phone() {
         .json(),
         r#"{"t":"end","why":"stopped on the PC"}"#
     );
+}
+
+/// A picture of zeros is blank (alpha aside); one lit pixel on the grid, or a dark grey desktop,
+/// is not.
+#[test]
+fn a_picture_of_zeros_is_blank() {
+    let (w, h) = (2560usize, 1440usize);
+    let mut px = vec![0u8; w * h * 4];
+    assert!(frames::blank(&px));
+    for a in px.iter_mut().skip(3).step_by(4) {
+        *a = 255;
+    }
+    assert!(frames::blank(&px), "alpha alone is still blank");
+    px[0] = 1;
+    assert!(!frames::blank(&px));
+    let grey = [28u8, 28, 28, 255].repeat(w * h);
+    assert!(!frames::blank(&grey));
+    assert!(frames::blank(&[]));
 }
 
 /// A black picture reads dark and flat; the test pattern bright and varied; nothing to read, zero.

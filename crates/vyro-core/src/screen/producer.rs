@@ -55,6 +55,8 @@ pub enum Status {
 /// so a picture that does not show can be traced to where it went wrong.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Report {
+    /// How the monitor's pictures are taken ([`Source::method`]).
+    pub capture: &'static str,
     /// The monitor's picture as taken.
     pub from: (u32, u32),
     /// The size sent.
@@ -113,6 +115,10 @@ pub trait Source {
     fn reopen(&mut self) -> Result<(), CaptureError>;
     /// Where the pictures are on the desktop (input goes there).
     fn rect(&self) -> Rect;
+    /// How the pictures are taken, for the report.
+    fn method(&self) -> &'static str {
+        "a test screen"
+    }
 }
 
 /// One encoded picture and the time of the picture it came from (100 ns units), which can be
@@ -166,6 +172,9 @@ impl Source for super::capture::Capture {
     }
     fn rect(&self) -> Rect {
         self.monitor.rect
+    }
+    fn method(&self) -> &'static str {
+        super::capture::Capture::method(self)
     }
 }
 
@@ -299,6 +308,7 @@ pub fn drive<S: Source, E: Encode>(
         if period >= REPORT {
             let per_sec = |n: u32| (f64::from(n) / period.as_secs_f64()).round() as u32;
             status(Status::Report(Report {
+                capture: cap.method(),
                 taken: per_sec(report.taken),
                 encoded: per_sec(report.encoded),
                 bitrate: per_sec(report.bitrate),
@@ -306,6 +316,7 @@ pub fn drive<S: Source, E: Encode>(
                 ..report
             }));
             report = Report {
+                capture: report.capture,
                 from: report.from,
                 sent: report.sent,
                 luma: report.luma,

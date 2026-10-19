@@ -69,6 +69,7 @@ pub enum Note {
     End { why: String },
     /// What went out lately ([`Report`]): sizes as `[w, h]`, rates a second, bits a second.
     Report {
+        capture: &'static str,
         from: [u32; 2],
         sent: [u32; 2],
         taken: u32,
@@ -88,6 +89,7 @@ impl Note {
 
     pub fn report(r: &Report) -> Self {
         Self::Report {
+            capture: r.capture,
             from: [r.from.0, r.from.1],
             sent: [r.sent.0, r.sent.1],
             taken: r.taken,
@@ -106,10 +108,11 @@ impl std::fmt::Display for Report {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}x{} sent as {}x{}: {} new and {} encoded a second, {} keyframes, {} kbit/s, \
-             brightness {} varying {}, {} keyframes asked for",
+            "{}x{} through {}, sent as {}x{}: {} new and {} encoded a second, {} keyframes, \
+             {} kbit/s, brightness {} varying {}, {} keyframes asked for",
             self.from.0,
             self.from.1,
+            self.capture,
             self.sent.0,
             self.sent.1,
             self.taken,

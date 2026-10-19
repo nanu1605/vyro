@@ -1,6 +1,12 @@
 //! The monitor's picture through DXGI Desktop Duplication (1.7). The app runs it as the signed-in
 //! user; the secure desktop (sign-in, lock screen, administrator prompts) cannot be captured and
 //! is reported as such. The mouse pointer is not part of the picture: the phone draws its own.
+//!
+//! On some PCs Desktop Duplication hands over pictures of nothing but zeros. A blank picture is
+//! then taken again through GDI, as Chrome falls back to it; when GDI sees the screen, the rest
+//! of the session is taken through GDI.
+
+use std::time::{Duration, Instant};
 
 use windows::core::Interface;
 use windows::Win32::Foundation::HMODULE;
@@ -19,7 +25,13 @@ use windows::Win32::Graphics::Dxgi::{
     DXGI_ERROR_SESSION_DISCONNECTED, DXGI_ERROR_UNSUPPORTED, DXGI_ERROR_WAIT_TIMEOUT,
     DXGI_OUTDUPL_FRAME_INFO,
 };
+use windows::Win32::Graphics::Gdi::{
+    BitBlt, CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GdiFlush, GetDC,
+    ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, CAPTUREBLT, DIB_RGB_COLORS,
+    HBITMAP, HDC, HGDIOBJ, SRCCOPY,
+};
 
+use super::frames;
 use super::input::Rect;
 pub use super::producer::{CaptureError, Picture};
 
@@ -136,11 +148,128 @@ pub struct Capture {
     staging: Option<ID3D11Texture2D>,
     /// A picture was taken since the duplication opened (until then every frame is one).
     seen: bool,
+    /// GDI instead, once Desktop Duplication gave a blank picture that GDI could fill.
+    gdi: Option<Gdi>,
+    /// When a blank picture was last taken again through GDI.
+    tried: Option<Instant>,
     pub monitor: Monitor,
 }
 
-// SAFETY: the device and duplication are used from one thread at a time (the producer).
+// SAFETY: the device, duplication and GDI objects are used from one thread at a time.
 unsafe impl Send for Capture {}
+
+/// A blank picture is taken again through GDI at most this often (a screen that really is black
+/// is not grabbed twice for every picture).
+const RETRY: Duration = Duration::from_secs(2);
+
+/// The monitor through GDI: a copy of its part of the screen into a bitmap of our own.
+struct Gdi {
+    mem: HDC,
+    bitmap: HBITMAP,
+    old: HGDIOBJ,
+    bits: *mut std::ffi::c_void,
+    rect: Rect,
+    /// The last picture, and when it was taken: GDI does not say when the screen changes.
+    last: Option<(Vec<u8>, Instant)>,
+}
+
+impl Gdi {
+    fn open(rect: Rect) -> Result<Self, CaptureError> {
+        let fail = |what: &str| CaptureError::Other(format!("GDI: {what}"));
+        let info = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: rect.width,
+                // Negative: rows top to bottom, as the conversion reads them.
+                biHeight: -rect.height,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        // SAFETY: plain GDI calls; the screen DC is released here, the rest in `drop`.
+        unsafe {
+            let screen = GetDC(None);
+            if screen.is_invalid() {
+                return Err(fail("no screen"));
+            }
+            let mem = CreateCompatibleDC(Some(screen));
+            let mut bits = std::ptr::null_mut();
+            let bitmap = CreateDIBSection(Some(mem), &info, DIB_RGB_COLORS, &mut bits, None, 0);
+            ReleaseDC(None, screen);
+            let bitmap = match bitmap {
+                Ok(b) if !bits.is_null() => b,
+                _ => {
+                    let _ = DeleteDC(mem);
+                    return Err(fail("no bitmap"));
+                }
+            };
+            let old = SelectObject(mem, bitmap.into());
+            Ok(Self {
+                mem,
+                bitmap,
+                old,
+                bits,
+                rect,
+                last: None,
+            })
+        }
+    }
+
+    /// The monitor now. A copy that fails is the secure desktop (or no desktop at all).
+    fn grab(&mut self) -> Result<Picture, CaptureError> {
+        let r = self.rect;
+        let len = r.width as usize * r.height as usize * 4;
+        // SAFETY: the bitmap is `len` bytes and selected into `mem`; it is read after GdiFlush.
+        unsafe {
+            let screen = GetDC(None);
+            let copied = BitBlt(
+                self.mem,
+                0,
+                0,
+                r.width,
+                r.height,
+                Some(screen),
+                r.left,
+                r.top,
+                SRCCOPY | CAPTUREBLT,
+            );
+            ReleaseDC(None, screen);
+            copied.map_err(|_| CaptureError::Secure)?;
+            let _ = GdiFlush();
+            Ok(Picture {
+                bgra: std::slice::from_raw_parts(self.bits.cast::<u8>(), len).to_vec(),
+                width: r.width as u32,
+                height: r.height as u32,
+            })
+        }
+    }
+
+    /// The next picture, at most one every `timeout_ms`; `None` when the screen did not change.
+    fn next(&mut self, timeout_ms: u32) -> Result<Option<Picture>, CaptureError> {
+        if let Some((_, at)) = &self.last {
+            let due = *at + Duration::from_millis(u64::from(timeout_ms));
+            std::thread::sleep(due.saturating_duration_since(Instant::now()));
+        }
+        let p = self.grab()?;
+        let same = self.last.as_ref().is_some_and(|(b, _)| *b == p.bgra);
+        self.last = Some((p.bgra.clone(), Instant::now()));
+        Ok((!same).then_some(p))
+    }
+}
+
+impl Drop for Gdi {
+    fn drop(&mut self) {
+        // SAFETY: the objects made in `open`, put back and deleted once.
+        unsafe {
+            SelectObject(self.mem, self.old);
+            let _ = DeleteObject(self.bitmap.into());
+            let _ = DeleteDC(self.mem);
+        }
+    }
+}
 
 impl Capture {
     /// Captures monitor `index` (0: the primary).
@@ -182,6 +311,8 @@ impl Capture {
             dup,
             staging: None,
             seen: false,
+            gdi: None,
+            tried: None,
             monitor,
         })
     }
@@ -197,8 +328,57 @@ impl Capture {
         Ok(())
     }
 
+    /// How the pictures are taken: "Desktop Duplication", or "GDI" after the fallback.
+    pub fn method(&self) -> &'static str {
+        if self.gdi.is_some() {
+            "GDI"
+        } else {
+            "Desktop Duplication"
+        }
+    }
+
     /// The next picture, waiting at most `timeout_ms`; `None` when the screen did not change.
     pub fn next(&mut self, timeout_ms: u32) -> Result<Option<Picture>, CaptureError> {
+        if let Some(g) = &mut self.gdi {
+            return g.next(timeout_ms);
+        }
+        let picture = self.duplicated(timeout_ms)?;
+        if let Some(p) = &picture {
+            if frames::blank(&p.bgra) && self.tried.is_none_or(|t| t.elapsed() >= RETRY) {
+                self.tried = Some(Instant::now());
+                if let Some((g, q)) = self.through_gdi() {
+                    log::warn!(
+                        "screen: Desktop Duplication gives {} a blank picture; GDI sees it, so \
+                         the session goes on through GDI",
+                        self.monitor.name
+                    );
+                    self.gdi = Some(g);
+                    return Ok(Some(q));
+                }
+            }
+        }
+        Ok(picture)
+    }
+
+    /// The monitor through GDI, when GDI sees something on it.
+    fn through_gdi(&self) -> Option<(Gdi, Picture)> {
+        let mut g = match Gdi::open(self.monitor.rect) {
+            Ok(g) => g,
+            Err(e) => {
+                log::debug!("screen: {e}");
+                return None;
+            }
+        };
+        let p = g.grab().ok()?;
+        if frames::blank(&p.bgra) {
+            return None;
+        }
+        g.last = Some((p.bgra.clone(), Instant::now()));
+        Some((g, p))
+    }
+
+    /// The next picture through Desktop Duplication.
+    fn duplicated(&mut self, timeout_ms: u32) -> Result<Option<Picture>, CaptureError> {
         let mut info = DXGI_OUTDUPL_FRAME_INFO::default();
         let mut res = None;
         // SAFETY: out pointers valid; every acquired frame is released below.
@@ -279,6 +459,44 @@ impl Capture {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// GDI, the fallback, takes the primary monitor too: its size, rows packed, not blank.
+    #[test]
+    fn gdi_captures_the_primary_monitor_where_there_is_one() {
+        let Some(m) = monitors().into_iter().next() else {
+            eprintln!("screen: no monitor for GDI");
+            return;
+        };
+        let mut g = match Gdi::open(m.rect) {
+            Ok(g) => g,
+            Err(e) => {
+                eprintln!("screen: no GDI capture here: {e}");
+                return;
+            }
+        };
+        match g.next(10) {
+            Ok(Some(p)) => {
+                assert_eq!(
+                    (p.width as i32, p.height as i32),
+                    (m.rect.width, m.rect.height)
+                );
+                assert_eq!(p.bgra.len(), p.width as usize * p.height as usize * 4);
+                let mean = p.bgra.iter().map(|&b| u64::from(b)).sum::<u64>() / p.bgra.len() as u64;
+                eprintln!(
+                    "screen: GDI captured {}x{}, mean byte {mean}{}",
+                    p.width,
+                    p.height,
+                    if frames::blank(&p.bgra) {
+                        ", blank"
+                    } else {
+                        ""
+                    }
+                );
+            }
+            Ok(None) => panic!("the first GDI picture is always new"),
+            Err(e) => eprintln!("screen: GDI capture failed: {e}"),
+        }
+    }
 
     /// Takes a picture where the test runs on a desktop; CI's runner may have none, and says so.
     #[test]

@@ -27,6 +27,8 @@
   /** What the PC sent lately (every 2 s): sizes, rates a second, bits a second, and how bright
    * the picture it took is (luma 16–235) and how much that varies. */
   interface Report {
+    /** How the PC takes its pictures: "Desktop Duplication", or "GDI" when that gave blanks. */
+    capture: string;
     from: [number, number];
     sent: [number, number];
     taken: number;
@@ -547,7 +549,7 @@
             </li>
             {#if report}
               <li>
-                {pc}: its screen {report.from[0]}×{report.from[1]}, sent as {report.sent[0]}×{report.sent[1]};
+                {pc}: its screen {report.from[0]}×{report.from[1]} through {report.capture}, sent as {report.sent[0]}×{report.sent[1]};
                 {report.taken} new and {report.encoded} sent pictures a second, {(report.bitrate / 1e6).toFixed(1)} Mbit/s;
                 {lookText(report)}; {report.asked} whole pictures asked for.
               </li>
