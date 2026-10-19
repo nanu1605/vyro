@@ -96,14 +96,19 @@ through the relay where it cannot.
 
 ## Results
 
+The owner, 2026-10-19, on `vyro-windows-c87dd2d` with the relay deployed from 60eda87 (run
+39265388166). Builds before it showed a black picture: the main monitor runs with HDR on (ROADMAP
+→ 1.7, "Still black on both phones").
+
 | Check | Android | iPhone | Notes |
 |---|---|---|---|
 | Permission | | | |
-| Direct on Wi-Fi: picture, delay, CPU | | | |
-| Taps, hold, drag, scroll, zoom | | | |
-| Typing, Ctrl+A, Alt+Tab, Win | | | |
-| Two monitors | | | |
-| Mobile data: direct or slow | | | |
+| Direct on Wi-Fi: picture, delay, CPU | works | works | a delay of milliseconds; Vyro at 10 % CPU at most |
+| Taps, hold, drag, scroll, zoom | works | works | "everything working" |
+| Typing, Ctrl+A, Alt+Tab, Win | works | works | |
+| Two monitors | works | works | 2560×1440 (HDR) and 3840×2160 |
+| HDR on and off, SDR brightness | works | works | |
+| Mobile data: direct or slow | | | the delay grows on mobile data; direct or slow view not noted |
 | Slow view | | | |
 | Secure screen, administrator window | | | |
 | Stop, lock on end, idle end, permission off | | | |
