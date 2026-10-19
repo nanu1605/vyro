@@ -28,6 +28,8 @@ let checks = 0;
 function problem(where, what) {
   problems.push(`${where}: ${what}`);
   console.error(`✗ ${where}: ${what}`);
+  // On CI, also an annotation on the run.
+  if (process.env.GITHUB_ACTIONS) console.log(`::error title=${where.replace(/[:,]/g, ' ')}::${String(what).replace(/%/g, '%25').replace(/\r?\n/g, '%0A')}`);
 }
 
 function ok(where) {
@@ -253,8 +255,10 @@ async function main() {
     await seeText(a.page, 'the slow view, a picture at a time', '…and says it is the slow view');
     await pc.out.wait(/^asked: screen\.stop /);
     const surface = await a.page.locator('.surface').boundingBox();
+    // Waits are set before the action: on this machine the answer can beat them.
+    const clicked = pc.out.next(/^asked: screen\.input .*"button"/);
     if (surface) await a.page.touchscreen.tap(surface.x + surface.width / 2, surface.y + surface.height / 2);
-    await pc.out.next(/^asked: screen\.input .*"button"/).then(
+    await clicked.then(
       () => ok('a tap reaches the PC as a click'),
       (e) => problem('slow view', e.message),
     );
@@ -287,9 +291,20 @@ async function main() {
     // has; not Playwright's Chromium): offer and answer through the relay, then straight to the
     // PC on this machine. The example PC sends no video (only Windows encodes it here), but the
     // connection, its notes and the input are the real ones.
-    const chrome = await chromium.launch({ channel: 'chrome' }).catch(() => null);
-    if (!chrome) console.log('· no Google Chrome here: the direct session is not tried');
-    else {
+    let chrome = await chromium.launch({ channel: 'chrome' }).catch(() => null);
+    if (chrome) {
+      const probe = await chrome.newPage();
+      const h264 = await probe.evaluate(() =>
+        (RTCRtpReceiver.getCapabilities('video')?.codecs ?? []).some((c) => c.mimeType.toLowerCase() === 'video/h264'),
+      );
+      await probe.close();
+      if (!h264) {
+        await chrome.close();
+        chrome = null;
+        console.log('· this Google Chrome plays no H.264: the direct session is not tried');
+      }
+    } else console.log('· no Google Chrome here: the direct session is not tried');
+    if (chrome) {
       try {
         pc.say('');
         const link = (await pc.out.next(/^link: (.+)$/))[1];
@@ -300,20 +315,23 @@ async function main() {
         await d.page.getByRole('navigation').getByRole('button', { name: 'Screen', exact: true }).click();
         const start = d.page.getByRole('button', { name: /^Show .*screen$/ });
         await start.waitFor({ timeout: 10_000 });
+        const connected = pc.out.next(/^screen: connected$/, 30_000);
         await start.click();
-        await pc.out.next(/^screen: connected$/, 30_000).then(
+        await connected.then(
           () => ok('the phone connects to the PC directly'),
           (e) => problem('direct', e.message),
         );
         await seeText(d.page, 'Tap to click', '…and the phone knows it is direct');
         const box = await d.page.locator('.surface').boundingBox();
+        const pressed = pc.out.next(/^screen input: Button/);
         if (box) await d.page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
-        await pc.out.next(/^screen input: Button/).then(
+        await pressed.then(
           () => ok('a tap reaches the PC over the direct connection'),
           (e) => problem('direct input', e.message),
         );
+        const stopped = pc.out.next(/^asked: screen\.stop /);
         await d.page.getByRole('button', { name: 'Stop', exact: true }).click();
-        await pc.out.next(/^asked: screen\.stop /).then(
+        await stopped.then(
           () => ok('…and Stop ends it'),
           (e) => problem('direct stop', e.message),
         );

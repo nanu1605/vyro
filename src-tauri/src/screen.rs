@@ -126,10 +126,16 @@ impl ScreenState {
     }
 
     pub fn status(&self) -> ScreenStatus {
+        // One lock at a time: a guard made inside the struct expression would live to its end.
+        let share = lock(&self.live).as_ref().map(|l| l.share.clone());
+        let (lock_on_end, slow_left) = {
+            let mut stored = lock(&self.stored);
+            (stored.lock_on_end, stored.slow.left(unix_now()))
+        };
         ScreenStatus {
-            share: lock(&self.live).as_ref().map(|l| l.share.clone()),
-            lock_on_end: lock(&self.stored).lock_on_end,
-            slow_left: lock(&self.stored).slow.left(unix_now()),
+            share,
+            lock_on_end,
+            slow_left,
         }
     }
 }
@@ -654,4 +660,46 @@ pub fn set_screen_lock(app: AppHandle, on: bool) -> ScreenStatus {
     state.save();
     announce(&app);
     state.status()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn state() -> ScreenState {
+        ScreenState {
+            path: None,
+            stored: Mutex::new(Stored::default()),
+            saved: Mutex::new(Instant::now()),
+            live: Mutex::new(None),
+            serial: AtomicU64::new(0),
+        }
+    }
+
+    /// The status takes each lock once: the window asks for it at start, on the main thread.
+    #[test]
+    fn the_status_answers() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(state().status());
+        });
+        let status = rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the status never answered (a lock taken twice)");
+        assert_eq!(
+            status,
+            ScreenStatus {
+                share: None,
+                lock_on_end: false,
+                slow_left: share::SLOW_DAILY_SECS,
+            }
+        );
+    }
+
+    #[test]
+    fn a_session_lasts_in_words() {
+        assert_eq!(span(Duration::from_secs(12)), "12 s");
+        assert_eq!(span(Duration::from_secs(4 * 60 + 20)), "4 min");
+        assert_eq!(span(Duration::from_secs(4 * 60 + 40)), "5 min");
+    }
 }
