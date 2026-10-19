@@ -9,13 +9,21 @@
 // arriving, and that a whole picture comes when asked for. Each finding is a line; on GitHub
 // Actions a notice (or an error, which fails the step).
 //
-//   node scripts/screen-check.mjs
+//   node scripts/screen-check.mjs [--test WxH] [--dump FILE]
+//
+// --test sends a moving test pattern of that size instead of the monitor (on Windows through
+// Windows' encoder, scaled as the app scales a large monitor); --dump keeps the H.264 the encoder
+// gave out (see examples/screen_check.rs).
 import { spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { chromium } from 'playwright';
 
 const root = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 const windows = process.platform === 'win32';
+const args = process.argv.slice(2);
+const testScreen = args.includes('--test');
+/** The desktop itself is sent: the browser's page is what changes on it. */
+const desktop = windows && !testScreen;
 const ci = !!process.env.GITHUB_ACTIONS;
 let problems = 0;
 const ok = (m) => console.log(ci ? `::notice title=Screen check::${m}` : `✓ ${m}`);
@@ -74,7 +82,7 @@ const offer = await page.evaluate(async () => {
   return p.localDescription.sdp;
 });
 
-const child = spawn(exe, [], { cwd: root, stdio: ['pipe', 'pipe', 'inherit'] });
+const child = spawn(exe, args, { cwd: root, stdio: ['pipe', 'pipe', 'inherit'] });
 const said = [];
 const waiters = [];
 createInterface({ input: child.stdout }).on('line', (l) => {
@@ -157,7 +165,7 @@ try {
   if (blank(moving)) problem('the picture is blank');
   if (moving.freezes > 2) problem(`${moving.freezes} freezes on a moving screen`);
 
-  if (windows) await page.evaluate(() => document.body.classList.add('still'));
+  if (desktop) await page.evaluate(() => document.body.classList.add('still'));
   else child.stdin.write('still\n');
   await page.waitForTimeout(1500);
   const settled = await look();
