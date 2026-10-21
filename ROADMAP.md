@@ -2696,6 +2696,10 @@ show on the phone).
       whose read takes over 250 ms is logged (at most every 5 minutes), to find what else
       holds a reading up. Memory, GPU, disk and network already use Task Manager's own sources
       and sums.
+- [x] **CI green** on 286753a (run 39653188894), merged into 1.6 (16d0e44, run 39653229359) and
+      1.7 (cbbaddb, run 39654835985), every job each. Test build `vyro-windows-cbbaddb`. Locally:
+      fmt, clippy (Linux and windows-gnu), 689 core tests, 214 frontend tests, the builds, the
+      bundle budget, the case seen from front, top and back in the preview.
 - [ ] Field check 1.5 ([`docs/field-check-1.5.md`](docs/field-check-1.5.md)); 1.4.1 released
       first; the owner's go. Then the relay is deployed (`relay.yml`), which serves the new
       phone app.
