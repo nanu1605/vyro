@@ -2,9 +2,10 @@
 
 Status: **in progress** (begun on `vyro-windows-bbc8120`, 2026-10-20: the owner reports control
 from the phone works, and Shut down shuts the laptop down). Test build now:
-**`vyro-windows-cbbaddb`**, the 1.7 test build (CI run 39654835985, every job green, version
-1.7.0), by the owner's choice (2026-10-19): it carries every change of 1.5, with step 6's fixes.
-1.5's own build is not tried by itself. About 40 minutes.
+**`vyro-windows-422e8d0`**, the 1.7 test build (CI run 39672234874, every job green, version
+1.7.0), by the owner's choice (2026-10-19): it carries every change of 1.5, with step 6's fixes
+and step 7's What's new (before it, `vyro-windows-cbbaddb`). 1.5's own build is not tried by
+itself. About 45 minutes.
 
 1.5 answers the owner's request to check and run anything Vyro does from the phone, shut the PC
 down from it, wake it, and see what runs on it (ROADMAP → 1.5.0, decision 36,
@@ -89,10 +90,12 @@ and, for waking, a second PC with Vyro on the same wired network, if you have on
 ## 7. What's new (added 2026-10-21)
 
 - Install this build over the one installed now, as an update does (Vyro's settings stay). On
-  its first start the window shows **What's new in Vyro 1.5**, once; **Got it** closes it.
+  its first start the window shows **What's new in Vyro 1.7** (the test build is 1.7.0; 1.5's own
+  build says 1.5), once; **Got it** closes it.
   Started in the tray instead, a notification says Vyro was updated.
 - Quit Vyro from the tray and start it again: it does not show.
-- Settings → Updates → **What's new in 1.5**, or Ctrl+K → What's new, opens it again.
+- Settings → Updates → **What's new in 1.7**, or Ctrl+K → What's new, opens it again, with
+  1.6 and 1.5 folded below.
 - If there is a PC that never had Vyro: a new install there does not show it.
 
 ## Results
