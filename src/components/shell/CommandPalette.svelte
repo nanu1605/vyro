@@ -19,8 +19,10 @@
     onsection: (t: Tab, id: string) => void;
     onhistory: (sensor: string) => void;
     onbios: () => void;
+    /** Opens What's new (1.5). */
+    onwhatsnew: () => void;
   }
-  let { open = $bindable(), snap, fansActive, onselect, onsection, onhistory, onbios }: Props = $props();
+  let { open = $bindable(), snap, fansActive, onselect, onsection, onhistory, onbios, onwhatsnew }: Props = $props();
 
   interface Item {
     key: string;
@@ -69,6 +71,7 @@
   const base = $derived<Item[]>([
     ...VIEWS.map((v) => ({ key: `tab:${v.id}`, label: v.label, hint: v.blurb, kind: 'Go to', run: () => onselect(v.id) })),
     ...(fansActive ? [{ key: 'bios', label: 'Return fans to BIOS', hint: 'Hand every fan back', kind: 'Action', run: onbios }] : []),
+    { key: 'whatsnew', label: 'What’s new', hint: 'This version’s notes', kind: 'Action', run: onwhatsnew },
     ...SECTIONS.map(([t, id, label, hint]) => ({ key: `sec:${id}`, label, hint, kind: t === 'settings' ? 'Settings' : 'Health', run: () => onsection(t, id) })),
     ...THEMES.map((t) => ({
       key: `theme:${t.id}`,

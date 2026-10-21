@@ -73,6 +73,8 @@ a step that fails can crash a game, the driver or the PC, which is part of the c
 
 - With GPU tuning off, no NVIDIA setting changes (Now shows stock values throughout).
 - Task Manager: Vyro's idle CPU and memory as with 1.5.
+- Installed over 1.5, the first start shows **What's new in Vyro 1.6** once (GPU tuning); over
+  1.4.1 it shows 1.6, with 1.5 folded below it.
 
 ## Results
 

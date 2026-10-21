@@ -5,8 +5,9 @@
 // text inside them in whole words even at their narrowest. Since 1.3 also: custom accents that are
 // hard to read as picked (navy on Midnight, pale yellow on Daylight), and Settings with the colour
 // wheel open. Since 1.4 also: Settings → Remote's reach from anywhere (the relay's confirmation,
-// a phone's pairing code, the options). Since 1.6 also: GPU tuning's confirmation, and the view with
-// tuning on and a stability test running. The phone app itself is swept by scripts/relay-e2e.mjs.
+// a phone's pairing code, the options). Since 1.5 also: What's new after an update. Since 1.6 also: GPU
+// tuning's confirmation, and the view with tuning on and a stability test running. The phone app itself is swept
+// by scripts/relay-e2e.mjs.
 // Runs against the browser preview
 // (sample data, two GPUs as on the owner's PC) of a finished build:
 //
@@ -261,6 +262,18 @@ async function sweepDialogs(browser, theme, width) {
   await page.goto(`${BASE}/`);
   await page.waitForTimeout(1200);
   const at = (what) => `${what} · ${theme} ${width}px`;
+
+  // What's new (1.5), as after an update from 1.4.1: once, and gone after Got it.
+  await page.goto(`${BASE}/?whatsnew=1.4.1`);
+  const news = page.getByRole('dialog', { name: /^What’s new in Vyro/ });
+  await news.waitFor({ timeout: 5000 }).catch(() => problem(at("What's new"), 'does not show after an update'));
+  await page.waitForTimeout(500);
+  await axe(page, at("What's new"));
+  await noSidewaysScroll(page, at("What's new"));
+  await news.getByRole('button', { name: 'Got it' }).click();
+  if (await news.isVisible()) problem(at("What's new"), 'still shows after Got it');
+  await page.goto(`${BASE}/`);
+  await page.waitForTimeout(1200);
 
   // Dashboard edit mode with a widget's options open.
   await tab(page, 'Dashboard');

@@ -2697,6 +2697,18 @@ show on the phone).
       whose read takes over 250 ms is logged (at most every 5 minutes), to find what else
       holds a reading up. Memory, GPU, disk and network already use Task Manager's own sources
       and sums.
+- [x] **What's new** (the owner, 2026-10-21): the first time Vyro starts after an update, the
+      window shows what the new version brings, once ("What's new in Vyro 1.5", "Got it");
+      Settings → Updates and the palette (Ctrl+K → What's new) open it again. Started in the
+      tray, a notification says so. The notes are `src/whatsnew.ts`, one entry per version,
+      newest first, written for the owner, those for the phone marked; a test fails when the
+      version being built has none, so no release goes out without its notes. The version last
+      shown is kept in `version.json` beside the settings, not in them (the window saves its
+      settings whole and would write over it). Vyro before 1.5 kept no version, so an update
+      from it is told from a new install by its saved settings (settings, dashboard, widgets,
+      remote, alert rules) or a WebView or log folder made before this start; a new install
+      shows nothing and keeps its version. An update over several versions shows each one's
+      notes, the newest open. Tests cover the decision (Rust) and which notes show (TS).
 - [x] **CI green** on 286753a (run 39653188894), merged into 1.6 (16d0e44, run 39653229359) and
       1.7 (cbbaddb, run 39654835985), every job each. Test build `vyro-windows-cbbaddb`. Locally:
       fmt, clippy (Linux and windows-gnu), 689 core tests, 214 frontend tests, the builds, the
@@ -2757,6 +2769,8 @@ settings, tested on an NVIDIA desktop card and a laptop GPU (decision 37). Built
       failed write, a crash at start, apply at start only when tested, another card's presets,
       trials, sleep), crash events from the logs, IPC 15, the tray tooltip, the window's logic.
       On Windows CI, WARP renders the fixed frame the same twice and keeps the memory pattern.
+- [x] **What's new in 1.6** (1.5's What's new, merged in 2026-10-21): GPU tuning, the
+      stability test and Find my best, back to stock, and presets from the phone.
 - [x] **CI green** on eca77e0 (run 39161727115): Linux, Windows with the installed-app smoke
       test (WARP renders the fixed frame and keeps the memory pattern), the relay and phone app
       with the end-to-end test, accessibility. Test build `vyro-windows-eca77e0`. Locally: fmt,

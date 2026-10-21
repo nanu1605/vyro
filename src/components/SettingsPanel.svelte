@@ -19,8 +19,10 @@
     snap: SensorSnapshot | null;
     backend: BackendStatus | null;
     active: boolean;
+    /** Opens What's new (1.5). */
+    onwhatsnew: () => void;
   }
-  let { snap, backend, active }: Props = $props();
+  let { snap, backend, active, onwhatsnew }: Props = $props();
 
   let autostart = $state<boolean | null>(null);
   const look = $derived(themeOf(prefs.theme));
@@ -573,6 +575,11 @@
       {#if upd.available}
         <p class="note">Installing asks for administrator approval once and restarts the sensor service.</p>
       {/if}
+    {/if}
+    {#if upd}
+      <div class="actions">
+        <button type="button" onclick={onwhatsnew}>What’s new in {upd.current.replace(/^(\d+\.\d+)\.0$/, '$1')}</button>
+      </div>
     {/if}
   </Card>
 

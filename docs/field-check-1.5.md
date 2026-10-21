@@ -86,6 +86,15 @@ and, for waking, a second PC with Vyro on the same wired network, if you have on
   Time` on Windows 11 24H2 or later (`% Processor Utility` before). Note any line
   `provider …: a poll took … ms`: it names a read that still holds the readings up.
 
+## 7. What's new (added 2026-10-21)
+
+- Install this build over the one installed now, as an update does (Vyro's settings stay). On
+  its first start the window shows **What's new in Vyro 1.5**, once; **Got it** closes it.
+  Started in the tray instead, a notification says Vyro was updated.
+- Quit Vyro from the tray and start it again: it does not show.
+- Settings → Updates → **What's new in 1.5**, or Ctrl+K → What's new, opens it again.
+- If there is a PC that never had Vyro: a new install there does not show it.
+
 ## Results
 
 | Step | Result | Notes |
@@ -97,3 +106,4 @@ and, for waking, a second PC with Vyro on the same wired network, if you have on
 | 5. Nothing else changed |  |  |
 | 6. Fans from outside |  |  |
 | 6. Readings against Task Manager |  |  |
+| 7. What's new |  |  |
