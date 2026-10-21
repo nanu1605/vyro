@@ -43,8 +43,9 @@ Contributions: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 Releases are published by the Release workflow (see [CONTRIBUTING](CONTRIBUTING.md#releasing)):
 install `Vyro_<version>_x64_en-US.msi` from the latest release. Installed copies look for a new
 release daily and update themselves from Settings → Updates (one administrator prompt; app and
-service are both replaced). Every CI run also uploads a test build, `vyro-windows-<commit>`,
-which never updates itself.
+service are both replaced). The first time Vyro starts after an update it shows what's new in
+that version, once; Settings → Updates opens it again. Every CI run also uploads a test build,
+`vyro-windows-<commit>`, which never updates itself.
 
 The MSI installs Vyro for all users with a Start-menu entry, installs the signed
 [PawnIO](https://github.com/namazso/PawnIO) driver silently if it is missing (it reads CPU

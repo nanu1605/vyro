@@ -19,7 +19,7 @@
   import CoolingPanel from './components/CoolingPanel.svelte';
   import { animator } from './anim';
   import { loadUpdates, update } from './updates.svelte';
-  import { cancelPowerAction, getBackendStatus, getScreenStatus, onScreenShare, stopScreenShare, getHardwareChanges, getLowBatteries, getPawnIoStatus, getPowerState, getRemoteBrief, inTauri, onBackendStatus, onHardwareChanged, onLowBattery, onOpenView, onPowerPending, onRemote, onSensors, onWindowOpened, restoreFans, restoreGpu, setUiVisible } from './ipc';
+  import { cancelPowerAction, getBackendStatus, getScreenStatus, onScreenShare, stopScreenShare, getHardwareChanges, getLowBatteries, getPawnIoStatus, getPowerState, getRemoteBrief, inTauri, onBackendStatus, onHardwareChanged, onLowBattery, onOpenView, onPowerPending, onRemote, onSensors, onWindowOpened, restoreFans, restoreGpu, setUiVisible, getWhatsNew, whatsNewSeen } from './ipc';
   import { lowNotice } from './devices';
   import { loadSeen, newestId, saveSeen } from './changes';
   import { loadSeenKeys, markSeen, unseen } from './insights';
@@ -197,6 +197,18 @@
     setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 150);
   }
 
+  // What's new (1.5): after an update, the new versions' notes once; from Settings or the
+  // palette, every version's. Loaded when it opens.
+  let whatsNew = $state<{ current: string; from: string | null; all: boolean } | null>(null);
+  function openWhatsNew(): void {
+    whatsNew = { current: inTauri ? (update.status?.current ?? '') : '', from: null, all: true };
+  }
+  function closeWhatsNew(): void {
+    const shown = whatsNew;
+    whatsNew = null;
+    if (shown && !shown.all) void whatsNewSeen().catch(() => {});
+  }
+
   // Command palette (P28): Ctrl+K from anywhere; loaded the first time it opens.
   let palette = $state(false);
   let paletteLoaded = $state(false);
@@ -256,6 +268,11 @@
       })
       .catch(() => {});
     void loadUpdates().catch(() => {});
+    getWhatsNew()
+      .then((a) => {
+        if (a) whatsNew = { ...a, all: false };
+      })
+      .catch(() => {});
     let stop: (() => void) | undefined;
     let stopBackend: (() => void) | undefined;
     let stopChanges: (() => void) | undefined;
@@ -564,7 +581,7 @@
       {/if}
       {#if visited.settings}
         <div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden={tab !== 'settings'}>
-          <SettingsPanel {snap} {backend} active={tab === 'settings'} />
+          <SettingsPanel {snap} {backend} active={tab === 'settings'} onwhatsnew={openWhatsNew} />
         </div>
       {/if}
     </main>
@@ -592,7 +609,14 @@
       onsection={openSection}
       onhistory={(id) => openHistory(id)}
       onbios={fansToBios}
+      onwhatsnew={openWhatsNew}
     />
+  {/await}
+{/if}
+
+{#if whatsNew}
+  {#await import('./components/WhatsNew.svelte') then { default: WhatsNew }}
+    <WhatsNew current={whatsNew.current} from={whatsNew.from} all={whatsNew.all} onclose={closeWhatsNew} />
   {/await}
 {/if}
 
