@@ -16,6 +16,36 @@ pub fn clamp_pct(v: f64) -> f64 {
     }
 }
 
+/// The CPU busy counter Task Manager shows. Windows 11 24H2's update of May 2025 (KB5058411,
+/// build 26100) moved every page of Task Manager to the standard `% Processor Time`; before
+/// it, the Performance and Processes pages showed `% Processor Utility`, which counts a boosting
+/// processor above its base clock as busier (1.5 field check: Vyro read higher than Task
+/// Manager on a laptop).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CpuCounter {
+    Time,
+    Utility,
+}
+
+impl CpuCounter {
+    /// For a Windows build number (`CurrentBuildNumber`); 0 when it could not be read.
+    pub fn for_build(build: u32) -> Self {
+        if build >= 26100 {
+            Self::Time
+        } else {
+            Self::Utility
+        }
+    }
+
+    /// The `Processor Information` counter name.
+    pub fn counter(self) -> &'static str {
+        match self {
+            Self::Time => "% Processor Time",
+            Self::Utility => "% Processor Utility",
+        }
+    }
+}
+
 /// Parses a `Processor Information` instance name such as `"0,3"` (group, number). `_Total`
 /// and per-group totals (`"0,_Total"`) return `None`.
 pub fn parse_processor_instance(name: &str) -> Option<(u32, u32)> {
@@ -87,6 +117,19 @@ mod tests {
         assert_eq!(clamp_pct(f64::NAN), 0.0);
         assert_eq!(effective_mhz(120.0, 3800.0), Some(4560.0));
         assert_eq!(effective_mhz(0.0, 3800.0), None);
+    }
+
+    #[test]
+    fn reads_the_counter_task_manager_shows() {
+        // Windows 10 and Windows 11 before 24H2: utility.
+        assert_eq!(CpuCounter::for_build(19045), CpuCounter::Utility);
+        assert_eq!(CpuCounter::for_build(22631), CpuCounter::Utility);
+        assert_eq!(CpuCounter::for_build(0), CpuCounter::Utility);
+        // 24H2, 25H2 and later: processor time.
+        assert_eq!(CpuCounter::for_build(26100), CpuCounter::Time);
+        assert_eq!(CpuCounter::for_build(26200), CpuCounter::Time);
+        assert_eq!(CpuCounter::Time.counter(), "% Processor Time");
+        assert_eq!(CpuCounter::Utility.counter(), "% Processor Utility");
     }
 
     #[test]
