@@ -85,6 +85,42 @@ export function formOf(hw: HardwareId | null, pick: 'auto' | 'desktop' | 'laptop
   return hw?.board.formFactor === 'laptop' ? 'laptop' : 'desktop';
 }
 const BOARD = { x0: 20, x1: 264, y0: 130, y1: 435 };
+/** Case fans' places: front, then rear, then low front. */
+const FAN_SPOTS: ReadonlyArray<{ pos: Vec3; axis: 'x' | 'y' }> = [
+  { pos: [446, 390, 110], axis: 'x' },
+  { pos: [446, 265, 110], axis: 'x' },
+  { pos: [14, 360, 110], axis: 'x' },
+  { pos: [446, 140, 110], axis: 'x' },
+];
+/** The AIO's radiator, under the top with its fans below it. */
+const RADIATOR: { pos: Vec3; size: Vec3 } = { pos: [235, 448, 110], size: [280, 24, 122] };
+
+/** Where the tower's panels are open so its fans show from outside, in case coordinates: a mesh
+ * front behind its frame, a mesh top over the radiator's place, and a round grille in the back
+ * at each rear fan. Solid, the panels hid every case fan except through the glass (1.5 field
+ * check). */
+export interface CaseOpenings {
+  /** The front's mesh (x = CASE[0]): its z and y ranges. */
+  front: { z: [number, number]; y: [number, number] };
+  /** The top's mesh (y = CASE[1]): its x and z ranges. */
+  top: { x: [number, number]; z: [number, number] };
+  /** The back's grilles (x = 0): centre and radius. */
+  rear: Array<{ y: number; z: number; r: number }>;
+}
+
+/** The front frame's width around its mesh, mm. */
+const FRONT_FRAME = 10;
+
+export function caseOpenings(): CaseOpenings {
+  const [W, H, D] = CASE;
+  const [rx, , rz] = RADIATOR.pos;
+  const [sx, , sz] = RADIATOR.size;
+  return {
+    front: { z: [FRONT_FRAME, D - FRONT_FRAME], y: [FRONT_FRAME, H - FRONT_FRAME] },
+    top: { x: [rx - sx / 2, rx + sx / 2], z: [rz - sz / 2, rz + sz / 2] },
+    rear: FAN_SPOTS.filter((f) => f.pos[0] < W / 2).map((f) => ({ y: f.pos[1], z: f.pos[2], r: 58 })),
+  };
+}
 const CPU_AT: Vec3 = [150, 345, 0];
 const SLOT_Y = 270;
 const SLOT_MM = 20.32;
@@ -162,7 +198,7 @@ export function buildPc(input: PcInput): Part[] {
   if (pump >= 0) {
     parts.push(
       box({ id: 'aio', kind: 'aio', label: 'CPU', pos: [CPU_AT[0], CPU_AT[1], 24], size: [62, 62, 34], group: 'cpu', tab: 'cooling', fan: { axis: 'z', rpm: rpmOf(pump) } }),
-      box({ id: 'radiator', kind: 'radiator', label: 'Radiator', pos: [235, 448, 110], size: [280, 24, 122], group: null, tab: 'cooling', labelled: false }),
+      box({ id: 'radiator', kind: 'radiator', label: 'Radiator', pos: RADIATOR.pos, size: RADIATOR.size, group: null, tab: 'cooling', labelled: false }),
     );
     for (const [i, x] of [175, 295].entries())
       parts.push(
@@ -271,12 +307,7 @@ export function buildPc(input: PcInput): Part[] {
   // either way, turning slowly with "Speed not reported" when nothing reads them. A header that
   // has never turned is empty, or its fans run from a hub: its 0 RPM stood the front fans still
   // (1.2's first field check).
-  const spots: Array<{ pos: Vec3; axis: 'x' | 'y' }> = [
-    { pos: [446, 390, 110], axis: 'x' },
-    { pos: [446, 265, 110], axis: 'x' },
-    { pos: [14, 360, 110], axis: 'x' },
-    { pos: [446, 140, 110], axis: 'x' },
-  ];
+  const spots = FAN_SPOTS;
   const caseFan = (id: string, label: string, s: (typeof spots)[number], rpm: (snap: SensorSnapshot) => number | null) =>
     box({
       id,

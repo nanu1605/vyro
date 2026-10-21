@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cardKey, detectCard, tier, validShape, AMD, INTEL, NVIDIA } from './gpuspecs';
-import { buildLaptop, buildPc, CASE, discreteGpus, fanSpeedText, fanState, formOf, heat, heatColor, IDLE_SPIN, inMode, LAPTOP, LIMITS, partTemp, RAMP, slotIndex, spinRate, type Part } from './pcmodel';
+import { buildLaptop, buildPc, CASE, caseOpenings, discreteGpus, fanSpeedText, fanState, formOf, heat, heatColor, IDLE_SPIN, inMode, LAPTOP, LIMITS, partTemp, RAMP, slotIndex, spinRate, type Part } from './pcmodel';
 import { sampleLaptop } from './sample';
 import { sampleHardware } from './sample';
 import { initialSimState, nextSnapshot } from './sim';
@@ -131,6 +131,28 @@ describe('My PC layout', () => {
     const kept = buildPc({ hw: sampleHardware, snap: { ...snap, fans: empty }, cardKey, spunFans: new Set([sys1]) });
     expect(kept.find((p) => p.id === `fan.${sys1}`)?.pos).toEqual(front[0]!.pos);
     expect(kept.filter((p) => p.id.startsWith('casefan.')).length).toBe(2);
+  });
+
+  it('opens the case where every case and radiator fan is, so each shows from outside', () => {
+    // 1.5 field check: solid panels hid the fans from everywhere but the glass side.
+    const open = caseOpenings();
+    const [W, H] = CASE;
+    const four = [...snap.fans.filter((f) => f.kind !== 'fan' || /cpu/i.test(f.name)), ...[1, 2, 3, 4].map((n) => ({ ...snap.fans.find((f) => f.kind === 'fan' && !/cpu/i.test(f.name))!, name: `SYS_FAN${n}`, rpm: 800 }))];
+    const fans = buildPc({ hw: sampleHardware, snap: { ...snap, fans: four }, cardKey }).filter((p) => p.kind === 'fan' && p.id !== 'cooler.fan' && p.id !== 'aio');
+    expect(fans.filter((p) => p.id.startsWith('radfan.')).length).toBe(2);
+    expect(fans.filter((p) => p.id.startsWith('fan.')).length).toBe(4);
+    const within = (v: number, half: number, [a, b]: [number, number]) => v - half >= a && v + half <= b;
+    for (const f of fans) {
+      const [x, y, z] = f.pos;
+      const r = f.size[1] === 25 ? f.size[0] / 2 : f.size[1] / 2;
+      if (f.fan!.axis === 'y') {
+        expect(y > H / 2 && within(x, r, open.top.x) && within(z, r, open.top.z), f.id).toBe(true);
+      } else if (x > W / 2) {
+        expect(within(z, r, open.front.z) && within(y, r, open.front.y), f.id).toBe(true);
+      } else {
+        expect(open.rear.some((g) => Math.abs(g.y - y) < 1 && Math.abs(g.z - z) < 1 && g.r >= r - 4), f.id).toBe(true);
+      }
+    }
   });
 
   it('moves parts out of the case in the exploded view, the board stays', () => {

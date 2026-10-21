@@ -26,19 +26,23 @@ pub use process::ProcessProvider;
 /// Per-process GPU utilization, written by the GPU provider and read by the process provider.
 pub type GpuShare = Arc<Mutex<HashMap<u32, f64>>>;
 
-/// The real providers, in poll order (GPU before processes so per-process GPU is current).
+/// The real providers, in poll order. The snapshot goes out once all have polled, so the readings
+/// Task Manager also shows (memory, CPU and processes) are read last, just before it does: the
+/// hardware reads before them (the sensor chips, the SMBus, the drives) no longer make them a
+/// tick-length late (1.5 field check: the gauges lagged Task Manager). GPU before power (its
+/// watts) and processes (per-process GPU); the AMD CPU before power.
 pub fn providers(clients: crate::engine::ClientPids) -> Vec<Box<dyn Provider>> {
     let share = GpuShare::default();
     vec![
-        Box::new(CpuProvider::new()),
         Box::new(crate::amd::AmdCpuProvider::new()),
         Box::new(crate::sio::SioProvider::new()),
-        Box::new(MemoryProvider::new()),
         Box::new(crate::ram::RamProvider::new()),
         Box::new(crate::storage::StorageProvider::new()),
+        Box::new(crate::network::NetworkProvider::new()),
         Box::new(GpuProvider::new(Arc::clone(&share))),
         Box::new(crate::power::PowerProvider::new()),
-        Box::new(crate::network::NetworkProvider::new()),
+        Box::new(MemoryProvider::new()),
+        Box::new(CpuProvider::new()),
         Box::new(ProcessProvider::new(share, clients)),
     ]
 }

@@ -20,7 +20,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { corners, fitDistance } from './camfit';
 import type { GpuShape } from './gpuspecs';
 import { laptopAirflow, towerAirflow } from './airflow';
-import { CASE, heatColor, LAPTOP, LID, LID_OPEN, type Part } from './pcmodel';
+import { CASE, caseOpenings, heatColor, LAPTOP, LID, LID_OPEN, type Part } from './pcmodel';
 
 export type SceneView = 'pc' | 'gpu' | 'laptop';
 
@@ -192,6 +192,26 @@ function sleeveTexture(): THREE.CanvasTexture {
   t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(30, 1);
+  return t;
+}
+
+/** Perforated steel for the case's mesh panels, as an alpha map (white is metal, black a
+ * hole): staggered round holes, a little over half of it open. One tile is MESH_TILE mm wide. */
+const MESH_TILE: [number, number] = [6, 10.5];
+function perforation(): THREE.CanvasTexture {
+  const t = canvasTexture(32, 56, (ctx) => {
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, 32, 56);
+    ctx.fillStyle = '#000';
+    for (const [x, y] of [[0, 0], [32, 0], [0, 56], [32, 56], [16, 28]] as const) {
+      ctx.beginPath();
+      ctx.arc(x, y, 13, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+  t.colorSpace = THREE.NoColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.RepeatWrapping;
   return t;
 }
 
@@ -701,17 +721,82 @@ export function createScene(canvas: HTMLCanvasElement, view: SceneView, pal: Sce
     const t = 5;
     // Powder-coated steel, matte: glossier, the inside caught the room's ceiling light from
     // above and the whole interior turned white (1.2's first field check).
-    const shell = mat(pal.light ? 0xe4e8ee : 0x16191f, { metalness: 0.3, roughness: 0.8 });
+    const shellColor = pal.light ? 0xe4e8ee : 0x16191f;
+    const shell = mat(shellColor, { metalness: 0.3, roughness: 0.8 });
     deco.add(boxMesh([W, H, t], shell, [W / 2, H / 2, -t / 2])); // behind the board
-    deco.add(boxMesh([W, t, D], shell, [W / 2, H + t / 2, D / 2])); // top
     deco.add(boxMesh([W, t, D], shell, [W / 2, -t / 2, D / 2])); // floor
-    deco.add(boxMesh([t, H, D], shell, [-t / 2, H / 2, D / 2])); // back
-    // Front: a mesh panel with a light strip down its edge.
-    deco.add(boxMesh([t, H, D], mat(pal.light ? 0xcfd5dd : 0x0f1216, { metalness: 0.3, roughness: 0.8 }), [W + t / 2, H / 2, D / 2]));
+    // Open where the fans are, so they show from outside too (1.5 field check: solid panels hid
+    // them from everywhere but the glass): perforated steel, see-through from a distance.
+    const open = caseOpenings();
+    const base = keep(perforation());
+    const meshOf = (color: number, u: number, v: number) => {
+      const map = keep(base.clone());
+      map.repeat.set(u / MESH_TILE[0], v / MESH_TILE[1]);
+      return new THREE.MeshStandardMaterial({
+        color,
+        metalness: 0.35,
+        roughness: 0.6,
+        alphaMap: map,
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+    };
+    // A sheet facing along x (u along z) or y (u along x).
+    const sheet = (geo: THREE.BufferGeometry, m: THREE.Material, at: [number, number, number], facing: 'x' | 'y') => {
+      const mesh = new THREE.Mesh(geo, m);
+      if (facing === 'x') mesh.rotation.y = -Math.PI / 2;
+      else mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(...at);
+      return mesh;
+    };
+    // Top: the mesh over the radiator's place, in the steel.
+    {
+      const [x0, x1] = open.top.x;
+      const [z0, z1] = open.top.z;
+      const y = H + t / 2;
+      deco.add(
+        boxMesh([x0, t, D], shell, [x0 / 2, y, D / 2]),
+        boxMesh([W - x1, t, D], shell, [(x1 + W) / 2, y, D / 2]),
+        boxMesh([x1 - x0, t, z0], shell, [(x0 + x1) / 2, y, z0 / 2]),
+        boxMesh([x1 - x0, t, D - z1], shell, [(x0 + x1) / 2, y, (z1 + D) / 2]),
+        sheet(new THREE.PlaneGeometry(x1 - x0, z1 - z0), meshOf(shellColor, x1 - x0, z1 - z0), [(x0 + x1) / 2, y, (z0 + z1) / 2], 'y'),
+      );
+    }
+    // Back: a round grille behind each rear fan.
+    {
+      const outline = new THREE.Shape();
+      outline.moveTo(-D / 2, -H / 2);
+      outline.lineTo(D / 2, -H / 2);
+      outline.lineTo(D / 2, H / 2);
+      outline.lineTo(-D / 2, H / 2);
+      outline.closePath();
+      for (const g of open.rear) {
+        const hole = new THREE.Path();
+        hole.absarc(g.z - D / 2, g.y - H / 2, g.r, 0, Math.PI * 2, true);
+        outline.holes.push(hole);
+      }
+      const back = new THREE.ExtrudeGeometry(outline, { depth: t, bevelEnabled: false });
+      back.translate(0, 0, -t / 2);
+      deco.add(sheet(back, shell, [-t / 2, H / 2, D / 2], 'x'));
+      for (const g of open.rear) deco.add(sheet(new THREE.CircleGeometry(g.r, 48), meshOf(shellColor, 2 * g.r, 2 * g.r), [-t / 2, g.y, g.z], 'x'));
+    }
+    // Front: mesh in a frame, with a light strip down its edge.
+    {
+      const frontColor = pal.light ? 0xcfd5dd : 0x0f1216;
+      const frame = mat(frontColor, { metalness: 0.3, roughness: 0.8 });
+      const [z0, z1] = open.front.z;
+      const [y0, y1] = open.front.y;
+      const x = W + t / 2;
+      deco.add(
+        boxMesh([t, H - y1, D], frame, [x, (y1 + H) / 2, D / 2]),
+        boxMesh([t, y0, D], frame, [x, y0 / 2, D / 2]),
+        boxMesh([t, y1 - y0, z0], frame, [x, (y0 + y1) / 2, z0 / 2]),
+        boxMesh([t, y1 - y0, D - z1], frame, [x, (y0 + y1) / 2, (z1 + D) / 2]),
+        sheet(new THREE.PlaneGeometry(z1 - z0, y1 - y0), meshOf(frontColor, z1 - z0, y1 - y0), [x, (y0 + y1) / 2, (z0 + z1) / 2], 'x'),
+      );
+    }
     deco.add(boxMesh([2, H * 0.86, 2.5], decoRgb(), [W + t + 0.6, H / 2, D - 10]));
-    // Top vents.
-    const slotMat = mat(0x07090c, { roughness: 0.9 });
-    for (let i = 0; i < 9; i++) deco.add(boxMesh([W * 0.55, 0.8, 5], slotMat, [W * 0.5, H + t + 0.4, 30 + i * 18]));
     // Feet.
     const foot = mat(0x0b0d10, { roughness: 0.9 });
     for (const x of [30, W - 30]) for (const z of [25, D - 25]) deco.add(rounded([46, 12, 30], 4, foot, [x, -t - 6, z]));

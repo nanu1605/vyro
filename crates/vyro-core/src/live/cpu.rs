@@ -1,5 +1,6 @@
 //! CPU utilization and clock from PDH `Processor Information` counters, the same source as
-//! Task Manager. Temperatures, power and voltages need the driver (Phase 6).
+//! Task Manager, and the same counter as this Windows build's Task Manager ([`CpuCounter`]).
+//! Temperatures, power and voltages need the driver (Phase 6).
 
 use windows::Win32::System::Power::{
     CallNtPowerInformation, ProcessorInformation, PROCESSOR_POWER_INFORMATION,
@@ -11,7 +12,8 @@ use super::PerCore;
 use crate::provider::{BoxError, Provider};
 use crate::registry::{Group, Registry, SensorDesc, SensorKey, Source, Unit};
 use crate::snapshot::SensorSnapshot;
-use crate::usage::{clamp_pct, effective_mhz, per_processor};
+use crate::usage::{clamp_pct, effective_mhz, per_processor, CpuCounter};
+use crate::winutil::{Key, HKEY_LOCAL_MACHINE};
 
 struct Counters {
     // Declared before `query` so they drop first (they are freed with it anyway).
@@ -50,6 +52,20 @@ pub fn logical_processors() -> u32 {
     unsafe { GetActiveProcessorCount(ALL_PROCESSOR_GROUPS) }.max(1)
 }
 
+/// The Windows build number; 0 when it cannot be read.
+fn windows_build() -> u32 {
+    Key::open(
+        HKEY_LOCAL_MACHINE,
+        r"SOFTWARE\Microsoft\Windows NT\CurrentVersion",
+    )
+    .and_then(|k| {
+        k.string("CurrentBuildNumber")
+            .or_else(|| k.string("CurrentBuild"))
+    })
+    .and_then(|b| b.trim().parse().ok())
+    .unwrap_or(0)
+}
+
 /// Per-logical-processor clocks from the power manager: (max = nominal, current). Used when
 /// the `% Processor Performance` counter is missing.
 fn power_info() -> Vec<PROCESSOR_POWER_INFORMATION> {
@@ -80,16 +96,29 @@ impl Provider for CpuProvider {
 
     fn init(&mut self, reg: &mut Registry) -> Result<(), BoxError> {
         let query = Query::open()?;
-        // `% Processor Utility` (Windows 8+) is what Task Manager shows; `% Processor Time`
-        // is the fallback on older builds, and the legacy `Processor` object the last resort
-        // (its instances are plain numbers, which `per_processor` does not read).
+        // The counter this build's Task Manager shows, then the other one, and the legacy
+        // `Processor` object last (its instances are plain numbers, which `per_processor` does
+        // not read).
+        let shown = CpuCounter::for_build(windows_build());
+        let other = match shown {
+            CpuCounter::Time => CpuCounter::Utility,
+            CpuCounter::Utility => CpuCounter::Time,
+        };
+        log::info!(
+            "cpu: usage from {}, as Task Manager shows it",
+            shown.counter()
+        );
         let usage = |inst: &str| {
             query
                 .add(&format!(
-                    r"\Processor Information({inst})\% Processor Utility"
+                    r"\Processor Information({inst})\{}",
+                    shown.counter()
                 ))
                 .or_else(|_| {
-                    query.add(&format!(r"\Processor Information({inst})\% Processor Time"))
+                    query.add(&format!(
+                        r"\Processor Information({inst})\{}",
+                        other.counter()
+                    ))
                 })
                 .or_else(|_| query.add(&format!(r"\Processor({inst})\% Processor Time")))
         };
