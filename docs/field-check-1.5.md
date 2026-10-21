@@ -1,8 +1,10 @@
 # Field check: 1.5 (control from the phone)
 
-Status: **to do.** Test build: **`vyro-windows-bbc8120`**, the 1.7 test build (CI run
-39314060726, every job green, version 1.7.0), by the owner's choice (2026-10-19): it carries
-every change of 1.5. 1.5's own build is not tried by itself. About 40 minutes.
+Status: **in progress** (begun on `vyro-windows-bbc8120`, 2026-10-20: the owner reports control
+from the phone works, and Shut down shuts the laptop down). Test build now:
+**`vyro-windows-cbbaddb`**, the 1.7 test build (CI run 39654835985, every job green, version
+1.7.0), by the owner's choice (2026-10-19): it carries every change of 1.5, with step 6's fixes.
+1.5's own build is not tried by itself. About 40 minutes.
 
 1.5 answers the owner's request to check and run anything Vyro does from the phone, shut the PC
 down from it, wake it, and see what runs on it (ROADMAP → 1.5.0, decision 36,

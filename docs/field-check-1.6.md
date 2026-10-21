@@ -1,7 +1,7 @@
 # Field check: 1.6 (GPU tuning)
 
-Status: **to do.** Test build: **`vyro-windows-bbc8120`**, the 1.7 test build (CI run
-39314060726, every job green, version 1.7.0), by the owner's choice (2026-10-19): it carries
+Status: **to do.** Test build: **`vyro-windows-cbbaddb`**, the 1.7 test build (CI run
+39654835985, every job green, version 1.7.0), by the owner's choice (2026-10-19): it carries
 every change of 1.6, including the crash marker fix (2276a08). 1.6's own build is not tried by
 itself. Install the same MSI on the laptop. About 90 minutes on the desktop
 (most of it Find my best, which can run unattended) and 30 on the laptop.
