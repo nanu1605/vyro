@@ -34,20 +34,29 @@ const MAX_OFFER: usize = 32 * 1024;
 /// The most inputs one slow-view message carries.
 #[cfg(windows)]
 const MAX_INPUTS: usize = 20;
-/// The slow view's JPEG quality.
-#[cfg(windows)]
-const SLOW_QUALITY: f32 = 0.55;
 /// What today's slow view used is saved this often.
 const SAVE_EVERY: Duration = Duration::from_secs(30);
 #[cfg(not(windows))]
 const ONLY_WINDOWS: &str = "Only Vyro on Windows shares its screen.";
 
 /// `screen.json`.
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 struct Stored {
     lock_on_end: bool,
     slow: SlowAllowance,
+    /// While the phone's microphone plays, the cable is Windows' default microphone (1.7).
+    mic_switch: bool,
+}
+
+impl Default for Stored {
+    fn default() -> Self {
+        Self {
+            lock_on_end: false,
+            slow: SlowAllowance::default(),
+            mic_switch: true,
+        }
+    }
 }
 
 /// Who ended a session.
@@ -67,6 +76,8 @@ pub struct ScreenState {
     saved: Mutex<Instant>,
     live: Mutex<Option<Live>>,
     serial: AtomicU64,
+    /// The phone's voice clips and microphone (1.7).
+    pub(crate) voice: crate::voice::Voice,
 }
 
 struct Live {
@@ -100,7 +111,8 @@ struct Slow {
 
 impl ScreenState {
     pub fn load(app: &AppHandle) -> Self {
-        let path = app.path().app_local_data_dir().ok().map(|d| d.join(FILE));
+        let dir = app.path().app_local_data_dir().ok();
+        let path = dir.as_ref().map(|d| d.join(FILE));
         let stored = path
             .as_deref()
             .and_then(|p| files::read_json::<Stored>(p, |_| Ok(())).ok())
@@ -112,6 +124,7 @@ impl ScreenState {
             saved: Mutex::new(Instant::now()),
             live: Mutex::new(None),
             serial: AtomicU64::new(0),
+            voice: crate::voice::Voice::new(dir),
         }
     }
 
@@ -128,14 +141,20 @@ impl ScreenState {
     pub fn status(&self) -> ScreenStatus {
         // One lock at a time: a guard made inside the struct expression would live to its end.
         let share = lock(&self.live).as_ref().map(|l| l.share.clone());
-        let (lock_on_end, slow_left) = {
+        let (lock_on_end, slow_left, mic_switch) = {
             let mut stored = lock(&self.stored);
-            (stored.lock_on_end, stored.slow.left(unix_now()))
+            (
+                stored.lock_on_end,
+                stored.slow.left(unix_now()),
+                stored.mic_switch,
+            )
         };
         ScreenStatus {
             share,
             lock_on_end,
             slow_left,
+            mic: self.voice.on(),
+            mic_switch,
         }
     }
 }
@@ -145,7 +164,7 @@ fn state(app: &AppHandle) -> Option<tauri::State<'_, ScreenState>> {
 }
 
 /// Tells the window and the tray.
-fn announce(app: &AppHandle) {
+pub(crate) fn announce(app: &AppHandle) {
     let Some(state) = state(app) else {
         return;
     };
@@ -157,11 +176,28 @@ fn announce(app: &AppHandle) {
 }
 
 /// "12 s", "4 min".
-fn span(d: Duration) -> String {
+pub(crate) fn span(d: Duration) -> String {
     match d.as_secs() {
         s if s < 60 => format!("{s} s"),
         s => format!("{} min", (s + 30) / 60),
     }
+}
+
+/// Tells the phone of a direct session (over its data channel), if there is one.
+pub(crate) fn tell(app: &AppHandle, note: &str) {
+    #[cfg(windows)]
+    if let Some(state) = state(app) {
+        if let Some(Kind::Direct(s)) = lock(&state.live).as_ref().map(|l| &l.kind) {
+            s.tell(note.to_owned());
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = (app, note);
+}
+
+/// "Make the cable Windows' default microphone while the phone's microphone is on".
+pub(crate) fn mic_switch(app: &AppHandle) -> bool {
+    state(app).is_some_and(|s| lock(&s.stored).mic_switch)
 }
 
 /// A phone's request for the screen: the relay connection has checked its permission.
@@ -292,6 +328,7 @@ fn end(app: &AppHandle, serial: u64, why: &str, by: By) {
         return;
     };
     live.stop.store(true, Ordering::SeqCst);
+    crate::voice::mic_off(app, why);
     #[cfg(windows)]
     if let Kind::Direct(s) = &live.kind {
         s.tell(share::Note::End { why: why.into() }.json());
@@ -355,7 +392,7 @@ mod win {
     use vyro_core::remote::relay::proto::b64url;
     use vyro_core::screen::capture::{self, Capture, CaptureError};
     use vyro_core::screen::rtc::{self, SessionEvent};
-    use vyro_core::screen::share::{MonitorChoice, Note, SLOW_INTERVAL, SLOW_MAX, SLOW_SPENT};
+    use vyro_core::screen::share::{MonitorChoice, Note, SLOW_INTERVAL, SLOW_SPENT};
     use vyro_core::screen::{frames, inject, input, jpeg, producer};
 
     use super::*;
@@ -370,8 +407,22 @@ mod win {
             }
             "screen.slow" => slow(app, r),
             "screen.input" => slow_input(app, r),
+            "screen.clip" => clip(app, r),
+            "screen.audio" => Ok(json!({
+                "cable": crate::voice::cable_name()?,
+                "switchDefault": mic_switch(app),
+            })),
             _ => Err(vyro_core::remote::relay::api::UNKNOWN.into()),
         }
+    }
+
+    /// HD or SD (1.7); HD when the phone does not say (a phone app before 1.7).
+    fn quality_param(r: &Request) -> producer::Quality {
+        r.params
+            .get("quality")
+            .cloned()
+            .and_then(|q| serde_json::from_value(q).ok())
+            .unwrap_or_default()
     }
 
     fn monitor_param(r: &Request) -> usize {
@@ -438,6 +489,7 @@ mod win {
         let rect = Arc::new(Mutex::new(None));
         let sink: rtc::EventSink = {
             let (app, used, rect) = (app.clone(), Arc::clone(&used), Arc::clone(&rect));
+            let phone = r.name.clone();
             Box::new(move |e| match e {
                 SessionEvent::Connected => log::info!("screen: the phone is connected"),
                 SessionEvent::Input(i) => {
@@ -448,10 +500,32 @@ mod win {
                         }
                     }
                 }
+                SessionEvent::Clip(wav, reply) => {
+                    *lock(&used) = Instant::now();
+                    let (app, phone) = (app.clone(), phone.clone());
+                    // Encoding takes a moment; the session's own thread goes on.
+                    let spawned = std::thread::Builder::new()
+                        .name("vyro-phone-clip".into())
+                        .spawn(move || {
+                            let saved = crate::voice::save_clip(&app, &phone, &wav);
+                            if let Err(e) = &saved {
+                                log::warn!("phone clip: {e}");
+                            }
+                            reply.send(saved.as_deref().map_err(String::as_str));
+                        });
+                    if let Err(e) = spawned {
+                        log::warn!("phone clip: {e}");
+                    }
+                }
+                SessionEvent::Mic(frame) => {
+                    *lock(&used) = Instant::now();
+                    crate::voice::mic_frame(&app, &phone, &frame);
+                }
                 SessionEvent::Closed(why) => end(&app, serial, &why, By::Phone),
             })
         };
         let (session, answer) = rtc::start(&offer, &opts, sink)?;
+        session.set_quality(quality_param(r));
         let session = Arc::new(session);
         let stop = Arc::new(AtomicBool::new(false));
         begin(
@@ -604,11 +678,45 @@ mod win {
         let Some(p) = view.last.as_ref().filter(|_| view.fresh) else {
             return Ok(json!({ "same": true, "left": left }));
         };
-        let (w, h) = frames::fit(p.width, p.height, SLOW_MAX.0, SLOW_MAX.1);
+        let ((max_w, max_h), quality) = quality_param(r).slow();
+        let (w, h) = frames::fit(p.width, p.height, max_w, max_h);
         let bgr = frames::bgra_to_bgr(&p.bgra, p.width, p.height, p.width as usize * 4, w, h);
-        let jpeg = jpeg::encode(&bgr, w, h, SLOW_QUALITY)?;
+        let jpeg = jpeg::encode(&bgr, w, h, quality)?;
         view.fresh = false;
         Ok(json!({ "jpeg": b64url(&jpeg), "w": w, "h": h, "left": left }))
+    }
+
+    /// A voice clip through the relay (1.7), a piece a request: `{id, i, n, d}` with `d` the
+    /// piece in base64url. `{got: i}` until the last, then `{saved: file name}` once it is on
+    /// the clipboard. Only during this phone's session.
+    fn clip(app: &AppHandle, r: &Request) -> Result<Value, String> {
+        let text = |k: &str| r.params.get(k).and_then(Value::as_str);
+        let number = |k: &str| {
+            r.params
+                .get(k)
+                .and_then(Value::as_u64)
+                .and_then(|v| u32::try_from(v).ok())
+        };
+        let id = text("id").ok_or("The request needs \"id\".")?;
+        let (i, n) = number("i")
+            .zip(number("n"))
+            .ok_or("The request needs \"i\" and \"n\".")?;
+        let piece = text("d")
+            .and_then(vyro_core::remote::relay::proto::unb64url)
+            .ok_or("The request needs \"d\", in base64url.")?;
+        {
+            let state = state(app).ok_or("Vyro is starting.")?;
+            let current = lock(&state.live);
+            let live = current
+                .as_ref()
+                .filter(|l| l.share.id == r.phone)
+                .ok_or("The session ended.")?;
+            *lock(&live.used) = Instant::now();
+        }
+        match crate::voice::clip_piece(app, (&r.phone, &r.name), id, (i, n), piece)? {
+            Some(name) => Ok(json!({ "saved": name })),
+            None => Ok(json!({ "got": i })),
+        }
     }
 
     /// The slow view's input: `{inputs: [...]}`, each as the direct session's data channel
@@ -659,6 +767,26 @@ pub fn stop_screen_share(app: AppHandle) -> ScreenStatus {
     state(&app).map(|s| s.status()).unwrap_or_default()
 }
 
+/// "Make the cable Windows' default microphone while the phone's microphone is on" (1.7).
+#[tauri::command]
+pub fn set_screen_mic(app: AppHandle, on: bool) -> ScreenStatus {
+    let Some(state) = state(&app) else {
+        return ScreenStatus::default();
+    };
+    lock(&state.stored).mic_switch = on;
+    state.save();
+    announce(&app);
+    state.status()
+}
+
+/// The microphone a virtual cable offers, if one is installed (Settings → Remote).
+#[tauri::command]
+pub async fn find_phone_cable() -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(crate::voice::cable_name)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// "Lock the PC when a session ends".
 #[tauri::command]
 pub fn set_screen_lock(app: AppHandle, on: bool) -> ScreenStatus {
@@ -682,6 +810,7 @@ mod tests {
             saved: Mutex::new(Instant::now()),
             live: Mutex::new(None),
             serial: AtomicU64::new(0),
+            voice: crate::voice::Voice::new(None),
         }
     }
 
@@ -701,6 +830,8 @@ mod tests {
                 share: None,
                 lock_on_end: false,
                 slow_left: share::SLOW_DAILY_SECS,
+                mic: false,
+                mic_switch: true,
             }
         );
     }

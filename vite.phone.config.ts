@@ -72,6 +72,9 @@ export default defineConfig({
     emptyOutDir: true,
     target: 'es2022',
     sourcemap: false,
+    // The microphone's audio worklet stays a file: the relay's policy runs scripts only from the
+    // relay itself, never a data: URL.
+    assetsInlineLimit: (file) => (file.endsWith('.worklet.js') ? false : undefined),
     rollupOptions: { input: { phone: 'phone.html' } },
   },
 });

@@ -3,6 +3,7 @@
 import { mount } from 'svelte';
 import '../styles/theme.css';
 import '../remote/page.css';
+import './phone.css';
 import { applyLook, savedLook } from '../themes';
 import Phone from './Phone.svelte';
 

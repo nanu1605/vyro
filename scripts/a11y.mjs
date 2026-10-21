@@ -345,9 +345,11 @@ async function sweepDialogs(browser, theme, width) {
   await page.waitForTimeout(300);
   await axe(page, at('Relay pairing and options'));
   await noSidewaysScroll(page, at('Relay pairing and options'));
-  // The screen shared with a phone (1.7): the banner on every view, and Stop.
-  await page.goto(`${BASE}/?screen`);
+  // The screen shared with a phone (1.7): the banner on every view (with the phone's
+  // microphone on), and Stop.
+  await page.goto(`${BASE}/?screen=mic`);
   await page.getByText('Your screen is shared').waitFor();
+  await page.getByText('this PC hears the phone').waitFor();
   await axe(page, at('Screen shared banner'));
   await noSidewaysScroll(page, at('Screen shared banner'));
   await page.getByRole('button', { name: 'Stop sharing' }).click();

@@ -63,6 +63,10 @@ pub const METHODS: &[(&str, Access)] = &[
     ("screen.stop", Access::Screen),
     ("screen.slow", Access::Screen),
     ("screen.input", Access::Screen),
+    // The phone's voice (1.7): a clip through the relay, a piece a request; and whether this
+    // PC has a cable for the live microphone.
+    ("screen.clip", Access::Screen),
+    ("screen.audio", Access::Screen),
 ];
 
 /// Who may make `method`; `None`: no such request.

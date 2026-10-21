@@ -219,6 +219,11 @@ pub fn b64url(bytes: &[u8]) -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
+/// The bytes of [`b64url`] text.
+pub fn unb64url(text: &str) -> Option<Vec<u8>> {
+    URL_SAFE_NO_PAD.decode(text).ok()
+}
+
 pub fn secret_from(text: &str) -> Option<Secret> {
     URL_SAFE_NO_PAD.decode(text).ok()?.try_into().ok()
 }

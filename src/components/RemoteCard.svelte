@@ -19,6 +19,8 @@
     setPhoneControl,
     setPhoneScreen,
     setScreenLock,
+    setScreenMic,
+    findPhoneCable,
     stopScreenShare,
     setRelayEnabled,
     setRelayUrl,
@@ -55,6 +57,8 @@
   let actions = $state.raw<PhoneAction[]>([]);
   let readiness = $state.raw<WakeReadiness | null>(null);
   let screen = $state.raw<ScreenStatus | null>(null);
+  /** The microphone a virtual cable offers: `undefined` while it is looked for. */
+  let cable = $state<string | null | undefined>(undefined);
 
   function loadActions(): void {
     getPhoneActions()
@@ -78,11 +82,15 @@
   // The screen (1.7): who sees it now, the lock-on-end choice, the slow view left today.
   $effect(() => {
     if (!active) return;
-    untrack(() =>
+    untrack(() => {
       getScreenStatus()
         .then((s) => (screen = s))
-        .catch(() => {}),
-    );
+        .catch(() => {});
+      // Read each time Settings shows: a cable installed meanwhile appears.
+      findPhoneCable()
+        .then((c) => (cable = c))
+        .catch(() => (cable = null));
+    });
     let stop: (() => void) | undefined;
     let disposed = false;
     void onScreenShare((s) => (screen = s)).then((fn) => {
@@ -516,7 +524,9 @@
       <h3 id="remote-screen">Screen</h3>
       {#if screen.share}
         <p class="shared" role="status">
-          Shared now with <b>{screen.share.phone}</b>{screen.share.slow ? ' (slow view)' : ''}.
+          Shared now with <b>{screen.share.phone}</b>{screen.share.slow ? ' (slow view)' : ''}{screen.mic
+            ? ', its microphone on'
+            : ''}.
           <button type="button" onclick={() => void screenCall(stopScreenShare)}>Stop sharing</button>
         </p>
       {/if}
@@ -535,6 +545,29 @@
           }}
         />
         Lock this PC when a phone's session ends
+      </label>
+      <p class="note" id="remote-mic">
+        <b>The phone as this PC's microphone.</b> In a direct session the phone's Mic button makes this PC hear the phone
+        (WhatsApp's voice notes, calls), through a virtual cable:
+        {#if cable === undefined}
+          looking for one…
+        {:else if cable}
+          <b>{cable}</b> is installed.
+        {:else}
+          none is installed. Install the free VB-CABLE (<code>vb-audio.com/Cable</code>), then restart the PC.
+        {/if}
+        Voice clips need nothing installed: the phone puts them on this PC's clipboard, ready to paste.
+      </p>
+      <label class="check">
+        <input
+          type="checkbox"
+          checked={screen.micSwitch}
+          onchange={(e) => {
+            const on = e.currentTarget.checked;
+            void screenCall(() => setScreenMic(on));
+          }}
+        />
+        Make the cable Windows' default microphone while the phone's microphone is on
       </label>
       <p class="note">
         Where a phone cannot reach this PC directly, it shows the screen a picture at a time through the relay:

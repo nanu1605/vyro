@@ -178,6 +178,8 @@
 
   // The screen shared with a phone (1.7): shown on every view while it lasts, with Stop.
   let screenShare = $state.raw<ScreenShare | null>(null);
+  /** The phone's microphone plays into the cable (1.7). */
+  let screenMic = $state(false);
   async function stopScreen(): Promise<void> {
     try {
       screenShare = (await stopScreenShare()).share;
@@ -325,9 +327,9 @@
       else stopPower = fn;
     });
     getScreenStatus()
-      .then((s) => (screenShare = s.share))
+      .then((s) => ((screenShare = s.share), (screenMic = s.mic)))
       .catch(() => {});
-    void onScreenShare((s) => (screenShare = s.share)).then((fn) => {
+    void onScreenShare((s) => ((screenShare = s.share), (screenMic = s.mic))).then((fn) => {
       if (disposed) fn();
       else stopScreen = fn;
     });
@@ -421,7 +423,7 @@
         <div class="power-banner screen-banner" role="status">
           <span>
             <b>Your screen is shared</b> with {screenShare.phone}{screenShare.slow ? ' (slow view)' : ''}: it sees this screen and can use the
-            mouse and keyboard.
+            mouse and keyboard.{screenMic ? ' Its microphone is on: this PC hears the phone.' : ''}
           </span>
           <button type="button" onclick={() => void stopScreen()}>Stop sharing</button>
         </div>

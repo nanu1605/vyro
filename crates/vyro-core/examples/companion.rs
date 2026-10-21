@@ -41,6 +41,7 @@ mod openh264_encoder;
 use openh264_encoder::openh264;
 use vyro_core::screen::rtc::{self, SessionEvent};
 use vyro_core::screen::share::Note;
+use vyro_core::screen::voice::Pieces;
 use vyro_core::units::TempUnit;
 use vyro_core::{unix_now, PollerConfig, SimProvider};
 
@@ -98,6 +99,12 @@ impl Drop for Live {
 
 /// The direct screen session, while there is one.
 static SCREEN: Mutex<Option<Live>> = Mutex::new(None);
+/// A clip coming through the relay.
+static PIECES: Mutex<Option<Pieces>> = Mutex::new(None);
+/// The phone's microphone sends.
+static MIC_ON: AtomicBool = AtomicBool::new(false);
+/// The cable this example PC says it has.
+const CABLE: &str = "CABLE Output (VB-Audio Virtual Cable)";
 
 /// Whether the test screen moves (off Windows; `still` and `moving` on stdin).
 fn moving() -> &'static Arc<AtomicBool> {
@@ -125,7 +132,8 @@ fn video(session: &rtc::Session, stop: &AtomicBool) -> Result<(), String> {
     return producer::run(session, &producer::Settings::default(), stop, &status);
     #[cfg(not(windows))]
     {
-        let mut screen = producer::TestScreen::new(640, 360);
+        // Larger than SD, so a phone that asks for SD gets smaller pictures (1.7).
+        let mut screen = producer::TestScreen::new(1280, 720);
         screen.moving = Arc::clone(moving());
         let settings = producer::Settings {
             bitrate: 1_000_000,
@@ -162,9 +170,49 @@ fn screen_start(r: &Request) -> Result<serde_json::Value, String> {
         Box::new(|e| match e {
             SessionEvent::Connected => println!("screen: connected"),
             SessionEvent::Input(i) => println!("screen input: {i:?}"),
+            SessionEvent::Clip(bytes, reply) => {
+                // The phone's WAV, checked as the app checks it; nothing is kept.
+                match vyro_core::screen::voice::read_wav(&bytes) {
+                    Ok(pcm) => {
+                        println!("screen: clip {} bytes, {} ms", bytes.len(), pcm.len() / 32);
+                        reply.send(Ok("Clip.wav"));
+                    }
+                    Err(e) => reply.send(Err(&e)),
+                }
+            }
+            SessionEvent::Mic(f) => match vyro_core::screen::voice::read_frame(&f) {
+                Ok((seq, _)) => {
+                    // The first frame: the phone is told it plays, as the app tells it.
+                    if !MIC_ON.swap(true, Ordering::SeqCst) {
+                        if let Some(live) = vyro_core::lock(&SCREEN).as_ref() {
+                            live.session.tell(
+                                Note::Mic {
+                                    on: true,
+                                    into: Some(CABLE.into()),
+                                    default: true,
+                                    why: None,
+                                }
+                                .json(),
+                            );
+                        }
+                    }
+                    if seq % 50 == 0 {
+                        println!("screen: mic frame {seq}");
+                    }
+                }
+                Err(e) => println!("screen: mic refused: {e}"),
+            },
             SessionEvent::Closed(why) => println!("screen: closed ({why})"),
         }),
     )?;
+    let quality: producer::Quality = r
+        .params
+        .get("quality")
+        .cloned()
+        .and_then(|q| serde_json::from_value(q).ok())
+        .unwrap_or_default();
+    session.set_quality(quality);
+    println!("screen: quality {quality:?}");
     let session = Arc::new(session);
     let stop = Arc::new(AtomicBool::new(false));
     std::thread::spawn({
@@ -194,9 +242,47 @@ fn answer(engine: &OnceLock<Arc<LocalEngine>>, r: &Request) -> Result<serde_json
             "h": 180,
             "left": 1200
         })),
+        // A clip through the relay, a piece a request, checked as the app checks it.
+        "screen.clip" => {
+            let text = |k: &str| r.params.get(k).and_then(serde_json::Value::as_str);
+            let number = |k: &str| {
+                r.params
+                    .get(k)
+                    .and_then(serde_json::Value::as_u64)
+                    .and_then(|v| u32::try_from(v).ok())
+            };
+            let (id, i, n) = text("id")
+                .zip(number("i"))
+                .zip(number("n"))
+                .map(|((id, i), n)| (id, i, n))
+                .ok_or("no id, i or n")?;
+            let piece = text("d")
+                .and_then(vyro_core::remote::relay::proto::unb64url)
+                .ok_or("no d")?;
+            let mut pieces = vyro_core::lock(&PIECES);
+            if pieces.as_ref().is_none_or(|p| p.id != id) {
+                *pieces = Some(Pieces::new(id, n)?);
+            }
+            let whole = pieces.as_mut().ok_or("lost")?.add(i, n, piece)?;
+            match whole {
+                Some(bytes) => {
+                    *pieces = None;
+                    let pcm = vyro_core::screen::voice::read_wav(&bytes)?;
+                    println!(
+                        "screen: relay clip {} bytes, {} ms",
+                        bytes.len(),
+                        pcm.len() / 32
+                    );
+                    Ok(serde_json::json!({ "saved": "Clip.wav" }))
+                }
+                None => Ok(serde_json::json!({ "got": i })),
+            }
+        }
+        "screen.audio" => Ok(serde_json::json!({ "cable": CABLE, "switchDefault": true })),
         "screen.stop" | "screen.input" => {
             if r.method == "screen.stop" {
                 vyro_core::lock(&SCREEN).take();
+                MIC_ON.store(false, Ordering::SeqCst);
             }
             println!("asked: {} {}", r.method, r.params);
             Ok(serde_json::json!({ "done": true }))

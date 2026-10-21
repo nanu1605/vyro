@@ -56,8 +56,8 @@
   {/if}
 
   <section class="tiles" aria-label="Readings">
-    {#each cards as t (t.id)}
-      <article class="panel tile {t.level ?? ''}" aria-labelledby="t-{t.id}">
+    {#each cards as t, i (t.id)}
+      <article class="panel tile rise {t.level ?? ''}" style:--i={i} aria-labelledby="t-{t.id}">
         <h2 id="t-{t.id}">
           {t.title}
           {#if t.level === 'warn' || t.level === 'hot'}<span class="tag {t.level}">{WORD[t.level]}</span>{/if}
@@ -139,6 +139,13 @@
     gap: 0.75rem;
     margin-bottom: 0.75rem;
   }
+  /* Two to a row on a phone, however narrow (1.7). */
+  @media (max-width: 40rem) {
+    .tiles {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.6rem;
+    }
+  }
   .tile {
     margin: 0;
     min-width: 0;
@@ -171,16 +178,24 @@
     font-size: 0.85rem;
   }
   .bar {
-    height: 4px;
-    margin-bottom: 0.5rem;
-    border-radius: 2px;
+    height: 6px;
+    margin-bottom: 0.55rem;
+    border-radius: 3px;
     background: var(--gauge-track);
     overflow: hidden;
   }
   .bar i {
     display: block;
     height: 100%;
+    border-radius: 3px;
     background: var(--accent);
+    transition: width var(--dur-3) var(--ease-out);
+  }
+  .tile.warn .bar i {
+    background: var(--warn);
+  }
+  .tile.hot .bar i {
+    background: var(--hot);
   }
   dl {
     display: grid;
@@ -190,8 +205,9 @@
   }
   dl div {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
-    gap: 0.5rem;
+    gap: 0 0.5rem;
   }
   dt {
     color: var(--muted);

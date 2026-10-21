@@ -33,15 +33,15 @@ use crate::live::dll::Library;
 /// Media Foundation's functions, from System32's `mfplat.dll` when there is one: Windows "N"
 /// editions without the Media Feature Pack have none, and Vyro must still start there (only the
 /// screen's direct view is then missing).
-struct Mf {
-    startup: unsafe extern "system" fn(u32, u32) -> HRESULT,
-    shutdown: unsafe extern "system" fn() -> HRESULT,
+pub(crate) struct Mf {
+    pub(crate) startup: unsafe extern "system" fn(u32, u32) -> HRESULT,
+    pub(crate) shutdown: unsafe extern "system" fn() -> HRESULT,
     media_type: unsafe extern "system" fn(*mut *mut c_void) -> HRESULT,
     memory_buffer: unsafe extern "system" fn(u32, *mut *mut c_void) -> HRESULT,
     sample: unsafe extern "system" fn(*mut *mut c_void) -> HRESULT,
 }
 
-fn mf() -> Result<&'static Mf, String> {
+pub(crate) fn mf() -> Result<&'static Mf, String> {
     static MF: OnceLock<Option<Mf>> = OnceLock::new();
     MF.get_or_init(|| {
         let lib = Library::system32("mfplat.dll")?;
@@ -78,17 +78,17 @@ impl Mf {
         Ok(unsafe { T::from_raw(p) })
     }
 
-    unsafe fn media_type(&self) -> windows::core::Result<IMFMediaType> {
+    pub(crate) unsafe fn media_type(&self) -> windows::core::Result<IMFMediaType> {
         // SAFETY: MFCreateMediaType hands back an owned IMFMediaType.
         unsafe { Self::make(|p| (self.media_type)(p)) }
     }
 
-    unsafe fn memory_buffer(&self, len: u32) -> windows::core::Result<IMFMediaBuffer> {
+    pub(crate) unsafe fn memory_buffer(&self, len: u32) -> windows::core::Result<IMFMediaBuffer> {
         // SAFETY: MFCreateMemoryBuffer hands back an owned IMFMediaBuffer.
         unsafe { Self::make(|p| (self.memory_buffer)(len, p)) }
     }
 
-    unsafe fn sample(&self) -> windows::core::Result<IMFSample> {
+    pub(crate) unsafe fn sample(&self) -> windows::core::Result<IMFSample> {
         // SAFETY: MFCreateSample hands back an owned IMFSample.
         unsafe { Self::make(|p| (self.sample)(p)) }
     }

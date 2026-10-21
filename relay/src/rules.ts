@@ -199,7 +199,8 @@ export function assetHeaders(url: URL): Record<string, string> {
     ].join('; '),
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer',
-    'Permissions-Policy': 'camera=(self), microphone=(), geolocation=()',
+    // The camera scans a pairing code; the microphone records voice for the PC (1.7).
+    'Permissions-Policy': 'camera=(self), microphone=(self), geolocation=()',
     'Cross-Origin-Opener-Policy': 'same-origin',
     'X-Frame-Options': 'DENY',
     'X-Robots-Tag': 'noindex, nofollow',

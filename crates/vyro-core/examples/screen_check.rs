@@ -139,6 +139,11 @@ fn main() -> Result<(), String> {
         Box::new(|e| match e {
             SessionEvent::Connected => println!("connected"),
             SessionEvent::Input(i) => println!("input {i:?}"),
+            SessionEvent::Clip(bytes, reply) => {
+                println!("clip {} bytes", bytes.len());
+                reply.send(Ok("check.wav"));
+            }
+            SessionEvent::Mic(f) => println!("mic {} bytes", f.len()),
             SessionEvent::Closed(why) => println!("closed {why}"),
         }),
     )?;

@@ -44,6 +44,10 @@ pub struct ScreenStatus {
     pub lock_on_end: bool,
     /// Seconds of the slow view left today.
     pub slow_left: u32,
+    /// The phone's microphone plays into the cable now.
+    pub mic: bool,
+    /// While it does, the cable is Windows' default microphone.
+    pub mic_switch: bool,
 }
 
 /// A monitor as the phone can choose it.
@@ -67,6 +71,14 @@ pub enum Note {
     Secure,
     /// The session ended, and why.
     End { why: String },
+    /// The phone's microphone: playing into `into` (the microphone Windows offers), made
+    /// Windows' default or not; or off, and why if it could not start.
+    Mic {
+        on: bool,
+        into: Option<String>,
+        default: bool,
+        why: Option<String>,
+    },
     /// What went out lately ([`Report`]): sizes as `[w, h]`, rates a second, bits a second.
     Report {
         capture: &'static str,

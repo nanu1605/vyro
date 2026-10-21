@@ -12,7 +12,8 @@ Windows (low-level ones through PawnIO, read by the Vyro Sensor Service), histor
 Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 1.7: the
 [phone app](#phone-app-from-anywhere-14) shows the PC's screen and uses it, for a phone you
 allow, straight to the PC where it can and a picture at a time through the relay where it
-cannot. New in 1.6:
+cannot, in full screen and in HD or SD; the phone's voice reaches the PC as a clip to paste or as
+its microphone; and the app is redesigned. New in 1.6:
 [GPU tuning](#gpu-tuning-16) for NVIDIA RTX 20 to RTX 50 cards, with presets made for the card,
 your own settings, a stability test and "Find my best". New in 1.5: the
 [phone app](#phone-app-from-anywhere-14) shows what runs on the PC, its devices and Health, and,
@@ -352,6 +353,22 @@ the PC (1.5).
   a time; the PC shows a banner and a tray item with Stop while it lasts, and a session left
   alone ends after 10 minutes. Windows' sign-in and administrator prompts cannot be seen or
   used, and Ctrl+Alt+Del cannot be sent. Optionally the PC locks when a phone's session ends.
+  **Full** fills the phone with the PC's screen (sideways for a wide one on Android); **HD** or
+  **SD** chooses the quality, and on mobile data the phone asks first (SD uses about 7 MB a
+  minute at most, HD up to 35).
+- **Your voice from the phone (1.7).** A WhatsApp Web voice note, or any app on the PC, records
+  the PC's microphone, not the phone's. Two ways around it, from the Screen tab:
+  - **Clip**: record on the phone and send it; it lands on the PC's clipboard as an audio file
+    (kept in `Phone clips` for a week), so **Paste** (or Ctrl+V on the PC) attaches it to a chat.
+    Nothing to install.
+  - **Mic**: the phone becomes the PC's microphone while it is on, so WhatsApp's own voice-note
+    button, calls and recorders hear the phone. It needs a virtual audio cable on the PC: install
+    the free [VB-CABLE](https://vb-audio.com/Cable/) (run its setup as administrator, then
+    restart). Vyro finds it, makes its "CABLE Output" Windows' default microphone while the
+    phone's is on (Settings → Remote can turn that off) and puts your microphone back after.
+    Direct connections only; Settings → Remote says whether a cable was found.
+- **The app's look (1.7).** Tabs at the foot of the screen, sheets that rise from below, a little
+  motion (none with the phone's reduced motion), and nothing wider than the phone.
 - **Waking the PC (1.5).** A phone cannot send the wake signal itself (web pages cannot send it),
   so another Vyro PC on the same network sends it: turn on **Wake from phone** in Settings on
   the PC to be woken, and keep another PC paired with the phone. Settings says what Windows

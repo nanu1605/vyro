@@ -21,6 +21,7 @@ mod smoke;
 mod snap;
 mod tray;
 mod updates;
+mod voice;
 mod whats_new;
 mod widgets;
 
@@ -196,6 +197,8 @@ fn main() {
             screen::get_screen_status,
             screen::stop_screen_share,
             screen::set_screen_lock,
+            screen::set_screen_mic,
+            screen::find_phone_cable,
             remote::set_wake_from_phone,
             remote::get_wake_readiness,
             share::save_share_card,

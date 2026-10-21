@@ -35,6 +35,36 @@ export const NOTES: Release[] = [
         text: 'Where no direct connection can be made, the phone shows a picture at a time through the relay instead.',
         phone: true,
       },
+      {
+        icon: 'phone',
+        title: 'A new phone app',
+        text: 'Tabs at the bottom within your thumb’s reach, sheets that rise from below, and a little motion throughout. Everything fits your phone’s width.',
+        phone: true,
+      },
+      {
+        icon: 'screen',
+        title: 'Full screen',
+        text: 'The PC’s screen fills your phone, turned sideways for a wide screen where the phone allows. Its controls step aside until you need them.',
+        phone: true,
+      },
+      {
+        icon: 'gauge',
+        title: 'HD or SD',
+        text: 'On mobile data the phone asks which you’d like: SD uses about a fifth of the data. Switch any time from the toolbar.',
+        phone: true,
+      },
+      {
+        icon: 'mic',
+        title: 'Voice clips for your chats',
+        text: 'Record a clip on your phone: it lands on this PC’s clipboard as a file, ready to paste into WhatsApp Web or any chat.',
+        phone: true,
+      },
+      {
+        icon: 'mic',
+        title: 'Your phone as this PC’s microphone',
+        text: 'With the free VB-CABLE installed here, the phone’s Mic button lets apps on this PC hear you, WhatsApp’s voice notes too. Settings → Remote says more.',
+        phone: true,
+      },
     ],
   },
   {

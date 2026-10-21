@@ -29,7 +29,10 @@ BUDGETS = {
     "dist/remote.html": 34_000,
     # The phone app (1.4), served by the relay: the companion's readings plus pairing, the relay
     # link and its sealing (WebCrypto). The QR reader for scanning loads only when scanning.
-    "relay/public/index.html": 40_000,
+    # 40 kB until 1.7; raised for the redesigned frame (the bar, the tabs at the bottom with their
+    # icons, toasts, motion; ROADMAP 1.7.0), with every tab, the home screen, the offline states
+    # and the sheets still lazy.
+    "relay/public/index.html": 44_000,
 }
 
 REF = re.compile(r'<(?:script|link)\b[^>]*?\b(?:src|href)="/?(assets/[^"]+\.(?:js|css))"')

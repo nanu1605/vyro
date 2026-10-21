@@ -9,7 +9,9 @@
 // and has it lock the PC and end a process (the example PC only prints what it was asked); finds
 // the same link refused the second time; checks that nothing on the wire between the phone and
 // the relay is readable; signs the phone out from the PC; shows a PC that went away as asleep;
-// and runs axe on each screen at phone and desktop width. Exits 1 on any failure. With
+// and runs axe on each screen at phone and desktop width. From 1.7 also: no screen scrolls
+// sideways at 320, 360, 390 or 430 px, and every tab and sheet again on the light theme. Exits 1
+// on any failure. With
 // SHOTS=<folder>, it also saves a screenshot of each screen there.
 
 import { spawn } from 'node:child_process';
@@ -124,8 +126,8 @@ async function relayUp() {
 }
 
 /** A PC (the companion example) on the relay; its pairing links and states come on stdout. */
-function startPc() {
-  const child = run('cargo', ['run', '-q', '-p', 'vyro-core', '--example', 'companion', '--', '--relay', RELAY]);
+function startPc(theme = 'midnight') {
+  const child = run('cargo', ['run', '-q', '-p', 'vyro-core', '--example', 'companion', '--', '--relay', RELAY, '--theme', theme]);
   return { child, out: lines(child, 'pc'), say: (s) => child.stdin.write(`${s}\n`) };
 }
 
@@ -144,10 +146,56 @@ async function axe(page, where) {
 
 const SHOTS = process.env.SHOTS;
 
-/** axe at phone width, then at desktop width, then back. */
+/** Phones' widths the app must fit without scrolling sideways (1.7), besides 390 px. */
+const NARROW = [320, 360, 430];
+
+/** axe at phone width, then at desktop width, then back; and nothing wider than the narrower
+ * and wider phones (1.7). */
+/** Waits for the views and cards to finish coming in (1.7): measured mid-way, a card sliding in
+ * sticks out to the side and a fading one has too little contrast. Endless animations (a pulse,
+ * a shimmer) are not waited for. */
+async function settle(page) {
+  await page
+    .evaluate(() =>
+      Promise.race([
+        Promise.all(
+          document
+            .getAnimations()
+            .filter((a) => a.effect?.getComputedTiming?.().endTime !== Infinity)
+            .map((a) => a.finished.catch(() => {})),
+        ),
+        new Promise((r) => setTimeout(r, 3000)),
+      ]),
+    )
+    .catch(() => {});
+}
+
+/** How far anything on the page reaches past its right edge (the PC's screen itself aside: its
+ * picture is clipped to its frame, zoomed or not). */
+async function sticksOut(page) {
+  return page.evaluate(() => {
+    const w = document.documentElement.clientWidth;
+    let worst = document.documentElement.scrollWidth - w;
+    for (const el of document.querySelectorAll('body *')) {
+      if (el.closest('.surface, .sr-only, .visually-hidden, dialog:not([open])')) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width && r.height) worst = Math.max(worst, Math.round(r.right - w));
+    }
+    return worst;
+  });
+}
+
 async function axeBoth(page, where) {
+  await settle(page);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/${where.replace(/[^a-z0-9]+/gi, '-')}.png`, fullPage: true });
   await axe(page, `${where} (390 px)`);
+  for (const width of NARROW) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.waitForTimeout(150);
+    await settle(page);
+    const extra = await sticksOut(page);
+    if (extra > 1) problem(`${where} (${width} px)`, `reaches ${extra} px past the side of the screen`);
+  }
   await page.setViewportSize({ width: 1440, height: 900 });
   await axe(page, `${where} (1440 px)`);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -156,6 +204,8 @@ async function axeBoth(page, where) {
 /** A phone: its own browser storage, with every WebSocket frame kept. */
 async function phone(browser, name) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  // The browser's fake microphone (a tone) for voice clips and the live microphone (1.7).
+  await ctx.grantPermissions(['microphone']).catch(() => {});
   // How each of the page's sockets closed.
   await ctx.addInitScript(() => {
     const Native = window.WebSocket;
@@ -187,6 +237,29 @@ async function phone(browser, name) {
   page.on('pageerror', (e) => problem(name, `page error: ${e.message}`));
   page.on('console', (m) => m.type() === 'error' && !/WebSocket|ERR_|status of 4/.test(m.text()) && problem(name, `console: ${m.text()}`));
   return { ctx, page, frames };
+}
+
+/** Chromium with a fake microphone that needs no one to allow it. */
+const MEDIA = ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'];
+
+/** A voice clip (1.7): recorded for a moment from the fake microphone and sent; `kept` is the
+ * PC's line saying it took it. */
+async function sendClip(page, kept, where) {
+  await page.getByRole('button', { name: /^Voice clip for / }).click();
+  const sheet = page.getByRole('dialog', { name: /^A voice clip for / });
+  await sheet.waitFor({ timeout: 5000 });
+  await axeBoth(page, `phone app, voice clip (${where})`);
+  await sheet.getByRole('button', { name: 'Record', exact: true }).click();
+  await sheet.getByRole('button', { name: /^Send to / }).waitFor({ timeout: 5000 });
+  await page.waitForTimeout(1500);
+  await sheet.getByRole('button', { name: /^Send to / }).click();
+  await kept.then(
+    (m) => ok(`a ${m[2]} ms voice clip reaches the PC (${where})`),
+    (e) => problem(`clip (${where})`, e.message),
+  );
+  await seeText(page, /clipboard/, `…and the phone says it is on the PC's clipboard (${where})`);
+  await axeBoth(page, `phone app, voice clip sent (${where})`);
+  await sheet.getByRole('button', { name: /^Paste on / }).click();
 }
 
 async function seeText(page, text, where, ms = 20_000) {
@@ -236,7 +309,7 @@ async function main() {
   await pc.out.wait(/^state: "online"$/);
   ok('the PC is on the relay');
 
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ args: MEDIA });
   try {
     // 1. Pair from the link and read.
     const a = await phone(browser, 'phone A');
@@ -259,15 +332,17 @@ async function main() {
     if (await a.page.getByRole('button', { name: /^End task|^End .*…$/ }).count()) problem('view only', 'End is offered');
     else ok('a phone that may only look is offered no End');
     await axeBoth(a.page, 'phone app, processes');
-    await tab('Devices');
-    await seeText(a.page, 'Devices on', 'the Devices tab');
+    await tab('More');
+    await a.page.getByRole('button', { name: /^Devices/ }).click();
+    await seeText(a.page, 'Devices on', 'Devices, in More (1.7)');
     await axeBoth(a.page, 'phone app, devices');
+    await a.page.getByRole('button', { name: 'More', exact: true }).first().click();
     await tab('Health');
     await seeText(a.page, 'Health of', 'the Health tab');
     await axeBoth(a.page, 'phone app, health');
     await tab('More');
     await seeText(a.page, 'Diagnostics', 'the More tab');
-    if (await a.page.getByRole('heading', { name: 'Power' }).count()) problem('view only', 'Power is offered');
+    if (await a.page.getByRole('button', { name: /^Power/ }).count()) problem('view only', 'Power is offered');
     else ok('…without Power for a phone that may only look');
     await axeBoth(a.page, 'phone app, more (view only)');
     // Tabs opened in quick succession ask for more at once than the relay takes (checked below).
@@ -279,9 +354,11 @@ async function main() {
     // The owner lets it control the PC: the phone hears at once.
     pc.say('control');
     await seeText(a.page, 'can change this PC', 'a phone allowed on the PC is told at once');
+    await a.page.getByRole('button', { name: /^Power/ }).click({ timeout: 10_000 });
     await a.page.getByRole('heading', { name: 'Power' }).waitFor({ timeout: 10_000 });
     await axeBoth(a.page, 'phone app, more (control)');
     await a.page.getByRole('button', { name: 'Lock…' }).click();
+    await a.page.getByRole('dialog', { name: /^Lock / }).waitFor({ timeout: 5000 });
     await axeBoth(a.page, 'phone app, power confirmation');
     await a.page.getByRole('button', { name: 'Lock', exact: true }).click();
     await pc.out.wait(/^asked: power .*"action":"lock"/).then(
@@ -290,6 +367,7 @@ async function main() {
     );
     await tab('Processes');
     await a.page.getByRole('button', { name: /^End .*…$/ }).first().click();
+    await axeBoth(a.page, 'phone app, end a task');
     await a.page.getByRole('button', { name: /^End .* now$/ }).first().click();
     await pc.out.wait(/^asked: process\.end /).then(
       () => ok('End reaches the PC'),
@@ -325,6 +403,27 @@ async function main() {
       async (e) => problem('slow view', `${e.message}; ${await scene(a, pc, relay)}`),
     );
     await axeBoth(a.page, 'phone app, screen (slow view)');
+    // A voice clip through the relay, a piece a request (1.7).
+    await sendClip(a.page, pc.out.next(/^screen: relay clip (\d+) bytes, (\d+) ms$/, 30_000), 'slow view');
+    if (await a.page.getByRole('button', { name: /^Microphone for / }).count()) {
+      problem('slow view', 'the Mic button shows on the slow view (only a direct connection carries it)');
+    }
+    // Full screen (1.7): the picture fills the phone, the bars go; the controls come back from
+    // the corner after hiding.
+    await a.page.getByRole('button', { name: 'Full screen' }).click();
+    await a.page.locator('.stage.full').waitFor({ timeout: 5000 }).then(
+      () => ok("Full screen fills the phone with the PC's screen"),
+      (e) => problem('full screen', e.message),
+    );
+    if (await a.page.locator('nav.tabs').count()) problem('full screen', 'the tabs still show');
+    await axeBoth(a.page, 'phone app, screen (full screen)');
+    const exit = a.page.getByRole('button', { name: 'Exit full screen' });
+    if (!(await exit.isVisible())) await a.page.getByRole('button', { name: 'Show the controls' }).click();
+    await exit.click();
+    await a.page.locator('nav.tabs').waitFor({ timeout: 5000 }).then(
+      () => ok('…and leaving it brings the tabs back'),
+      (e) => problem('full screen', e.message),
+    );
     const stop = a.page.getByRole('button', { name: 'Stop', exact: true });
     if (await stop.waitFor({ timeout: 10_000 }).then(() => true, () => false)) {
       await stop.click();
@@ -334,6 +433,31 @@ async function main() {
     const cut = (await a.page.evaluate(() => window.__closes)).filter((c) => c.code === 1008);
     if (cut.length) problem('pace', `the relay cut phone A off: ${cut.map((c) => c.reason).join(', ')}`);
     else ok('the relay never cut the phone off for asking too fast');
+
+    // On mobile data (1.7): the phone asks HD or SD before it starts, once.
+    await a.page.addInitScript(() =>
+      Object.defineProperty(navigator, 'connection', {
+        configurable: true,
+        value: { type: 'cellular', saveData: false, addEventListener() {}, removeEventListener() {} },
+      }),
+    );
+    await a.page.reload();
+    await seeText(a.page, 'Live', 'phone A again, now on mobile data');
+    await tab('Screen');
+    await a.page.getByRole('button', { name: /^Show .*screen$/ }).click();
+    const question = a.page.getByRole('dialog', { name: 'You’re on mobile data' });
+    await question.waitFor({ timeout: 5000 }).then(
+      () => ok('on mobile data the phone asks HD or SD first'),
+      (e) => problem('mobile data', e.message),
+    );
+    await axeBoth(a.page, 'phone app, mobile data question');
+    await question.getByRole('button', { name: /^SD/ }).click();
+    await a.page.locator('.surface img').waitFor({ timeout: 15_000 }).then(
+      () => ok('…and shows the screen in SD'),
+      (e) => problem('mobile data', e.message),
+    );
+    if (!(await a.page.getByRole('button', { name: /^Quality: SD/ }).count())) problem('mobile data', 'the toolbar does not say SD');
+    await a.page.getByRole('button', { name: 'Stop', exact: true }).click();
 
     // 2. The link works once.
     const b = await phone(browser, 'phone B');
@@ -359,7 +483,9 @@ async function main() {
     // has, or the one CHROME names; not Playwright's Chromium): offer and answer through the
     // relay, then straight to the PC on this machine, which sends a moving test pattern through
     // the app's own producer (OpenH264 standing in for Windows' encoder).
-    let chrome = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : { channel: 'chrome' }).catch(() => null);
+    let chrome = await chromium
+      .launch(process.env.CHROME ? { executablePath: process.env.CHROME, args: MEDIA } : { channel: 'chrome', args: MEDIA })
+      .catch(() => null);
     if (chrome) {
       const probe = await chrome.newPage();
       const h264 = await probe.evaluate(() =>
@@ -422,6 +548,22 @@ async function main() {
         await d.page.locator('details.arrives summary').click();
         await seeText(d.page, /Here: brightness \d+ %/, '…and says how bright the picture is here');
         await seeText(d.page, /its screen \d+×\d+ through [\w ]+,\s+sent as \d+×\d+/, '…and what the PC sent');
+        // The phone as the PC's microphone (1.7): Chrome's fake microphone in 20 ms frames on
+        // their own channel; the PC says what it hears the phone as.
+        const heard = pc.out.next(/^screen: mic frame \d+$/, 15_000);
+        await d.page.getByRole('button', { name: /^Microphone for / }).click();
+        await heard.then(
+          () => ok("the phone's microphone reaches the PC"),
+          (e) => problem('mic', e.message),
+        );
+        await seeText(d.page, /hears you as CABLE Output/, '…and the phone says what the PC hears it as');
+        await axeBoth(d.page, 'phone app, microphone on');
+        await d.page.getByRole('button', { name: /^Microphone for / }).click();
+        // A voice clip over the direct connection, on its own channel.
+        await sendClip(d.page, pc.out.next(/^screen: clip (\d+) bytes, (\d+) ms$/, 30_000), 'direct');
+        // SD from the toolbar (1.7): smaller pictures at once.
+        await d.page.getByRole('button', { name: /^Quality: HD/ }).click();
+        await seeText(d.page, /Receiving 960×540/, 'SD from the toolbar: the PC sends 960×540');
         pc.say('still');
         await d.page.waitForTimeout(4000);
         const still = await picture();
@@ -447,8 +589,11 @@ async function main() {
       }
     }
 
-    // 4. The list of PCs.
-    await a.page.getByRole('button', { name: 'PCs' }).click();
+    // 4. The list of PCs: the PC's name opens them (1.7).
+    await a.page.getByRole('button', { name: /: your PCs$/ }).click();
+    await a.page.getByRole('dialog', { name: 'Your PCs' }).waitFor({ timeout: 5000 });
+    await axeBoth(a.page, 'phone app, your PCs');
+    await a.page.getByRole('button', { name: 'All PCs' }).click();
     await seeText(a.page, 'Your PCs', 'the home screen lists the PC');
     await a.page.locator('.pc-state.online').first().waitFor({ timeout: 10_000 }).then(() => ok('…as online'), () => problem('home', 'the PC is not shown online'));
     await axeBoth(a.page, 'phone app, home');
@@ -469,6 +614,43 @@ async function main() {
     pc.child.kill('SIGTERM');
     await seeText(c.page, 'is asleep or off', 'a PC that went away shows as asleep', 30_000);
     await axeBoth(c.page, 'phone app, PC asleep');
+
+    // 7. The light theme (1.7): a PC on Daylight; every tab and sheet, at every width.
+    const light = startPc('daylight');
+    const link3 = (await light.out.wait(/^link: (.+)$/, 600_000))[1];
+    await light.out.wait(/^state: "online"$/);
+    const l = await phone(browser, 'phone L');
+    await l.page.goto(link3);
+    await seeText(l.page, 'Live', 'a phone pairs with a PC on the light theme');
+    light.say('control');
+    light.say('screen');
+    await seeText(l.page, 'can change this PC', '…and may change it and see its screen');
+    await l.page.getByRole('heading', { name: /^CPU/ }).first().waitFor({ timeout: 10_000 });
+    await axeBoth(l.page, 'light, live readings');
+    const go = (name) => l.page.getByRole('navigation').getByRole('button', { name, exact: true }).click();
+    for (const [name, text] of [
+      ['Processes', 'What runs on'],
+      ['Screen', 'screen'],
+      ['Health', 'Health of'],
+      ['More', 'More on'],
+    ]) {
+      await go(name);
+      await seeText(l.page, text, `light, ${name}`);
+      await l.page.waitForTimeout(400);
+      await axeBoth(l.page, `light, ${name.toLowerCase()}`);
+    }
+    await l.page.getByRole('button', { name: /^Devices/ }).click();
+    await seeText(l.page, 'Devices on', 'light, devices');
+    await axeBoth(l.page, 'light, devices');
+    await l.page.getByRole('button', { name: 'More', exact: true }).first().click();
+    await l.page.getByRole('button', { name: /^Power/ }).click();
+    await l.page.getByRole('button', { name: 'Shut down…' }).click();
+    await l.page.getByRole('dialog', { name: /^Shut down / }).waitFor({ timeout: 5000 });
+    await axeBoth(l.page, 'light, shutdown confirmation');
+    await l.page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    if ((await l.page.locator('.powered').count()) === 0) problem('footer', 'no "Powered by" line');
+    else ok('the footer says who it is powered by');
+    light.child.kill('SIGTERM');
   } finally {
     await browser.close();
   }

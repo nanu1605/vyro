@@ -98,6 +98,9 @@ describe("the app's files", () => {
     expect(page['Content-Security-Policy']).toContain("default-src 'none'");
     expect(page['Content-Security-Policy']).toContain("connect-src 'self' wss://relay.example.workers.dev");
     expect(page['Content-Security-Policy']).toContain("frame-ancestors 'none'");
+    // Scripts only from the relay itself, the audio worklet too (no blob: or inline code).
+    expect(page['Content-Security-Policy']).toContain("script-src 'self';");
+    expect(page['Permissions-Policy']).toBe('camera=(self), microphone=(self), geolocation=()');
     expect(page['Cache-Control']).toBe('no-cache');
     expect(page['Strict-Transport-Security']).toBeDefined();
     const file = assetHeaders(new URL('http://127.0.0.1:8787/assets/phone-1a2b.js'));

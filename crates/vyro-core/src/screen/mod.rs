@@ -1,6 +1,7 @@
 //! The PC's screen on the phone (1.7): a session per phone allowed to see it, set up through the
 //! relay and then direct (`rtc`), video from the monitor (`capture`, `frames`, `encode`), input
-//! back from the phone (`input`, `inject`); the rules the app keeps around it (`share`).
+//! back from the phone (`input`, `inject`); the rules the app keeps around it (`share`); the
+//! phone's voice, as clips and as a microphone (`voice`).
 
 #[cfg(windows)]
 pub mod capture;
@@ -20,3 +21,4 @@ pub mod share;
 pub mod stun;
 #[cfg(test)]
 mod tests;
+pub mod voice;

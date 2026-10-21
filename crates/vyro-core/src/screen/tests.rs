@@ -636,6 +636,16 @@ fn notes_for_the_phone() {
         .json(),
         r#"{"t":"end","why":"stopped on the PC"}"#
     );
+    assert_eq!(
+        Note::Mic {
+            on: true,
+            into: Some("CABLE Output (VB-Audio Virtual Cable)".into()),
+            default: true,
+            why: None,
+        }
+        .json(),
+        r#"{"t":"mic","on":true,"into":"CABLE Output (VB-Audio Virtual Cable)","default":true,"why":null}"#
+    );
 }
 
 /// A picture of zeros is blank (alpha aside); one lit pixel on the grid, or a dark grey desktop,
@@ -714,6 +724,55 @@ fn the_step_follows_the_bit_rate() {
     };
     assert_eq!(step(5_000_000, &small), at(640, 360, 12));
     assert_eq!(step(300_000, &small), at(640, 360, 10));
+}
+
+/// SD (1.7) caps the size, the pictures a second and the bit rate, whatever the connection
+/// carries; HD is the settings as they are. The phone says which in a message.
+#[test]
+fn sd_spares_mobile_data() {
+    use producer::{step, Adapt, Quality, Settings};
+    let s = Settings::default();
+    assert_eq!(Quality::Hd.apply(&s), s);
+    let sd = Quality::Sd.apply(&s);
+    assert_eq!(
+        (sd.max_width, sd.max_height, sd.fps, sd.bitrate),
+        (960, 540, 15, 1_000_000)
+    );
+    assert_eq!(sd.monitor, s.monitor);
+    // A fast connection still gets SD's size and rate.
+    let t0 = Instant::now();
+    let mut a = Adapt::new(&sd, t0);
+    a.update(Some(20_000_000), &sd, t0 + Duration::from_secs(10));
+    assert_eq!(a.bitrate, 1_000_000);
+    assert_eq!(
+        (a.step.max_width, a.step.max_height, a.step.fps),
+        (960, 540, 15)
+    );
+    // Back to HD: everything at once, without waiting for the connection to prove it.
+    let hd = Adapt::new(&Quality::Hd.apply(&s), t0);
+    assert_eq!((hd.bitrate, hd.step), (5_000_000, step(5_000_000, &s)));
+    // SD never asks for more than smaller settings already do.
+    let small = Settings {
+        max_width: 640,
+        max_height: 360,
+        fps: 10,
+        bitrate: 500_000,
+        ..s
+    };
+    assert_eq!(Quality::Sd.apply(&small), small);
+    // The slow view in SD: smaller pictures, more compressed.
+    let ((w, h), q) = Quality::Sd.slow();
+    let ((hw, hh), hq) = Quality::Hd.slow();
+    assert!(w < hw && h < hh && q < hq);
+    // The phone's message, and the ids the session keeps.
+    assert_eq!(
+        input::parse(r#"{"t":"quality","q":"sd"}"#),
+        Ok(input::Input::Quality { q: Quality::Sd })
+    );
+    assert!(input::parse(r#"{"t":"quality","q":"4k"}"#).is_err());
+    for q in [Quality::Hd, Quality::Sd] {
+        assert_eq!(Quality::from_u8(q.to_u8()), q);
+    }
 }
 
 /// The bit rate and step follow the connection: down at once, up only once the connection has

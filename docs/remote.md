@@ -134,6 +134,16 @@ deleted 90 days after the PC was last seen.
 - **What it cannot do.** Vyro runs as the signed-in user: Windows' sign-in, lock and
   administrator prompts are a secure screen it can neither see nor use (the phone says so), a
   window running as administrator can be seen but not used, and Ctrl+Alt+Del cannot be sent.
+- **Voice (1.7, decision 39).** Under the same permission and only during a session: a clip
+  recorded on the phone is kept on the PC in `Phone clips` (named by Vyro, never the phone; 5
+  minutes at most; checked as 16 kHz mono PCM before it is kept; deleted after 7 days) and put on
+  the clipboard as a file, only when the phone sends one; the PC records each. The phone's live
+  microphone (direct connection only) plays into a virtual cable the owner installed; while it
+  plays, the cable is Windows' default microphone if Settings allows it, and the earlier defaults
+  are put back after, or at the next start after a crash. A phone with the microphone on is
+  heard by any program on the PC that records, and the banner says so. The phone app may use
+  the microphone (the relay's page policy allows it for the app itself), and the browser asks
+  first.
 - **Trust.** A phone that may see the screen sees everything on it, including what is typed
   where it shows. The phone app's code comes from the relay (below): whoever controls the relay
   could serve an app that shows the screen to someone else, for a phone allowed to see it. Keep

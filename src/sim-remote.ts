@@ -159,14 +159,15 @@ export function simPhoneScreen(id: string, on: boolean): RemoteStatus {
   return changed();
 }
 
-// The screen (1.7): `?screen` shows a session in progress, for the banner.
+// The screen (1.7): `?screen` shows a session in progress, for the banner; `?screen=mic` with
+// the phone's microphone on; `?cable=no`, a PC without a virtual cable.
+const screenParam = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
 let screen: ScreenStatus = {
-  share:
-    typeof location !== 'undefined' && new URLSearchParams(location.search).has('screen')
-      ? { phone: 'iPhone · Safari', id: '5e6f7a8b', since: now() - 95, slow: false }
-      : null,
+  share: screenParam?.has('screen') ? { phone: 'iPhone · Safari', id: '5e6f7a8b', since: now() - 95, slow: false } : null,
   lockOnEnd: false,
   slowLeft: 20 * 60,
+  mic: screenParam?.get('screen') === 'mic',
+  micSwitch: true,
 };
 const screenListeners = new Set<(s: ScreenStatus) => void>();
 function screenChanged(): ScreenStatus {
@@ -186,6 +187,15 @@ export function simStopScreen(): ScreenStatus {
 export function simScreenLock(on: boolean): ScreenStatus {
   screen = { ...screen, lockOnEnd: on };
   return screenChanged();
+}
+
+export function simScreenMic(on: boolean): ScreenStatus {
+  screen = { ...screen, micSwitch: on };
+  return screenChanged();
+}
+
+export function simPhoneCable(): string | null {
+  return screenParam?.get('cable') === 'no' ? null : 'CABLE Output (VB-Audio Virtual Cable)';
 }
 
 export function onSimScreen(cb: (s: ScreenStatus) => void): () => void {

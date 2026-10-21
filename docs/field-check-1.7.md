@@ -1,6 +1,7 @@
 # Field check: 1.7 (the PC's screen on the phone)
 
-Status: **done, 2026-10-19, except the slow view (not tried).** Test build: **`vyro-windows-3095d4f`** (CI run 39272496314, every job green),
+Status: **1–7 done, 2026-10-19, except the slow view (not tried); 8–12 (the owner's requests of
+2026-10-21) to do, on the next test build with the relay deployed from it.** Test build: **`vyro-windows-3095d4f`** (CI run 39272496314, every job green),
 version 1.7.0, or the artifact of any later green run on `claude/vyro-1.7`. Install the MSI over
 1.6, and open the phone app from the relay this branch deploys (or the branch's own relay; see
 `docs/remote.md` → Running your own relay). The relay was last deployed from 2e42a83 (run
@@ -99,6 +100,65 @@ through the relay where it cannot.
 - Repeat 2 (briefly) on the iPhone from the Home Screen app: the picture plays (Safari), taps,
   hold, typing.
 
+## 8. The phone app, redesigned
+
+- On each phone, in the dark theme and then the light one (the PC's Settings → Appearance):
+  every tab (Live, Processes, Screen, Health, More and each of its tiles), the list of PCs (tap
+  the PC's name), a confirmation (More → Power → Shut down, then Cancel), pairing and home.
+  Nothing scrolls sideways, nothing is cut off at the right, and **Powered by Jainav Infotech
+  Pvt Ltd** is at the foot of each screen.
+- Moving between tabs slides; cards come in one after another; sheets rise and close with Back
+  or a tap above them. With the phone's reduced motion on (Android: Remove animations; iPhone:
+  Reduce Motion), none of it moves.
+- The Wi-Fi companion page (Settings → Remote → On this network) shows the same line at its
+  foot.
+
+## 9. Full screen
+
+- Android: show the screen, tap **Full**. The PC's screen fills the phone, turned sideways for a
+  wide monitor; the controls disappear after 3 s and the small button in the corner brings them
+  back. Taps, drags and typing still land where they should. Back leaves full screen.
+- iPhone, from the Home Screen app: **Full** fills the app's window with the screen (turn the
+  phone yourself); **Exit** brings the tabs back.
+
+## 10. HD or SD
+
+- On Android with Wi-Fi off: **Show** asks "You’re on mobile data", SD or HD. Choose SD: the
+  details under the picture say 960×540 at most, and how much data the session used. Show it
+  again: it does not ask again (it remembered).
+- In a session on Wi-Fi in HD, turn Wi-Fi off: the phone offers "Switch to SD"; switching, or
+  **HD/SD** in the toolbar, changes the picture within a second or two.
+- iPhone (it does not say it is on mobile data): the HD/SD choice shows on the start card and in
+  the toolbar.
+
+## 11. Voice clips
+
+- In a session, tap **Clip**, allow the microphone, record 5–10 seconds, **Send to *PC***. The
+  phone says it is on the PC's clipboard; the PC shows a notification, and Settings → Remote's
+  record lists the clip.
+- In WhatsApp Web on the PC, open a chat and tap **Paste on *PC*** (or press Ctrl+V on the PC):
+  the clip attaches as an audio file; send it and play it on another phone. Note whether it
+  arrives as a voice message or as an audio file, and whether it plays.
+- `%LOCALAPPDATA%\app.vyro.monitor\Phone clips` holds it as `Clip <date time>.m4a`.
+- In the slow view (if 4 showed it), a clip of up to a minute goes too, a little slower.
+
+## 12. The phone as the PC's microphone (VB-CABLE)
+
+- Before installing anything: the Screen tab's **Mic** says the PC needs VB-CABLE and offers a
+  clip instead; Settings → Remote → Screen says none is installed.
+- Install VB-CABLE (vb-audio.com/Cable: run `VBCABLE_Setup_x64.exe` as administrator), restart
+  the PC. Settings → Remote → Screen now names "CABLE Output (VB-Audio Virtual Cable)".
+- Note the default microphone (Windows Settings → System → Sound → Input). In a direct session,
+  tap **Mic**: the phone says the PC hears it as CABLE Output, its default microphone now; the
+  PC's banner says the phone's microphone is on; Windows' Input shows CABLE Output, and its
+  level moves when you speak into the phone.
+- In WhatsApp Web, hold the voice-note button and speak into the phone: the note has your voice.
+  The delay is short (note it), and it does not break up on Wi-Fi.
+- Tap **Mic** again: within 2 seconds Windows' default microphone is the one you noted. The
+  same after stopping the session on the PC with the Mic on.
+- Turn off "Make the cable Windows' default microphone…" in Settings → Remote: **Mic** then leaves
+  the default alone and the phone says to choose CABLE Output in the app.
+
 ## Results
 
 The owner, 2026-10-19, on `vyro-windows-c87dd2d` with the relay deployed from 60eda87 (run
@@ -119,3 +179,8 @@ relay deployed from 2e42a83 (run 39298073589).
 | Slow view | not tried | not tried | both phones always found a direct path; CI's end-to-end test (`scripts/relay-e2e.mjs`) plays the slow view in Chromium through the relay |
 | Secure screen, administrator window | works | works | an administrator prompt (UAC) can't be seen ("not able to see admin permission yes or no"); the phone shows the secure-screen line, as designed. The owner keeps it so for 1.7. The administrator window shows on the phone and keeps its input out: works |
 | Stop, lock on end, idle end, permission off | works | works | "session ending work on both phones" |
+| 8. Redesign: every screen, both themes, no sideways scroll, the footer, motion | not yet | not yet | |
+| 9. Full screen | not yet | not yet | |
+| 10. HD or SD on mobile data | not yet | not yet | |
+| 11. A clip pasted into WhatsApp Web | not yet | not yet | |
+| 12. The phone as the microphone (VB-CABLE), the default put back | not yet | not yet | |

@@ -8,6 +8,7 @@
   import { getInfo, getView, NotPaired, pair, signOut, stream } from './api';
   import { canonCode, codeFromHash, deviceName, pageTitle, showCode, STALE_SECS } from './companion';
   import LiveView from './LiveView.svelte';
+  import Footer from '../phone/ui/Footer.svelte';
 
   type Stage = 'loading' | 'pair' | 'live' | 'down';
   let stage = $state<Stage>('loading');
@@ -226,6 +227,7 @@
     {:else}
       <p class="muted" role="status">Waiting for the first reading…</p>
     {/if}
+    <Footer />
   </main>
 </div>
 

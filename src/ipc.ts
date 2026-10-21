@@ -902,6 +902,18 @@ export async function setScreenLock(on: boolean): Promise<ScreenStatus> {
   return invoke<ScreenStatus>('set_screen_lock', { on });
 }
 
+/** "Make the cable Windows' default microphone while the phone's microphone is on" (1.7). */
+export async function setScreenMic(on: boolean): Promise<ScreenStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simScreenMic(on);
+  return invoke<ScreenStatus>('set_screen_mic', { on });
+}
+
+/** The microphone a virtual cable (VB-CABLE and the like) offers, if one is installed (1.7). */
+export async function findPhoneCable(): Promise<string | null> {
+  if (!inTauri) return (await import('./sim-remote')).simPhoneCable();
+  return invoke<string | null>('find_phone_cable');
+}
+
 export async function onScreenShare(cb: (s: ScreenStatus) => void): Promise<() => void> {
   if (!inTauri) return (await import('./sim-remote')).onSimScreen(cb);
   return listen<ScreenStatus>('screen-share', (e) => cb(e.payload));

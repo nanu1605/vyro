@@ -1,6 +1,6 @@
 <script lang="ts">
-  // The PC's devices (1.5): what is connected, and batteries, low ones first. A phone allowed to
-  // control the PC can connect and disconnect its paired Bluetooth devices.
+  // The PC's devices (1.5; in More from 1.7): what is connected, and batteries, low ones first. A
+  // phone allowed to control the PC can connect and disconnect its paired Bluetooth devices.
   import { actions, batteryView, connectionText, grouped, KIND_LABEL, lowNotice, stateText } from '../../devices';
   import type { DeviceInfo, Devices, LinkState } from '../../types';
   import { errText, every, type ScreenProps } from './ask';
@@ -53,7 +53,7 @@
   {#if error}
     <p class="error" role="alert">{error}</p>
   {:else if !data}
-    <p class="muted" role="status">Reading…</p>
+    <div class="skeleton" role="status" aria-label="Reading…"><span></span><span></span><span></span></div>
   {:else}
     {#each groups as g (g.id)}
       <h2 id="dev-{g.id}">{g.title}</h2>
@@ -68,17 +68,24 @@
               </span>
               {#if result[d.id]}<span class="small" role="status">{result[d.id]}</span>{/if}
             </div>
-            <span class="battery {b.tone}">{b.text}{b.charging ? ' ⚡' : ''}</span>
+            {#if b.text}
+              <span class="battery {b.tone}">
+                {#if b.pct != null}<span class="cell" aria-hidden="true"><i style:width="{b.pct}%"></i></span>{/if}
+                {b.text}{b.charging ? ' ⚡' : ''}
+              </span>
+            {/if}
             {#if can('device.connect')}
-              {#each actions(d) as label (label)}
-                <button
-                  type="button"
-                  class="ghost"
-                  disabled={busy != null}
-                  onclick={() => void act(d, label === 'Connect')}
-                  aria-label="{label} {d.name}">{label}</button
-                >
-              {/each}
+              <div class="acts">
+                {#each actions(d) as label (label)}
+                  <button
+                    type="button"
+                    class="ghost"
+                    disabled={busy != null}
+                    onclick={() => void act(d, label === 'Connect')}
+                    aria-label="{label} {d.name}">{label}</button
+                  >
+                {/each}
+              </div>
             {/if}
           </li>
         {/each}
@@ -89,34 +96,43 @@
 
 <style>
   h2 {
-    margin: 0.9rem 0 0.35rem;
-  }
-  .rows {
-    display: grid;
-    gap: 0.35rem;
-    margin: 0;
-    padding: 0;
-    list-style: none;
+    margin: 1rem 0 0.25rem;
   }
   .rows li {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid var(--line);
+    gap: 0.5rem 0.75rem;
   }
   .rows li.off .what b {
     color: var(--muted);
   }
   .what {
     display: grid;
-    flex: 1;
-    min-width: 10rem;
+    flex: 1 1 12rem;
+    gap: 0.1rem;
+    min-width: 0;
   }
   .battery {
+    display: inline-flex;
     flex: none;
+    align-items: center;
+    gap: 0.4rem;
     font-variant-numeric: tabular-nums;
+  }
+  .cell {
+    display: block;
+    width: 1.6rem;
+    height: 0.75rem;
+    padding: 1px;
+    border: 1.5px solid currentColor;
+    border-radius: 3px;
+  }
+  .cell i {
+    display: block;
+    height: 100%;
+    border-radius: 1px;
+    background: currentColor;
   }
   .battery.warn {
     color: var(--warn);
@@ -124,13 +140,13 @@
   .battery.hot {
     color: var(--hot);
   }
-  .rows button {
-    padding: 0.35rem 0.75rem;
-    font-size: 0.85rem;
+  .acts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
   }
-  .note.hot {
-    padding: 0.5rem 0.7rem;
-    border-left: 3px solid var(--hot);
-    background: color-mix(in srgb, var(--hot) 12%, transparent);
+  .acts button {
+    padding: 0.35rem 0.8rem;
+    font-size: 0.85rem;
   }
 </style>

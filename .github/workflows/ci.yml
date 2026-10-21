@@ -169,6 +169,10 @@ jobs:
           path: screen-2560.h264*
           if-no-files-found: ignore
           retention-days: 14
+      - name: A voice clip pasted into a real browser (1.7)
+        # The clip as the app makes it (AAC through Media Foundation) on the clipboard as a file,
+        # Ctrl+V pressed as the phone's Paste key presses it: the page must receive the file.
+        run: node scripts/clip-check.mjs
       - name: The runner's desktop size again
         if: always()
         shell: pwsh

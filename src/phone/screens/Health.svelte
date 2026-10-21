@@ -45,13 +45,19 @@
   }
 </script>
 
-<section class="panel" aria-labelledby="health-title">
+<section class="panel rise" aria-labelledby="health-title">
   <h1 id="health-title">Health of {pc}</h1>
   {#if error}<p class="error" role="alert">{error}</p>{/if}
   {#if !health}
-    <p class="muted" role="status">Reading…</p>
+    <div class="skeleton" role="status" aria-label="Reading…"><span></span><span></span><span></span></div>
   {:else}
-    <p><b>{WORD[health.overall] ?? health.overall}</b>{score?.latest.score != null ? ` · Performance Score ${fmt(score.latest.score)}` : ''}</p>
+    <div class="hero {health.overall}">
+      <span class="ring" aria-hidden="true"></span>
+      <div>
+        <p class="word">{WORD[health.overall] ?? health.overall}</p>
+        {#if score?.latest.score != null}<p class="muted small">Performance Score {fmt(score.latest.score)}</p>{/if}
+      </div>
+    </div>
     <ul class="rows">
       {#each health.subsystems as s (s.name)}
         <li>
@@ -67,7 +73,7 @@
 </section>
 
 {#if alerts}
-  <section class="panel" aria-labelledby="alerts-title">
+  <section class="panel rise" style:--i={1} aria-labelledby="alerts-title">
     <h2 id="alerts-title">Alerts</h2>
     {#if recent.length}
       <ul class="rows">
@@ -96,21 +102,53 @@
 
 <style>
   h2 {
-    margin: 0.75rem 0 0.35rem;
+    margin: 0.9rem 0 0.25rem;
   }
-  .rows {
-    display: grid;
-    gap: 0.35rem;
+  .hero {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    margin: 0.25rem 0 0.75rem;
+    padding: 0.85rem;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--muted) 10%, transparent);
+  }
+  .hero p {
     margin: 0;
-    padding: 0;
-    list-style: none;
+  }
+  .word {
+    font-size: 1.35rem;
+    font-weight: 700;
+  }
+  .ring {
+    flex: none;
+    width: 2.6rem;
+    height: 2.6rem;
+    border: 5px solid var(--muted);
+    border-radius: 50%;
+  }
+  .hero.ok {
+    background: color-mix(in srgb, var(--ok) 12%, transparent);
+  }
+  .hero.ok .ring {
+    border-color: var(--ok);
+  }
+  .hero.warn {
+    background: color-mix(in srgb, var(--warn) 12%, transparent);
+  }
+  .hero.warn .ring {
+    border-color: var(--warn);
+  }
+  .hero.fail {
+    background: color-mix(in srgb, var(--hot) 12%, transparent);
+  }
+  .hero.fail .ring {
+    border-color: var(--hot);
   }
   .rows li {
     display: flex;
     align-items: flex-start;
-    gap: 0.5rem;
-    padding: 0.4rem 0;
-    border-bottom: 1px solid var(--line);
+    gap: 0.6rem;
   }
   .rows p {
     margin: 0.15rem 0 0;
@@ -120,13 +158,15 @@
     justify-content: space-between;
   }
   .rule button {
+    flex: none;
+    min-width: 4rem;
     padding: 0.3rem 0.8rem;
     font-size: 0.85rem;
   }
   .dot {
     flex: none;
-    width: 0.6rem;
-    height: 0.6rem;
+    width: 0.65rem;
+    height: 0.65rem;
     margin-top: 0.35rem;
     border-radius: 50%;
     background: var(--muted);

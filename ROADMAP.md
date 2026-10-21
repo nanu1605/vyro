@@ -53,6 +53,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 35 | 1.3 ships in 1.4.0 | 1.3.0 is not released on its own: its changes (decisions 32 and 33, device names, wireless batteries) ship in 1.4.0, once field check 1.3 passes on the 1.4 test build (the owner, 2026-10-18). One update for installed copies instead of two; the 1.3 branch is neither merged nor released | decided |
 | 37 | GPU tuning | Vyro may change an NVIDIA card's core and memory clock offsets and its power limit (1.6; the owner's request, 2026-10-18, on an NVIDIA desktop card and a laptop GPU): only through the driver's own interface (NVML, loaded from System32), only in the service, off until the owner turns it on and confirms, only on RTX 20 to RTX 50 cards and only what the driver gives a range for. Presets per family scaled to those ranges, the owner's own, one per profile; a stability test and "Find my best"; stock on every exit, after heat, a crash or a driver reset, and when another program keeps changing the values; only tested settings at start; from a phone only Stock and tested presets. AMD and Intel later. Supersedes "never writes GPU settings" (anti-cheat notes) and the plans' "overclocking out of scope" | decided |
 | 38 | The screen on the phone | A phone may see and use the PC's screen only if the owner allows it, on the PC, apart from control (1.7; the owner's request, 2026-10-18, "direct, slow fallback"): one phone at a time, a banner and a tray item with Stop while it lasts, a notification at the start, a record of each session, an end after 10 minutes unused. Direct over WebRTC (str0m in the app, the phone's own browser), its fingerprints inside the sealed offer and answer so the relay cannot step in; the picture as H.264 from Windows' own encoder, input as Windows input in the signed-in session. Where no direct path exists, the slow view: one JPEG at a time through the relay, at most 2 a second, 20 minutes a day; the relay caps what a PC sends its phones at 1 GB a day. Windows' secure screens cannot be seen or used, and Ctrl+Alt+Del cannot be sent | decided |
+| 39 | Voice from the phone | The phone's voice reaches the PC two ways (1.7; the owner's report, 2026-10-21: a WhatsApp Web voice note sent through the phone's screen recorded nothing, as it records the PC's microphone and the phone's never reached the PC; the owner's choice, "clips and live mic"). Windows adds a microphone only through a driver Microsoft has signed (an EV certificate and a partner account Vyro does not have), so Vyro ships none. A **clip** recorded on the phone is kept on the PC (AAC through Windows' own encoder, or WAV without one; named by Vyro, never the phone; 5 minutes at most; deleted after 7 days) and put on the clipboard as a file, only when the phone sends one, so Paste in a chat attaches it. The **live microphone** plays into a virtual cable the owner installs (VB-CABLE, VoiceMeeter or Virtual Audio Cable, found by name, never bundled); while it plays, the cable's recording side is Windows' default microphone (an option, on by default) through `IPolicyConfig`, an interface Windows does not document but has kept since Windows 7 (EarTrumpet and SoundSwitch use it). The defaults it replaced are kept in a file first and put back when the microphone stops, the session ends or Vyro closes, or at the next start after a crash; a role the owner changed meanwhile is left alone. Both need the Screen permission and a session on; the live microphone the direct connection | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -2969,6 +2970,51 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       3095d4f). The relay serves the phone app with that line since the owner's go (deployed
       from 2e42a83, run 39298073589). The owner, 2026-10-19, on 3095d4f with that relay, on
       both phones over the direct path: "mobile data works now, lag stays low".
+- [x] **The owner's requests of 2026-10-21**, for 1.7 (What's new went into 1.5): "a full UI and
+      UX redesign to the mobile app … some animations … user friendly … 'Powered by Jainav
+      Infotech Pvt Ltd' at the bottom … no horizontal scrolling", "no option to make the screen
+      fullscreen", "when on mobile data … select HD or SD", and "not able to send audio notes from
+      my phone … on WhatsApp web … nothing was recorded".
+- [x] **The phone app redesigned**: an app bar with the PC's name (it opens the list of PCs and
+      their states) and the connection; five tabs at the foot within the thumb's reach (Live,
+      Processes, Screen, Health, More; Devices moved into More, which shows a dot for a low
+      battery); confirmations in sheets that rise from below; toasts for results; cards that come
+      in one after another, views that slide in the direction of travel, a tab marker that
+      slides, buttons that give a little when pressed, a shimmer while a list loads; none of it
+      with reduced motion. "Powered by Jainav Infotech Pvt Ltd" closes every screen, the
+      pairing, home and offline ones too, and the Wi-Fi companion page. Nothing scrolls
+      sideways: the end-to-end test checks every tab, sheet and state at 320, 360 and 430 px, in
+      both themes. The phone app's start grew from 33.8 to 42.2 kB with the shell (every screen
+      still loads when opened); its budget goes from 40 to 44 kB.
+- [x] **Full screen**: the Screen tab's toolbar (Full, HD/SD, Keys, Paste, Clip, Mic, Stop).
+      Full fills the phone with the PC's screen, turned sideways for a wide one where the
+      browser allows it (Android); on iPhone the picture fills the app's window and the bars
+      go. Over the picture the controls hide after 3 s; a corner button brings them back, as a
+      tap on the picture is a click on the PC. Back or Esc leave it.
+- [x] **HD or SD**: SD sends at most 960×540, 15 pictures a second and 1 Mbit/s (about 7 MB a
+      minute at most, HD up to 35), the slow view 640×400 at a lower JPEG quality. On mobile
+      data (Android says so; iPhone does not) the phone asks before it starts, and remembers
+      the answer; a change to mobile data mid-session offers SD. The toolbar switches at once:
+      the PC rebuilds its pace for the new ceiling (`{t: "quality"}` over the data channel).
+      The phone's details say how much the session used.
+- [x] **Voice clips** (decision 39): the Clip tool records on the phone (16 kHz mono, up to
+      5 minutes direct, 1 minute through the relay) and sends it: over its own data channel, or
+      through the relay a piece a request (`screen.clip`). The PC keeps it in `Phone clips` as
+      AAC (Media Foundation's own encoder, WAV without one), puts it on the clipboard as a file,
+      records it and says so; the phone offers Paste (Ctrl+V on the PC). CI on Windows encodes a
+      tone, round-trips the clipboard, and pastes a clip into the runner's Chrome or Edge,
+      which must receive it as a file of its name and size (`scripts/clip-check.mjs`).
+- [x] **The phone as the PC's microphone** (decision 39): the Mic tool (direct connection
+      only) sends 20 ms frames on a data channel that never resends; the PC plays them through a
+      80 ms jitter buffer into the cable it finds, makes the cable's recording side the default
+      microphone while it plays (Settings → Remote → Screen, on by default) and puts the
+      defaults back after; it stops 1.5 s after the frames stop. Settings shows the cable found,
+      or how to install VB-CABLE; the phone says what the PC hears it as, and without a cable
+      offers a clip instead. The banner says when the phone's microphone is on.
+- [x] **The relay's page policy**: it refused the microphone (`microphone=()`), so the phone
+      could not record at all; it now allows the page itself, and the audio worklet is a file
+      of the app's own (the policy runs no `blob:` or `data:` script). Phones get the new app
+      once the relay is deployed from this branch, at the owner's go.
 - Administrator prompts stay unseen in 1.7, by the owner's choice (field check, 2026-10-19:
   the phone shows its secure-screen line, as designed). Seeing and answering them would need
   the service to capture and type on the secure desktop as SYSTEM, behind its own permission;

@@ -76,6 +76,10 @@ pub enum Input {
     Here,
     /// The phone's picture stopped (it lost part of one, or has none yet): send a whole one.
     Picture,
+    /// HD or SD from now on (1.7).
+    Quality {
+        q: super::producer::Quality,
+    },
 }
 
 /// Reads and checks one message.

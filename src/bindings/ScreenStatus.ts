@@ -16,4 +16,12 @@ lockOnEnd: boolean,
 /**
  * Seconds of the slow view left today.
  */
-slowLeft: number, };
+slowLeft: number, 
+/**
+ * The phone's microphone plays into the cable now.
+ */
+mic: boolean, 
+/**
+ * While it does, the cable is Windows' default microphone.
+ */
+micSwitch: boolean, };

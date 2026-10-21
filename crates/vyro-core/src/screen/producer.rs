@@ -44,6 +44,56 @@ impl Default for Settings {
     }
 }
 
+/// How much picture a session sends (1.7): HD, all the connection carries up to 1080p at 30 a
+/// second, or SD, at most 960x540 at 15 a second and 1 Mbit/s (about 7 MB a minute at most), to
+/// spare a phone's mobile data. The phone chooses, and may change it during the session.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Quality {
+    #[default]
+    Hd,
+    Sd,
+}
+
+impl Quality {
+    /// `s` within what this quality allows.
+    pub fn apply(self, s: &Settings) -> Settings {
+        match self {
+            Self::Hd => *s,
+            Self::Sd => Settings {
+                max_width: s.max_width.min(960),
+                max_height: s.max_height.min(540),
+                fps: s.fps.min(15),
+                bitrate: s.bitrate.min(1_000_000),
+                ..*s
+            },
+        }
+    }
+
+    pub fn to_u8(self) -> u8 {
+        match self {
+            Self::Hd => 0,
+            Self::Sd => 1,
+        }
+    }
+
+    pub fn from_u8(v: u8) -> Self {
+        if v == 1 {
+            Self::Sd
+        } else {
+            Self::Hd
+        }
+    }
+
+    /// The slow view's largest picture and its JPEG quality.
+    pub fn slow(self) -> ((u32, u32), f32) {
+        match self {
+            Self::Hd => (super::share::SLOW_MAX, 0.55),
+            Self::Sd => ((640, 400), 0.45),
+        }
+    }
+}
+
 /// What the producer reports as it goes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Status {
@@ -320,7 +370,10 @@ pub fn drive<S: Source, E: Encode>(
 ) -> Result<(), String> {
     // The encoder, with the size and pictures a second it was made for.
     let mut enc: Option<(E, u32, u32, u32)> = None;
-    let mut adapt = Adapt::new(s, Instant::now());
+    // What the phone chose (HD or SD), and `s` within it.
+    let mut quality = session.quality();
+    let mut wanted = quality.apply(s);
+    let mut adapt = Adapt::new(&wanted, Instant::now());
     let started = Instant::now();
     let mut last: Option<(Vec<u8>, Instant)> = None;
     let mut settle_until = Instant::now();
@@ -329,7 +382,15 @@ pub fn drive<S: Source, E: Encode>(
     let mut counted = Instant::now();
     while !stop.load(Ordering::SeqCst) && !session.closed() {
         let tick = Instant::now();
-        let change = adapt.update(session.estimate(), s, tick);
+        if session.quality() != quality {
+            // At once, both ways: a phone that asks for HD again need not wait for the
+            // connection to prove it carries it (the estimate takes it down again if not).
+            quality = session.quality();
+            wanted = quality.apply(s);
+            adapt = Adapt::new(&wanted, tick);
+            log::info!("screen: the phone asked for {quality:?}");
+        }
+        let change = adapt.update(session.estimate(), &wanted, tick);
         if change.step {
             log::info!(
                 "screen: the connection carries {} kbit/s: up to {}x{} at {} a second, {} kbit/s",

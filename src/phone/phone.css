@@ -1,0 +1,176 @@
+/* The phone app's look (1.7, redesigned): an app bar, the content as cards, a bottom bar of
+   tabs within the thumb's reach, sheets that rise from the bottom. It goes over the phone pages'
+   frame (remote/page.css) and the app's theme (styles/theme.css), so the PC's theme and accent
+   still colour it. Motion uses the theme's durations; with reduced motion there is none
+   (theme.css). Nothing here may make a page wider than the phone. */
+
+:root {
+  --bar-h: 3.5rem;
+  --nav-h: 4.1rem;
+  --r-card: 18px;
+  --r-control: 12px;
+  --gap: 0.75rem;
+  --press: scale(0.97);
+}
+
+body {
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* The page's own width, never more. */
+.app {
+  min-height: 100dvh;
+  max-width: 40rem;
+  margin: 0 auto;
+}
+.app main {
+  min-width: 0;
+  /* A view sliding in from the side never widens the page, even for a moment. */
+  overflow-x: clip;
+  padding: 0.75rem max(1rem, env(safe-area-inset-left)) 1rem max(1rem, env(safe-area-inset-right));
+}
+.app.with-nav main {
+  padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 1rem);
+}
+
+/* Cards. */
+.app .panel {
+  margin: 0 0 var(--gap);
+  padding: 1rem 1rem 1.05rem;
+  border-radius: var(--r-card);
+  min-width: 0;
+}
+.app h1 {
+  margin: 0 0 0.6rem;
+  font-size: 1.3rem;
+  letter-spacing: -0.01em;
+}
+.app h2 {
+  margin: 0 0 0.5rem;
+}
+
+/* Controls: large enough for a thumb, and they give a little when pressed. */
+.app button {
+  min-height: 2.75rem;
+  border-radius: var(--r-control);
+  transition:
+    transform var(--dur-1) var(--ease-out),
+    background-color var(--dur-2) var(--ease-out),
+    border-color var(--dur-2) var(--ease-out);
+}
+.app button:active:not(:disabled) {
+  transform: var(--press);
+}
+.app input {
+  min-height: 2.75rem;
+  border-radius: var(--r-control);
+}
+.app button.ghost[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  font-weight: 700;
+}
+
+/* A row of buttons wraps; it never runs off the side. */
+.app .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.app .actions > * {
+  min-width: 0;
+}
+
+/* Lists inside cards. */
+.app .rows {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.app .rows > li {
+  min-width: 0;
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--line);
+}
+.app .rows > li:first-child {
+  border-top: 0;
+}
+
+/* Notes and errors. */
+.app .note {
+  margin: 0 0 var(--gap);
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+}
+.app .note.warn {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
+  border-left: 3px solid var(--warn);
+}
+.app .note.hot {
+  border-color: color-mix(in srgb, var(--hot) 45%, var(--line));
+  border-left: 3px solid var(--hot);
+  background: color-mix(in srgb, var(--hot) 10%, var(--panel));
+}
+
+/* While something loads: a soft shimmer instead of a blank. */
+.app .skeleton {
+  display: grid;
+  gap: 0.6rem;
+}
+.app .skeleton span {
+  display: block;
+  height: 3.25rem;
+  border-radius: var(--r-control);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--line) 50%, transparent) 0%,
+    color-mix(in srgb, var(--line) 90%, transparent) 50%,
+    color-mix(in srgb, var(--line) 50%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* Cards come in one after another the first time a view shows. */
+.app .rise {
+  animation: rise var(--dur-3) var(--ease-out) backwards;
+  animation-delay: calc(min(var(--i, 0), 6) * 45ms);
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Words never push a page sideways. */
+.app p,
+.app li,
+.app b,
+.app dd,
+.app dt {
+  overflow-wrap: anywhere;
+}

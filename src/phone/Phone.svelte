@@ -2,8 +2,15 @@
   // The phone app (1.4): a PC's readings from anywhere, through the Vyro relay, sealed end to
   // end. Installable from the browser (no app store). From 1.5 it also shows what runs on the
   // PC, its devices and Health, and, on a phone the owner allowed on the PC, changes it: ends a
-  // process, shuts it down, wakes another PC, and the rest Vyro does (screens/).
+  // process, shuts it down, wakes another PC, and the rest Vyro does (screens/). Redesigned in
+  // 1.7: a bar at the top, tabs at the bottom, sheets for choices, toasts for results, and views
+  // that move in from the side they are on.
   import { onMount } from 'svelte';
+  import Activity from '@lucide/svelte/icons/activity';
+  import HeartPulse from '@lucide/svelte/icons/heart-pulse';
+  import LayoutGrid from '@lucide/svelte/icons/layout-grid';
+  import List from '@lucide/svelte/icons/list';
+  import Monitor from '@lucide/svelte/icons/monitor';
   import { fmtDate } from '../format';
   import { applyLook, type AccentChoice, type ThemeId } from '../themes';
   import type { RemoteView } from '../types';
@@ -13,18 +20,26 @@
   import { PcLink, type LinkState, type PhoneInfo } from './relay';
   import { errText } from './screens/ask';
   import { b64url, randomBytes, SECRET_LEN } from './seal';
+  import AppBar, { type ChipTone } from './ui/AppBar.svelte';
+  import BottomNav from './ui/BottomNav.svelte';
+  import Footer from './ui/Footer.svelte';
+  import { direction, ms } from './ui/motion';
+  import Toasts from './ui/Toasts.svelte';
 
   type Screen = 'home' | 'pc' | 'scan' | 'install';
-  /** A PC's tabs (1.5); only Live for a PC whose Vyro is older, Screen from 1.7. */
-  type Tab = 'live' | 'processes' | 'devices' | 'health' | 'screen' | 'more';
-  const TABS: Array<{ id: Tab; label: string }> = [
-    { id: 'live', label: 'Live' },
-    { id: 'processes', label: 'Processes' },
-    { id: 'devices', label: 'Devices' },
-    { id: 'health', label: 'Health' },
-    { id: 'screen', label: 'Screen' },
-    { id: 'more', label: 'More' },
+  /** A PC's tabs (1.5); only Live for a PC whose Vyro is older, Screen from 1.7. Devices sit
+   * at the top of More (1.7). */
+  type Tab = 'live' | 'processes' | 'screen' | 'health' | 'more';
+  const TABS: Array<{ id: Tab; label: string; icon: typeof Activity }> = [
+    { id: 'live', label: 'Live', icon: Activity },
+    { id: 'processes', label: 'Processes', icon: List },
+    { id: 'screen', label: 'Screen', icon: Monitor },
+    { id: 'health', label: 'Health', icon: HeartPulse },
+    { id: 'more', label: 'More', icon: LayoutGrid },
   ];
+  /** Low batteries are asked for this often (a dot on More). */
+  const BATTERY_MS = 120_000;
+  const NEWS_KEY = 'vyro.phone.news';
 
   /** Chrome's install prompt (Android, desktop). */
   interface InstallPrompt extends Event {
@@ -37,7 +52,10 @@
     matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
   const NAME = deviceName(ua);
 
-  let pcs = $state<PairedPc[]>(loadPcs());
+  const saved = loadPcs();
+  /** Paired before this open: a phone pairing now for the first time has no news to hear. */
+  const pairedBefore = saved.length > 0;
+  let pcs = $state<PairedPc[]>(saved);
   let current = $state<string | null>(null);
   let screen = $state<Screen>('home');
   let info = $state<PhoneInfo | null>(null);
@@ -50,10 +68,20 @@
   /** A pairing link held while an iPhone user decides where to install. */
   let held = $state<Link | null>(null);
   let notice = $state<string | null>(null);
-  let pasted = $state('');
   let installPrompt = $state<InstallPrompt | null>(null);
   let tab = $state<Tab>('live');
+  /** The side the open view came in from. */
+  let dir = $state(0);
   let waking = $state<string | null>(null);
+  let pcSheet = $state(false);
+  /** The PC sheet's code, once first opened. */
+  let sheetLoaded = $state(false);
+  /** A low battery on the PC: the dot on More, and what it says. */
+  let lowBattery = $state<string | null>(null);
+  /** The phone's What's new: the newest notes it showed (null: none yet). */
+  let news = $state<{ from: string | null } | null>(null);
+  /** Something in the open tab hides the bars (the PC's screen, full screen). */
+  let immersive = $state(false);
 
   let link: PcLink | null = null;
   let listLinks: PcLink[] = [];
@@ -65,7 +93,12 @@
   const ask = <T,>(m: string, p: object = {}) =>
     link ? link.request<T>(m, p) : Promise.reject<T>(new Error('Not connected to the PC.'));
   const others = $derived(sleepers(pcs, current));
-  const tabs = $derived(TABS.filter((t) => t.id !== 'screen' || info?.screen !== undefined));
+  const tabs = $derived(
+    TABS.filter((t) => t.id !== 'screen' || info?.screen !== undefined).map((t) => ({
+      ...t,
+      dot: t.id === 'more' ? lowBattery : null,
+    })),
+  );
   const unit = $derived(info?.unit ?? 'c');
   const stale = $derived(screen === 'pc' && linkState === 'online' && (lastAt === 0 || now - lastAt > STALE_SECS * 1000));
   const STATE_TEXT: Record<LinkState, string> = {
@@ -78,9 +111,30 @@
     elsewhere: 'Open in another window',
     tooOld: 'Update Vyro on the PC',
   };
+  const navOn = $derived(screen === 'pc' && linkState === 'online' && asks && !immersive);
 
   $effect(() => {
     document.title = screen === 'pc' ? pageTitle(pc?.name ?? '', view) : 'Vyro';
+  });
+
+  // Low batteries on the PC: asked now and then while a PC is open, for the dot on More.
+  $effect(() => {
+    if (screen !== 'pc' || linkState !== 'online' || !info?.methods?.includes('devices')) {
+      lowBattery = null;
+      return;
+    }
+    const check = () => {
+      if (document.hidden) return;
+      ask<{ devices: Array<{ name: string; low?: string | null }> }>('devices')
+        .then((d) => {
+          const low = d.devices.filter((x) => x.low);
+          lowBattery = low.length ? `low battery: ${low.map((x) => x.name).join(', ')}` : null;
+        })
+        .catch(() => {});
+    };
+    check();
+    const t = setInterval(check, BATTERY_MS);
+    return () => clearInterval(t);
   });
 
   function save(next: PairedPc[]): void {
@@ -114,13 +168,16 @@
   }
 
   function goHome(): void {
+    pcSheet = false;
     link?.stop();
     link = null;
+    immersive = false;
     screen = 'home';
     if (pcs.length) startList();
   }
 
   function openPc(room: string): void {
+    pcSheet = false;
     stopList();
     link?.stop();
     current = room;
@@ -130,7 +187,10 @@
     linkState = 'connecting';
     screen = 'pc';
     tab = 'live';
+    dir = 0;
+    immersive = false;
     notice = null;
+    waking = null;
     save(updatePc(pcs, room, { used: Date.now() }));
     link = new PcLink(
       () => pcs.find((p) => p.room === room),
@@ -150,6 +210,18 @@
       { name: NAME, watch: !document.hidden, base: location.origin },
     );
     link.start();
+  }
+
+  function select(t: Tab): void {
+    if (t === tab) {
+      window.scrollTo({ top: 0, behavior: ms(1) ? 'smooth' : 'auto' });
+      return;
+    }
+    const ids = tabs.map((x) => x.id);
+    dir = direction(ids.indexOf(tab), ids.indexOf(t));
+    tab = t;
+    immersive = false;
+    window.scrollTo({ top: 0 });
   }
 
   function pairWith(l: Link): void {
@@ -191,9 +263,19 @@
     else pairWith(l);
   }
 
+  function scan(): void {
+    pcSheet = false;
+    link?.stop();
+    link = null;
+    screen = 'scan';
+    notice = null;
+    stopList();
+  }
+
   async function leave(): Promise<void> {
     const room = current;
     if (!room) return;
+    pcSheet = false;
     await link?.signOut();
     link = null;
     forget(room);
@@ -258,6 +340,32 @@
     await p?.prompt();
   }
 
+  /** The phone's What's new: once after the app changed, for a phone already in use. */
+  async function checkNews(): Promise<void> {
+    let seen: string | null = null;
+    try {
+      seen = localStorage.getItem(NEWS_KEY);
+    } catch {
+      return;
+    }
+    const { NOTES, notesSince } = await import('../whatsnew');
+    const newest = NOTES[0]?.version ?? '';
+    if (seen === newest) return;
+    // A phone new to Vyro has nothing to compare with: it starts from here.
+    if (!pairedBefore) return seen ? undefined : remember(newest);
+    if (notesSince(seen, newest).some((r) => r.items.some((i) => i.phone))) news = { from: seen };
+    else remember(newest);
+  }
+
+  function remember(version: string): void {
+    news = null;
+    try {
+      localStorage.setItem(NEWS_KEY, version);
+    } catch {
+      /* shown again next time */
+    }
+  }
+
   onMount(() => {
     takeLink();
     if (screen === 'home') {
@@ -265,6 +373,7 @@
       if (first && !notice) openPc(first.room);
       else if (pcs.length) startList();
     }
+    void checkNews().catch(() => {});
     const tick = setInterval(() => (now = Date.now()), 1000);
     const onVisibility = () => {
       link?.setWatch(!document.hidden);
@@ -300,294 +409,177 @@
     };
   });
 
-  const chip = $derived(
-    screen !== 'pc' ? null : linkState === 'online' ? (stale ? 'Waiting for readings…' : 'Live') : STATE_TEXT[linkState],
+  const chip = $derived.by((): { text: string; tone: ChipTone } | null => {
+    if (screen !== 'pc') return null;
+    if (linkState === 'online') return stale ? { text: 'Waiting for readings…', tone: 'wait' } : { text: 'Live', tone: 'ok' };
+    return { text: STATE_TEXT[linkState], tone: linkState === 'connecting' ? 'wait' : 'off' };
+  });
+  const sub = $derived(
+    `End-to-end encrypted${screen === 'pc' && info ? (info.control ? ' · can change this PC' : ' · view only') : ''}`,
   );
+  const back = $derived(
+    screen === 'scan' || screen === 'install' ? { label: pcs.length ? 'Your PCs' : 'Back', go: () => (pcs.length ? goHome() : (screen = 'home')) } : null,
+  );
+  /** What decides which view shows, for its entrance. */
+  const viewKey = $derived(screen === 'pc' ? `pc:${current}:${navOn || immersive ? tab : linkState}` : screen);
 </script>
 
-<div class="page">
-  <header>
-    <div class="top">
-      <p class="brand">
-        <span class="logo">VYRO</span>{#if screen === 'pc' && pc}<span class="pc">{pc.name}</span>{/if}
-      </p>
-      {#if chip}
-        <p class="live" class:wait={chip !== 'Live'} role="status">{chip}</p>
-      {/if}
-    </div>
-    <div class="bar-row">
-      <p class="tagline">
-        End-to-end encrypted{screen === 'pc' && info ? (info.control ? ' · can change this PC' : ' · view only') : ''}
-      </p>
-      {#if screen === 'pc' || screen === 'scan'}
-        <button type="button" class="ghost small-btn" onclick={goHome}>{pcs.length > 1 ? 'All PCs' : 'PCs'}</button>
-      {/if}
-    </div>
-  </header>
+<div class="app" class:with-nav={navOn} class:immersive>
+  {#if !immersive}
+    <AppBar
+      pc={screen === 'pc' && pc ? pc.name : null}
+      {chip}
+      {sub}
+      onpcs={screen === 'pc' ? () => ((sheetLoaded = true), (pcSheet = true)) : undefined}
+      {back}
+    />
+  {/if}
 
   <main>
     {#if notice}
       <p class="note warn" role="alert">{notice}</p>
     {/if}
 
-    {#if screen === 'install' && held}
-      <section class="panel" aria-labelledby="install-title">
-        <h1 id="install-title">Add Vyro to your Home Screen first</h1>
-        <p>On iPhone, an app on the Home Screen keeps its own pairing, apart from Safari’s. So pair it there:</p>
-        <ol>
-          <li>Tap <b>Share</b> at the bottom of Safari, then <b>Add to Home Screen</b>.</li>
-          <li>Open <b>Vyro</b> from your Home Screen.</li>
-          <li>Tap <b>Scan the code</b> and point it at the code in Vyro on your PC (it lasts 10 minutes).</li>
-        </ol>
-        <div class="actions">
-          <button type="button" class="ghost" onclick={() => held && pairWith(held)}>Use it in Safari instead</button>
-        </div>
-      </section>
-    {:else if screen === 'scan'}
-      {#await import('./Scan.svelte') then m}
-        <m.default
-          onlink={(text: string) => fromText(text)}
-          oncancel={() => (pcs.length ? goHome() : (screen = 'home'))}
-        />
-      {/await}
-    {:else if screen === 'pc' && pc}
-      {#if linkState === 'online' && asks}
-        <nav class="tabs" aria-label="{pc.name}">
-          {#each tabs as t (t.id)}
-            <button type="button" class="tab" aria-current={tab === t.id ? 'page' : undefined} onclick={() => (tab = t.id)}>
-              {t.label}
-            </button>
-          {/each}
-        </nav>
-      {/if}
-      {#if linkState === 'online' && asks && tab !== 'live'}
-        {#if tab === 'processes'}
-          {#await import('./screens/Processes.svelte') then m}<m.default {ask} {can} pc={pc.name} />{/await}
-        {:else if tab === 'devices'}
-          {#await import('./screens/Devices.svelte') then m}<m.default {ask} {can} pc={pc.name} />{/await}
-        {:else if tab === 'health'}
-          {#await import('./screens/Health.svelte') then m}<m.default {ask} {can} pc={pc.name} />{/await}
-        {:else if tab === 'screen'}
-          {#await import('./screens/Screen.svelte') then m}<m.default {ask} {can} pc={pc.name} />{/await}
-        {:else}
-          {#await import('./screens/More.svelte') then m}<m.default {ask} {can} pc={pc.name} sleepers={others} />{/await}
-        {/if}
-        {#if !info?.control && tab !== 'screen'}
-          <p class="muted small">
-            This phone may only look. To let it change {pc.name}: Settings → Remote → From anywhere on the PC.
-          </p>
-        {/if}
-      {:else if linkState === 'online' && view}
-        <LiveView {view} {unit} pc={pc.name} {now} />
-        <footer>
-          {#if info}
-            <p>{info.device} · paired until {fmtDate(info.expires)}, renewed each time you open it</p>
-          {/if}
-          <button type="button" class="ghost" onclick={() => void leave()}>Sign out of this PC</button>
-          {#if info}<p class="muted small">Vyro {info.version} on the PC</p>{/if}
-        </footer>
-      {:else if linkState === 'online' || linkState === 'connecting'}
-        <p class="muted" role="status">{linkState === 'online' ? 'Waiting for the first reading…' : 'Connecting…'}</p>
-      {:else if linkState === 'asleep'}
-        <section class="panel" aria-labelledby="state-title">
-          <h1 id="state-title">{pc.name} is asleep or off</h1>
-          <p>Its readings come back here as soon as it wakes, with Vyro running and <b>Reach from anywhere</b> on.</p>
-          {#if pc.wake && pcs.length > 1}
+    {#key viewKey}
+      <div class="view" style:--dx="{dir * 18}px" style:--dy="{dir ? 0 : 8}px">
+        {#if screen === 'install' && held}
+          <section class="panel rise" aria-labelledby="install-title">
+            <h1 id="install-title">Add Vyro to your Home Screen first</h1>
+            <p>On iPhone, an app on the Home Screen keeps its own pairing, apart from Safari’s. So pair it there:</p>
+            <ol class="list">
+              <li>Tap <b>Share</b> at the bottom of Safari, then <b>Add to Home Screen</b>.</li>
+              <li>Open <b>Vyro</b> from your Home Screen.</li>
+              <li>Tap <b>Scan the code</b> and point it at the code in Vyro on your PC (it lasts 10 minutes).</li>
+            </ol>
             <div class="actions">
-              <button type="button" onclick={() => void wakeThrough(pc).catch((e: unknown) => (waking = errText(e)))}>
-                Wake {pc.name}
-              </button>
+              <button type="button" class="ghost" onclick={() => held && pairWith(held)}>Use it in Safari instead</button>
             </div>
-          {/if}
-          {#if waking}<p role="status">{waking}</p>{/if}
-        </section>
-      {:else if linkState === 'unreachable'}
-        <section class="panel" aria-labelledby="state-title">
-          <h1 id="state-title">Can’t reach the Vyro relay</h1>
-          <p>Check this phone’s connection. Trying again by itself…</p>
-        </section>
-      {:else if linkState === 'elsewhere'}
-        <section class="panel" aria-labelledby="state-title">
-          <h1 id="state-title">Open in another window</h1>
-          <p>{pc.name} is open in another window of Vyro on this device.</p>
-          <div class="actions"><button type="button" onclick={() => openPc(pc.room)}>Use it here</button></div>
-        </section>
-      {:else if linkState === 'tooOld'}
-        <section class="panel" aria-labelledby="state-title">
-          <h1 id="state-title">Update Vyro on {pc.name}</h1>
-          <p>This app needs a newer Vyro on the PC. Vyro updates from its tray menu → Check for updates.</p>
-        </section>
-      {:else}
-        <section class="panel" aria-labelledby="state-title">
-          <h1 id="state-title">{linkState === 'expired' ? 'That pairing code has expired' : `Signed out of ${pc.name}`}</h1>
-          <p>
-            {linkState === 'expired'
-              ? 'It lasts 10 minutes and works once. In Vyro on the PC, show a new one: Settings → Remote → Pair a phone.'
-              : 'The PC signed this phone out, or its pairing ran out. Pair it again from Vyro: Settings → Remote → Pair a phone.'}
-          </p>
-          <div class="actions"><button type="button" onclick={() => forget(pc.room)}>Remove {pc.name}</button></div>
-        </section>
-      {/if}
-    {:else}
-      {#if pcs.length}
-        <section class="panel" aria-labelledby="pcs-title">
-          <h1 id="pcs-title">Your PCs</h1>
-          <ul class="pcs">
-            {#each pcs as p (p.room)}
-              <li>
-                <button type="button" class="pc-row" onclick={() => openPc(p.room)}>
-                  <span class="pc-name">{p.name}</span>
-                  <span class="pc-state {listStates[p.room] ?? 'connecting'}">{STATE_TEXT[listStates[p.room] ?? 'connecting']}</span>
-                </button>
-              </li>
-            {/each}
-          </ul>
-        </section>
-      {/if}
-      <section class="panel" aria-labelledby="pair-title">
-        <h1 id="pair-title">{pcs.length ? 'Pair another PC' : 'Pair with your PC'}</h1>
-        <p>
-          In Vyro on the PC, open <b>Settings → Remote → From anywhere → Pair a phone</b>, then scan the code it shows
-          {standalone ? 'here' : 'with this phone’s camera'}.
-        </p>
-        <div class="actions">
-          <button type="button" onclick={() => ((screen = 'scan'), (notice = null), stopList())}>Scan the code</button>
-        </div>
-        <form
-          class="paste"
-          onsubmit={(e) => {
-            e.preventDefault();
-            fromText(pasted);
-            pasted = '';
-          }}
-        >
-          <label for="paste">Or paste the pairing link</label>
-          <div class="paste-row">
-            <input id="paste" bind:value={pasted} autocomplete="off" spellcheck="false" inputmode="url" placeholder="https://…" />
-            <button type="submit" class="ghost" disabled={!pasted.trim()}>Pair</button>
-          </div>
-        </form>
-      </section>
-      {#if !standalone}
-        <section class="panel" aria-labelledby="install-help">
-          <h2 id="install-help">Install the app</h2>
-          {#if installPrompt}
-            <p>Vyro works like an app from your Home Screen, with no app store.</p>
-            <div class="actions"><button type="button" onclick={() => void install()}>Install Vyro</button></div>
-          {:else if ios}
-            <p>In Safari, tap <b>Share</b> → <b>Add to Home Screen</b>, then pair from the app there.</p>
+          </section>
+        {:else if screen === 'scan'}
+          {#await import('./Scan.svelte') then m}
+            <m.default onlink={(text: string) => fromText(text)} oncancel={() => (pcs.length ? goHome() : (screen = 'home'))} />
+          {/await}
+        {:else if screen === 'pc' && pc}
+          {#if linkState === 'online' && asks && tab !== 'live'}
+            {#if tab === 'processes'}
+              {#await import('./screens/Processes.svelte') then m}<m.default {ask} {can} pc={pc.name} />{/await}
+            {:else if tab === 'health'}
+              {#await import('./screens/Health.svelte') then m}<m.default {ask} {can} pc={pc.name} />{/await}
+            {:else if tab === 'screen'}
+              {#await import('./screens/Screen.svelte') then m}
+                <m.default {ask} {can} pc={pc.name} onimmersive={(on: boolean) => (immersive = on)} />
+              {/await}
+            {:else}
+              {#await import('./screens/More.svelte') then m}
+                <m.default {ask} {can} pc={pc.name} sleepers={others} low={lowBattery} />
+              {/await}
+            {/if}
+            {#if !info?.control && tab !== 'screen'}
+              <p class="muted small">
+                This phone may only look. To let it change {pc.name}: Settings → Remote → From anywhere on the PC.
+              </p>
+            {/if}
+          {:else if linkState === 'online' && view}
+            <LiveView {view} {unit} pc={pc.name} {now} />
+            {#if info}
+              <section class="panel link-card" aria-label="This phone and {pc.name}">
+                <p class="muted small">{info.device} · paired until {fmtDate(info.expires)}, renewed each time you open it · Vyro {info.version} on the PC</p>
+                <button type="button" class="ghost" onclick={() => void leave()}>Sign out of this PC</button>
+              </section>
+            {/if}
+          {:else if linkState === 'online' || linkState === 'connecting'}
+            <div class="skeleton" role="status" aria-label={linkState === 'online' ? 'Waiting for the first reading…' : 'Connecting…'}>
+              <p class="muted">{linkState === 'online' ? 'Waiting for the first reading…' : 'Connecting…'}</p>
+              <span></span><span></span><span></span>
+            </div>
           {:else}
-            <p>In your browser’s menu, choose <b>Install app</b> or <b>Add to Home screen</b>.</p>
+            {#await import('./Offline.svelte') then m}
+              <m.default
+                state={linkState}
+                pc={pc.name}
+                canWake={!!pc.wake && pcs.length > 1}
+                paired={pcs.length}
+                {waking}
+                onwake={() => void wakeThrough(pc).catch((e: unknown) => (waking = errText(e)))}
+                onuse={() => openPc(pc.room)}
+                onforget={() => forget(pc.room)}
+              />
+            {/await}
           {/if}
-        </section>
-      {/if}
-      <p class="muted small">
-        Everything travels through the Vyro relay sealed with keys only this phone and your PC have; the relay cannot read
-        it. Whether this phone may change a PC is decided on that PC.
-      </p>
-    {/if}
+        {:else}
+          {#await import('./Home.svelte') then m}
+            <m.default
+              {pcs}
+              states={listStates}
+              words={STATE_TEXT}
+              {standalone}
+              {ios}
+              installable={installPrompt != null}
+              onopen={openPc}
+              onscan={scan}
+              onpaste={fromText}
+              oninstall={() => void install()}
+            />
+          {/await}
+        {/if}
+        {#if !immersive}<Footer />{/if}
+      </div>
+    {/key}
   </main>
+
+  {#if navOn && pc}
+    <BottomNav label={pc.name} {tabs} current={tab} onselect={select} />
+  {/if}
+  <Toasts raised={navOn} />
+
+  {#if sheetLoaded}
+    {#await import('./PcSheet.svelte') then m}
+      <m.default
+        open={pcSheet}
+        {pcs}
+        {current}
+        onclose={() => (pcSheet = false)}
+        onopen={openPc}
+        onall={goHome}
+        onpair={scan}
+        onleave={() => void leave()}
+      />
+    {/await}
+  {/if}
+
+  {#if news}
+    {#await import('./PhoneNews.svelte') then m}
+      <m.default from={news.from} onclose={remember} />
+    {/await}
+  {/if}
 </div>
 
+
 <style>
-  .tabs {
-    display: flex;
-    gap: 0.25rem;
-    margin: 0 0 0.9rem;
-    overflow-x: auto;
-    border-bottom: 1px solid var(--line);
+  .view {
+    min-width: 0;
+    animation: enter var(--dur-3) var(--ease-out);
   }
-  .tab {
-    flex: none;
-    padding: 0.5rem 0.75rem;
-    border-radius: 8px 8px 0 0;
-    background: transparent;
-    color: var(--muted);
-    font-weight: 600;
+  @keyframes enter {
+    from {
+      opacity: 0;
+      transform: translate(var(--dx, 0), var(--dy, 0));
+    }
   }
-  .tab[aria-current='page'] {
-    color: var(--text);
-    box-shadow: inset 0 -2px 0 var(--accent);
-  }
-  .bar-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    margin: 0.35rem 0 1rem;
-  }
-  .bar-row .tagline {
-    margin: 0;
-  }
-  .small-btn {
-    padding: 0.35rem 0.75rem;
-    font-size: 0.85rem;
-  }
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-top: 0.75rem;
-  }
-  ol {
+  .list {
     margin: 0.5rem 0;
     padding-left: 1.25rem;
     line-height: 1.5;
   }
-  .pcs {
+  .link-card {
     display: grid;
     gap: 0.5rem;
-    margin: 0.5rem 0 0;
+    justify-items: start;
+  }
+  .link-card p {
+    margin: 0;
+  }
+  .immersive main {
     padding: 0;
-    list-style: none;
-  }
-  .pc-row {
-    display: flex;
-    width: 100%;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.75rem 0.85rem;
-    border: 1px solid var(--line);
-    background: var(--bg);
-    color: var(--text);
-    font-weight: 600;
-    text-align: left;
-  }
-  .pc-name {
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-  .pc-state {
-    flex: none;
-    color: var(--muted);
-    font-size: 0.8rem;
-    font-weight: 500;
-  }
-  .pc-state.online {
-    color: var(--text);
-  }
-  .pc-state.online::before {
-    content: '';
-    display: inline-block;
-    width: 0.5rem;
-    height: 0.5rem;
-    margin-right: 0.35rem;
-    border-radius: 50%;
-    background: var(--ok);
-  }
-  .paste {
-    display: grid;
-    gap: 0.35rem;
-    margin-top: 1rem;
-    font-size: 0.85rem;
-  }
-  .paste-row {
-    display: flex;
-    gap: 0.5rem;
-  }
-  .paste-row input {
-    flex: 1;
-    min-width: 0;
   }
 </style>

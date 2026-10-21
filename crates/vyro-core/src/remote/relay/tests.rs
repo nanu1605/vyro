@@ -676,6 +676,8 @@ fn every_request_has_one_access_and_changes_need_control() {
         "screen.stop",
         "screen.slow",
         "screen.input",
+        "screen.clip",
+        "screen.audio",
     ] {
         assert_eq!(api::access(m), Some(api::Access::Screen), "{m}");
     }

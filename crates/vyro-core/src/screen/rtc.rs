@@ -8,7 +8,7 @@
 //! to fit ([`Session::estimate`]).
 
 use std::net::{IpAddr, SocketAddr, UdpSocket};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -24,6 +24,7 @@ use str0m::{Candidate, Event, IceConnectionState, Input, Output, Rtc, RtcConfig}
 
 use super::frames;
 use super::input;
+use super::producer::Quality;
 use super::stun;
 
 /// Frames waiting to be sent; more than this and the newest is dropped (the phone is behind).
@@ -77,8 +78,55 @@ pub struct Frame {
 pub enum SessionEvent {
     Connected,
     Input(input::Input),
+    /// A voice clip came on its own channel (1.7): a WAV ([`super::voice::read_wav`]), and
+    /// where to say what became of it.
+    Clip(Vec<u8>, ClipReply),
+    /// A frame of the phone's live microphone (1.7; [`super::voice::read_frame`]).
+    Mic(Vec<u8>),
     /// The session ended, and why.
     Closed(String),
+}
+
+/// Tells the phone what became of a clip, on the clip's channel, from any thread.
+#[derive(Clone)]
+pub struct ClipReply {
+    state: Arc<Mutex<State>>,
+    channel: ChannelId,
+}
+
+impl ClipReply {
+    /// `Ok(file name)` once it is on the clipboard, or why not.
+    pub fn send(&self, kept: Result<&str, &str>) {
+        let msg = match kept {
+            Ok(name) => serde_json::json!({ "t": "saved", "name": name }),
+            Err(why) => serde_json::json!({ "t": "error", "why": why }),
+        };
+        crate::lock(&self.state)
+            .replies
+            .push((self.channel, msg.to_string()));
+    }
+}
+
+impl std::fmt::Debug for ClipReply {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ClipReply")
+    }
+}
+
+impl PartialEq for ClipReply {
+    fn eq(&self, other: &Self) -> bool {
+        self.channel == other.channel
+    }
+}
+
+/// What each of the phone's data channels carries.
+enum Channel {
+    /// Input from the phone, notes to it ("input").
+    Input,
+    /// A voice clip ("clip").
+    Clip(super::voice::ClipStream),
+    /// The live microphone ("mic").
+    Mic,
 }
 
 pub type EventSink = Box<dyn Fn(SessionEvent) + Send>;
@@ -92,6 +140,8 @@ struct State {
     /// The newest report for the phone (what went out lately), likewise; kept apart so a report
     /// never takes a note's place.
     report: Option<(String, bool)>,
+    /// Answers to clips, for their channels.
+    replies: Vec<(ChannelId, String)>,
 }
 
 /// A running session. Dropping it ends it.
@@ -104,6 +154,8 @@ pub struct Session {
     gap: Arc<AtomicBool>,
     /// What the connection carries, bits a second (0: not known yet).
     estimate: Arc<AtomicU32>,
+    /// HD or SD, as the phone asked ([`Quality::to_u8`]).
+    quality: Arc<AtomicU8>,
     stop: Arc<AtomicBool>,
     state: Arc<Mutex<State>>,
     thread: Option<JoinHandle<()>>,
@@ -128,6 +180,15 @@ impl Session {
     /// Whether the phone asked for a keyframe (it lost one, or just connected); asking clears it.
     pub fn take_keyframe_request(&self) -> bool {
         self.keyframe.swap(false, Ordering::SeqCst)
+    }
+
+    /// HD or SD: what the phone asked for, at the start or since (1.7).
+    pub fn quality(&self) -> Quality {
+        Quality::from_u8(self.quality.load(Ordering::SeqCst))
+    }
+
+    pub fn set_quality(&self, q: Quality) {
+        self.quality.store(q.to_u8(), Ordering::SeqCst);
     }
 
     /// How many keyframes the phone has asked for since the session began.
@@ -260,6 +321,7 @@ pub fn start(
     let asked = Arc::new(AtomicU32::new(0));
     let gap = Arc::new(AtomicBool::new(false));
     let estimate = Arc::new(AtomicU32::new(0));
+    let quality = Arc::new(AtomicU8::new(Quality::default().to_u8()));
     let stop = Arc::new(AtomicBool::new(false));
     let state = Arc::new(Mutex::new(State::default()));
     let thread = {
@@ -268,6 +330,7 @@ pub fn start(
             asked: Arc::clone(&asked),
             gap: Arc::clone(&gap),
             estimate: Arc::clone(&estimate),
+            quality: Arc::clone(&quality),
             stop: Arc::clone(&stop),
         };
         let state = Arc::clone(&state);
@@ -287,6 +350,7 @@ pub fn start(
             asked,
             gap,
             estimate,
+            quality,
             stop,
             state,
             thread: Some(thread),
@@ -345,6 +409,8 @@ struct Flags {
     gap: Arc<AtomicBool>,
     /// What the connection carries, bits a second.
     estimate: Arc<AtomicU32>,
+    /// HD or SD.
+    quality: Arc<AtomicU8>,
     stop: Arc<AtomicBool>,
 }
 
@@ -354,7 +420,7 @@ fn run(
     socket: &UdpSocket,
     frames: &Receiver<Frame>,
     flags: &Flags,
-    state: &Mutex<State>,
+    state: &Arc<Mutex<State>>,
     events: &EventSink,
 ) -> String {
     let Flags {
@@ -362,12 +428,14 @@ fn run(
         asked,
         gap,
         estimate,
+        quality,
         stop,
     } = flags;
     let started = Instant::now();
     let local = socket.local_addr().ok();
     let mut video: Option<(Mid, str0m::format::PayloadParams)> = None;
     let mut channel: Option<ChannelId> = None;
+    let mut channels: std::collections::HashMap<ChannelId, Channel> = Default::default();
     // Until a keyframe goes, the phone can decode nothing (pictures build on the one before):
     // none is sent before it, after connecting and after a frame was lost.
     let mut need_key = true;
@@ -408,21 +476,64 @@ fn run(
                         let b = u32::try_from(b.as_u64()).unwrap_or(u32::MAX);
                         estimate.store(b.max(1), Ordering::SeqCst);
                     }
+                    Event::ChannelOpen(id, label) if label == "clip" => {
+                        channels.insert(id, Channel::Clip(Default::default()));
+                    }
+                    Event::ChannelOpen(id, label) if label == "mic" => {
+                        channels.insert(id, Channel::Mic);
+                    }
                     Event::ChannelOpen(id, _) => {
                         channel = Some(id);
+                        channels.insert(id, Channel::Input);
                         let mut s = crate::lock(state);
                         let State { note, report, .. } = &mut *s;
                         for (_, due) in [note, report].into_iter().flatten() {
                             *due = true;
                         }
                     }
-                    Event::ChannelClose(id) if channel == Some(id) => channel = None,
+                    Event::ChannelClose(id) => {
+                        channels.remove(&id);
+                        if channel == Some(id) {
+                            channel = None;
+                        }
+                    }
+                    Event::ChannelData(d) if matches!(channels.get(&d.id), Some(Channel::Mic)) => {
+                        events(SessionEvent::Mic(d.data));
+                    }
+                    Event::ChannelData(d)
+                        if matches!(channels.get(&d.id), Some(Channel::Clip(_))) =>
+                    {
+                        let Some(Channel::Clip(clip)) = channels.get_mut(&d.id) else {
+                            continue;
+                        };
+                        let reply = ClipReply {
+                            state: Arc::clone(state),
+                            channel: d.id,
+                        };
+                        let got = if d.binary {
+                            clip.binary(&d.data).map(|()| None)
+                        } else {
+                            clip.text(&String::from_utf8_lossy(&d.data))
+                        };
+                        match got {
+                            Ok(Some(bytes)) => events(SessionEvent::Clip(bytes, reply)),
+                            Ok(None) => {}
+                            Err(why) => {
+                                log::info!("screen: a clip refused: {why}");
+                                reply.send(Err(&why));
+                            }
+                        }
+                    }
                     Event::ChannelData(d) => {
                         let text = String::from_utf8_lossy(&d.data);
                         match input::parse(&text) {
                             Ok(input::Input::Picture) => {
                                 log::info!("screen: the phone asked for a whole picture");
                                 asked.fetch_add(1, Ordering::SeqCst);
+                                keyframe.store(true, Ordering::SeqCst);
+                            }
+                            Ok(input::Input::Quality { q }) => {
+                                quality.store(q.to_u8(), Ordering::SeqCst);
                                 keyframe.store(true, Ordering::SeqCst);
                             }
                             Ok(i) => events(SessionEvent::Input(i)),
@@ -453,6 +564,15 @@ fn run(
         }
         if gap.swap(false, Ordering::SeqCst) {
             need_key = true;
+        }
+        // Answers to clips, on their channels.
+        let replies = std::mem::take(&mut crate::lock(state).replies);
+        for (id, text) in replies {
+            if let Some(mut ch) = rtc.channel(id) {
+                if let Err(e) = ch.write(false, text.as_bytes()) {
+                    log::debug!("screen: a clip's answer not sent: {e}");
+                }
+            }
         }
         // A note for the phone, once its channel is open.
         if channel.is_some_and(|id| send_note(&mut rtc, id, state)) {
