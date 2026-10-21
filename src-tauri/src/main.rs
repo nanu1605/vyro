@@ -19,6 +19,7 @@ mod smoke;
 mod snap;
 mod tray;
 mod updates;
+mod whats_new;
 mod widgets;
 
 use tauri::Manager;
@@ -42,6 +43,7 @@ fn main() {
     // Release builds only: the release workflow adds the updater's public key.
     let can_update = updates::configured(context.config());
     let current = context.package_info().version.to_string();
+    let version = current.clone();
 
     let mut builder = tauri::Builder::default()
         // First: a second launch (Start menu while Vyro sits in the tray) shows the running
@@ -59,6 +61,8 @@ fn main() {
             // The window starts hidden (tauri.conf.json); autostart passes --minimized to stay
             // in the tray.
             let minimized = std::env::args().any(|a| a == vyro_core::autostart::MINIMIZED_ARG);
+            // First: it looks for an earlier Vyro's files before this start writes any.
+            app.manage(whats_new::WhatsNew::load(app.handle(), &version));
             let engine = Engine::start(app.handle(), !minimized)?;
             app.manage(overlay::Overlay::default());
             app.manage(gaming::GameState::default());
@@ -85,6 +89,7 @@ fn main() {
             device_watch::start(app.handle());
             // CI's smoke test of the installed app (only with VYRO_SMOKE set).
             smoke::start();
+            whats_new::announce(app.handle(), minimized);
             if minimized {
                 tray::park_after_start(app.handle());
             } else {
@@ -183,6 +188,8 @@ fn main() {
             updates::get_update_status,
             updates::check_for_updates,
             updates::install_update,
+            whats_new::get_whats_new,
+            whats_new::whats_new_seen,
         ])
         .build(context)
         .expect("failed to build the Tauri application");

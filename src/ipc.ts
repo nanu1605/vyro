@@ -573,6 +573,36 @@ export async function installUpdate(): Promise<void> {
   await invoke('install_update');
 }
 
+/** What's new (1.5): the notes waiting to be shown after an update, or null. */
+export interface WhatsNewAnswer {
+  /** This Vyro's version. */
+  current: string;
+  /** The version updated from; null: a Vyro before 1.5. */
+  from: string | null;
+}
+
+let browserWhatsNewSeen = false;
+
+export async function getWhatsNew(): Promise<WhatsNewAnswer | null> {
+  if (!inTauri) {
+    // Preview: ?whatsnew (or ?whatsnew=1.4.1) shows the newest notes as after an update.
+    const q = new URLSearchParams(location.search);
+    if (!q.has('whatsnew') || browserWhatsNewSeen) return null;
+    const { NOTES } = await import('./whatsnew');
+    return { current: NOTES[0]?.version ?? '', from: q.get('whatsnew') || null };
+  }
+  return invoke<WhatsNewAnswer | null>('get_whats_new');
+}
+
+/** The notes were shown: not again for this version. */
+export async function whatsNewSeen(): Promise<void> {
+  if (!inTauri) {
+    browserWhatsNewSeen = true;
+    return;
+  }
+  await invoke('whats_new_seen');
+}
+
 let browserAutostart = false;
 
 /** Whether Vyro starts (in the tray) at sign-in. */
