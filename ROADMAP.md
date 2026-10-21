@@ -2678,6 +2678,26 @@ show on the phone).
       that a PC connected past the first check keeps its room a whole life after leaving. The
       relay's tests also gained the frame size limit either way, the PC's rate, and a PC that
       leaves and comes back.
+- [x] **My PC: the case's fans show from outside** (1.5 field check, 2026-10-21: the case was
+      solid where its fans are, so they showed only through the glass). The front is now a
+      frame round perforated steel, the top is perforated over the radiator's place, and the
+      back has a round grille at the rear fan; from a little way off the metal reads as
+      see-through, as a mesh case does. A test checks that every case and radiator fan the
+      model can place sits behind one of these openings.
+- [x] **CPU use as this PC's Task Manager shows it; readings go out as soon as they are
+      read** (1.5 field check, 2026-10-21: Vyro's numbers differed from Task Manager's, and the
+      gauges lagged it). Windows 11 24H2's update of May 2025 moved Task Manager to the
+      standard `% Processor Time` on every page; Vyro read `% Processor Utility`, what Task
+      Manager showed before, which counts a processor boosting above its base clock as busier,
+      so on a laptop Vyro read well above Task Manager. Vyro now reads the counter this
+      build's Task Manager shows: processor time from build 26100, utility before it (a test
+      covers the choice; the log names the counter). Each snapshot went out only after every
+      provider had read, and the CPU was read first, so the sensor chips, the SMBus, the
+      drives, the network and the GPU's libraries all came between the CPU's reading and the
+      gauge: memory, CPU and processes are now read last, just before it goes out. A provider
+      whose read takes over 250 ms is logged (at most every 5 minutes), to find what else
+      holds a reading up. Memory, GPU, disk and network already use Task Manager's own sources
+      and sums.
 - [ ] Field check 1.5 ([`docs/field-check-1.5.md`](docs/field-check-1.5.md)); 1.4.1 released
       first; the owner's go. Then the relay is deployed (`relay.yml`), which serves the new
       phone app.

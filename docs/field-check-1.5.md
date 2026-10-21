@@ -70,6 +70,20 @@ and, for waking, a second PC with Vyro on the same wired network, if you have on
 - The LAN page (Settings → Remote → On this network) still only shows readings.
 - Task Manager: Vyro's idle CPU and memory as with 1.4.1.
 
+## 6. Found during this check (2026-10-21)
+
+- **My PC → PC:** turn the model to its front, top and back. The front fans show through the
+  mesh front, the rear fan through its round grille, and with an AIO the radiator's fans
+  through the top. From the glass side nothing changed.
+- **Readings against Task Manager:** profile Desktop (the tray shows it; Gaming and Work read
+  every 2 s, Silent every 5 s, by design). Task Manager → Performance next to Vyro's
+  Dashboard: CPU utilization within a few percent of Vyro's CPU gauge, both moving at the
+  same moments; Memory's "used/total (%)" the same as Vyro's Memory. Run something heavy for
+  a few seconds (a benchmark, a game loading) and watch both climb together.
+- The app log (`%LOCALAPPDATA%\app.vyro.monitor\logs`) says `cpu: usage from % Processor
+  Time` on Windows 11 24H2 or later (`% Processor Utility` before). Note any line
+  `provider …: a poll took … ms`: it names a read that still holds the readings up.
+
 ## Results
 
 | Step | Result | Notes |
@@ -79,3 +93,5 @@ and, for waking, a second PC with Vyro on the same wired network, if you have on
 | 3. Doing things from the phone |  |  |
 | 4. Waking it |  |  |
 | 5. Nothing else changed |  |  |
+| 6. Fans from outside |  |  |
+| 6. Readings against Task Manager |  |  |

@@ -69,7 +69,15 @@ struct Slot {
     provider: Box<dyn Provider>,
     enabled: bool,
     last_error: Option<String>,
+    /// When a slow poll was last logged.
+    slow_logged: Option<Instant>,
 }
+
+/// A provider's poll longer than this is logged: the snapshot, and every reading in it, waits
+/// for it (1.5 field check: the gauges lagged Task Manager).
+const SLOW_POLL: Duration = Duration::from_millis(250);
+/// At most one such line per provider this often.
+const SLOW_LOG_EVERY: Duration = Duration::from_secs(300);
 
 pub struct Poller {
     slots: Vec<Slot>,
@@ -114,6 +122,7 @@ impl Poller {
             provider,
             enabled: true,
             last_error: None,
+            slow_logged: None,
         });
         self
     }
@@ -245,7 +254,18 @@ impl Poller {
         let mut reg = lock(&self.registry);
         for slot in self.slots.iter_mut().filter(|s| s.enabled) {
             let name = slot.provider.name();
-            match catch_unwind(AssertUnwindSafe(|| slot.provider.poll(&mut reg, &mut snap))) {
+            let started = Instant::now();
+            let polled = catch_unwind(AssertUnwindSafe(|| slot.provider.poll(&mut reg, &mut snap)));
+            let took = started.elapsed();
+            if took > SLOW_POLL
+                && slot
+                    .slow_logged
+                    .is_none_or(|t| t.elapsed() >= SLOW_LOG_EVERY)
+            {
+                log::info!("provider {name}: a poll took {} ms", took.as_millis());
+                slot.slow_logged = Some(Instant::now());
+            }
+            match polled {
                 Ok(Ok(())) => {
                     if slot.last_error.take().is_some() {
                         log::info!("provider {name}: recovered");
