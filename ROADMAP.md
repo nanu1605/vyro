@@ -3054,6 +3054,16 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
 - [x] **The relay deployed again** from this branch at a9c603f (2026-10-23, at the owner's go;
       Actions run 39972847059, its tests first), so phones get the SD offer in full screen the
       next time they open the app.
+- [x] **The phone app against older PCs, redesigned** (2026-10-23, the companion example of
+      each branch on a local relay): with PCs on 1.4.1 (the version released), 1.5, 1.6 and
+      1.7 it pairs and reads, shows the tabs each one offers (none on 1.4.1, readings only),
+      fits at 320 and 390 px with the footer on every screen and the list of PCs, and shows a
+      PC that went away as asleep. One thing was wrong: the phone's What's new told a phone
+      whose PC is still on 1.4.1 "What's new in Vyro 1.7" (the PC's screen, HD/SD, voice),
+      which that PC cannot do yet. It now tells only what the open PC's Vyro has, and the rest
+      once the PC is updated (a unit test with older PCs; the end-to-end test shows it once to
+      a phone that used an older app, and not again). It reaches phones with the next relay
+      deploy, at the owner's go.
 - Administrator prompts stay unseen in 1.7, by the owner's choice (field check, 2026-10-19:
   the phone shows its secure-screen line, as designed). Seeing and answering them would need
   the service to capture and type on the secure desktop as SYSTEM, behind its own permission;

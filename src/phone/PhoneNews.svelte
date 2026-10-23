@@ -1,6 +1,7 @@
 <script lang="ts">
-  // What's new for the phone (1.7): once, the first time the app opens after it changed. The
-  // notes are the PC's (src/whatsnew.ts), those marked for the phone. Loaded only when it shows.
+  // What's new for the phone (1.7): once, the first time the app opens after it changed, up to
+  // the open PC's version. The notes are the PC's (src/whatsnew.ts), those marked for the phone.
+  // Loaded only when it shows.
   import type { Component } from 'svelte';
   import CircleX from '@lucide/svelte/icons/circle-x';
   import Cpu from '@lucide/svelte/icons/cpu';
@@ -12,15 +13,17 @@
   import Smartphone from '@lucide/svelte/icons/smartphone';
   import Sparkles from '@lucide/svelte/icons/sparkles';
   import Sunrise from '@lucide/svelte/icons/sunrise';
-  import { NOTES, notesSince, shortVersion, type NoteIcon } from '../whatsnew';
+  import { notesSince, shortVersion, type NoteIcon } from '../whatsnew';
   import Sheet from './ui/Sheet.svelte';
 
   interface Props {
     /** The newest notes this phone showed; null: never (the app from before 1.7). */
     from: string | null;
-    onclose: (newest: string) => void;
+    /** The newest notes to show: the open PC's version, or this app's newest. */
+    upTo: string;
+    onclose: (shown: string) => void;
   }
-  let { from, onclose }: Props = $props();
+  let { from, upTo, onclose }: Props = $props();
 
   const ICONS: Record<NoteIcon, Component> = {
     phone: Smartphone,
@@ -35,12 +38,11 @@
     sparkles: Sparkles,
   };
 
-  const newest = NOTES[0]?.version ?? '';
-  const items = $derived(notesSince(from, newest).flatMap((r) => r.items.filter((i) => i.phone)));
+  const items = $derived(notesSince(from, upTo).flatMap((r) => r.items.filter((i) => i.phone)));
   let open = $state(true);
 </script>
 
-<Sheet {open} title="What’s new in Vyro {shortVersion(newest)}" onclose={() => ((open = false), onclose(newest))}>
+<Sheet {open} title="What’s new in Vyro {shortVersion(upTo)}" onclose={() => ((open = false), onclose(upTo))}>
   <ul class="items">
     {#each items as item, i (item.title)}
       {@const Icon = ICONS[item.icon]}
@@ -51,7 +53,7 @@
     {/each}
   </ul>
   <div class="actions">
-    <button type="button" class="got" onclick={() => ((open = false), onclose(newest))}>Got it</button>
+    <button type="button" class="got" onclick={() => ((open = false), onclose(upTo))}>Got it</button>
   </div>
 </Sheet>
 

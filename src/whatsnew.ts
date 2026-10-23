@@ -1,6 +1,6 @@
 // What's new (1.5): each version's notes, newest first. The app shows them once after Vyro was
 // updated (src-tauri/src/whats_new.rs decides when); the phone app shows the ones marked
-// `phone` after it changes. Every version gets an entry before it is released (a test checks
+// `phone` after it changes, up to the open PC's version. Every version gets an entry before it is released (a test checks
 // package.json's version has one).
 
 /** One of the icons the dialogs draw (WhatsNew.svelte). */
@@ -155,6 +155,16 @@ export function notesSince(from: string | null, current: string, notes: Release[
   const upTo = notes.filter((r) => compareVersions(r.version, current) <= 0);
   if (from === null) return upTo.slice(0, 1);
   return upTo.filter((r) => compareVersions(r.version, from) > 0);
+}
+
+/** The phone's notes (1.7) for a PC whose Vyro is `pc`, after those it showed up to `seen`:
+ * only up to the PC's version, since the phone app is newer than a PC not yet updated (the relay
+ * serves it to every phone) and what it brings needs the PC's Vyro too. `upTo`: the version to
+ * remember once shown, so the rest shows when the PC is updated. */
+export function phoneNotes(seen: string | null, pc: string, notes: Release[] = NOTES): { upTo: string; items: NoteItem[] } {
+  const newest = notes[0]?.version ?? '';
+  const upTo = compareVersions(pc, newest) < 0 ? pc : newest;
+  return { upTo, items: notesSince(seen, upTo, notes).flatMap((r) => r.items.filter((i) => i.phone)) };
 }
 
 /** "1.5.0" → "1.5"; a patch version stays whole ("1.5.1"). */

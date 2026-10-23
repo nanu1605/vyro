@@ -78,8 +78,8 @@
   let sheetLoaded = $state(false);
   /** A low battery on the PC: the dot on More, and what it says. */
   let lowBattery = $state<string | null>(null);
-  /** The phone's What's new: the newest notes it showed (null: none yet). */
-  let news = $state<{ from: string | null } | null>(null);
+  /** The phone's What's new: shown after the notes up to `from` (null: none yet), up to `upTo`. */
+  let news = $state<{ from: string | null; upTo: string } | null>(null);
   /** Something in the open tab hides the bars (the PC's screen, full screen). */
   let immersive = $state(false);
 
@@ -340,22 +340,33 @@
     await p?.prompt();
   }
 
-  /** The phone's What's new: once after the app changed, for a phone already in use. */
-  async function checkNews(): Promise<void> {
+  /** The phone's What's new: once after the app changed, for a phone already in use, and only
+   * what the open PC's Vyro (`pc`) has too; the rest once the PC is updated. */
+  async function checkNews(pc: string): Promise<void> {
     let seen: string | null = null;
     try {
       seen = localStorage.getItem(NEWS_KEY);
     } catch {
       return;
     }
-    const { NOTES, notesSince } = await import('../whatsnew');
+    const { NOTES, phoneNotes } = await import('../whatsnew');
     const newest = NOTES[0]?.version ?? '';
     if (seen === newest) return;
+    const { upTo, items } = phoneNotes(seen, pc, NOTES);
     // A phone new to Vyro has nothing to compare with: it starts from here.
-    if (!pairedBefore) return seen ? undefined : remember(newest);
-    if (notesSince(seen, newest).some((r) => r.items.some((i) => i.phone))) news = { from: seen };
-    else remember(newest);
+    if (!pairedBefore) return seen ? undefined : remember(upTo);
+    if (items.length) news = { from: seen, upTo };
+    else if (upTo === newest) remember(newest);
   }
+
+  // Asked once the open PC says which Vyro it runs.
+  let newsFor = '';
+  $effect(() => {
+    const pc = info?.version;
+    if (!pc || pc === newsFor) return;
+    newsFor = pc;
+    void checkNews(pc).catch(() => {});
+  });
 
   function remember(version: string): void {
     news = null;
@@ -373,7 +384,6 @@
       if (first && !notice) openPc(first.room);
       else if (pcs.length) startList();
     }
-    void checkNews().catch(() => {});
     const tick = setInterval(() => (now = Date.now()), 1000);
     const onVisibility = () => {
       link?.setWatch(!document.hidden);
@@ -549,7 +559,7 @@
 
   {#if news}
     {#await import('./PhoneNews.svelte') then m}
-      <m.default from={news.from} onclose={remember} />
+      <m.default from={news.from} upTo={news.upTo} onclose={remember} />
     {/await}
   {/if}
 </div>

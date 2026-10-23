@@ -10,8 +10,8 @@
 // the same link refused the second time; checks that nothing on the wire between the phone and
 // the relay is readable; signs the phone out from the PC; shows a PC that went away as asleep;
 // and runs axe on each screen at phone and desktop width. From 1.7 also: no screen scrolls
-// sideways at 320, 360, 390 or 430 px, and every tab and sheet again on the light theme. Exits 1
-// on any failure. With
+// sideways at 320, 360, 390 or 430 px, every tab and sheet again on the light theme, and the
+// phone's What's new shows once to a phone that used an older app. Exits 1 on any failure. With
 // SHOTS=<folder>, it also saves a screenshot of each screen there.
 
 import { spawn } from 'node:child_process';
@@ -433,6 +433,28 @@ async function main() {
     const cut = (await a.page.evaluate(() => window.__closes)).filter((c) => c.code === 1008);
     if (cut.length) problem('pace', `the relay cut phone A off: ${cut.map((c) => c.reason).join(', ')}`);
     else ok('the relay never cut the phone off for asking too fast');
+
+    // The phone's What's new (1.7): none for a phone that paired just now; once for one that
+    // used an older app, up to the PC's Vyro (1.7.0 here; an older PC's is a unit test).
+    const news = a.page.getByRole('dialog', { name: /^What’s new in Vyro/ });
+    if (await news.count()) problem('phone news', 'shows to a phone that paired just now');
+    await a.page.evaluate(() => localStorage.setItem('vyro.phone.news', '1.6.0'));
+    await a.page.reload();
+    await news.waitFor({ timeout: 10_000 }).then(
+      async () => {
+        const title = await news.getByRole('heading').first().innerText();
+        if (title === 'What’s new in Vyro 1.7') ok("a phone that used an older app hears what's new once");
+        else problem('phone news', `titled "${title}"`);
+      },
+      (e) => problem('phone news', `not shown to a phone that used an older app: ${e.message}`),
+    );
+    await axeBoth(a.page, "phone app, what's new");
+    await news.getByRole('button', { name: 'Got it' }).click();
+    await a.page.reload();
+    await seeText(a.page, 'Live', 'phone A again');
+    await a.page.waitForTimeout(1500);
+    if (await news.count()) problem('phone news', 'shows again after Got it');
+    else ok("…and not again after Got it");
 
     // On mobile data (1.7): the phone asks HD or SD before it starts, once. The connection is
     // one the test can change, as a phone's does when Wi-Fi goes.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareVersions, NOTES, notesSince, shortVersion, type Release } from './whatsnew';
+import { compareVersions, NOTES, notesSince, phoneNotes, shortVersion, type Release } from './whatsnew';
 
 const r = (version: string): Release => ({ version, items: [{ icon: 'sparkles', title: version, text: '' }] });
 const SAMPLE = [r('1.7.0'), r('1.6.0'), r('1.5.1'), r('1.5.0')];
@@ -37,6 +37,29 @@ describe('what’s new', () => {
   it('shows this version’s notes after an update from before 1.5', () => {
     expect(notesSince(null, '1.5.0', SAMPLE).map((n) => n.version)).toEqual(['1.5.0']);
     expect(notesSince(null, '1.6.0', SAMPLE).map((n) => n.version)).toEqual(['1.6.0']);
+  });
+
+  it('tells the phone only of what the open PC has', () => {
+    const notes: Release[] = [
+      { version: '1.7.0', items: [{ icon: 'screen', title: 'Screen', text: '', phone: true }, { icon: 'sparkles', title: 'PC only', text: '' }] },
+      { version: '1.6.0', items: [{ icon: 'phone', title: 'Presets', text: '', phone: true }] },
+      { version: '1.5.0', items: [{ icon: 'phone', title: 'Control', text: '', phone: true }] },
+    ];
+    const titles = (seen: string | null, pc: string) => {
+      const n = phoneNotes(seen, pc, notes);
+      return [n.upTo, n.items.map((i) => i.title)];
+    };
+    // A PC on the newest Vyro: everything after what the phone showed, phone items only.
+    expect(titles('1.5.0', '1.7.0')).toEqual(['1.7.0', ['Screen', 'Presets']]);
+    expect(titles(null, '1.7.0')).toEqual(['1.7.0', ['Screen']]);
+    // A PC not yet updated: nothing from its future, and the rest is kept for when it is.
+    expect(titles(null, '1.4.1')).toEqual(['1.4.1', []]);
+    expect(titles('1.5.0', '1.6.0')).toEqual(['1.6.0', ['Presets']]);
+    expect(titles('1.6.0', '1.6.0')).toEqual(['1.6.0', []]);
+    // Shown already for a newer PC: nothing for an older one.
+    expect(titles('1.7.0', '1.5.0')).toEqual(['1.5.0', []]);
+    // A PC newer than this phone app: up to the app's newest notes.
+    expect(titles('1.6.0', '1.8.0')).toEqual(['1.7.0', ['Screen']]);
   });
 
   it('shortens a .0 version', () => {
