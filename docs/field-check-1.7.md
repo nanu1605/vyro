@@ -1,13 +1,14 @@
 # Field check: 1.7 (the PC's screen on the phone)
 
-Status: **1–7 done, 2026-10-19, except the slow view (not tried); 8–12 (the owner's requests of
-2026-10-21) to do, on `vyro-windows-68d0d6c` (CI run 39952173968, every job green; the phone's
-microphone ends at once when turned off and rides out a stalled link) with the relay deployed
-from 3d80a68 (the same phone app; run 39946326727, 2026-10-23, at the owner's go).** Test build: **`vyro-windows-3095d4f`** (CI run 39272496314, every job green),
-version 1.7.0, or the artifact of any later green run on `claude/vyro-1.7`. Install the MSI over
-1.6, and open the phone app from the relay this branch deploys (or the branch's own relay; see
-`docs/remote.md` → Running your own relay). The relay was last deployed from 3d80a68 (run
-39946326727); reload the phone app once to get it. About 60 minutes, with an Android phone (Chrome) and an iPhone (Safari, the Home Screen app).
+Status: **1–7 done, 2026-10-19 (see Results), except the slow view (not tried); 8–12 (the
+owner's requests of 2026-10-21) to do.** Test build now: **`vyro-windows-68d0d6c`** (CI run
+39952173968, every job green, version 1.7.0; the phone's microphone ends at once when turned off
+and rides out a stalled link), or the artifact of any later green run on `claude/vyro-1.7`
+(before it, `vyro-windows-3095d4f` for 1–7). Install the MSI over 1.6, and open the phone app
+from the relay this branch deploys (or the branch's own relay; see `docs/remote.md` → Running
+your own relay). The relay was last deployed from 3d80a68 (the same phone app; run 39946326727,
+2026-10-23, at the owner's go); reload the phone app once to get it. About 60 minutes, with an
+Android phone (Chrome) and an iPhone (Safari, the Home Screen app).
 
 1.7 answers the owner's request to "see what is running on the PC from the phone, and use the
 system from the phone" (ROADMAP → 1.7.0, decision 38): directly where it can, and a slow view
