@@ -3046,6 +3046,12 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       now waits up to 10 s for a reading with CPU use; the same test was on 1.5 and 1.6, so the
       fix went in on 1.5 (428d5c6) and merged forward (both CI green). The phone app did not
       change, so the relay deployed from 3d80a68 serves it. Test build `vyro-windows-68d0d6c`.
+- [x] **CI green** on 688110f (run 39965523307), every job, with HD/SD taking effect on a still
+      screen (a producer test makes the SD and HD encoders on one; on the Windows runner a
+      capture asked again gives its still screen once more) and, in full screen, the SD offer
+      over the picture (the end-to-end test, 124 checks, moves a full-screen session onto
+      mobile data and switches). Test build `vyro-windows-688110f`. The phone's part of it
+      (the offer in full screen) reaches phones with the next relay deploy, at the owner's go.
 - Administrator prompts stay unseen in 1.7, by the owner's choice (field check, 2026-10-19:
   the phone shows its secure-screen line, as designed). Seeing and answering them would need
   the service to capture and type on the secure desktop as SYSTEM, behind its own permission;
