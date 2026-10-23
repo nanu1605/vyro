@@ -104,6 +104,9 @@ struct Slow {
     last: Option<vyro_core::screen::capture::Picture>,
     /// A newer picture than the phone has.
     fresh: bool,
+    /// HD or SD, as the last picture went: one asked for the other is sent again, though the
+    /// screen did not change.
+    sent: Option<vyro_core::screen::producer::Quality>,
     asked: Option<Instant>,
     /// Milliseconds used and not yet counted against today's allowance.
     pending_ms: u64,
@@ -613,6 +616,7 @@ mod win {
                         capture,
                         last: None,
                         fresh: false,
+                        sent: None,
                         asked: None,
                         pending_ms: 0,
                     })),
@@ -676,14 +680,20 @@ mod win {
             }
             Err(CaptureError::Other(e)) => return Err(e),
         }
-        let Some(p) = view.last.as_ref().filter(|_| view.fresh) else {
+        let asked = quality_param(r);
+        let Some(p) = view
+            .last
+            .as_ref()
+            .filter(|_| view.fresh || view.sent != Some(asked))
+        else {
             return Ok(json!({ "same": true, "left": left }));
         };
-        let ((max_w, max_h), quality) = quality_param(r).slow();
+        let ((max_w, max_h), quality) = asked.slow();
         let (w, h) = frames::fit(p.width, p.height, max_w, max_h);
         let bgr = frames::bgra_to_bgr(&p.bgra, p.width, p.height, p.width as usize * 4, w, h);
         let jpeg = jpeg::encode(&bgr, w, h, quality)?;
         view.fresh = false;
+        view.sent = Some(asked);
         Ok(json!({ "jpeg": b64url(&jpeg), "w": w, "h": h, "left": left }))
     }
 

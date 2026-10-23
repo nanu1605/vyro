@@ -775,6 +775,72 @@ fn sd_spares_mobile_data() {
     }
 }
 
+/// A switch to SD, and back, takes effect at once on a still screen too: the picture is taken
+/// again at the new size, rather than the last one going on at the old size until something
+/// moves (the phone's own button does not move anything on the PC).
+#[test]
+fn a_quality_switch_takes_effect_on_a_still_screen() {
+    use producer::Quality;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex};
+    let mut phone = RtcConfig::new()
+        .clear_codecs()
+        .enable_h264(true)
+        .build(Instant::now());
+    let sock = UdpSocket::bind("127.0.0.1:0").unwrap();
+    phone.add_local_candidate(Candidate::host(sock.local_addr().unwrap(), "udp").unwrap());
+    let mut api = phone.sdp_api();
+    api.add_media(MediaKind::Video, Direction::RecvOnly, None, None, None);
+    api.add_channel("input".into());
+    let (offer, _pending) = api.apply().unwrap();
+    let opts = Options {
+        hosts: vec!["127.0.0.1".parse().unwrap()],
+        stun: Vec::new(),
+        stun_timeout: Duration::ZERO,
+    };
+    let (session, _answer) = rtc::start(&offer.to_sdp_string(), &opts, Box::new(|_| {})).unwrap();
+    let session = Arc::new(session);
+    let stop = Arc::new(AtomicBool::new(false));
+    let screen = TestScreen::new(1920, 1080);
+    screen.moving.store(false, Ordering::SeqCst);
+    // Each encoder made: its size and pictures a second.
+    let made = Arc::new(Mutex::new(Vec::<(u32, u32, u32)>::new()));
+    let producing = {
+        let (session, stop, made) = (Arc::clone(&session), Arc::clone(&stop), Arc::clone(&made));
+        std::thread::spawn(move || {
+            producer::drive(
+                &session,
+                &producer::Settings::default(),
+                &stop,
+                &|_| {},
+                screen,
+                |w, h, fps, bitrate| {
+                    made.lock().unwrap().push((w, h, fps));
+                    Ok(SizedEncoder { fps, bitrate, n: 0 })
+                },
+            )
+        })
+    };
+    let wait_for = |want: (u32, u32, u32), from: usize| {
+        let until = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < until {
+            if made.lock().unwrap()[from..].contains(&want) {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        panic!("no encoder for {want:?}: {:?}", made.lock().unwrap());
+    };
+    wait_for((1920, 1080, 30), 0);
+    session.set_quality(Quality::Sd);
+    wait_for((960, 540, 15), 1);
+    let n = made.lock().unwrap().len();
+    session.set_quality(Quality::Hd);
+    wait_for((1920, 1080, 30), n);
+    stop.store(true, Ordering::SeqCst);
+    producing.join().unwrap().unwrap();
+}
+
 /// The bit rate and step follow the connection: down at once, up only once the connection has
 /// carried more for a while, and the bit rate not for every small change.
 #[test]

@@ -901,7 +901,8 @@
       </div>
     {/if}
 
-    {#if error}<p class="error" role="alert">{error}</p>{/if}
+    <!-- In full screen these show over the picture instead, where they can be seen. -->
+    {#if error && !full}<p class="error" role="alert">{error}</p>{/if}
 
     {#if mode === 'idle' || mode === 'ended'}
       {#if why}<p class="note" role="status">The session ended: {why}.</p>{/if}
@@ -923,7 +924,7 @@
         <button type="button" class="go" onclick={show}>{why ? 'Show it again' : `Show ${pc}'s screen`}</button>
       </div>
     {:else}
-      {#if toMobile}
+      {#if toMobile && !full}
         <p class="note warn" role="status">
           You’re on mobile data now.
           <button type="button" class="ghost inline" onclick={() => setQuality('sd')}>Switch to SD</button>
@@ -982,6 +983,20 @@
           {/if}
           {#if keysOpen}
             <div class="drawer">{@render keyboard()}</div>
+          {/if}
+          {#if error || reconnecting || toMobile}
+            <div class="over">
+              {#if error}
+                <p class="note hot" role="alert">{error}</p>
+              {:else if reconnecting}
+                <p class="note">The connection to {pc} dropped. Reconnecting…</p>
+              {:else}
+                <p class="note warn" role="status">
+                  You’re on mobile data now.
+                  <button type="button" class="ghost inline" onclick={() => setQuality('sd')}>Switch to SD</button>
+                </p>
+              {/if}
+            </div>
           {/if}
         {/if}
       </div>
@@ -1150,6 +1165,22 @@
     overflow: hidden;
     clip: rect(0 0 0 0);
     white-space: nowrap;
+  }
+  /* In full screen, what the page says above the picture otherwise: over it, below the controls. */
+  .over {
+    position: absolute;
+    top: calc(env(safe-area-inset-top) + 4.25rem);
+    right: calc(env(safe-area-inset-right) + 0.5rem);
+    left: calc(env(safe-area-inset-left) + 0.5rem);
+    display: grid;
+    justify-items: center;
+    pointer-events: none;
+  }
+  .over .note {
+    max-width: min(100%, 30rem);
+    margin: 0;
+    background: color-mix(in srgb, var(--panel) 94%, transparent);
+    pointer-events: auto;
   }
   .drawer {
     position: absolute;

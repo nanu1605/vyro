@@ -434,13 +434,19 @@ async function main() {
     if (cut.length) problem('pace', `the relay cut phone A off: ${cut.map((c) => c.reason).join(', ')}`);
     else ok('the relay never cut the phone off for asking too fast');
 
-    // On mobile data (1.7): the phone asks HD or SD before it starts, once.
+    // On mobile data (1.7): the phone asks HD or SD before it starts, once. The connection is
+    // one the test can change, as a phone's does when Wi-Fi goes.
     await a.page.addInitScript(() =>
       Object.defineProperty(navigator, 'connection', {
         configurable: true,
-        value: { type: 'cellular', saveData: false, addEventListener() {}, removeEventListener() {} },
+        value: Object.assign(new EventTarget(), { type: 'cellular', saveData: false }),
       }),
     );
+    const network = (type) =>
+      a.page.evaluate((type) => {
+        navigator.connection.type = type;
+        navigator.connection.dispatchEvent(new Event('change'));
+      }, type);
     await a.page.reload();
     await seeText(a.page, 'Live', 'phone A again, now on mobile data');
     await tab('Screen');
@@ -457,6 +463,30 @@ async function main() {
       (e) => problem('mobile data', e.message),
     );
     if (!(await a.page.getByRole('button', { name: /^Quality: SD/ }).count())) problem('mobile data', 'the toolbar does not say SD');
+    await a.page.getByRole('button', { name: 'Stop', exact: true }).click();
+    // A session in HD on Wi-Fi that moves onto mobile data offers SD, in full screen too (where
+    // the page around the picture cannot be seen).
+    await network('wifi');
+    await a.page.getByRole('group', { name: 'Quality' }).getByRole('button', { name: 'HD', exact: true }).click();
+    await a.page.getByRole('button', { name: /^Show (it again|.*screen)$/ }).click();
+    await a.page.locator('.surface img, .surface video').first().waitFor({ timeout: 15_000 });
+    await a.page.getByRole('button', { name: 'Full screen' }).click();
+    await network('cellular');
+    const offer = a.page.locator('.stage.full .over').getByRole('button', { name: 'Switch to SD' });
+    await offer.waitFor({ timeout: 5000 }).then(
+      () => ok('in full screen, moving onto mobile data offers SD over the picture'),
+      (e) => problem('mobile data', e.message),
+    );
+    await axeBoth(a.page, 'phone app, screen (full screen, mobile data offer)');
+    if (await offer.count()) {
+      await offer.click();
+      await offer.waitFor({ state: 'detached', timeout: 5000 }).catch((e) => problem('mobile data', e.message));
+    }
+    const leave = a.page.getByRole('button', { name: 'Exit full screen' });
+    if (!(await leave.isVisible())) await a.page.getByRole('button', { name: 'Show the controls' }).click();
+    if (await a.page.getByRole('button', { name: /^Quality: SD/ }).count()) ok('…and switching takes the session to SD');
+    else problem('mobile data', 'Switch to SD left the toolbar on HD');
+    await leave.click();
     await a.page.getByRole('button', { name: 'Stop', exact: true }).click();
 
     // 2. The link works once.

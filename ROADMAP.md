@@ -2997,9 +2997,13 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
 - [x] **HD or SD**: SD sends at most 960×540, 15 pictures a second and 1 Mbit/s (about 7 MB a
       minute at most, HD up to 35), the slow view 640×400 at a lower JPEG quality. On mobile
       data (Android says so; iPhone does not) the phone asks before it starts, and remembers
-      the answer; a change to mobile data mid-session offers SD. The toolbar switches at once:
-      the PC rebuilds its pace for the new ceiling (`{t: "quality"}` over the data channel).
-      The phone's details say how much the session used.
+      the answer; a change to mobile data mid-session offers SD, over the picture in full
+      screen. The toolbar switches at once: the PC rebuilds its pace for the new ceiling
+      (`{t: "quality"}` over the data channel) and takes the screen again at the new size, so
+      a still screen changes too (a review found the first cut went on at the old size until
+      something on the PC moved, and the slow view likewise; in full screen the offer, a
+      dropped connection and errors could not be seen). The phone's details say how much the
+      session used.
 - [x] **Voice clips** (decision 39): the Clip tool records on the phone (16 kHz mono, up to
       5 minutes direct, 1 minute through the relay) and sends it: over its own data channel, or
       through the relay a piece a request (`screen.clip`). The PC keeps it in `Phone clips` as

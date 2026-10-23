@@ -151,7 +151,8 @@ pub struct Capture {
     ctx: ID3D11DeviceContext,
     device: ID3D11Device,
     output: IDXGIOutput1,
-    dup: IDXGIOutputDuplication,
+    /// None between letting the duplication go and a new one opening.
+    dup: Option<IDXGIOutputDuplication>,
     staging: Option<ID3D11Texture2D>,
     /// Converts an HDR desktop's pictures, once one came.
     hdr: Option<Hdr>,
@@ -323,7 +324,7 @@ impl Capture {
             ctx,
             device,
             output,
-            dup,
+            dup: Some(dup),
             staging: None,
             hdr: None,
             unusable: None,
@@ -335,17 +336,32 @@ impl Capture {
         })
     }
 
-    /// Opens the duplication again after [`CaptureError::Lost`].
+    /// Opens the duplication again after [`CaptureError::Lost`]. The old one goes first, as in
+    /// Microsoft's sample; until a new one opens, [`next`](Self::next) says the picture is lost.
     pub fn reopen(&mut self) -> Result<(), CaptureError> {
+        self.dup = None;
         // SAFETY: as in `open`.
-        self.dup = unsafe { self.output.DuplicateOutput(&self.device) }
+        let dup = unsafe { self.output.DuplicateOutput(&self.device) }
             .map_err(|e| other("duplication", &e))?;
-        describe(&self.monitor, &self.dup);
+        describe(&self.monitor, &dup);
+        self.dup = Some(dup);
         self.staging = None;
         self.hdr = None;
         self.blank_since = None;
         self.seen = false;
         Ok(())
+    }
+
+    /// The next look gives a picture though the screen did not change: the size sent changed
+    /// (HD or SD), and a still screen would otherwise go on at the old one. GDI forgets its last
+    /// picture; Desktop Duplication opens again, and its first frame is the whole desktop.
+    pub fn refresh(&mut self) {
+        if let Some(g) = &mut self.gdi {
+            g.last = None;
+        } else if let Err(e) = self.reopen() {
+            // `next` says the picture is lost, and the producer opens it again.
+            log::debug!("screen: {e}");
+        }
     }
 
     /// How the pictures are taken: "Desktop Duplication" (with "HDR" when they are converted),
@@ -475,10 +491,13 @@ impl Capture {
 
     /// The next picture through Desktop Duplication.
     fn duplicated(&mut self, timeout_ms: u32) -> Result<Option<Picture>, CaptureError> {
+        let Some(dup) = self.dup.clone() else {
+            return Err(CaptureError::Lost);
+        };
         let mut info = DXGI_OUTDUPL_FRAME_INFO::default();
         let mut res = None;
         // SAFETY: out pointers valid; every acquired frame is released below.
-        match unsafe { self.dup.AcquireNextFrame(timeout_ms, &mut info, &mut res) } {
+        match unsafe { dup.AcquireNextFrame(timeout_ms, &mut info, &mut res) } {
             Ok(()) => {}
             Err(e) if e.code() == DXGI_ERROR_WAIT_TIMEOUT => return Ok(None),
             Err(e) => return Err(other("capture", &e)),
@@ -530,7 +549,7 @@ impl Capture {
             }))
         })();
         // SAFETY: the frame acquired above.
-        let _ = unsafe { self.dup.ReleaseFrame() };
+        let _ = unsafe { dup.ReleaseFrame() };
         result
     }
 }
@@ -628,6 +647,16 @@ mod tests {
                         } else {
                             ""
                         }
+                    );
+                    // Asked again (HD or SD changed the size sent), a still screen gives its
+                    // picture once more.
+                    c.refresh();
+                    let again = (0..20).find_map(|_| c.next(100).ok().flatten());
+                    let again = again.expect("no picture in 2 s after asking for one again");
+                    assert_eq!((again.width, again.height), (p.width, p.height));
+                    eprintln!(
+                        "screen: asked again, captured {}x{}",
+                        again.width, again.height
                     );
                     return;
                 }

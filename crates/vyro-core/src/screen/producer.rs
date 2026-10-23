@@ -169,6 +169,9 @@ pub trait Source {
     fn next(&mut self, timeout_ms: u32) -> Result<Option<Picture>, CaptureError>;
     /// Starts again after [`CaptureError::Lost`] or [`CaptureError::Secure`].
     fn reopen(&mut self) -> Result<(), CaptureError>;
+    /// The next look gives a picture though the screen did not change (HD or SD changed the
+    /// size sent).
+    fn refresh(&mut self);
     /// Where the pictures are on the desktop (input goes there).
     fn rect(&self) -> Rect;
     /// How the pictures are taken, for the report.
@@ -335,6 +338,9 @@ impl Source for super::capture::Capture {
     fn reopen(&mut self) -> Result<(), CaptureError> {
         super::capture::Capture::reopen(self)
     }
+    fn refresh(&mut self) {
+        super::capture::Capture::refresh(self);
+    }
     fn rect(&self) -> Rect {
         self.monitor.rect
     }
@@ -388,6 +394,9 @@ pub fn drive<S: Source, E: Encode>(
             quality = session.quality();
             wanted = quality.apply(s);
             adapt = Adapt::new(&wanted, tick);
+            // Only the last picture as sent is kept: a still screen is taken again at the new
+            // size rather than going on at the old one until something moves.
+            cap.refresh();
             log::info!("screen: the phone asked for {quality:?}");
         }
         let change = adapt.update(session.estimate(), &wanted, tick);
@@ -600,6 +609,9 @@ impl Source for TestScreen {
     }
     fn reopen(&mut self) -> Result<(), CaptureError> {
         Ok(())
+    }
+    fn refresh(&mut self) {
+        self.shown = false;
     }
     fn rect(&self) -> Rect {
         Rect {

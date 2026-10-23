@@ -130,7 +130,9 @@ through the relay where it cannot.
   details under the picture say 960×540 at most, and how much data the session used. Show it
   again: it does not ask again (it remembered).
 - In a session on Wi-Fi in HD, turn Wi-Fi off: the phone offers "Switch to SD"; switching, or
-  **HD/SD** in the toolbar, changes the picture within a second or two.
+  **HD/SD** in the toolbar, changes the picture within a second or two, also with nothing
+  moving on the PC (the details under the picture say the new size). Again in full screen: the
+  offer shows over the picture.
 - iPhone (it does not say it is on mobile data): the HD/SD choice shows on the start card and in
   the toolbar.
 
