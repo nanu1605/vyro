@@ -227,9 +227,20 @@ mod tests {
             |_: &RemoteStatus| {},
         )
         .unwrap();
-        // Becoming visible ticks at once; the engine's first tick may still be running.
-        let snap = snaps.recv_timeout(Duration::from_secs(10)).unwrap();
-        assert!(snap.cpu.usage_total.is_some());
+        // Becoming visible ticks at once; the engine's first tick may still be running, and CPU
+        // use needs two samples, so on a busy machine the first readings can come without it.
+        let until = std::time::Instant::now() + Duration::from_secs(10);
+        let mut seen = 0;
+        loop {
+            let left = until.saturating_duration_since(std::time::Instant::now());
+            let snap = snaps
+                .recv_timeout(left)
+                .unwrap_or_else(|e| panic!("no CPU use in {seen} readings in 10 s: {e}"));
+            seen += 1;
+            if snap.cpu.usage_total.is_some() {
+                break;
+            }
+        }
         let rules = app.alert_rules().unwrap();
         app.set_alert_rules(rules).unwrap();
         app.shutdown();
