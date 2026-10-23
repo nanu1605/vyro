@@ -2715,6 +2715,9 @@ show on the phone).
       1.7 (cbbaddb, run 39654835985), every job each. Test build `vyro-windows-cbbaddb`. Locally:
       fmt, clippy (Linux and windows-gnu), 689 core tests, 214 frontend tests, the builds, the
       bundle budget, the case seen from front, top and back in the preview.
+- [x] **CI green** with What's new on a750861 (run 39671633762), merged into 1.6 (76c914b, run
+      39671904739) and 1.7 (422e8d0, run 39672234874), every job each. Test build
+      `vyro-windows-422e8d0`.
 - [ ] Field check 1.5 ([`docs/field-check-1.5.md`](docs/field-check-1.5.md)); 1.4.1 released
       first; the owner's go. Then the relay is deployed (`relay.yml`), which serves the new
       phone app.
