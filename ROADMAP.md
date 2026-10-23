@@ -3034,6 +3034,14 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       the worker. Test build `vyro-windows-78ab9ea` (36.4 MB archive). Locally: fmt, clippy
       (Linux and windows-gnu), 772 core and 55 app tests, 252 front-end tests, the builds, the
       budgets (phone 42.2 of 44 kB), 24 relay tests, the accessibility sweep (710 checks).
+- [x] **CI green again** on 68d0d6c (run 39952173968), every job, with the microphone ending at
+      once when the phone turns it off (the end-to-end test, 120 checks, checks it in CI's
+      Chrome) and riding out a stalled link. The run before it (55e93f1) failed the service's
+      own test, which took the first reading the app got and expected CPU use in it; CPU use
+      needs two samples, and on a busy runner the first reading can come before the second. It
+      now waits up to 10 s for a reading with CPU use; the same test was on 1.5 and 1.6, so the
+      fix went in on 1.5 (428d5c6) and merged forward (both CI green). The phone app did not
+      change, so the relay deployed from 3d80a68 serves it. Test build `vyro-windows-68d0d6c`.
 - Administrator prompts stay unseen in 1.7, by the owner's choice (field check, 2026-10-19:
   the phone shows its secure-screen line, as designed). Seeing and answering them would need
   the service to capture and type on the secure desktop as SYSTEM, behind its own permission;
