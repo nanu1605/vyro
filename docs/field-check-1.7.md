@@ -9,6 +9,8 @@ later green run on `claude/vyro-1.7` (before it, `vyro-windows-68d0d6c`, and
 this branch deploys (or the branch's own relay; see `docs/remote.md` → Running your own relay).
 The relay was last deployed from a9c603f (run 39972847059, 2026-10-23, at the owner's go), with
 every fix above, the SD offer in full screen among them; reload the phone app once to get it.
+One later phone fix (its What's new tells only what the open PC's Vyro has, 93cb9da) comes with
+the next relay deploy.
 About 60 minutes, with an Android phone (Chrome) and an iPhone (Safari, the Home Screen app).
 
 1.7 answers the owner's request to "see what is running on the PC from the phone, and use the

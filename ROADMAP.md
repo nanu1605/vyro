@@ -3062,8 +3062,10 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       whose PC is still on 1.4.1 "What's new in Vyro 1.7" (the PC's screen, HD/SD, voice),
       which that PC cannot do yet. It now tells only what the open PC's Vyro has, and the rest
       once the PC is updated (a unit test with older PCs; the end-to-end test shows it once to
-      a phone that used an older app, and not again). It reaches phones with the next relay
-      deploy, at the owner's go.
+      a phone that used an older app, and not again). CI green on 263354e (run 40002227086),
+      every job, the end-to-end test at 129 checks. It reaches phones with the next relay
+      deploy, at the owner's go; the PC's test build stays `vyro-windows-688110f` (the PC
+      app's only change since is this list of notes).
 - Administrator prompts stay unseen in 1.7, by the owner's choice (field check, 2026-10-19:
   the phone shows its secure-screen line, as designed). Seeing and answering them would need
   the service to capture and type on the secure desktop as SYSTEM, behind its own permission;
