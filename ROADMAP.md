@@ -3050,8 +3050,10 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       screen (a producer test makes the SD and HD encoders on one; on the Windows runner a
       capture asked again gives its still screen once more) and, in full screen, the SD offer
       over the picture (the end-to-end test, 124 checks, moves a full-screen session onto
-      mobile data and switches). Test build `vyro-windows-688110f`. The phone's part of it
-      (the offer in full screen) reaches phones with the next relay deploy, at the owner's go.
+      mobile data and switches). Test build `vyro-windows-688110f`.
+- [x] **The relay deployed again** from this branch at a9c603f (2026-10-23, at the owner's go;
+      Actions run 39972847059, its tests first), so phones get the SD offer in full screen the
+      next time they open the app.
 - Administrator prompts stay unseen in 1.7, by the owner's choice (field check, 2026-10-19:
   the phone shows its secure-screen line, as designed). Seeing and answering them would need
   the service to capture and type on the secure desktop as SYSTEM, behind its own permission;

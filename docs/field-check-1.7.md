@@ -7,11 +7,9 @@ microphone ends at once when turned off and rides out a stalled link), or the ar
 later green run on `claude/vyro-1.7` (before it, `vyro-windows-68d0d6c`, and
 `vyro-windows-3095d4f` for 1–7). Install the MSI over 1.6, and open the phone app from the relay
 this branch deploys (or the branch's own relay; see `docs/remote.md` → Running your own relay).
-The relay was last deployed from 3d80a68 (run 39946326727, 2026-10-23, at the owner's go);
-reload the phone app once to get it. Its phone app lacks one later fix: in full screen, the
-offer to switch to SD (step 10) shows only after a relay deploy from 688110f or later; until
-then, leave full screen to see it. About 60 minutes, with an Android phone (Chrome) and an
-iPhone (Safari, the Home Screen app).
+The relay was last deployed from a9c603f (run 39972847059, 2026-10-23, at the owner's go), with
+every fix above, the SD offer in full screen among them; reload the phone app once to get it.
+About 60 minutes, with an Android phone (Chrome) and an iPhone (Safari, the Home Screen app).
 
 1.7 answers the owner's request to "see what is running on the PC from the phone, and use the
 system from the phone" (ROADMAP → 1.7.0, decision 38): directly where it can, and a slow view
