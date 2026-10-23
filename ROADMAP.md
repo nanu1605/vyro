@@ -3016,8 +3016,10 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       offers a clip instead. The banner says when the phone's microphone is on.
 - [x] **The relay's page policy**: it refused the microphone (`microphone=()`), so the phone
       could not record at all; it now allows the page itself, and the audio worklet is a file
-      of the app's own (the policy runs no `blob:` or `data:` script). Phones get the new app
-      once the relay is deployed from this branch, at the owner's go.
+      of the app's own (the policy runs no `blob:` or `data:` script). The relay deployed from
+      this branch at 3d80a68 (2026-10-23, at the owner's go; Actions run 39946326727, its tests
+      first), so phones get the new app, its microphone and the redesign the next time they
+      open it.
 - [x] **CI green** on 78ab9ea (run 39940388920), every job. On the Windows runner a 1 s tone
       encodes to a 13 kB AAC file, the clipboard holds the file put there, and a clip pasted
       with Ctrl+V (as the phone's Paste key sends it) reaches the runner's browser as a file of
