@@ -1,7 +1,7 @@
 // What's new (1.5): each version's notes, newest first. The app shows them once after Vyro was
 // updated (src-tauri/src/whats_new.rs decides when); the phone app shows the ones marked
-// `phone` after it changes, up to the open PC's version. Every version gets an entry before it is released (a test checks
-// package.json's version has one).
+// `phone` after it changes, up to the open PC's version. Every version gets an entry before it
+// is released (a test checks package.json's version has one).
 
 /** One of the icons the dialogs draw (WhatsNew.svelte). */
 export type NoteIcon = 'phone' | 'end' | 'power' | 'wake' | 'fan' | 'gauge' | 'gpu' | 'screen' | 'mic' | 'sparkles';
