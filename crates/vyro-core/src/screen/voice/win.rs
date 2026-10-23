@@ -373,16 +373,18 @@ pub fn set_default_microphone(console: Option<&str>, calls: Option<&str>) -> Res
         // Owned from here: released when it goes.
         let _policy = windows::core::IUnknown::from_raw(raw);
         let vtbl = &**raw.cast::<*const PolicyConfigVtbl>();
+        // Each role on its own: one that fails (its device unplugged) leaves the other done.
+        let mut failed = None;
         for (id, role) in [(console, eConsole), (calls, eCommunications)] {
             if let Some(id) = id {
                 let id = HSTRING::from(id);
-                (vtbl.set_default_endpoint)(raw, PCWSTR(id.as_ptr()), role)
-                    .ok()
-                    .map_err(|e| format!("the default microphone: {e}"))?;
+                if let Err(e) = (vtbl.set_default_endpoint)(raw, PCWSTR(id.as_ptr()), role).ok() {
+                    failed.get_or_insert(format!("the default microphone: {e}"));
+                }
             }
         }
+        failed.map_or(Ok(()), Err)
     }
-    Ok(())
 }
 
 /// The phone's microphone played into a cable's playback side, from a jitter buffer the

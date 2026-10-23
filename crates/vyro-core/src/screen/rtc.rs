@@ -83,6 +83,8 @@ pub enum SessionEvent {
     Clip(Vec<u8>, ClipReply),
     /// A frame of the phone's live microphone (1.7; [`super::voice::read_frame`]).
     Mic(Vec<u8>),
+    /// The phone turned its microphone off (its channel closed).
+    MicEnd,
     /// The session ended, and why.
     Closed(String),
 }
@@ -492,7 +494,9 @@ fn run(
                         }
                     }
                     Event::ChannelClose(id) => {
-                        channels.remove(&id);
+                        if let Some(Channel::Mic) = channels.remove(&id) {
+                            events(SessionEvent::MicEnd);
+                        }
                         if channel == Some(id) {
                             channel = None;
                         }

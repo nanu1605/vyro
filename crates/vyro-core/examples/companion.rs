@@ -202,6 +202,10 @@ fn screen_start(r: &Request) -> Result<serde_json::Value, String> {
                 }
                 Err(e) => println!("screen: mic refused: {e}"),
             },
+            SessionEvent::MicEnd => {
+                MIC_ON.store(false, Ordering::SeqCst);
+                println!("screen: mic off");
+            }
             SessionEvent::Closed(why) => println!("screen: closed ({why})"),
         }),
     )?;

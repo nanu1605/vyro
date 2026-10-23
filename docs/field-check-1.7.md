@@ -156,8 +156,10 @@ through the relay where it cannot.
   level moves when you speak into the phone.
 - In WhatsApp Web, hold the voice-note button and speak into the phone: the note has your voice.
   The delay is short (note it), and it does not break up on Wi-Fi.
-- Tap **Mic** again: within 2 seconds Windows' default microphone is the one you noted. The
-  same after stopping the session on the PC with the Mic on.
+- On mobile data, while recording a note, walk somewhere the signal drops for a few seconds:
+  the note has silence there, not the room around the PC, and Windows' Input stays CABLE Output.
+- Tap **Mic** again: at once (within a second) Windows' default microphone is the one you noted.
+  The same after stopping the session on the PC with the Mic on.
 - Turn off "Make the cable Windows' default microphone…" in Settings → Remote: **Mic** then leaves
   the default alone and the phone says to choose CABLE Output in the app.
 

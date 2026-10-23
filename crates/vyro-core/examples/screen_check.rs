@@ -144,6 +144,7 @@ fn main() -> Result<(), String> {
                 reply.send(Ok("check.wav"));
             }
             SessionEvent::Mic(f) => println!("mic {} bytes", f.len()),
+            SessionEvent::MicEnd => println!("mic off"),
             SessionEvent::Closed(why) => println!("closed {why}"),
         }),
     )?;

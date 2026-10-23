@@ -328,7 +328,7 @@ fn end(app: &AppHandle, serial: u64, why: &str, by: By) {
         return;
     };
     live.stop.store(true, Ordering::SeqCst);
-    crate::voice::mic_off(app, why);
+    crate::voice::session_ended(app, why);
     #[cfg(windows)]
     if let Kind::Direct(s) = &live.kind {
         s.tell(share::Note::End { why: why.into() }.json());
@@ -521,6 +521,7 @@ mod win {
                     *lock(&used) = Instant::now();
                     crate::voice::mic_frame(&app, &phone, &frame);
                 }
+                SessionEvent::MicEnd => crate::voice::mic_off(&app, "turned off on the phone"),
                 SessionEvent::Closed(why) => end(&app, serial, &why, By::Phone),
             })
         };

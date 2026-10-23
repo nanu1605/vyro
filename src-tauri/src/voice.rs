@@ -26,8 +26,10 @@ const CLIPS: &str = "Phone clips";
 const RESTORE: &str = "mic-restore.json";
 /// Clips older than this are deleted.
 const KEEP: Duration = Duration::from_secs(7 * 24 * 60 * 60);
-/// The microphone stops when no frame came for this long (the phone turned it off).
-const QUIET: Duration = Duration::from_millis(1500);
+/// The microphone stops when no frame came for this long and the phone did not turn it off (it
+/// went to the background, or the link is gone). A stall shorter than this plays silence and
+/// leaves the default microphone alone, so a voice note being recorded keeps the cable.
+const QUIET: Duration = Duration::from_secs(10);
 /// After the cable failed to start, it is not tried again for this long.
 const RETRY: Duration = Duration::from_secs(10);
 const NO_CABLE: &str = "No virtual cable is installed on the PC. Install VB-CABLE (free, \
@@ -352,9 +354,9 @@ fn start(app: &AppHandle, phone: String) {
     {
         let mut mic = lock(&state.voice.mic);
         if !matches!(*mic, Mic::Starting) {
-            // The session ended meanwhile.
+            // Turned off, or the session ended, meanwhile.
             drop(mic);
-            stop(app, on, "the session ended");
+            stop(app, on, "turned off as it started");
             return;
         }
         *mic = Mic::On(Box::new(on));
@@ -402,7 +404,7 @@ fn watch(app: &AppHandle) {
                 return;
             };
             drop(mic);
-            stop(&app, *on, "turned off on the phone");
+            stop(&app, *on, "the phone stopped sending");
             return;
         });
     if let Err(e) = spawned {
@@ -410,7 +412,15 @@ fn watch(app: &AppHandle) {
     }
 }
 
-/// Ends the microphone, if it plays: the session ended.
+/// The session ended: the microphone stops, and a clip half sent through the relay goes.
+pub fn session_ended(app: &AppHandle, why: &str) {
+    if let Some(state) = state(app) {
+        *lock(&state.voice.pieces) = None;
+    }
+    mic_off(app, why);
+}
+
+/// Ends the microphone, if it plays (or stops it starting).
 pub fn mic_off(app: &AppHandle, why: &str) {
     #[cfg(windows)]
     {
@@ -418,6 +428,7 @@ pub fn mic_off(app: &AppHandle, why: &str) {
             return;
         };
         let was = std::mem::take(&mut *lock(&state.voice.mic));
+        // Starting: `start` sees it and stops. Failed: the phone's next try starts at once.
         if let Mic::On(on) = was {
             stop(app, *on, why);
         }

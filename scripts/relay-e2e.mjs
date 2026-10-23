@@ -558,7 +558,14 @@ async function main() {
         );
         await seeText(d.page, /hears you as CABLE Output/, '…and the phone says what the PC hears it as');
         await axeBoth(d.page, 'phone app, microphone on');
+        // Off on the phone: its channel closes and the PC hears at once (not after a stall's
+        // wait), so the default microphone comes back straight away.
+        const off = pc.out.next(/^screen: mic off$/, 3_000);
         await d.page.getByRole('button', { name: /^Microphone for / }).click();
+        await off.then(
+          () => ok('turning the microphone off on the phone ends it on the PC at once'),
+          (e) => problem('mic off', e.message),
+        );
         // A voice clip over the direct connection, on its own channel.
         await sendClip(d.page, pc.out.next(/^screen: clip (\d+) bytes, (\d+) ms$/, 30_000), 'direct');
         // SD from the toolbar (1.7): smaller pictures at once.

@@ -3011,7 +3011,10 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       only) sends 20 ms frames on a data channel that never resends; the PC plays them through a
       80 ms jitter buffer into the cable it finds, makes the cable's recording side the default
       microphone while it plays (Settings → Remote → Screen, on by default) and puts the
-      defaults back after; it stops 1.5 s after the frames stop. Settings shows the cable found,
+      defaults back after; it stops when the phone turns it off (its channel closes) or after
+      10 s with no frames, so a stall on mobile data plays silence and a voice note being
+      recorded keeps the cable rather than switching to the PC's own microphone and back (a
+      review found the first cut gave up after 1.5 s). Settings shows the cable found,
       or how to install VB-CABLE; the phone says what the PC hears it as, and without a cable
       offers a clip instead. The banner says when the phone's microphone is on.
 - [x] **The relay's page policy**: it refused the microphone (`microphone=()`), so the phone
