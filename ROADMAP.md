@@ -3018,6 +3018,17 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       could not record at all; it now allows the page itself, and the audio worklet is a file
       of the app's own (the policy runs no `blob:` or `data:` script). Phones get the new app
       once the relay is deployed from this branch, at the owner's go.
+- [x] **CI green** on 78ab9ea (run 39940388920), every job. On the Windows runner a 1 s tone
+      encodes to a 13 kB AAC file, the clipboard holds the file put there, and a clip pasted
+      with Ctrl+V (as the phone's Paste key sends it) reaches the runner's browser as a file of
+      its own name and size, `audio/x-m4a`: the way a chat takes it. The end-to-end test (119
+      checks) sends a clip through the relay and, in CI's Chrome, the phone's microphone and a
+      clip over the direct connection. The first run (87206bb) failed two older tests that gave
+      a background worker a fixed time (the GPU settings at start, the fan worker's first write
+      after saving the BIOS state), on a runner busier with the voice tests; they now wait for
+      the worker. Test build `vyro-windows-78ab9ea` (36.4 MB archive). Locally: fmt, clippy
+      (Linux and windows-gnu), 772 core and 55 app tests, 252 front-end tests, the builds, the
+      budgets (phone 42.2 of 44 kB), 24 relay tests, the accessibility sweep (710 checks).
 - Administrator prompts stay unseen in 1.7, by the owner's choice (field check, 2026-10-19:
   the phone shows its secure-screen line, as designed). Seeing and answering them would need
   the service to capture and type on the secure desktop as SYSTEM, behind its own permission;
