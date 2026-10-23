@@ -467,6 +467,12 @@ fn wait_for(what: &str, mut f: impl FnMut() -> bool) {
     }
 }
 
+/// Until the controller's thread has set the card at its start (stock, or the tested settings
+/// it applies at start): a busy machine can take far longer than a moment.
+fn started(c: &TuneControl) {
+    wait_for("the settings at start", || c.status().current.is_some());
+}
+
 fn fast(dir: Option<&std::path::Path>) -> Options {
     Options {
         dir: dir.map(std::path::Path::to_path_buf),
@@ -628,7 +634,7 @@ fn a_crash_while_tuned_turns_apply_at_start_off() {
     assert!(!st.config.apply_at_start);
     let why = st.waiting.unwrap();
     assert!(why.contains("stopped without shutting down"), "{why}");
-    std::thread::sleep(Duration::from_millis(60));
+    started(&c);
     assert_eq!(c.status().current, Some(Settings::STOCK));
     assert!(!dir.path().join(MARKER_FILE).exists());
     let saved: TuneConfig =
@@ -650,7 +656,7 @@ fn apply_at_start_only_for_tested_settings() {
         }
         crate::files::write_json(&dir.path().join(controller::CONFIG_FILE), &cfg).unwrap();
         let c = TuneControl::start(Box::new(SimDevice::new()), fast(Some(dir.path())));
-        std::thread::sleep(Duration::from_millis(60));
+        started(&c);
         (c.status(), dir)
     };
     let (st, _d) = start(true);
@@ -669,7 +675,7 @@ fn presets_from_another_card_are_not_applied() {
     cfg.mark_tested(PLUS, 50);
     crate::files::write_json(&dir.path().join(controller::CONFIG_FILE), &cfg).unwrap();
     let c = TuneControl::start(Box::new(SimDevice::new()), fast(Some(dir.path())));
-    std::thread::sleep(Duration::from_millis(60));
+    started(&c);
     let st = c.status();
     assert_eq!(st.current, Some(Settings::STOCK));
     assert!(st.waiting.unwrap().contains("another card"));

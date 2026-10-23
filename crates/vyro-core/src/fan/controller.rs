@@ -1216,16 +1216,22 @@ mod tests {
         }
     }
 
-    /// Ticks until the worker has handled the tick (it writes asynchronously).
+    /// Ticks until the worker has handled the tick (it writes asynchronously). A busy machine
+    /// can take seconds: the worker saves the BIOS state to disk before its first write.
     fn tick(fc: &FanControl, dev: &SimDevice, temp: f64, expect: usize) {
         fc.on_tick(|id| (id == CPU_TEMP).then_some(temp));
-        for _ in 0..200 {
+        let until = Instant::now() + Duration::from_secs(15);
+        while Instant::now() < until {
             if lock(&dev.0).log.len() >= expect {
                 return;
             }
             std::thread::sleep(Duration::from_millis(5));
         }
-        panic!("worker did not act: {:?}", lock(&dev.0).log);
+        panic!(
+            "worker did not act: {:?}; its last error: {:?}",
+            lock(&dev.0).log,
+            fc.status(|_| None).last_error
+        );
     }
 
     fn settle() {
