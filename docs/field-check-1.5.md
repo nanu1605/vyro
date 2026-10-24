@@ -1,6 +1,7 @@
 # Field check: 1.5 (control from the phone)
 
-Status: **in progress** (begun on `vyro-windows-bbc8120`, 2026-10-20: the owner reports control
+Status: **in progress; shipped in 1.7.0 on 2026-10-24, before it finished, by the owner's
+choice: it goes on, on the release** (begun on `vyro-windows-bbc8120`, 2026-10-20: the owner reports control
 from the phone works, and Shut down shuts the laptop down). Test build now:
 **`vyro-windows-422e8d0`**, the 1.7 test build (CI run 39672234874, every job green, version
 1.7.0), by the owner's choice (2026-10-19): it carries every change of 1.5, with step 6's fixes

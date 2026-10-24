@@ -2720,7 +2720,8 @@ show on the phone).
       `vyro-windows-422e8d0`.
 - [ ] Field check 1.5 ([`docs/field-check-1.5.md`](docs/field-check-1.5.md)); 1.4.1 released
       first; the owner's go. Then the relay is deployed (`relay.yml`), which serves the new
-      phone app.
+      phone app. 1.5 shipped in 1.7.0 (2026-10-24) before this check finished, by the owner's
+      choice; the check goes on, on the release.
 
 ### 1.6.0 — GPU tuning: presets, your own settings, a stability test
 
@@ -2784,7 +2785,8 @@ settings, tested on an NVIDIA desktop card and a laptop GPU (decision 37). Built
 - [ ] Field check 1.6 ([`docs/field-check-1.6.md`](docs/field-check-1.6.md)) on the owner's
       NVIDIA desktop card and a laptop, including whether NVML accepts the offsets on GeForce
       under Windows (if not, NVAPI is the next step); 1.4.1 and 1.5 released first; the owner's
-      go.
+      go. 1.6 shipped in 1.7.0 (2026-10-24) before this check began, by the owner's choice; the
+      check goes on, on the release.
 
 ### 1.7.0 — the PC's screen on the phone
 
@@ -3095,7 +3097,19 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       an administrator window, two monitors, the slow view, the idle end; 1.4.1 to 1.6 released
       first; the owner's go. Done by the owner on 2026-10-19 (3095d4f, relay from 2e42a83), every
       check working except the slow view, not tried (both phones found a direct path; CI's
-      end-to-end test covers it). Waits for 1.4.1 to 1.6 and the owner's go.
+      end-to-end test covers it). Steps 8–12 (the owner's requests of 2026-10-21) not done when
+      1.7.0 shipped; the check goes on, on the release.
+- [x] **1.7.0 released** (2026-10-24), with 1.5 and 1.6 in it, on the owner's go given before
+      the field checks finished (1.5 in progress, 1.6 not begun, 1.7's steps 8–12 to do), by the
+      owner's choice: CI passed on 54b85c0 (run 40100528867; Linux, Windows with the smoke test,
+      the relay and phone app, accessibility), test build `vyro-windows-ab4e97a`'s PC code with
+      the phone's microphone fix (3965b62) and records. `main` fast-forwarded to it from 1.4.1,
+      and Release run 40138330608 tagged `v1.7.0`, found the relay's address in `vyro.exe` and
+      published the 13.4 MB MSI, `latest.json` and checksums here and to
+      `nanu1605/vyro-releases`, so installed copies are offered 1.7.0, and once it is in, What's
+      new shows 1.7, 1.6 and 1.5. 1.5.0 and 1.6.0 are not released on their own. The relay was
+      not deployed again: since run 40100373259 it serves 3965b62's phone app and relay, which
+      are this commit's.
 
 ## Risks
 

@@ -1,7 +1,8 @@
 # Field check: 1.7 (the PC's screen on the phone)
 
 Status: **1–7 done, 2026-10-19 (see Results), except the slow view (not tried); 8–12 (the
-owner's requests of 2026-10-21) to do.** Test build now: **`vyro-windows-ab4e97a`** (CI run
+owner's requests of 2026-10-21) to do; 1.7.0 released on 2026-10-24 before they were
+done, by the owner's choice: they go on, on the release.** Test build now: **`vyro-windows-ab4e97a`** (CI run
 40095785073, every job green, version 1.7.0; after a crash with the phone's Mic on, the default
 microphone is put back even when Windows' sound is slow to answer at sign-in). A check already
 begun on `vyro-windows-688110f` (CI run 39965523307; HD/SD takes effect on a still screen, and
