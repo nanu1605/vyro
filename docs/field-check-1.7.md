@@ -9,11 +9,10 @@ the microphone ends at once when turned off and rides out a stalled link) goes o
 row below is the same on both. Or the artifact of any later green run on `claude/vyro-1.7`
 (before them, `vyro-windows-68d0d6c`, and `vyro-windows-3095d4f` for 1–7). Install the MSI over 1.6, and open the phone app from the relay
 this branch deploys (or the branch's own relay; see `docs/remote.md` → Running your own relay).
-The relay was last deployed from dac433f (run 40094510901, 2026-10-24, at the owner's go), with
-every fix above, the SD offer in full screen and the phone's What's new telling only what the
-open PC's Vyro has among them; reload the phone app once to get it. One later phone fix (Record
-or Mic tapped twice, or the clip sheet closed as it starts recording, leaves no microphone on,
-3965b62) comes with the next relay deploy.
+The relay was last deployed from 3965b62 (run 40100373259, 2026-10-24, at the owner's go), with
+every fix above among them: the SD offer in full screen, the phone's What's new telling only
+what the open PC's Vyro has, and no microphone left on when Record or Mic is tapped twice or the
+clip sheet closes as it starts recording. Reload the phone app once to get it.
 About 60 minutes, with an Android phone (Chrome) and an iPhone (Safari, the Home Screen app).
 
 1.7 answers the owner's request to "see what is running on the PC from the phone, and use the

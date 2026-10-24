@@ -3082,8 +3082,10 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       Cancel or a close stops at once. The end-to-end test taps Record twice and closes the
       sheet as it starts, on the slow view and direct, and sees every microphone let go, and
       taps Mic twice for one channel. CI green on 3965b62 (run 40097775619), every job, the
-      end-to-end test at 134 checks. It is the phone app's, so it reaches phones with the next
-      relay deploy, at the owner's go; the PC's test build stays `vyro-windows-ab4e97a`.
+      end-to-end test at 134 checks. The PC's test build stays `vyro-windows-ab4e97a`.
+- [x] **The relay deployed again** from this branch at 3965b62 (2026-10-24, at the owner's go;
+      Actions run 40100373259, its tests first), so phones get the microphone fix the next time
+      they open the app.
 - Administrator prompts stay unseen in 1.7, by the owner's choice (field check, 2026-10-19:
   the phone shows its secure-screen line, as designed). Seeing and answering them would need
   the service to capture and type on the secure desktop as SYSTEM, behind its own permission;
