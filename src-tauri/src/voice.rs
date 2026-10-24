@@ -137,7 +137,17 @@ impl Voice {
         if let Some(path) = dir.as_ref().map(|d| d.join(RESTORE)).filter(|p| p.exists()) {
             let _ = std::thread::Builder::new()
                 .name("vyro-mic-restore".into())
-                .spawn(move || restore(&path));
+                .spawn(move || {
+                    // At sign-in Windows' sound may not answer yet: up to a minute for it.
+                    for _ in 0..60 {
+                        let read = voice::win::default_microphones();
+                        if read.is_ok_and(|(console, calls)| console.is_some() || calls.is_some()) {
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_secs(1));
+                    }
+                    restore(&path);
+                });
         }
         Self {
             dir,
@@ -503,7 +513,14 @@ fn restore(path: &Path) {
             return;
         }
     };
-    let (console, calls) = win::default_microphones().unwrap_or_default();
+    let (console, calls) = match win::default_microphones() {
+        Ok(now) => now,
+        // Not known which role the cable still has: kept for the next start.
+        Err(e) => {
+            log::warn!("phone microphone: {e}");
+            return;
+        }
+    };
     let (console, calls) = put_back(&was, console.as_deref(), calls.as_deref());
     match win::set_default_microphone(console.as_deref(), calls.as_deref()) {
         Ok(()) => {
