@@ -3068,6 +3068,12 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
 - [x] **The relay deployed again** from this branch at dac433f (2026-10-24, at the owner's go;
       Actions run 40094510901, its tests first), so phones get the What's new that tells only
       what the open PC's Vyro has the next time they open the app.
+- [x] **The default microphone put back after a crash, at sign-in** (2026-10-24, a review of
+      the phone's voice on the PC): the restore at the next start read Windows' defaults, and a
+      failed read looked like the owner having chosen other microphones, so the restore was
+      forgotten and the cable stayed the default. A failed read now keeps it for the next start,
+      and the restore at start waits up to a minute for Windows' sound. CI green on ab4e97a
+      (run 40095785073), every job; test build `vyro-windows-ab4e97a`.
 - Administrator prompts stay unseen in 1.7, by the owner's choice (field check, 2026-10-19:
   the phone shows its secure-screen line, as designed). Seeing and answering them would need
   the service to capture and type on the secure desktop as SYSTEM, behind its own permission;

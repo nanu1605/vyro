@@ -1,11 +1,13 @@
 # Field check: 1.7 (the PC's screen on the phone)
 
 Status: **1–7 done, 2026-10-19 (see Results), except the slow view (not tried); 8–12 (the
-owner's requests of 2026-10-21) to do.** Test build now: **`vyro-windows-688110f`** (CI run
-39965523307, every job green, version 1.7.0; HD/SD takes effect on a still screen, and the
-microphone ends at once when turned off and rides out a stalled link), or the artifact of any
-later green run on `claude/vyro-1.7` (before it, `vyro-windows-68d0d6c`, and
-`vyro-windows-3095d4f` for 1–7). Install the MSI over 1.6, and open the phone app from the relay
+owner's requests of 2026-10-21) to do.** Test build now: **`vyro-windows-ab4e97a`** (CI run
+40095785073, every job green, version 1.7.0; after a crash with the phone's Mic on, the default
+microphone is put back even when Windows' sound is slow to answer at sign-in). A check already
+begun on `vyro-windows-688110f` (CI run 39965523307; HD/SD takes effect on a still screen, and
+the microphone ends at once when turned off and rides out a stalled link) goes on with it: every
+row below is the same on both. Or the artifact of any later green run on `claude/vyro-1.7`
+(before them, `vyro-windows-68d0d6c`, and `vyro-windows-3095d4f` for 1–7). Install the MSI over 1.6, and open the phone app from the relay
 this branch deploys (or the branch's own relay; see `docs/remote.md` → Running your own relay).
 The relay was last deployed from dac433f (run 40094510901, 2026-10-24, at the owner's go), with
 every fix above, the SD offer in full screen and the phone's What's new telling only what the
