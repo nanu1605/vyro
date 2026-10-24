@@ -3074,6 +3074,16 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       forgotten and the cable stayed the default. A failed read now keeps it for the next start,
       and the restore at start waits up to a minute for Windows' sound. CI green on ab4e97a
       (run 40095785073), every job; test build `vyro-windows-ab4e97a`.
+- [x] **The phone lets its microphone go** (2026-10-24, the same review): it takes a moment to
+      start, and Record tapped twice started two recordings, one never stopped (the phone kept
+      its microphone, and both fed the clip); a clip sheet closed as it started went on
+      recording unseen and at the time limit sent what it heard; Mic tapped twice opened a
+      second channel. A second tap now starts nothing more, and a recording that starts after
+      Cancel or a close stops at once. The end-to-end test taps Record twice and closes the
+      sheet as it starts, on the slow view and direct, and sees every microphone let go, and
+      taps Mic twice for one channel. CI green on 3965b62 (run 40097775619), every job, the
+      end-to-end test at 134 checks. It is the phone app's, so it reaches phones with the next
+      relay deploy, at the owner's go; the PC's test build stays `vyro-windows-ab4e97a`.
 - Administrator prompts stay unseen in 1.7, by the owner's choice (field check, 2026-10-19:
   the phone shows its secure-screen line, as designed). Seeing and answering them would need
   the service to capture and type on the secure desktop as SYSTEM, behind its own permission;
