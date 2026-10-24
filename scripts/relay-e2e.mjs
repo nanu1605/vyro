@@ -216,15 +216,31 @@ async function phone(browser, name) {
         this.addEventListener('close', (e) => window.__closes.push({ at: Date.now(), code: e.code, reason: e.reason }));
       }
     };
-    // Its direct connections, to read what the video brought.
+    // Its direct connections, to read what the video brought, and the channels it opened.
     const Peer = window.RTCPeerConnection;
     window.__peers = [];
+    window.__channels = [];
     if (Peer) {
       window.RTCPeerConnection = class extends Peer {
         constructor(...args) {
           super(...args);
           window.__peers.push(this);
         }
+        createDataChannel(label, ...rest) {
+          window.__channels.push(label);
+          return super.createDataChannel(label, ...rest);
+        }
+      };
+    }
+    // The microphones it took, to see each one let go.
+    window.__media = [];
+    const media = navigator.mediaDevices;
+    if (media?.getUserMedia) {
+      const get = media.getUserMedia.bind(media);
+      media.getUserMedia = async (c) => {
+        const s = await get(c);
+        window.__media.push(s);
+        return s;
       };
     }
   });
@@ -242,14 +258,37 @@ async function phone(browser, name) {
 /** Chromium with a fake microphone that needs no one to allow it. */
 const MEDIA = ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'];
 
+/** The phone's microphones still taken. */
+const micsTaken = (page) =>
+  page.evaluate(() => window.__media.flatMap((s) => s.getAudioTracks()).filter((t) => t.readyState === 'live').length);
+
+/** Two taps on `button` in one go, before the microphone it starts has started. */
+const tapTwice = (button) =>
+  button.evaluate((b) => {
+    b.click();
+    b.click();
+  });
+
 /** A voice clip (1.7): recorded for a moment from the fake microphone and sent; `kept` is the
- * PC's line saying it took it. */
+ * PC's line saying it took it. Record is tapped twice: one recording starts. */
 async function sendClip(page, kept, where) {
-  await page.getByRole('button', { name: /^Voice clip for / }).click();
   const sheet = page.getByRole('dialog', { name: /^A voice clip for / });
+  // Closed as the microphone starts: it lets the microphone go once it has started.
+  await page.getByRole('button', { name: /^Voice clip for / }).click();
+  await sheet.waitFor({ timeout: 5000 });
+  await sheet.getByRole('button', { name: 'Record', exact: true }).evaluate((b) => {
+    b.click();
+    b.closest('dialog').close();
+  });
+  await sheet.waitFor({ state: 'hidden', timeout: 5000 });
+  await page.waitForTimeout(1500);
+  const left = await micsTaken(page);
+  if (left) problem(`clip (${where})`, `${left} microphone(s) still taken after the sheet closed as it started recording`);
+  else ok(`a clip sheet closed as it starts recording lets the microphone go (${where})`);
+  await page.getByRole('button', { name: /^Voice clip for / }).click();
   await sheet.waitFor({ timeout: 5000 });
   await axeBoth(page, `phone app, voice clip (${where})`);
-  await sheet.getByRole('button', { name: 'Record', exact: true }).click();
+  await tapTwice(sheet.getByRole('button', { name: 'Record', exact: true }));
   await sheet.getByRole('button', { name: /^Send to / }).waitFor({ timeout: 5000 });
   await page.waitForTimeout(1500);
   await sheet.getByRole('button', { name: /^Send to / }).click();
@@ -260,6 +299,9 @@ async function sendClip(page, kept, where) {
   await seeText(page, /clipboard/, `…and the phone says it is on the PC's clipboard (${where})`);
   await axeBoth(page, `phone app, voice clip sent (${where})`);
   await sheet.getByRole('button', { name: /^Paste on / }).click();
+  const taken = await micsTaken(page);
+  if (taken) problem(`clip (${where})`, `${taken} microphone(s) still taken after the clip went (Record tapped twice)`);
+  else ok(`…and the phone lets its microphone go, though Record was tapped twice (${where})`);
 }
 
 async function seeText(page, text, where, ms = 20_000) {
@@ -602,12 +644,17 @@ async function main() {
         await seeText(d.page, /its screen \d+×\d+ through [\w ]+,\s+sent as \d+×\d+/, '…and what the PC sent');
         // The phone as the PC's microphone (1.7): Chrome's fake microphone in 20 ms frames on
         // their own channel; the PC says what it hears the phone as.
+        // Tapped twice as it starts: one channel, one microphone.
         const heard = pc.out.next(/^screen: mic frame \d+$/, 15_000);
-        await d.page.getByRole('button', { name: /^Microphone for / }).click();
+        const opened = await d.page.evaluate(() => window.__channels.length);
+        await tapTwice(d.page.getByRole('button', { name: /^Microphone for / }));
         await heard.then(
           () => ok("the phone's microphone reaches the PC"),
           (e) => problem('mic', e.message),
         );
+        const mics = await d.page.evaluate((n) => window.__channels.slice(n).filter((l) => l === 'mic').length, opened);
+        if (mics === 1) ok('…on one channel, though Mic was tapped twice');
+        else problem('mic', `${mics} microphone channels for a Mic tapped twice`);
         await seeText(d.page, /hears you as CABLE Output/, '…and the phone says what the PC hears it as');
         await axeBoth(d.page, 'phone app, microphone on');
         // Off on the phone: its channel closes and the PC hears at once (not after a stall's
@@ -618,6 +665,7 @@ async function main() {
           () => ok('turning the microphone off on the phone ends it on the PC at once'),
           (e) => problem('mic off', e.message),
         );
+        if (await micsTaken(d.page)) problem('mic off', 'the phone still holds its microphone');
         // A voice clip over the direct connection, on its own channel.
         await sendClip(d.page, pc.out.next(/^screen: clip (\d+) bytes, (\d+) ms$/, 30_000), 'direct');
         // SD from the toolbar (1.7): smaller pictures at once.

@@ -29,28 +29,44 @@
   let mic: Capture | null = null;
   let blocks: Int16Array[] = [];
   let samples = 0;
+  // The microphone takes a moment to start: a second tap meanwhile starts nothing more, and one
+  // that starts after Cancel or the sheet closed stops at once (`take` moved on).
+  let starting = false;
+  let take = 0;
 
   async function record(): Promise<void> {
+    if (starting || mic) return;
+    starting = true;
+    const mine = ++take;
     why = null;
     blocks = [];
     samples = 0;
     secs = 0;
     try {
-      mic = await capture((pcm) => {
+      const started = await capture((pcm) => {
         blocks.push(pcm);
         samples += pcm.length;
         secs = samples / RATE;
         loud = level(pcm);
         if (secs >= limit) void finish();
       });
+      if (mine !== take) {
+        started.stop();
+        return;
+      }
+      mic = started;
       stage = 'recording';
     } catch (e) {
+      if (mine !== take) return;
       why = micError(e);
       stage = 'failed';
+    } finally {
+      starting = false;
     }
   }
 
   function halt(): void {
+    take++;
     mic?.stop();
     mic = null;
     loud = 0;

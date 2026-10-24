@@ -717,7 +717,8 @@
   /** 20 ms frames on their own channel, never resent: a late frame is no use to a voice. */
   async function startMic(): Promise<void> {
     const p = peer;
-    if (!p) return;
+    // A second tap while it starts opens no second channel.
+    if (!p || micChannel) return;
     error = null;
     const ch = p.createDataChannel('mic', { ordered: false, maxRetransmits: 0 });
     ch.binaryType = 'arraybuffer';
