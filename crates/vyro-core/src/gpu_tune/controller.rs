@@ -865,6 +865,7 @@ impl Worker {
             self.mark(Some(m));
         }
         let result = self.dev.apply(&want.settings);
+        let failed = result.is_err();
         let read = self.dev.read().ok();
         let clocks = self.dev.clocks();
         let mut inner = lock(&self.shared.inner);
@@ -906,16 +907,22 @@ impl Worker {
                 inner.held = Some(why.clone());
                 inner.trial = None;
                 inner.record(TuneEventKind::Fault, why);
+                // The driver takes the settings one at a time: those before the one it refused
+                // are on the card. Not known what it runs, so the next loop writes stock.
+                inner.written = None;
             }
         }
-        let tuned = inner
-            .written
-            .as_ref()
-            .is_some_and(|w| !w.settings.is_stock());
+        // A write that failed may have left tuned values on the card: the marker stays until
+        // stock is on.
+        let tuned = failed
+            || inner
+                .written
+                .as_ref()
+                .is_some_and(|w| !w.settings.is_stock());
         drop(inner);
         let marker = marker.filter(|_| tuned);
         self.since = marker.as_ref().map(|m| m.since);
-        if marker.is_none() {
+        if !tuned {
             self.mark(None);
         }
     }
@@ -1023,6 +1030,9 @@ pub struct SimDevice {
     now: Settings,
     /// Writes fail while set (tests).
     pub fail: Arc<Mutex<bool>>,
+    /// A memory offset is refused while set, after the power limit and core offset went on, as
+    /// a driver that refuses one setting does (tests).
+    pub refuse_mem: Arc<Mutex<bool>>,
     /// Another program's values, reported instead of Vyro's while set (tests).
     pub other: Arc<Mutex<Option<Settings>>>,
 }
@@ -1051,6 +1061,7 @@ impl SimDevice {
             },
             now: Settings::STOCK,
             fail: Arc::new(Mutex::new(false)),
+            refuse_mem: Arc::new(Mutex::new(false)),
             other: Arc::new(Mutex::new(None)),
         }
     }
@@ -1098,6 +1109,11 @@ impl TuneDevice for SimDevice {
             return Err("the driver refused".into());
         }
         *lock(&self.other) = None;
+        if *lock(&self.refuse_mem) && s.mem_mhz != self.now.mem_mhz {
+            self.now.power_pct = s.power_pct;
+            self.now.core_mhz = s.core_mhz;
+            return Err("the driver refused the memory offset".into());
+        }
         self.now = *s;
         Ok(())
     }

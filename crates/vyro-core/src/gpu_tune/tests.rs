@@ -611,6 +611,45 @@ fn a_failed_write_holds_at_stock() {
 }
 
 #[test]
+fn a_write_refused_part_way_leaves_the_card_at_stock() {
+    let dir = tempfile::tempdir().unwrap();
+    let dev = SimDevice::new();
+    *crate::lock(&dev.refuse_mem) = true;
+    let c = TuneControl::start(Box::new(dev), fast(Some(dir.path())));
+    c.set_config(on("mine"), true).unwrap();
+    wait_for("held", || c.brief().held);
+    let why = c.status().held.unwrap();
+    assert!(why.contains("memory offset"), "{why}");
+    // The power limit and core offset went on before the memory offset was refused.
+    wait_for("stock", || c.status().current == Some(Settings::STOCK));
+    assert!(!c.brief().tuned);
+    assert!(!dir.path().join(MARKER_FILE).exists());
+}
+
+#[test]
+fn a_failed_return_to_stock_keeps_the_marker() {
+    let dir = tempfile::tempdir().unwrap();
+    let dev = SimDevice::new();
+    let fail = Arc::clone(&dev.fail);
+    let c = TuneControl::start(Box::new(dev), fast(Some(dir.path())));
+    c.set_config(on("mine"), true).unwrap();
+    wait_for("tuned", || c.brief().tuned);
+    *crate::lock(&fail) = true;
+    c.restore().unwrap();
+    wait_for("the failure", || {
+        c.status()
+            .last_error
+            .is_some_and(|e| e.contains("stock values failed"))
+    });
+    assert_eq!(c.status().current, Some(PLUS), "still tuned");
+    c.shutdown();
+    assert!(
+        dir.path().join(MARKER_FILE).exists(),
+        "kept, so the next start gives the card stock"
+    );
+}
+
+#[test]
 fn a_crash_while_tuned_turns_apply_at_start_off() {
     let dir = tempfile::tempdir().unwrap();
     let mut cfg = on("mine");
