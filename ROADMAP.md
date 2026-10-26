@@ -3134,6 +3134,9 @@ Fixes on `claude/vyro-1.7` after 1.7.0's release, for a 1.7.1 when the owner say
       now stops when the clip's channel closes and says the connection was lost. The end-to-end
       test sends a clip over a channel that never drains and closes it (it went on "Sending…"
       before). The phone app's only: phones get it with the relay's next deploy.
+- [x] **CI green** on b972394 (run 40296520623), every job, the end-to-end test at 135 checks
+      with both of the above (in CI's Chrome, the clip over the direct connection). Test build
+      `vyro-windows-b972394` (still numbered 1.7.0: the version goes up when 1.7.1 is released).
 - Also looked at, nothing to fix: an update from 1.4.1 keeps its data (no change to the
   history's tables since; each file 1.5 to 1.7 added to stays readable without the new fields,
   phones paired before them may only look, and the files new since 1.5 start empty).
