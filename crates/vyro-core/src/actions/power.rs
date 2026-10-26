@@ -222,6 +222,47 @@ mod win {
         // SAFETY: plain queries.
         unsafe { (IsPwrSuspendAllowed(), IsPwrHibernateAllowed()) }
     }
+
+    pub fn locked() -> Option<bool> {
+        use windows::core::PWSTR;
+        use windows::Win32::System::RemoteDesktop::{
+            WTSFreeMemory, WTSQuerySessionInformationW, WTSSessionInfoEx, WTSINFOEXW,
+            WTS_CURRENT_SERVER_HANDLE, WTS_CURRENT_SESSION, WTS_SESSIONSTATE_LOCK,
+            WTS_SESSIONSTATE_UNLOCK,
+        };
+        let mut buf = PWSTR::null();
+        let mut len = 0u32;
+        // SAFETY: this session's information; Windows allocates the buffer, freed below.
+        unsafe {
+            WTSQuerySessionInformationW(
+                Some(WTS_CURRENT_SERVER_HANDLE),
+                WTS_CURRENT_SESSION,
+                WTSSessionInfoEx,
+                &mut buf,
+                &mut len,
+            )
+        }
+        .ok()?;
+        if buf.is_null() {
+            return None;
+        }
+        let whole = usize::try_from(len).is_ok_and(|n| n >= std::mem::size_of::<WTSINFOEXW>());
+        let info = whole.then(|| {
+            // SAFETY: Windows wrote a WTSINFOEXW of `len` bytes there.
+            unsafe { buf.0.cast::<WTSINFOEXW>().read_unaligned() }
+        });
+        let flags = info.filter(|i| i.Level == 1).map(|i| {
+            // SAFETY: level 1 is the union's only form.
+            unsafe { i.Data.WTSInfoExLevel1.SessionFlags }
+        });
+        // SAFETY: allocated by WTSQuerySessionInformationW above, freed once.
+        unsafe { WTSFreeMemory(buf.0.cast()) };
+        match flags.and_then(|f| u32::try_from(f).ok()) {
+            Some(WTS_SESSIONSTATE_LOCK) => Some(true),
+            Some(WTS_SESSIONSTATE_UNLOCK) => Some(false),
+            _ => None,
+        }
+    }
 }
 
 /// Does the action; shutting down and restarting start their wait.
@@ -247,4 +288,12 @@ pub fn abilities() -> (bool, bool) {
     return win::abilities();
     #[cfg(not(windows))]
     (false, false)
+}
+
+/// Whether the signed-in user's desktop is locked; `None` when Windows does not say.
+pub fn locked() -> Option<bool> {
+    #[cfg(windows)]
+    return win::locked();
+    #[cfg(not(windows))]
+    None
 }

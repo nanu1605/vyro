@@ -28,6 +28,9 @@ use crate::engine::Engine;
 
 /// Emitted with the [`PowerState`] when a shutdown or restart is asked or cancelled.
 pub const POWER_EVENT: &str = "power-pending";
+/// A phone asked to install an update while the PC is locked.
+const UPDATE_LOCKED: &str =
+    "The PC is locked, and Windows asks someone at it to allow the update: install it there.";
 /// Emitted (no payload) when a phone changed something.
 pub const ACTIONS_EVENT: &str = "phone-actions";
 const ACTIONS_FILE: &str = "phone-actions.json";
@@ -255,6 +258,11 @@ fn call(app: &AppHandle, r: &Request) -> Result<Value, String> {
             app, false,
         ))),
         "updates.install" => {
+            // Windows asks someone at the PC to allow the installer, and Vyro closes as it
+            // starts: on a locked PC nobody can, and the phone would lose the PC until then.
+            if power::locked() == Some(true) {
+                return Err(UPDATE_LOCKED.into());
+            }
             tauri::async_runtime::block_on(crate::updates::install_update(app.clone()))?;
             done()
         }

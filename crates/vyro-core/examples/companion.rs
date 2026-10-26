@@ -296,7 +296,18 @@ fn answer(engine: &OnceLock<Arc<LocalEngine>>, r: &Request) -> Result<serde_json
                 .unwrap_or_default(),
         ),
         "power.state" => Ok(serde_json::json!({ "pending": null })),
-        "power" | "power.cancel" | "process.end" | "profile.pick" | "fans.bios" | "wake" => {
+        // A release build that found a newer one; installing is only printed.
+        "updates" => Ok(serde_json::json!({
+            "configured": true,
+            "current": env!("CARGO_PKG_VERSION"),
+            "checking": false,
+            "available": { "version": "9.9.9", "notes": null, "date": null },
+            "lastCheck": null,
+            "error": null,
+            "installing": false,
+        })),
+        "power" | "power.cancel" | "process.end" | "profile.pick" | "fans.bios" | "wake"
+        | "updates.install" => {
             println!("asked: {} {}", r.method, r.params);
             Ok(serde_json::json!({ "done": true }))
         }

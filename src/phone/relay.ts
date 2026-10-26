@@ -50,6 +50,8 @@ const DAY_MS = 24 * 3600 * 1000;
 
 /** A request that failed: the PC refused it, or did not answer. */
 export class RequestError extends Error {}
+/** Why waiting requests fail when the PC leaves the relay. */
+export const GONE = 'The PC went to sleep or off.';
 
 export interface Handlers {
   onState(s: LinkState): void;
@@ -331,7 +333,7 @@ export class PcLink {
         });
       } else {
         this.session = null;
-        this.dropWaiting('The PC went to sleep or off.');
+        this.dropWaiting(GONE);
         this.set('asleep');
       }
       return;

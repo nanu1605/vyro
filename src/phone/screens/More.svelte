@@ -30,6 +30,7 @@
   } from '../../types';
   import Sheet from '../ui/Sheet.svelte';
   import { toast } from '../ui/toast.svelte';
+  import { GONE } from '../relay';
   import { errText, every, type ScreenProps } from './ask';
   import Devices from './Devices.svelte';
 
@@ -65,6 +66,8 @@
   let confirming = $state<PowerAction | null>(null);
   let soon = $state(true);
   let force = $state(false);
+  /** Installing an update is being confirmed. */
+  let confirmInstall = $state(false);
 
   const quiet = <T,>(p: Promise<T>) => p.catch(() => null);
 
@@ -113,6 +116,21 @@
     sleep: 'Wake it from here only through another Vyro PC on its network.',
     hibernate: 'Wake it from here only through another Vyro PC on its network.',
   };
+
+  /** Vyro closes on the PC as the installer starts, before it answers: the PC leaving is the
+   * installer starting, and only another answer says why it did not. */
+  async function install(): Promise<void> {
+    confirmInstall = false;
+    busy = true;
+    toast(`Installing: once someone at ${pc} allows it, Vyro starts again there.`);
+    try {
+      await ask('updates.install');
+    } catch (e) {
+      if (errText(e) !== GONE) toast(errText(e), 'hot');
+    } finally {
+      busy = false;
+    }
+  }
 
   async function doPower(a: PowerAction): Promise<void> {
     confirming = null;
@@ -301,7 +319,7 @@
               <button type="button" class="ghost" disabled={busy || updates.checking} onclick={() => void run('Checked.', 'updates.check')}>Check now</button>
             {/if}
             {#if updates.available && can('updates.install')}
-              <button type="button" disabled={busy || updates.installing} onclick={() => void run('Installing: Vyro restarts on the PC.', 'updates.install')}>
+              <button type="button" disabled={busy || updates.installing} onclick={() => (confirmInstall = true)}>
                 Install {updates.available.version}
               </button>
             {/if}
@@ -326,6 +344,17 @@
       <button type="button" class="ghost" onclick={() => (confirming = null)}>Cancel</button>
     </div>
   {/if}
+</Sheet>
+
+<Sheet open={confirmInstall} title="Install Vyro {updates?.available?.version ?? ''} on {pc}?" onclose={() => (confirmInstall = false)}>
+  <p class="muted small">
+    Windows asks someone at {pc} to allow it. Vyro closes there as the installer starts, so this phone cannot reach {pc} until
+    it is allowed and Vyro has started again.
+  </p>
+  <div class="actions sheet-actions">
+    <button type="button" disabled={busy} onclick={() => void install()}>Install</button>
+    <button type="button" class="ghost" onclick={() => (confirmInstall = false)}>Cancel</button>
+  </div>
 </Sheet>
 
 <style>

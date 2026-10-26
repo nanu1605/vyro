@@ -415,6 +415,21 @@ async function main() {
       () => ok('Lock reaches the PC'),
       (e) => problem('lock', e.message),
     );
+    // An update from the phone: it says first that someone at the PC must allow it, as Vyro
+    // closes there until then.
+    await a.page.getByRole('button', { name: 'More', exact: true }).first().click();
+    await a.page.getByRole('button', { name: /^Updates/ }).click({ timeout: 10_000 });
+    await a.page.getByRole('button', { name: /^Install \d/ }).click();
+    const installing = a.page.getByRole('dialog', { name: /^Install Vyro / });
+    await installing.waitFor({ timeout: 5000 });
+    if (await installing.getByText(/asks someone at .+ to allow it/).count()) ok('installing from the phone says first that someone at the PC must allow it');
+    else problem('update', 'the confirmation does not say that someone at the PC must allow it');
+    await axeBoth(a.page, 'phone app, update confirmation');
+    await installing.getByRole('button', { name: 'Install', exact: true }).click();
+    await pc.out.wait(/^asked: updates\.install/).then(
+      () => ok('…and Install reaches the PC'),
+      (e) => problem('update', e.message),
+    );
     await tab('Processes');
     await a.page.getByRole('button', { name: /^End .*…$/ }).first().click();
     await axeBoth(a.page, 'phone app, end a task');
