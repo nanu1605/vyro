@@ -3322,7 +3322,7 @@ them in the one release.
 Fixes on `claude/vyro-1.7` after 1.7.5's release, gathered for one release when the owner says
 (the owner, 2026-10-26: "make all the fixes in a single release").
 
-- [ ] **The phone's microphone starts once when turned off and on as it starts** (2026-10-26, a
+- [x] **The phone's microphone starts once when turned off and on as it starts** (2026-10-26, a
       review of 1.7's microphone): the first frame starts the cable on a thread of its own (a
       second or so); turned off meanwhile, the PC forgot that start, so the phone's next frames
       began a second one beside it. Each made the cable the default microphone or found it
@@ -3331,9 +3331,10 @@ Fixes on `claude/vyro-1.7` after 1.7.5's release, gathered for one release when 
       lost the line saying where the PC hears it. Now one start at a time: turned off while it
       starts, it stops once started, unless the phone turns it on again first, when that start
       plays. Test: off and on again while it starts is one start (fails before). Clippy clean
-      for Windows here, tests included; the PC's alone: no relay deploy. Field check 1.7,
-      step 12.
-- [ ] **An update ends a screen session as quitting does** (2026-10-26, a review of 1.7's
+      for Windows here, tests included; CI green on 210a6bb with the next fix (run 40415227849,
+      every job; the Windows job ran the test), this commit's own run cancelled by that push.
+      The PC's alone: no relay deploy. Field check 1.7, step 12.
+- [x] **An update ends a screen session as quitting does** (2026-10-26, a review of 1.7's
       update from the phone): on Windows the updater starts the installer and ends the process
       at once, so Vyro's own exit never ran. A phone's session was left as it was: keys and a
       drag it held stayed down after the update (what 1.7.3 fixed for a session that ends), the
@@ -3343,7 +3344,8 @@ Fixes on `claude/vyro-1.7` after 1.7.5's release, gathered for one release when 
       the session (the phone told "Vyro is installing an update" if the note goes out before
       the process ends), the benchmark and the GPU test; the relay and the engine are left to
       the process's end, so an installer that did not start leaves Vyro working. Clippy clean
-      for Windows here; the PC's alone: no relay deploy. Field check 1.7, step 6.
+      for Windows here; CI green on 210a6bb (run 40415227849, every job). The PC's alone: no
+      relay deploy. Field check 1.7, step 6.
 
 ## Risks
 
