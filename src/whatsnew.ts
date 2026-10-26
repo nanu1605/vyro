@@ -21,6 +21,21 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '1.7.1',
+    items: [
+      {
+        icon: 'sparkles',
+        title: 'What 1.5 and 1.6 brought',
+        text: 'After an update from Vyro 1.4, 1.7.0 showed only its own news. What’s new now shows every version’s, and Settings → Updates → What’s new lists them all.',
+      },
+      {
+        icon: 'mic',
+        title: 'Voice clips that say when the connection drops',
+        text: 'A clip sent from your phone as the connection is lost now says so, rather than “Sending…” for good.',
+      },
+    ],
+  },
+  {
     version: '1.7.0',
     items: [
       {

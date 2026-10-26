@@ -23,6 +23,8 @@ import { chromium } from 'playwright';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const require = createRequire(import.meta.url);
 const AXE = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
+/** Vyro's version, the example PC's too. */
+const VERSION = JSON.parse(readFileSync(`${root}package.json`, 'utf8')).version;
 const PORT = 8787;
 const RELAY = `http://127.0.0.1:${PORT}`;
 const problems = [];
@@ -483,7 +485,7 @@ async function main() {
     else ok('the relay never cut the phone off for asking too fast');
 
     // The phone's What's new (1.7): none for a phone that paired just now; once for one that
-    // used an older app, up to the PC's Vyro (1.7.0 here; an older PC's is a unit test). That
+    // used an older app, up to the PC's Vyro (this one here; an older PC's is a unit test). That
     // app showed none, so 1.5's notes too: they came only within 1.7.
     const news = a.page.getByRole('dialog', { name: /^What’s new in Vyro/ });
     if (await news.count()) problem('phone news', 'shows to a phone that paired just now');
@@ -493,7 +495,7 @@ async function main() {
       async () => {
         const title = await news.getByRole('heading').first().innerText();
         const older = await news.getByText('Control this PC from your phone').count();
-        if (title === 'What’s new in Vyro 1.7' && older) ok("a phone that used an older app hears what's new once, 1.5's too");
+        if (title === `What’s new in Vyro ${VERSION.replace(/\.0$/, '')}` && older) ok("a phone that used an older app hears what's new once, 1.5's too");
         else problem('phone news', `titled "${title}"${older ? '' : ", without 1.5's notes"}`);
       },
       (e) => problem('phone news', `not shown to a phone that used an older app: ${e.message}`),

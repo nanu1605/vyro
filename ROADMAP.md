@@ -3114,7 +3114,7 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
 
 ### 1.7.1 — after 1.7.0
 
-Fixes on `claude/vyro-1.7` after 1.7.0's release, for a 1.7.1 when the owner says.
+Fixes on `claude/vyro-1.7` after 1.7.0's release; 1.7.1 on the owner's go (2026-10-26).
 
 - [x] **What's new after an update from 1.4.1** (2026-10-26, a review after the release): Vyro
       before 1.5 kept no version, and an update from it showed only the new version's notes, a
@@ -3137,6 +3137,15 @@ Fixes on `claude/vyro-1.7` after 1.7.0's release, for a 1.7.1 when the owner say
 - [x] **CI green** on b972394 (run 40296520623), every job, the end-to-end test at 135 checks
       with both of the above (in CI's Chrome, the clip over the direct connection). Test build
       `vyro-windows-b972394` (still numbered 1.7.0: the version goes up when 1.7.1 is released).
+- [x] **The relay deployed** from this branch at 2911c39 (2026-10-26, at the owner's go; Actions
+      run 40301180806, its tests first), so phones get both fixes the next time they open the
+      app.
+- [x] **Version 1.7.1** (the owner, 2026-10-26: "release 1.7.1"): `scripts/set-version.py
+      1.7.1`, and What's new in 1.7.1 (the notes of 1.5 and 1.6 now shown after an update from
+      1.4, and where to find them all; the clip that says the connection dropped). Its items are
+      the PC's only, so the phone app the relay serves (2911c39's, its notes up to 1.7.0) behaves
+      as 1.7.1's would and needs no deploy. The end-to-end test reads the version for the
+      phone's What's new title (it said 1.7).
 - Also looked at, nothing to fix: an update from 1.4.1 keeps its data (no change to the
   history's tables since; each file 1.5 to 1.7 added to stays readable without the new fields,
   phones paired before them may only look, and the files new since 1.5 start empty).
