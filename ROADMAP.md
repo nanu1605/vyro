@@ -3178,6 +3178,19 @@ Fixes on `claude/vyro-1.7` after 1.7.1's release, for a 1.7.2 when the owner say
       memory offset after the power limit and core offset ends at stock with no marker; a
       failed return to stock keeps the marker (both failed before). CI green on 4a88621 (run
       40311241489), every job. Test build `vyro-windows-4a88621` (numbered 1.7.1).
+- [x] **Updates from a phone: refused while the PC is locked, and confirmed first**
+      (2026-10-26, a review of 1.7's phone controls): Install on the phone's Updates page
+      started the installer at once. Windows asks someone at the PC to allow it, and Vyro
+      closes as it starts, so on a locked PC the prompt waited for someone to unlock it and the
+      phone lost the PC until then, with "The PC went to sleep or off." as the only word. The PC
+      now refuses it while it is locked ("The PC is locked, and Windows asks someone at it to
+      allow the update: install it there."), from what Windows says of the session; the phone
+      asks first ("Install Vyro <version> on <PC>?", saying someone at the PC must allow it and that
+      the phone cannot reach the PC until Vyro has started again), and once it starts says so
+      rather than that the PC went to sleep. The phone's part needs a relay deploy; an older
+      phone app already gets the PC's refusal. Relay check: the confirmation opens, passes the
+      accessibility check, and Install reaches the PC. CI green on 8e93b8a (run 40330207767),
+      every job. Test build `vyro-windows-8e93b8a` (numbered 1.7.1).
 - Also looked at, nothing to fix: the rest of GPU tuning (sleep, the heat guard, another
   program, a trial that ends by itself when the app stops, a crash seen at start, the app
   starting a test only once the card runs its settings); the phones' permission check (one
