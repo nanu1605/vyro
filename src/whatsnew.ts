@@ -21,6 +21,16 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '1.7.4',
+    items: [
+      {
+        icon: 'screen',
+        title: 'Taps that follow a new resolution',
+        text: 'When this PC’s resolution changes while your phone shows its screen (set here, or by a game), taps from the phone now land where they are shown, not where the screen used to be.',
+      },
+    ],
+  },
+  {
     version: '1.7.3',
     items: [
       {

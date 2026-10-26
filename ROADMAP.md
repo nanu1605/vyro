@@ -3253,9 +3253,9 @@ Fixes on `claude/vyro-1.7` after 1.7.2's release; 1.7.3 on the owner's go (2026-
 
 ### 1.7.4 — after 1.7.3
 
-Fixes on `claude/vyro-1.7` after 1.7.3's release, for a 1.7.4 when the owner says.
+Fixes on `claude/vyro-1.7` after 1.7.3's release; 1.7.4 on the owner's go (2026-10-26).
 
-- [ ] **Taps land where the monitor is after its resolution changes** (2026-10-26, a review of
+- [x] **Taps land where the monitor is after its resolution changes** (2026-10-26, a review of
       1.7's capture): where the shared monitor is on the desktop was read once, as the session
       started. Another resolution (set at the PC, or by a game going full screen), or a monitor
       added, removed or resized to its left or above, moves it on the desktop, and the picture
@@ -3266,7 +3266,11 @@ Fixes on `claude/vyro-1.7` after 1.7.3's release, for a 1.7.4 when the owner say
       after the picture is lost, GDI follows it, and the session is told each new place, also
       when the size sent stays the same. Test: a monitor that moves on the desktop during a
       session, its size the same, is followed with no new encoder (fails before). Field check
-      1.7, step 2.
+      1.7, step 2. Clippy clean for Windows here; the PC's alone: no relay deploy.
+- [x] **Version 1.7.4** (the owner, 2026-10-26: "release 1.7.4"): `scripts/set-version.py
+      1.7.4`, and What's new in 1.7.4 (taps that follow a new resolution). Its item is the PC's
+      only, so the phone app the relay serves (81131fc's, its notes up to 1.7.1) behaves as
+      1.7.4's would and needs no deploy.
 
 ## Risks
 
