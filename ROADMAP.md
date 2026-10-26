@@ -3285,13 +3285,27 @@ Fixes on `claude/vyro-1.7` after 1.7.3's release; 1.7.4 on the owner's go (2026-
 
 ### 1.7.5 — after 1.7.4
 
-Fixes on `claude/vyro-1.7` after 1.7.4's release, for a 1.7.5 when the owner says.
+Fixes on `claude/vyro-1.7` after 1.7.4's release; 1.7.5 on the owner's go (2026-10-26), all of
+them in the one release.
 
-- [ ] **The slow view's minutes left go down in Settings → Remote while it runs** (2026-10-26,
+- [x] **The slow view's minutes left go down in Settings → Remote while it runs** (2026-10-26,
       a review of 1.7's Settings): they were read when Settings showed and when a session
       started or ended, so with Settings open during a slow view they stayed where they were
       (field check 1.7, step 4, expects them to go down). Read again every 15 s while a slow
-      view is on and Settings → Remote shows.
+      view is on and Settings → Remote shows. svelte-check clean, the frontend's tests pass;
+      the PC's alone: no relay deploy.
+- [x] **Text with a control character in it types** (2026-10-26, a review of 1.7's input): the
+      phone leaves control characters out of typed text, but not DEL or U+0080–U+009F, which
+      text pasted into its box can hold; the PC refused a message with one, so that piece of
+      text (up to 200 characters) typed nothing, and in the slow view the whole batch it came
+      in was refused. The PC now leaves them out, newline and tab kept, and types the rest
+      (Ctrl+C and the like are still keys, sent as presses). Test: text with C0, DEL and C1
+      characters is typed without them (fails before). Clippy clean here; the PC's alone, so
+      the phone app the relay serves needs no deploy.
+- [x] **Version 1.7.5** (the owner, 2026-10-26: "make all the fixes in a single release"):
+      `scripts/set-version.py 1.7.5`, and What's new in 1.7.5 (minutes left that count down,
+      text with a hidden character). Both items are the PC's only, so the phone app the relay
+      serves (81131fc's, its notes up to 1.7.1) behaves as 1.7.5's would and needs no deploy.
 
 ## Risks
 

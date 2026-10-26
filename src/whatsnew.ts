@@ -21,6 +21,21 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '1.7.5',
+    items: [
+      {
+        icon: 'screen',
+        title: 'Minutes left that count down',
+        text: 'While your phone shows this PC’s screen through the slow view, Settings → Remote now counts its minutes left for today down as they go, not only when Settings opens.',
+      },
+      {
+        icon: 'screen',
+        title: 'Text with a hidden character still types',
+        text: 'Text typed from your phone that holds an invisible control character, as some pasted text does, now types without it here, rather than not at all.',
+      },
+    ],
+  },
+  {
     version: '1.7.4',
     items: [
       {

@@ -84,7 +84,8 @@ through the relay where it cannot.
 - If 3 did not show it: on the phone, turn on a VPN or a network that blocks UDP, or test from
   another network, until "No direct path" shows.
 - The picture refreshes about twice a second when something changes; taps and typing still work,
-  a little slower. Settings → Remote → Screen shows the minutes left today going down.
+  a little slower. Settings → Remote → Screen shows the minutes left today going down (from
+  1.7.5, also when Settings was open before the session started).
 - Drag around the PC's screen for a minute or more: the session goes on, and the top of the phone
   keeps saying **Live**.
 
