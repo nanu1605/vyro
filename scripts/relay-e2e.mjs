@@ -228,7 +228,13 @@ async function phone(browser, name) {
         }
         createDataChannel(label, ...rest) {
           window.__channels.push(label);
-          return super.createDataChannel(label, ...rest);
+          const ch = super.createDataChannel(label, ...rest);
+          // With `__stall` set, a clip's channel that never drains, as on a slow link.
+          if (label === 'clip' && window.__stall) {
+            Object.defineProperty(ch, 'bufferedAmount', { get: () => 2 << 20 });
+            window.__stalled = ch;
+          }
+          return ch;
         }
       };
     }
@@ -670,6 +676,22 @@ async function main() {
         if (await micsTaken(d.page)) problem('mic off', 'the phone still holds its microphone');
         // A voice clip over the direct connection, on its own channel.
         await sendClip(d.page, pc.out.next(/^screen: clip (\d+) bytes, (\d+) ms$/, 30_000), 'direct');
+        // The connection lost while much of a clip waits to go: the phone says so, rather than
+        // "Sending…" for good.
+        await d.page.evaluate(() => (window.__stall = true));
+        const clipSheet = d.page.getByRole('dialog', { name: /^A voice clip for / });
+        await d.page.getByRole('button', { name: /^Voice clip for / }).click();
+        await clipSheet.getByRole('button', { name: 'Record', exact: true }).click();
+        await clipSheet.getByRole('button', { name: /^Send to / }).waitFor({ timeout: 5000 });
+        await d.page.waitForTimeout(1000);
+        await clipSheet.getByRole('button', { name: /^Send to / }).click();
+        await d.page.waitForFunction(() => window.__stalled?.readyState === 'open', null, { timeout: 10_000 });
+        await d.page.waitForTimeout(500);
+        await d.page.evaluate(() => window.__stalled.close());
+        await seeText(d.page, /The connection to .+ was lost/, 'a clip whose connection is lost on the way says so', 5000);
+        await d.page.evaluate(() => (window.__stall = false));
+        await d.page.keyboard.press('Escape');
+        await clipSheet.waitFor({ state: 'hidden', timeout: 5000 });
         // SD from the toolbar (1.7): smaller pictures at once.
         await d.page.getByRole('button', { name: /^Quality: HD/ }).click();
         await seeText(d.page, /Receiving 960×540/, 'SD from the toolbar: the PC sends 960×540');

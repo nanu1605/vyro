@@ -644,6 +644,7 @@
     const p = peer;
     if (!p) throw new Error(`Not connected to ${pc}.`);
     const ch = p.createDataChannel('clip', { ordered: true });
+    const lost = () => new Error(`The connection to ${pc} was lost.`);
     try {
       await new Promise<void>((ok, fail) => {
         const t = setTimeout(() => fail(new Error(`${pc} did not answer.`)), 10_000);
@@ -652,6 +653,7 @@
       });
       const answer = new Promise<string>((ok, fail) => {
         const t = setTimeout(() => fail(new Error(`${pc} did not say it kept the clip.`)), 60_000);
+        ch.onclose = () => (clearTimeout(t), fail(lost()));
         ch.onmessage = (e) => {
           clearTimeout(t);
           let m: { t?: string; name?: string; why?: string } = {};
@@ -664,13 +666,22 @@
           else fail(new Error(m.why ?? `${pc} could not keep the clip.`));
         };
       });
+      // Not awaited when the sending below fails first.
+      answer.catch(() => {});
+      // Waits while much is queued; once the connection is lost what waits never goes, so it
+      // stops then rather than wait forever.
+      const ready = async () => {
+        while (ch.readyState === 'open' && ch.bufferedAmount > 1 << 20) await sleep(40);
+        if (ch.readyState !== 'open') throw lost();
+      };
       ch.send(JSON.stringify({ t: 'clip', bytes: bytes.length }));
       const parts = pieces(bytes, PIECE_DIRECT);
       for (let i = 0; i < parts.length; i++) {
-        while (ch.bufferedAmount > 1 << 20) await sleep(40);
+        await ready();
         ch.send(parts[i]!.slice());
         progress((i + 1) / parts.length);
       }
+      await ready();
       ch.send(JSON.stringify({ t: 'end' }));
       return await answer;
     } finally {
