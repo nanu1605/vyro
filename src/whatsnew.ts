@@ -149,11 +149,12 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-/** The notes to show after an update from `from` (null: a Vyro before 1.5, so this version's)
- * to `current`, newest first. */
+/** The notes to show after an update from `from` to `current`, newest first. `from` null: a
+ * Vyro before 1.5, which kept no version, so every version's notes up to `current` (they begin
+ * at 1.5, and 1.5 and 1.6 were released only within 1.7). */
 export function notesSince(from: string | null, current: string, notes: Release[] = NOTES): Release[] {
   const upTo = notes.filter((r) => compareVersions(r.version, current) <= 0);
-  if (from === null) return upTo.slice(0, 1);
+  if (from === null) return upTo;
   return upTo.filter((r) => compareVersions(r.version, from) > 0);
 }
 

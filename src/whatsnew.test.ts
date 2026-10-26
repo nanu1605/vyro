@@ -34,9 +34,11 @@ describe('what’s new', () => {
     expect(notesSince('1.5.0', '1.6.0', SAMPLE).map((n) => n.version)).toEqual(['1.6.0', '1.5.1']);
   });
 
-  it('shows this version’s notes after an update from before 1.5', () => {
+  it('shows every version’s notes after an update from before 1.5, which kept no version', () => {
     expect(notesSince(null, '1.5.0', SAMPLE).map((n) => n.version)).toEqual(['1.5.0']);
-    expect(notesSince(null, '1.6.0', SAMPLE).map((n) => n.version)).toEqual(['1.6.0']);
+    expect(notesSince(null, '1.6.0', SAMPLE).map((n) => n.version)).toEqual(['1.6.0', '1.5.1', '1.5.0']);
+    // 1.7.0 over 1.4.1, as released: 1.5 and 1.6 came only within it.
+    expect(notesSince(null, '1.7.0').map((n) => n.version)).toEqual(['1.7.0', '1.6.0', '1.5.0']);
   });
 
   it('tells the phone only of what the open PC has', () => {
@@ -51,7 +53,8 @@ describe('what’s new', () => {
     };
     // A PC on the newest Vyro: everything after what the phone showed, phone items only.
     expect(titles('1.5.0', '1.7.0')).toEqual(['1.7.0', ['Screen', 'Presets']]);
-    expect(titles(null, '1.7.0')).toEqual(['1.7.0', ['Screen']]);
+    // The app from before 1.7 showed none: every phone item up to the PC's Vyro.
+    expect(titles(null, '1.7.0')).toEqual(['1.7.0', ['Screen', 'Presets', 'Control']]);
     // A PC not yet updated: nothing from its future, and the rest is kept for when it is.
     expect(titles(null, '1.4.1')).toEqual(['1.4.1', []]);
     expect(titles('1.5.0', '1.6.0')).toEqual(['1.6.0', ['Presets']]);

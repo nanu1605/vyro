@@ -34,7 +34,7 @@ struct Stored {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Decision {
     /// Show the notes of every version after `from`; `None`: updated from a Vyro before 1.5,
-    /// whose version is not known, so this version's notes.
+    /// whose version is not known, so every version's notes.
     Show { from: Option<String> },
     /// Keep this version without showing anything (a new install, or an older version put back).
     Record,
