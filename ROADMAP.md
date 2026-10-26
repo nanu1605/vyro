@@ -3251,6 +3251,23 @@ Fixes on `claude/vyro-1.7` after 1.7.2's release; 1.7.3 on the owner's go (2026-
       serves 81131fc's phone app and relay, which differ from this commit's only in the PC-only
       notes of 1.7.2 and 1.7.3.
 
+### 1.7.4 — after 1.7.3
+
+Fixes on `claude/vyro-1.7` after 1.7.3's release, for a 1.7.4 when the owner says.
+
+- [ ] **Taps land where the monitor is after its resolution changes** (2026-10-26, a review of
+      1.7's capture): where the shared monitor is on the desktop was read once, as the session
+      started. Another resolution (set at the PC, or by a game going full screen), or a monitor
+      added, removed or resized to its left or above, moves it on the desktop, and the picture
+      came back at its new size, but taps went on landing by the old place: on a 1080p monitor
+      turned 1440p, a tap at the right edge clicked three quarters of the way across; beside a
+      changed monitor, they could land on the other one. The GDI fallback went on copying the
+      old part of the desktop. Capture now looks the monitor up again by name every second and
+      after the picture is lost, GDI follows it, and the session is told each new place, also
+      when the size sent stays the same. Test: a monitor that moves on the desktop during a
+      session, its size the same, is followed with no new encoder (fails before). Field check
+      1.7, step 2.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

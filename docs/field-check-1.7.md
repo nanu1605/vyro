@@ -54,6 +54,11 @@ through the relay where it cannot.
   windows switch. **Win**: the Start menu opens.
 - With two monitors: the screen buttons list both; choosing the other one shows it, and taps
   land on it.
+- From 1.7.4: while the screen is shown, change the monitor's resolution at the PC (Settings →
+  System → Display → Display resolution, Keep changes), or start a game that changes it. The
+  picture comes back at the new size, and a tap on an icon at the right or bottom edge still
+  clicks that icon. With two monitors, sharing the right one, change the left one's resolution:
+  taps still land on the right one where they are shown.
 - **HDR** (Settings → System → Display → Use HDR, on the monitor shown): the picture shows with
   its usual colours, neither black, dark nor washed out, and the PC's line says "Desktop
   Duplication (HDR)". Move the "SDR content brightness" slider, then show the screen again: white

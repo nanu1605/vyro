@@ -166,6 +166,8 @@ pub struct Capture {
     blank_since: Option<Instant>,
     /// When the monitor was last taken through GDI to see whether it really is blank.
     tried: Option<Instant>,
+    /// When where the monitor is on the desktop was last looked up.
+    followed: Instant,
     pub monitor: Monitor,
 }
 
@@ -177,6 +179,8 @@ unsafe impl Send for Capture {}
 const BLANK_FOR: Duration = Duration::from_secs(1);
 /// And again at most this often while GDI sees it blank too (a screen that really is black).
 const RETRY: Duration = Duration::from_secs(5);
+/// Where the monitor is on the desktop is looked up this often, and after it is opened again.
+const FOLLOW: Duration = Duration::from_secs(1);
 
 /// The monitor through GDI: a copy of its part of the screen into a bitmap of our own.
 struct Gdi {
@@ -332,6 +336,7 @@ impl Capture {
             gdi: None,
             blank_since: None,
             tried: None,
+            followed: Instant::now(),
             monitor,
         })
     }
@@ -349,7 +354,37 @@ impl Capture {
         self.hdr = None;
         self.blank_since = None;
         self.seen = false;
+        self.follow();
         Ok(())
+    }
+
+    /// Follows the monitor on the desktop: another resolution, or a monitor added or moved
+    /// beside it, changes where it is, and input and GDI go by that. Looked up afresh by name,
+    /// as the output kept since it opened may still describe it as it was.
+    fn follow(&mut self) {
+        self.followed = Instant::now();
+        let Some(now) = monitors().into_iter().find(|m| m.name == self.monitor.name) else {
+            return;
+        };
+        if now.rect == self.monitor.rect {
+            return;
+        }
+        let r = now.rect;
+        log::info!(
+            "screen: {} is now {}x{} at {},{}",
+            self.monitor.name,
+            r.width,
+            r.height,
+            r.left,
+            r.top
+        );
+        self.monitor.rect = r;
+        if self.gdi.is_some() {
+            match Gdi::open(r) {
+                Ok(g) => self.gdi = Some(g),
+                Err(e) => log::warn!("screen: {e}"),
+            }
+        }
     }
 
     /// The next look gives a picture though the screen did not change: the size sent changed
@@ -378,6 +413,9 @@ impl Capture {
 
     /// The next picture, waiting at most `timeout_ms`; `None` when the screen did not change.
     pub fn next(&mut self, timeout_ms: u32) -> Result<Option<Picture>, CaptureError> {
+        if self.followed.elapsed() >= FOLLOW {
+            self.follow();
+        }
         if let Some(g) = &mut self.gdi {
             return g.next(timeout_ms);
         }

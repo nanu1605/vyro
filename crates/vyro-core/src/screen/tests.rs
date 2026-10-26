@@ -914,6 +914,88 @@ fn a_quality_switch_takes_effect_on_a_still_screen() {
     producing.join().unwrap().unwrap();
 }
 
+/// A monitor that moves on the desktop as the session goes on (another resolution, a monitor
+/// added beside it) keeps its picture's size, but input must land where it is now: the session
+/// is told the new place, though no new encoder was needed.
+#[test]
+fn input_follows_a_monitor_that_moved() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex};
+    let mut phone = RtcConfig::new()
+        .clear_codecs()
+        .enable_h264(true)
+        .build(Instant::now());
+    let sock = UdpSocket::bind("127.0.0.1:0").unwrap();
+    phone.add_local_candidate(Candidate::host(sock.local_addr().unwrap(), "udp").unwrap());
+    let mut api = phone.sdp_api();
+    api.add_media(MediaKind::Video, Direction::RecvOnly, None, None, None);
+    api.add_channel("input".into());
+    let (offer, _pending) = api.apply().unwrap();
+    let opts = Options {
+        hosts: vec!["127.0.0.1".parse().unwrap()],
+        stun: Vec::new(),
+        stun_timeout: Duration::ZERO,
+    };
+    let (session, _answer) = rtc::start(&offer.to_sdp_string(), &opts, Box::new(|_| {})).unwrap();
+    let session = Arc::new(session);
+    let stop = Arc::new(AtomicBool::new(false));
+    let screen = TestScreen::new(1280, 720);
+    let left = Arc::clone(&screen.left);
+    // Where the session was told the monitor is, each time; and each encoder made.
+    let places = Arc::new(Mutex::new(Vec::<input::Rect>::new()));
+    let made = Arc::new(Mutex::new(0));
+    let producing = {
+        let (session, stop) = (Arc::clone(&session), Arc::clone(&stop));
+        let (places, made) = (Arc::clone(&places), Arc::clone(&made));
+        std::thread::spawn(move || {
+            producer::drive(
+                &session,
+                &producer::Settings::default(),
+                &stop,
+                &|s| {
+                    if let producer::Status::Sending { rect, .. } = s {
+                        places.lock().unwrap().push(rect);
+                    }
+                },
+                screen,
+                |_, _, fps, bitrate| {
+                    *made.lock().unwrap() += 1;
+                    Ok(SizedEncoder { fps, bitrate, n: 0 })
+                },
+            )
+        })
+    };
+    let wait_for = |left: i32| {
+        let until = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < until {
+            if places
+                .lock()
+                .unwrap()
+                .last()
+                .is_some_and(|r| r.left == left)
+            {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        panic!(
+            "not told the monitor is at {left}: {:?}",
+            places.lock().unwrap()
+        );
+    };
+    wait_for(0);
+    left.store(1920, Ordering::SeqCst);
+    wait_for(1920);
+    stop.store(true, Ordering::SeqCst);
+    producing.join().unwrap().unwrap();
+    assert_eq!(
+        *made.lock().unwrap(),
+        1,
+        "the same size needs no new encoder"
+    );
+    assert_eq!(places.lock().unwrap().len(), 2, "told once for each place");
+}
+
 /// The bit rate and step follow the connection: down at once, up only once the connection has
 /// carried more for a while, and the bit rate not for every small change.
 #[test]

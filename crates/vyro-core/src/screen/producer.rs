@@ -12,7 +12,7 @@
 //! the monitor and Windows' encoder in the app ([`run`]), a test screen and another encoder in
 //! the tests and the example PC.
 
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -384,6 +384,8 @@ pub fn drive<S: Source, E: Encode>(
     let mut last: Option<(Vec<u8>, Instant)> = None;
     let mut settle_until = Instant::now();
     let mut secure = false;
+    // The size last sent and where the monitor was, as the session was told.
+    let mut told: Option<(u32, u32, Rect)> = None;
     let mut report = Report::default();
     let mut counted = Instant::now();
     while !stop.load(Ordering::SeqCst) && !session.closed() {
@@ -461,10 +463,16 @@ pub fn drive<S: Source, E: Encode>(
                 {
                     enc = Some((make(w, h, step.fps, adapt.bitrate)?, w, h, step.fps));
                     made = true;
+                }
+                // Input lands where the monitor is now: another resolution, or a monitor added
+                // beside it, moves it on the desktop though the size sent may stay the same.
+                let place = (w, h, cap.rect());
+                if made || told != Some(place) {
+                    told = Some(place);
                     status(Status::Sending {
                         width: w,
                         height: h,
-                        rect: cap.rect(),
+                        rect: place.2,
                     });
                 }
                 settle_until = Instant::now() + SETTLE;
@@ -574,6 +582,8 @@ fn open(
 pub struct TestScreen {
     width: u32,
     height: u32,
+    /// Where its left edge is on the desktop (a monitor placed to its left moves it).
+    pub left: Arc<AtomicI32>,
     /// Change the picture on every look (true), or keep it still.
     pub moving: Arc<AtomicBool>,
     /// Pictures made so far (each one a step of the pattern).
@@ -586,6 +596,7 @@ impl TestScreen {
         Self {
             width,
             height,
+            left: Arc::new(AtomicI32::new(0)),
             moving: Arc::new(AtomicBool::new(true)),
             made: Arc::new(AtomicU32::new(0)),
             shown: false,
@@ -615,7 +626,7 @@ impl Source for TestScreen {
     }
     fn rect(&self) -> Rect {
         Rect {
-            left: 0,
+            left: self.left.load(Ordering::SeqCst),
             top: 0,
             width: self.width as i32,
             height: self.height as i32,
