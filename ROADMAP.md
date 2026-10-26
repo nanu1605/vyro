@@ -3107,9 +3107,36 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       and Release run 40138330608 tagged `v1.7.0`, found the relay's address in `vyro.exe` and
       published the 13.4 MB MSI, `latest.json` and checksums here and to
       `nanu1605/vyro-releases`, so installed copies are offered 1.7.0, and once it is in, What's
-      new shows 1.7, 1.6 and 1.5. 1.5.0 and 1.6.0 are not released on their own. The relay was
-      not deployed again: since run 40100373259 it serves 3965b62's phone app and relay, which
-      are this commit's.
+      new shows 1.7 (not 1.6 and 1.5 as first written here: found after the release, see 1.7.1;
+      Settings → Updates → What's new lists all three). 1.5.0 and 1.6.0 are not released on
+      their own. The relay was not deployed again: since run 40100373259 it serves 3965b62's
+      phone app and relay, which are this commit's.
+
+### 1.7.1 — after 1.7.0
+
+Fixes on `claude/vyro-1.7` after 1.7.0's release, for a 1.7.1 when the owner says.
+
+- [x] **What's new after an update from 1.4.1** (2026-10-26, a review after the release): Vyro
+      before 1.5 kept no version, and an update from it showed only the new version's notes, a
+      rule made when 1.5 was to be released on its own. 1.5 and 1.6 came out only within 1.7.0,
+      so a PC updated from 1.4.1 showed 1.7's notes alone (its screen on the phone, not GPU
+      tuning or control from the phone), and a phone that used the app before 1.7 likewise. An
+      update from a Vyro that kept no version now shows every version's notes up to the new
+      one: the PC's window opens the newest with the others folded below, and the phone lists
+      them (a unit test with 1.7.0 over 1.4.1; the end-to-end test opens the app as a phone
+      that used an older app and finds 1.5's notes). The phone's side reaches phones with the
+      relay's next deploy, before they have seen 1.7's; the PC's comes with 1.7.1, for PCs
+      still on 1.4.1 then.
+- [x] **A clip whose connection is lost on the way says so** (2026-10-26, the same review): over
+      the direct connection a clip waits while more than 1 MB of it is queued, and once the
+      connection is lost what is queued never goes, so a clip sent as it dropped (minutes of
+      voice on mobile data) showed "Sending…" for good and kept checking in the background. It
+      now stops when the clip's channel closes and says the connection was lost. The end-to-end
+      test sends a clip over a channel that never drains and closes it (it went on "Sending…"
+      before). The phone app's only: phones get it with the relay's next deploy.
+- Also looked at, nothing to fix: an update from 1.4.1 keeps its data (no change to the
+  history's tables since; each file 1.5 to 1.7 added to stays readable without the new fields,
+  phones paired before them may only look, and the files new since 1.5 start empty).
 
 ## Risks
 

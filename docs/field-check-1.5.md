@@ -92,7 +92,8 @@ and, for waking, a second PC with Vyro on the same wired network, if you have on
 
 - Install this build over the one installed now, as an update does (Vyro's settings stay). On
   its first start the window shows **What's new in Vyro 1.7** (the test build is 1.7.0; 1.5's own
-  build says 1.5), once; **Got it** closes it.
+  build says 1.5), once; **Got it** closes it. Over 1.4.1, 1.7.0 shows 1.7's notes alone;
+  from 1.7.1, 1.6's and 1.5's are folded below them (ROADMAP, 1.7.1).
   Started in the tray instead, a notification says Vyro was updated.
 - Quit Vyro from the tray and start it again: it does not show.
 - Settings → Updates → **What's new in 1.7**, or Ctrl+K → What's new, opens it again, with
