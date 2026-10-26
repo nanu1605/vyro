@@ -3161,6 +3161,30 @@ Fixes on `claude/vyro-1.7` after 1.7.0's release; 1.7.1 on the owner's go (2026-
   history's tables since; each file 1.5 to 1.7 added to stays readable without the new fields,
   phones paired before them may only look, and the files new since 1.5 start empty).
 
+### 1.7.2 — after 1.7.1
+
+Fixes on `claude/vyro-1.7` after 1.7.1's release, for a 1.7.2 when the owner says.
+
+- [x] **GPU tuning: a write the driver refuses part way leaves the card at stock** (2026-10-26,
+      a review of 1.6's tuning, which reached every PC with 1.7.0): the driver takes the
+      settings one at a time (power limit, core offset, memory offset). When it refused one,
+      the controller said "The card is at stock" but wrote nothing, so those that went on
+      before stayed on, the marker of a tuned card was removed, and the check every 5 s passed
+      over the card as at stock: a driver that refuses the memory offset (field check 1.6 asks
+      whether NVML takes offsets on GeForce at all) left a raised power limit and core offset
+      on with Vyro showing stock. What the card runs is now taken as not known, so stock is
+      written next, and the marker stays until stock is on; a return to stock that fails keeps
+      it too, so the next start gives the card stock. Tests: a simulated card that refuses the
+      memory offset after the power limit and core offset ends at stock with no marker; a
+      failed return to stock keeps the marker (both failed before). CI green on 4a88621 (run
+      40311241489), every job. Test build `vyro-windows-4a88621` (numbered 1.7.1).
+- Also looked at, nothing to fix: the rest of GPU tuning (sleep, the heat guard, another
+  program, a trial that ends by itself when the app stops, a crash seen at start, the app
+  starting a test only once the card runs its settings); the phones' permission check (one
+  place, unknown requests refused, replays refused) and the screen session ending when the
+  permission is taken back; the phone's live microphone and the PC's side of a clip through
+  the relay.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on
