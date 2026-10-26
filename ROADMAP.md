@@ -3191,6 +3191,9 @@ Fixes on `claude/vyro-1.7` after 1.7.1's release, for a 1.7.2 when the owner say
       phone app already gets the PC's refusal. Relay check: the confirmation opens, passes the
       accessibility check, and Install reaches the PC. CI green on 8e93b8a (run 40330207767),
       every job. Test build `vyro-windows-8e93b8a` (numbered 1.7.1).
+- [x] **The relay deployed** from this branch at 81131fc (2026-10-26, at the owner's go; Actions
+      run 40344879569, its tests first; version f22d0817), so phones ask before an install the
+      next time they open the app.
 - Also looked at, nothing to fix: the rest of GPU tuning (sleep, the heat guard, another
   program, a trial that ends by itself when the app stops, a crash seen at start, the app
   starting a test only once the card runs its settings); the phones' permission check (one
