@@ -3146,6 +3146,17 @@ Fixes on `claude/vyro-1.7` after 1.7.0's release; 1.7.1 on the owner's go (2026-
       the PC's only, so the phone app the relay serves (2911c39's, its notes up to 1.7.0) behaves
       as 1.7.1's would and needs no deploy. The end-to-end test reads the version for the
       phone's What's new title (it said 1.7).
+- [x] **1.7.1 released** (2026-10-26, on the owner's go): CI passed on 8ed9e04 (run
+      40302057374; Linux, Windows with the smoke test, the relay and phone app with the
+      end-to-end test, accessibility). `main` fast-forwarded to it from 1.7.0's records, and
+      Release run 40304397928 tagged `v1.7.1`, found the relay's address in `vyro.exe` and
+      published the 13.4 MB MSI, `latest.json` and checksums here and to
+      `nanu1605/vyro-releases`; GitHub's own digests of the files published here match the
+      checksums the run printed (MSI `8f83f5d8…`, `latest.json` `1c2ab2ad…`). Installed copies
+      on 1.4.1 or 1.7.0 are offered it: over 1.4.1 What's new opens 1.7.1 with 1.7, 1.6 and 1.5
+      folded below; over 1.7.0, 1.7.1 alone. The relay was not deployed again: since run
+      40301180806 it serves 2911c39's phone app and relay, which differ from this commit's only
+      in the PC-only notes of 1.7.1.
 - Also looked at, nothing to fix: an update from 1.4.1 keeps its data (no change to the
   history's tables since; each file 1.5 to 1.7 added to stays readable without the new fields,
   phones paired before them may only look, and the files new since 1.5 start empty).
