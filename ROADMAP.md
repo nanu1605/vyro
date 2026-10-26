@@ -3217,6 +3217,24 @@ Fixes on `claude/vyro-1.7` after 1.7.1's release; 1.7.2 on the owner's go (2026-
   permission is taken back; the phone's live microphone and the PC's side of a clip through
   the relay.
 
+### 1.7.3 — after 1.7.2
+
+Fixes on `claude/vyro-1.7` after 1.7.2's release, for a 1.7.3 when the owner says.
+
+- [ ] **Keys and buttons held from the phone are let go when the session ends** (2026-10-26, a
+      review of 1.7's screen input): the phone holds Ctrl, Alt, Shift and Win from a tap on
+      the key bar until its next key, and the left button through a drag, and the PC sent
+      each down as it came. A session that ended in between (Stop at the PC, the phone gone or
+      its network lost, the idle rule, another monitor chosen) left them down on the PC: for
+      the person at it, letters became shortcuts (Win and "l" locks the PC) or the mouse dragged
+      whatever it moved over, until they pressed the key or button themselves. The PC now notes
+      what a session holds down and lets go of it when the session ends, for the direct and the
+      slow view alike; input that arrives after the end is not sent. Win and Alt let go alone
+      would open Start or a window's menu, so an unassigned key goes first, as after a
+      shortcut. Tests: what a session holds through taps, the key bar and a drag, and what its
+      end lets go of; the releases as Windows input, Win masked and Ctrl not. Field check 1.7,
+      step 6.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

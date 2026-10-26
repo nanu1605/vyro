@@ -83,6 +83,79 @@ fn input_messages_are_checked() {
     assert!(input::parse(r#"{"t":"run","cmd":"x"}"#).is_err());
 }
 
+/// Ctrl and Win tapped on the phone's key bar, and a drag begun, when the session ends: its end
+/// lets go of them, and input after it is not sent.
+#[test]
+fn a_session_lets_go_of_what_it_held_when_it_ends() {
+    use input::Input::{Button as B, Key as K, Press};
+    let mut held = input::Held::default();
+    for i in [
+        K {
+            k: Key::Control,
+            down: true,
+        },
+        Press { c: 'c' },
+        K {
+            k: Key::Escape,
+            down: true,
+        },
+        K {
+            k: Key::Escape,
+            down: false,
+        },
+        K {
+            k: Key::Meta,
+            down: true,
+        },
+        K {
+            k: Key::Control,
+            down: true,
+        },
+        B {
+            b: Button::Right,
+            down: true,
+        },
+        B {
+            b: Button::Right,
+            down: false,
+        },
+        B {
+            b: Button::Left,
+            down: true,
+        },
+    ] {
+        assert!(held.note(&i));
+    }
+    assert_eq!(
+        held.end(),
+        [
+            B {
+                b: Button::Left,
+                down: false
+            },
+            K {
+                k: Key::Control,
+                down: false
+            },
+            K {
+                k: Key::Meta,
+                down: false
+            },
+        ]
+    );
+    assert!(!held.note(&K {
+        k: Key::Shift,
+        down: true
+    }));
+    assert!(held.end().is_empty(), "let go once");
+    // What the phone let go of itself is not let go again.
+    let mut tidy = input::Held::default();
+    for down in [true, false] {
+        assert!(tidy.note(&K { k: Key::Alt, down }));
+    }
+    assert!(tidy.end().is_empty());
+}
+
 /// An H.264 keyframe in Annex B form: SPS, PPS and an IDR slice (the contents do not matter to
 /// the transport).
 fn keyframe(n: u8) -> Vec<u8> {

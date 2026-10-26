@@ -183,6 +183,51 @@ pub fn apply(i: &Input, monitor: Rect) -> Result<(), String> {
     }
 }
 
+/// An unassigned key: pressed while Win or Alt is down, their release is not taken as Win or
+/// Alt pressed alone (Start, a window's menu), as after a shortcut.
+const MASK: VIRTUAL_KEY = VIRTUAL_KEY(0xE8);
+
+/// The Windows input that lets go of `up` (`Held::end`); releases need no position.
+fn releases(up: &[Input]) -> Vec<INPUT> {
+    const ANY: Rect = Rect {
+        left: 0,
+        top: 0,
+        width: 1,
+        height: 1,
+    };
+    let alone = |i: &Input| {
+        matches!(
+            i,
+            Input::Key {
+                k: Key::Meta | Key::Alt,
+                ..
+            }
+        )
+    };
+    let mut v = Vec::new();
+    if up.iter().any(alone) {
+        v.push(key(MASK, 0, KEYBD_EVENT_FLAGS(0)));
+        v.push(key(MASK, 0, KEYEVENTF_KEYUP));
+    }
+    for i in up {
+        v.extend(inputs(i, ANY, ANY));
+    }
+    v
+}
+
+/// Lets go of what an ended session held down.
+pub fn let_go(up: &[Input]) {
+    let v = releases(up);
+    if v.is_empty() {
+        return;
+    }
+    // SAFETY: a slice of fully initialised INPUT structures.
+    let sent = unsafe { SendInput(&v, std::mem::size_of::<INPUT>() as i32) };
+    if sent as usize != v.len() {
+        log::warn!("screen: Windows took {sent} of {} releases", v.len());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,5 +272,35 @@ mod tests {
                 "down is a negative turn"
             );
         }
+    }
+
+    #[test]
+    fn letting_go_of_win_or_alt_opens_nothing() {
+        let up = |k| Input::Key { k, down: false };
+        let v = releases(&[
+            Input::Button {
+                b: Button::Left,
+                down: false,
+            },
+            up(Key::Meta),
+        ]);
+        assert_eq!(v.len(), 4);
+        // SAFETY: reading the member each input was made with.
+        unsafe {
+            assert_eq!(
+                v[0].Anonymous.ki.wVk, MASK,
+                "masked first, while Win is down"
+            );
+            assert_eq!(v[1].Anonymous.ki.dwFlags, KEYEVENTF_KEYUP);
+            assert_eq!(v[2].Anonymous.mi.dwFlags, MOUSEEVENTF_LEFTUP);
+            assert_eq!(v[3].Anonymous.ki.wVk, VK_LWIN);
+            assert_eq!(
+                v[3].Anonymous.ki.dwFlags,
+                KEYEVENTF_KEYUP | KEYEVENTF_EXTENDEDKEY
+            );
+        }
+        // Ctrl alone opens nothing: no mask.
+        assert_eq!(releases(&[up(Key::Control)]).len(), 1);
+        assert!(releases(&[]).is_empty());
     }
 }

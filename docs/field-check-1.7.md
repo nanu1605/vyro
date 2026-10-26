@@ -101,6 +101,10 @@ through the relay where it cannot.
 - Leave the phone with the Screen tab open, then lock the phone for 10 minutes: the session ends
   by itself ("nobody used it for 10 minutes" in the record).
 - Turn the phone's permission off while it shows the screen: the session ends at once.
+- From 1.7.3: tap **Ctrl** and **Win** on the phone's key bar (both stay lit), then Stop at the
+  PC. Type on the PC's own keyboard: letters arrive as letters (no shortcuts), and the Start
+  menu did not open. The same with a drag held on the phone while the PC stops it: the mouse
+  is not left dragging.
 - With a session on, start one from the iPhone (also allowed): it is told the screen is already
   shared with the Android phone.
 

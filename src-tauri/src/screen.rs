@@ -87,6 +87,8 @@ struct Live {
     stop: Arc<AtomicBool>,
     /// When the phone last showed it is there: input, its "here", a picture asked for.
     used: Arc<Mutex<Instant>>,
+    /// The keys and buttons its input holds down, let go when it ends.
+    held: Arc<Mutex<vyro_core::screen::input::Held>>,
     #[cfg(windows)]
     kind: Kind,
 }
@@ -331,6 +333,8 @@ fn end(app: &AppHandle, serial: u64, why: &str, by: By) {
         return;
     };
     live.stop.store(true, Ordering::SeqCst);
+    #[cfg(windows)]
+    vyro_core::screen::inject::let_go(&lock(&live.held).end());
     crate::voice::session_ended(app, why);
     #[cfg(windows)]
     if let Kind::Direct(s) = &live.kind {
@@ -489,17 +493,22 @@ mod win {
         };
         let serial = next_serial(app);
         let used = Arc::new(Mutex::new(Instant::now()));
+        let held = Arc::new(Mutex::new(input::Held::default()));
         let rect = Arc::new(Mutex::new(None));
         let sink: rtc::EventSink = {
             let (app, used, rect) = (app.clone(), Arc::clone(&used), Arc::clone(&rect));
+            let held = Arc::clone(&held);
             let phone = r.name.clone();
             Box::new(move |e| match e {
                 SessionEvent::Connected => log::info!("screen: the phone is connected"),
                 SessionEvent::Input(i) => {
                     *lock(&used) = Instant::now();
                     if let Some(on) = *lock(&rect) {
-                        if let Err(e) = inject::apply(&i, on) {
-                            log::debug!("screen: {e}");
+                        let mut held = lock(&held);
+                        if held.note(&i) {
+                            if let Err(e) = inject::apply(&i, on) {
+                                log::debug!("screen: {e}");
+                            }
                         }
                     }
                 }
@@ -540,6 +549,7 @@ mod win {
                 started: Instant::now(),
                 stop: Arc::clone(&stop),
                 used,
+                held,
                 kind: Kind::Direct(Arc::clone(&session)),
             },
         )?;
@@ -612,6 +622,7 @@ mod win {
                     started: Instant::now(),
                     stop: Arc::new(AtomicBool::new(false)),
                     used: Arc::new(Mutex::new(Instant::now())),
+                    held: Arc::default(),
                     kind: Kind::Slow(Box::new(Slow {
                         capture,
                         last: None,
@@ -746,7 +757,7 @@ mod win {
             .map(|v| input::parse(&v.to_string()))
             .collect::<Result<Vec<_>, _>>()?;
         let state = state(app).ok_or("Vyro is starting.")?;
-        let on = {
+        let (on, held) = {
             let current = lock(&state.live);
             let live = current
                 .as_ref()
@@ -756,9 +767,13 @@ mod win {
                 return Err("A direct session takes input on its own connection.".into());
             };
             *lock(&live.used) = Instant::now();
-            view.capture.monitor.rect
+            (view.capture.monitor.rect, Arc::clone(&live.held))
         };
+        let mut held = lock(&held);
         for i in &inputs {
+            if !held.note(i) {
+                return Err("The session ended.".into());
+            }
             inject::apply(i, on)?;
         }
         Ok(json!({ "done": true }))

@@ -108,6 +108,54 @@ pub fn parse(msg: &str) -> Result<Input, String> {
     }
 }
 
+/// What a session's input holds down on the PC: keys and buttons pressed and not let go. The
+/// phone holds Ctrl, Alt, Shift and Win until its next key, and the left button through a drag;
+/// a session that ends between (the phone gone, Stop at the PC, the idle rule) would leave them
+/// down for whoever uses the PC next, so its end lets them go.
+#[derive(Debug, Default)]
+pub struct Held {
+    keys: Vec<Key>,
+    buttons: Vec<Button>,
+    ended: bool,
+}
+
+impl Held {
+    /// Notes `i` before it is sent; false once the session ended, when it is not sent.
+    pub fn note(&mut self, i: &Input) -> bool {
+        if self.ended {
+            return false;
+        }
+        match *i {
+            Input::Key { k, down } => hold(&mut self.keys, k, down),
+            Input::Button { b, down } => hold(&mut self.buttons, b, down),
+            _ => {}
+        }
+        true
+    }
+
+    /// The session ended: the input that lets go of what it holds. Later input is not sent.
+    pub fn end(&mut self) -> Vec<Input> {
+        self.ended = true;
+        let buttons = self
+            .buttons
+            .drain(..)
+            .map(|b| Input::Button { b, down: false });
+        let keys = self
+            .keys
+            .drain(..)
+            .rev()
+            .map(|k| Input::Key { k, down: false });
+        buttons.chain(keys).collect()
+    }
+}
+
+fn hold<T: PartialEq>(held: &mut Vec<T>, x: T, down: bool) {
+    held.retain(|h| *h != x);
+    if down {
+        held.push(x);
+    }
+}
+
 /// A rectangle of the desktop, in pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rect {
