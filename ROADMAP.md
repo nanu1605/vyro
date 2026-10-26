@@ -3317,6 +3317,23 @@ them in the one release.
       it. The relay was not deployed again: since run 40344879569 it serves 81131fc's phone app
       and relay, which differ from this commit's only in the PC-only notes of 1.7.2 to 1.7.5.
 
+### 1.7.6 — after 1.7.5
+
+Fixes on `claude/vyro-1.7` after 1.7.5's release, gathered for one release when the owner says
+(the owner, 2026-10-26: "make all the fixes in a single release").
+
+- [ ] **The phone's microphone starts once when turned off and on as it starts** (2026-10-26, a
+      review of 1.7's microphone): the first frame starts the cable on a thread of its own (a
+      second or so); turned off meanwhile, the PC forgot that start, so the phone's next frames
+      began a second one beside it. Each made the cable the default microphone or found it
+      already was, and the one the PC then dropped could put the old default back while the
+      other played: Windows' apps heard the PC's own microphone, not the phone's, and the phone
+      lost the line saying where the PC hears it. Now one start at a time: turned off while it
+      starts, it stops once started, unless the phone turns it on again first, when that start
+      plays. Test: off and on again while it starts is one start (fails before). Clippy clean
+      for Windows here, tests included; the PC's alone: no relay deploy. Field check 1.7,
+      step 12.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

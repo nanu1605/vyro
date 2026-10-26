@@ -179,6 +179,9 @@ through the relay where it cannot.
   the note has silence there, not the room around the PC, and Windows' Input stays CABLE Output.
 - Tap **Mic** again: at once (within a second) Windows' default microphone is the one you noted.
   The same after stopping the session on the PC with the Mic on.
+- From 1.7.6: tap **Mic**, and as soon as it lights, tap it off and on again. The phone says the
+  PC hears it as CABLE Output, Windows' Input shows CABLE Output and its level moves when you
+  speak; tap **Mic** off: the default you noted is back.
 - Turn off "Make the cable Windows' default microphone…" in Settings → Remote: **Mic** then leaves
   the default alone and the phone says to choose CABLE Output in the app.
 

@@ -112,12 +112,52 @@ pub struct Voice {
 enum Mic {
     #[default]
     Off,
-    /// Starting on its own thread; frames meanwhile are dropped.
-    Starting,
+    /// Starting on its own thread, for the phone named; frames meanwhile are dropped. `off`: it
+    /// was turned off meanwhile, and stops once started, unless that phone turns it on again
+    /// first (one start at a time: two would each switch, and put back, the default microphone).
+    Starting { phone: String, off: bool },
     /// It could not start; not tried again before [`RETRY`].
     Failed(Instant),
     #[cfg(windows)]
     On(Box<On>),
+}
+
+impl Mic {
+    /// A frame from `phone` while the microphone does not play: whether it starts it.
+    fn frame(&mut self, phone: &str) -> bool {
+        match self {
+            Mic::Starting { phone: p, off } => {
+                if p.as_str() == phone {
+                    *off = false;
+                }
+                false
+            }
+            Mic::Failed(at) if at.elapsed() < RETRY => false,
+            #[cfg(windows)]
+            Mic::On(_) => false,
+            Mic::Off | Mic::Failed(_) => {
+                *self = Mic::Starting {
+                    phone: phone.to_owned(),
+                    off: false,
+                };
+                true
+            }
+        }
+    }
+
+    /// Turned off: what played, to stop. One starting stops once started.
+    fn turn_off(&mut self) -> Mic {
+        if let Mic::Starting { off, .. } = self {
+            *off = true;
+            return Mic::Off;
+        }
+        std::mem::take(self)
+    }
+
+    /// A start finished: whether it plays now (else it was turned off as it started).
+    fn started(&self) -> bool {
+        matches!(self, Mic::Starting { off: false, .. })
+    }
 }
 
 #[cfg(windows)]
@@ -288,25 +328,22 @@ pub fn mic_frame(app: &AppHandle, phone: &str, frame: &[u8]) {
         return;
     };
     let mut mic = lock(&state.voice.mic);
-    match &mut *mic {
-        Mic::On(on) => {
-            on.last = Instant::now();
-            lock(&on.player.frames).push(seq, samples);
-        }
-        Mic::Starting => {}
-        Mic::Failed(at) if at.elapsed() < RETRY => {}
-        Mic::Off | Mic::Failed(_) => {
-            *mic = Mic::Starting;
-            drop(mic);
-            let (app, phone) = (app.clone(), phone.to_owned());
-            let spawned = std::thread::Builder::new()
-                .name("vyro-mic-start".into())
-                .spawn(move || start(&app, phone));
-            if let Err(e) = spawned {
-                log::warn!("phone microphone: {e}");
-                *lock(&state.voice.mic) = Mic::Failed(Instant::now());
-            }
-        }
+    if let Mic::On(on) = &mut *mic {
+        on.last = Instant::now();
+        lock(&on.player.frames).push(seq, samples);
+        return;
+    }
+    if !mic.frame(phone) {
+        return;
+    }
+    drop(mic);
+    let (app, phone) = (app.clone(), phone.to_owned());
+    let spawned = std::thread::Builder::new()
+        .name("vyro-mic-start".into())
+        .spawn(move || start(&app, phone));
+    if let Err(e) = spawned {
+        log::warn!("phone microphone: {e}");
+        *lock(&state.voice.mic) = Mic::Failed(Instant::now());
     }
 }
 
@@ -363,7 +400,7 @@ fn start(app: &AppHandle, phone: String) {
     };
     {
         let mut mic = lock(&state.voice.mic);
-        if !matches!(*mic, Mic::Starting) {
+        if !mic.started() {
             // Turned off, or the session ended, meanwhile.
             drop(mic);
             stop(app, on, "turned off as it started");
@@ -437,8 +474,8 @@ pub fn mic_off(app: &AppHandle, why: &str) {
         let Some(state) = state(app) else {
             return;
         };
-        let was = std::mem::take(&mut *lock(&state.voice.mic));
         // Starting: `start` sees it and stops. Failed: the phone's next try starts at once.
+        let was = lock(&state.voice.mic).turn_off();
         if let Mic::On(on) = was {
             stop(app, *on, why);
         }
@@ -558,6 +595,26 @@ mod tests {
             ..was
         };
         assert_eq!(put_back(&none, Some("cable"), None), (None, None));
+    }
+
+    #[test]
+    fn off_and_on_again_while_it_starts_is_one_start() {
+        let mut mic = Mic::Off;
+        assert!(mic.frame("phone"), "the first frame starts it");
+        assert!(!mic.frame("phone"), "one start at a time");
+        assert!(matches!(mic.turn_off(), Mic::Off), "nothing plays yet");
+        // On again before the start finished: no second start, and the first one plays.
+        assert!(!mic.frame("phone"));
+        assert!(mic.started());
+
+        // Off while it starts, and not on again: it stops once started.
+        let mut mic = Mic::Off;
+        mic.frame("phone");
+        mic.turn_off();
+        assert!(!mic.started());
+        // Another phone's frames (a session after) wait for that start to end.
+        assert!(!mic.frame("other phone"));
+        assert!(!mic.started());
     }
 
     #[test]
