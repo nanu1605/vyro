@@ -214,11 +214,7 @@ fn main() {
 
     app.run(|handle, event| {
         if let tauri::RunEvent::Exit = event {
-            // Ends a benchmark's load and keeps the stopped run before the engine goes.
-            bench::stop_and_wait(handle, "Vyro quit.", std::time::Duration::from_secs(3));
-            // Ends a GPU stability test, so its trial ends now rather than in half a minute.
-            gpu_tune::stop_and_wait(handle, std::time::Duration::from_secs(3));
-            screen::end_all(handle, "Vyro closed");
+            wind_down(handle, "Vyro closed");
             if let Some(remote) = handle.try_state::<remote::Remote>() {
                 remote.stop();
                 remote.stop_relay();
@@ -228,4 +224,16 @@ fn main() {
             }
         }
     });
+}
+
+/// Ends what would go on, or stay, after Vyro: as it quits, and before an update's installer,
+/// which ends the process at once (Windows) without the app's own exit. A screen session ends
+/// saying `why`.
+pub(crate) fn wind_down(handle: &tauri::AppHandle, why: &str) {
+    // Ends a benchmark's load and keeps the stopped run before the engine goes.
+    bench::stop_and_wait(handle, "Vyro quit.", std::time::Duration::from_secs(3));
+    // Ends a GPU stability test, so its trial ends now rather than in half a minute.
+    gpu_tune::stop_and_wait(handle, std::time::Duration::from_secs(3));
+    // Lets go of keys a phone holds, and puts the default microphone back.
+    screen::end_all(handle, why);
 }

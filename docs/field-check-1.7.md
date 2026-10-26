@@ -111,6 +111,10 @@ through the relay where it cannot.
   PC. Type on the PC's own keyboard: letters arrive as letters (no shortcuts), and the Start
   menu did not open. The same with a drag held on the phone while the PC stops it: the mouse
   is not left dragging.
+- From 1.7.6, with an update offered (the next version, when there is one): tap **Ctrl** on
+  the phone's key bar, then at the PC Settings → Updates → **Install and restart**. The session
+  ends (the phone says "Vyro is installing an update", or that the connection was lost), and
+  while the installer runs and after, the PC's keyboard types letters, not shortcuts.
 - With a session on, start one from the iPhone (also allowed): it is told the screen is already
   shared with the Android phone.
 

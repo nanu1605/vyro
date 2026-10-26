@@ -105,7 +105,17 @@ pub(crate) async fn check(app: &AppHandle, auto: bool) -> UpdateStatus {
         s.checking = true;
         s.error = None;
     });
-    let result = match app.updater() {
+    // The installer ends this process at once (Windows), without the app's own exit: what
+    // would outlast it ends first, then the plugin's own cleanup, which this hook replaces.
+    let handle = app.clone();
+    let updater = app
+        .updater_builder()
+        .on_before_exit(move || {
+            crate::wind_down(&handle, "Vyro is installing an update");
+            handle.cleanup_before_exit();
+        })
+        .build();
+    let result = match updater {
         Ok(u) => u.check().await.map_err(|e| describe(&e)),
         Err(e) => Err(describe(&e)),
     };

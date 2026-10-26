@@ -3333,6 +3333,17 @@ Fixes on `claude/vyro-1.7` after 1.7.5's release, gathered for one release when 
       plays. Test: off and on again while it starts is one start (fails before). Clippy clean
       for Windows here, tests included; the PC's alone: no relay deploy. Field check 1.7,
       step 12.
+- [ ] **An update ends a screen session as quitting does** (2026-10-26, a review of 1.7's
+      update from the phone): on Windows the updater starts the installer and ends the process
+      at once, so Vyro's own exit never ran. A phone's session was left as it was: keys and a
+      drag it held stayed down after the update (what 1.7.3 fixed for a session that ends), the
+      phone heard only that the connection was lost, and the default microphone came back only
+      once Vyro started again. A benchmark's run under way was not kept, and a GPU stability
+      test's trial ended half a minute later. The update now runs what quitting ends first:
+      the session (the phone told "Vyro is installing an update" if the note goes out before
+      the process ends), the benchmark and the GPU test; the relay and the engine are left to
+      the process's end, so an installer that did not start leaves Vyro working. Clippy clean
+      for Windows here; the PC's alone: no relay deploy. Field check 1.7, step 6.
 
 ## Risks
 
