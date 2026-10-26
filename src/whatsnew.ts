@@ -21,6 +21,16 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '1.7.3',
+    items: [
+      {
+        icon: 'screen',
+        title: 'Keys from your phone let go when a session ends',
+        text: 'Ctrl, Alt, Shift or Win tapped on your phone, or a drag, no longer stays held down on this PC when its screen session ends first: whoever uses the PC next types letters, not shortcuts.',
+      },
+    ],
+  },
+  {
     version: '1.7.2',
     items: [
       {

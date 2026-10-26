@@ -3219,7 +3219,7 @@ Fixes on `claude/vyro-1.7` after 1.7.1's release; 1.7.2 on the owner's go (2026-
 
 ### 1.7.3 — after 1.7.2
 
-Fixes on `claude/vyro-1.7` after 1.7.2's release, for a 1.7.3 when the owner says.
+Fixes on `claude/vyro-1.7` after 1.7.2's release; 1.7.3 on the owner's go (2026-10-26).
 
 - [x] **Keys and buttons held from the phone are let go when the session ends** (2026-10-26, a
       review of 1.7's screen input): the phone holds Ctrl, Alt, Shift and Win from a tap on
@@ -3235,6 +3235,10 @@ Fixes on `claude/vyro-1.7` after 1.7.2's release, for a 1.7.3 when the owner say
       end lets go of; the releases as Windows input, Win masked and Ctrl not. Field check 1.7,
       step 6. CI green on 0a138fa (run 40375538723), every job, both tests run on Windows. Test
       build `vyro-windows-0a138fa` (numbered 1.7.2). The PC's alone: no relay deploy.
+- [x] **Version 1.7.3** (the owner, 2026-10-26: "release 1.7.3"): `scripts/set-version.py
+      1.7.3`, and What's new in 1.7.3 (keys from the phone let go when a session ends). Its
+      item is the PC's only, so the phone app the relay serves (81131fc's, its notes up to
+      1.7.1) behaves as 1.7.3's would and needs no deploy.
 
 ## Risks
 
