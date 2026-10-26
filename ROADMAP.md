@@ -3221,7 +3221,7 @@ Fixes on `claude/vyro-1.7` after 1.7.1's release; 1.7.2 on the owner's go (2026-
 
 Fixes on `claude/vyro-1.7` after 1.7.2's release, for a 1.7.3 when the owner says.
 
-- [ ] **Keys and buttons held from the phone are let go when the session ends** (2026-10-26, a
+- [x] **Keys and buttons held from the phone are let go when the session ends** (2026-10-26, a
       review of 1.7's screen input): the phone holds Ctrl, Alt, Shift and Win from a tap on
       the key bar until its next key, and the left button through a drag, and the PC sent
       each down as it came. A session that ended in between (Stop at the PC, the phone gone or
@@ -3233,7 +3233,8 @@ Fixes on `claude/vyro-1.7` after 1.7.2's release, for a 1.7.3 when the owner say
       would open Start or a window's menu, so an unassigned key goes first, as after a
       shortcut. Tests: what a session holds through taps, the key bar and a drag, and what its
       end lets go of; the releases as Windows input, Win masked and Ctrl not. Field check 1.7,
-      step 6.
+      step 6. CI green on 0a138fa (run 40375538723), every job, both tests run on Windows. Test
+      build `vyro-windows-0a138fa` (numbered 1.7.2). The PC's alone: no relay deploy.
 
 ## Risks
 
