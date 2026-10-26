@@ -110,6 +110,17 @@
       error = String(e).replace(/^Error: /, '');
     }
   }
+  // The slow view's minutes left go down as it runs, with no event: read again meanwhile.
+  const slowOn = $derived(!!screen?.share?.slow);
+  $effect(() => {
+    if (!active || !slowOn) return;
+    const t = setInterval(() => {
+      getScreenStatus()
+        .then((s) => (screen = s))
+        .catch(() => {});
+    }, 15_000);
+    return () => clearInterval(t);
+  });
   // Read when "Wake from phone" is turned on or Settings shows, not on every status reload (it
   // reads the adapters and Wi-Fi).
   const wakeOn = $derived(!!status?.relay.wake);

@@ -3283,6 +3283,16 @@ Fixes on `claude/vyro-1.7` after 1.7.3's release; 1.7.4 on the owner's go (2026-
       it serves 81131fc's phone app and relay, which differ from this commit's only in the
       PC-only notes of 1.7.2 to 1.7.4.
 
+### 1.7.5 — after 1.7.4
+
+Fixes on `claude/vyro-1.7` after 1.7.4's release, for a 1.7.5 when the owner says.
+
+- [ ] **The slow view's minutes left go down in Settings → Remote while it runs** (2026-10-26,
+      a review of 1.7's Settings): they were read when Settings showed and when a session
+      started or ended, so with Settings open during a slow view they stayed where they were
+      (field check 1.7, step 4, expects them to go down). Read again every 15 s while a slow
+      view is on and Settings → Remote shows.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on
