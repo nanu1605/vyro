@@ -84,10 +84,11 @@ pub enum Input {
 
 /// Reads and checks one message.
 pub fn parse(msg: &str) -> Result<Input, String> {
-    let i: Input = serde_json::from_str(msg).map_err(|e| format!("not an input message: {e}"))?;
-    match &i {
+    let mut i: Input =
+        serde_json::from_str(msg).map_err(|e| format!("not an input message: {e}"))?;
+    match &mut i {
         Input::Move { x, y } if !(0.0..=1.0).contains(x) || !(0.0..=1.0).contains(y) => {
-            Err("position outside the screen".into())
+            return Err("position outside the screen".into());
         }
         Input::Scroll { dx, dy }
             if !dx.is_finite()
@@ -95,17 +96,21 @@ pub fn parse(msg: &str) -> Result<Input, String> {
                 || dx.abs() > MAX_NOTCHES
                 || dy.abs() > MAX_NOTCHES =>
         {
-            Err("too much scrolling at once".into())
+            return Err("too much scrolling at once".into());
         }
-        Input::Text { s } if s.chars().count() > MAX_TEXT => Err("too much text at once".into()),
-        Input::Text { s } if s.chars().any(|c| c.is_control() && c != '\n' && c != '\t') => {
-            Err("control characters are sent as keys".into())
+        Input::Text { s } if s.chars().count() > MAX_TEXT => {
+            return Err("too much text at once".into());
         }
+        // Control characters are sent as keys (Ctrl+C is a press); in text they are left out
+        // rather than the whole message refused. The phone leaves out most, not DEL or
+        // U+0080–U+009F, which text pasted into it can hold.
+        Input::Text { s } => s.retain(|c| !c.is_control() || c == '\n' || c == '\t'),
         Input::Press { c } if !c.is_ascii_alphanumeric() => {
-            Err("only letters and digits are pressed as keys".into())
+            return Err("only letters and digits are pressed as keys".into());
         }
-        _ => Ok(i),
+        _ => {}
     }
+    Ok(i)
 }
 
 /// What a session's input holds down on the PC: keys and buttons pressed and not let go. The

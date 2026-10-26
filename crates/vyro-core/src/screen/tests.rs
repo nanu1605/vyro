@@ -76,9 +76,12 @@ fn input_messages_are_checked() {
     assert!(input::parse(r#"{"t":"key","k":"F13","down":true}"#).is_err());
     assert!(input::parse(r#"{"t":"text","s":"héllo wörld"}"#).is_ok());
     assert!(input::parse(&format!(r#"{{"t":"text","s":"{}"}}"#, "a".repeat(201))).is_err());
-    assert!(
-        input::parse("{\"t\":\"text\",\"s\":\"\\u0003\"}").is_err(),
-        "Ctrl+C is a key"
+    // Control characters are left out of text (Ctrl+C is a key), not the whole text refused.
+    assert_eq!(
+        input::parse("{\"t\":\"text\",\"s\":\"a\\u0003b\\u007fc\\u0085d\\te\\nf\"}"),
+        Ok(input::Input::Text {
+            s: "abcd\te\nf".into()
+        })
     );
     assert!(input::parse(r#"{"t":"run","cmd":"x"}"#).is_err());
 }
