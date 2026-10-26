@@ -3199,6 +3199,17 @@ Fixes on `claude/vyro-1.7` after 1.7.1's release; 1.7.2 on the owner's go (2026-
       setting; updates from the phone ask first, and not while the PC is locked). Its items are
       the PC's only, so the phone app the relay serves (81131fc's, its notes up to 1.7.1)
       behaves as 1.7.2's would and needs no deploy.
+- [x] **1.7.2 released** (2026-10-26, on the owner's go): CI passed on 3b43668 (run
+      40345701196; Linux, Windows with the smoke test, the relay and phone app with the
+      end-to-end test, accessibility). `main` fast-forwarded to it from 1.7.1's records, and
+      Release run 40348950165 tagged `v1.7.2`, found the relay's address in `vyro.exe` and
+      published the 13.4 MB MSI, `latest.json` and checksums here and to
+      `nanu1605/vyro-releases`; GitHub's own digests of the files published here match the
+      checksums the run printed (MSI `3bdbe6e4…`, `latest.json` `c3630e03…`). Installed copies
+      on 1.4.1 to 1.7.1 are offered it; What's new opens 1.7.2, with the versions since the
+      installed one folded below. The relay was not deployed again: since run 40344879569 it
+      serves 81131fc's phone app and relay, which differ from this commit's only in the PC-only
+      notes of 1.7.2.
 - Also looked at, nothing to fix: the rest of GPU tuning (sleep, the heat guard, another
   program, a trial that ends by itself when the app stops, a crash seen at start, the app
   starting a test only once the card runs its settings); the phones' permission check (one
