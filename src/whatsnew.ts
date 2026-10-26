@@ -21,6 +21,21 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '1.7.2',
+    items: [
+      {
+        icon: 'gpu',
+        title: 'Back to stock when the driver refuses a setting',
+        text: 'If the driver takes some of a tuning’s settings but refuses the next, the card now goes back to stock, rather than keeping those it took while Vyro showed Stock.',
+      },
+      {
+        icon: 'phone',
+        title: 'Updates from your phone ask first',
+        text: 'Someone at this PC must allow an update, and Vyro closes here while it installs, so your phone now asks before it starts one. While this PC is locked, install it here.',
+      },
+    ],
+  },
+  {
     version: '1.7.1',
     items: [
       {

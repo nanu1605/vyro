@@ -3163,7 +3163,7 @@ Fixes on `claude/vyro-1.7` after 1.7.0's release; 1.7.1 on the owner's go (2026-
 
 ### 1.7.2 — after 1.7.1
 
-Fixes on `claude/vyro-1.7` after 1.7.1's release, for a 1.7.2 when the owner says.
+Fixes on `claude/vyro-1.7` after 1.7.1's release; 1.7.2 on the owner's go (2026-10-26).
 
 - [x] **GPU tuning: a write the driver refuses part way leaves the card at stock** (2026-10-26,
       a review of 1.6's tuning, which reached every PC with 1.7.0): the driver takes the
@@ -3194,6 +3194,11 @@ Fixes on `claude/vyro-1.7` after 1.7.1's release, for a 1.7.2 when the owner say
 - [x] **The relay deployed** from this branch at 81131fc (2026-10-26, at the owner's go; Actions
       run 40344879569, its tests first; version f22d0817), so phones ask before an install the
       next time they open the app.
+- [x] **Version 1.7.2** (the owner, 2026-10-26: "release 1.7.2"): `scripts/set-version.py
+      1.7.2`, and What's new in 1.7.2 (the card back to stock when the driver refuses a
+      setting; updates from the phone ask first, and not while the PC is locked). Its items are
+      the PC's only, so the phone app the relay serves (81131fc's, its notes up to 1.7.1)
+      behaves as 1.7.2's would and needs no deploy.
 - Also looked at, nothing to fix: the rest of GPU tuning (sleep, the heat guard, another
   program, a trial that ends by itself when the app stops, a crash seen at start, the app
   starting a test only once the card runs its settings); the phones' permission check (one
