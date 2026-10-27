@@ -21,6 +21,39 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '1.7.7',
+    items: [
+      {
+        icon: 'screen',
+        title: 'Your screen stays on your phone through a dropped connection',
+        text: 'The phone now keeps showing this PC’s screen when its connection drops for a moment, as when it changes networks, and the slow view reconnects rather than ending.',
+        phone: true,
+      },
+      {
+        icon: 'screen',
+        title: 'Another monitor without locking',
+        text: 'With “Lock this PC when a phone’s session ends” on, choosing another monitor on your phone, or its falling back to the slow view, no longer locks this PC in between.',
+      },
+      {
+        icon: 'mic',
+        title: 'Your phone’s microphone ends with its session',
+        text: 'A session’s end no longer leaves your phone’s microphone as Windows’ default for a few seconds after, and Vyro puts yours back as it closes.',
+      },
+      {
+        icon: 'mic',
+        title: 'A voice clip you cancel stops',
+        text: 'Closing the clip sheet while a clip sends, or tapping its new Cancel, now stops sending it, so it no longer lands on this PC later.',
+        phone: true,
+      },
+      {
+        icon: 'phone',
+        title: 'Pages that keep what they showed',
+        text: 'One refresh that fails no longer empties a page on your phone: Health, Processes, Devices and More keep what this PC said last.',
+        phone: true,
+      },
+    ],
+  },
+  {
     version: '1.7.6',
     items: [
       {

@@ -3430,6 +3430,12 @@ Fixes on `claude/vyro-1.7` after 1.7.6's release, gathered for one release when 
       failed: no picture after the drop). CI green on 6a4a139 (run 40477715492, every job; the
       Windows job ran the app's tests, the end to end its 141 checks, the direct session in
       Google Chrome among them).
+- [x] **Version 1.7.7** (the owner, 2026-10-27: "release 1.7.7"): `scripts/set-version.py
+      1.7.7`, and What's new in 1.7.7 (the screen through a dropped connection, another monitor
+      without locking, the phone's microphone that ends with its session, a voice clip that
+      stops when cancelled, pages that keep what they showed). Three items are the phone app's
+      and marked for it; the phone shows them once the relay serves this commit's phone app,
+      which the owner's go on a deploy decides.
 
 ## Risks
 
