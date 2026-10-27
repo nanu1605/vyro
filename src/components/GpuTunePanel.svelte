@@ -54,6 +54,17 @@
     ampere: 'Ampere (RTX 30)',
     ada: 'Ada Lovelace (RTX 40)',
     blackwell: 'Blackwell (RTX 50)',
+    rdna2: 'RDNA 2 (RX 6000)',
+    rdna3: 'RDNA 3 (RX 7000)',
+    rdna4: 'RDNA 4 (RX 9000)',
+    alchemist: 'Alchemist (Arc A)',
+    battlemage: 'Battlemage (Arc B)',
+  };
+  /** Whose driver interface tunes the card (2.0), as the anti-cheat note names it. */
+  const INTERFACE: Record<string, string> = {
+    nvidia: "NVIDIA's own driver interface, as NVIDIA's tools do",
+    amd: "AMD's own driver interface (ADLX), as AMD Software does",
+    intel: "Intel's own driver interface, as Intel's tools do",
   };
 
   function refresh(): void {
@@ -220,8 +231,8 @@
         <p class="note">GPU tuning runs in the Vyro sensor service, which is not running.</p>
       {:else}
         <p class="note">
-          Vyro tunes NVIDIA RTX 20 to RTX 50 cards, desktop and laptop, through NVIDIA's own driver interface. AMD and Intel
-          graphics are not supported yet.
+          Vyro tunes NVIDIA RTX 20 to RTX 50, AMD Radeon RX 6000 to RX 9000 and Intel Arc A- and B-series cards, desktop and
+          laptop, each through its maker's own driver interface. Graphics built into a processor are not tuned.
         </p>
       {/if}
     </div>
@@ -230,8 +241,9 @@
       <div>
         <h2>GPU tuning</h2>
         <p class="sub">
-          {status.gpu?.name}{status.gpu?.family ? ` · ${FAMILY[status.gpu.family]}` : ''}{status.gpu?.laptop ? ' · laptop' : ''} · driver
-          {status.gpu?.driver}
+          {status.gpu?.name}{status.gpu?.family ? ` · ${FAMILY[status.gpu.family]}` : ''}{status.gpu?.laptop ? ' · laptop' : ''}{status.gpu?.driver
+            ? ` · ${status.gpu.vendor === 'amd' ? 'AMD Software' : 'driver'} ${status.gpu.driver}`
+            : ''}
         </p>
       </div>
       <div class="actions">
@@ -450,13 +462,23 @@
       <p>Vyro will change the {status.gpu?.name}'s clocks and power limit when you apply a preset.</p>
       <ul>
         <li>Higher clocks can crash games or the PC, or show glitches. Test settings before you rely on them.</li>
-        <li>Raising clocks may affect your card's warranty, as with any tuning tool.</li>
+        {#if status.gpu?.vendor === 'intel'}
+          <li>
+            Intel asks every tuning tool to say this: raising clocks or power can shorten the card's life, and turning tuning on
+            accepts Intel's overclocking warranty waiver for this card.
+          </li>
+        {:else}
+          <li>Raising clocks may affect your card's warranty, as with any tuning tool.</li>
+        {/if}
         <li>
-          Some games' anti-cheat checks tuning tools. Vyro uses only NVIDIA's own driver interface, as NVIDIA's tools do; see
-          the anti-cheat notes in Vyro's documentation.
+          Some games' anti-cheat checks tuning tools. Vyro uses only {INTERFACE[status.gpu?.vendor ?? 'nvidia']}; see the
+          anti-cheat notes in Vyro's documentation.
         </li>
         <li>After a crash or a driver reset Vyro starts the card at stock. Closing the window does not end tuning; use “Return to stock”.</li>
-        <li>Close MSI Afterburner and other tuning tools first: two programs setting the same clocks fight.</li>
+        <li>
+          Close MSI Afterburner, AMD Software's own tuning and other tuning tools first: two programs setting the same clocks
+          fight.
+        </li>
       </ul>
       <div class="actions">
         <button type="button" onclick={() => confirm?.close()}>Cancel</button>

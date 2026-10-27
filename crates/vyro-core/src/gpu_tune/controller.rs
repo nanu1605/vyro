@@ -732,7 +732,7 @@ impl TuneControl {
                 inner.guard = TempGuard::default();
                 return;
             }
-            let Some(card) = gpus.iter().find(|g| same_card(&g.name, &gpu.name)) else {
+            let Some(card) = gpus.iter().find(|g| super::same_card(&g.name, &gpu.name)) else {
                 return;
             };
             match inner.guard.check(card.temp_edge, card.temp_hotspot) {
@@ -789,18 +789,6 @@ fn new_inner(config: TuneConfig, profile: Profile, gpu: &GpuInfo, limits: &Limit
         recent: VecDeque::new(),
         pending: Vec::new(),
     }
-}
-
-/// Whether a snapshot's GPU name is the tuned card ("NVIDIA GeForce RTX 4070" in either).
-fn same_card(snapshot: &str, nvml: &str) -> bool {
-    let norm = |s: &str| {
-        s.to_ascii_lowercase()
-            .replace("nvidia", "")
-            .trim()
-            .to_owned()
-    };
-    let (a, b) = (norm(snapshot), norm(nvml));
-    !a.is_empty() && (a == b || a.contains(&b) || b.contains(&a))
 }
 
 struct Worker {
@@ -1041,6 +1029,7 @@ impl SimDevice {
     pub fn new() -> Self {
         Self {
             info: GpuInfo {
+                vendor: super::Vendor::Nvidia,
                 name: "NVIDIA GeForce RTX 4070 (simulated)".into(),
                 uuid: "GPU-sim".into(),
                 family: Some(super::Family::Ada),

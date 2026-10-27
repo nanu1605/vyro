@@ -330,7 +330,7 @@ fn run_search(
     mem_max: i32,
     mem_fast: i32,
 ) -> (Next, u32) {
-    let mut s = Search::new(start, l);
+    let mut s = Search::new(start, l, Vendor::Nvidia);
     let mut next = s.first();
     let mut tests = 0;
     loop {
@@ -403,7 +403,7 @@ fn search_lowers_a_result_that_fails_the_long_test() {
         mem_mhz: 600,
         power_pct: 100,
     };
-    let mut s = Search::new(start, limits());
+    let mut s = Search::new(start, limits(), Vendor::Nvidia);
     let mut next = s.first();
     let mut confirms = 0;
     while let Next::Test { settings, secs, .. } = next {
@@ -440,7 +440,10 @@ fn search_gives_up_when_nothing_passes() {
         mem: None,
         ..limits()
     };
-    assert!(matches!(Search::new(start, none).first(), Next::GaveUp(_)));
+    assert!(matches!(
+        Search::new(start, none, Vendor::Nvidia).first(),
+        Next::GaveUp(_)
+    ));
     // Memory only (no core range).
     let mem_only = Limits {
         core: None,
@@ -782,6 +785,7 @@ fn sleep_gives_stock_and_waking_applies_again() {
 fn cards_vyro_does_not_tune() {
     let old = SimDevice::new().with_info(
         GpuInfo {
+            vendor: super::Vendor::Nvidia,
             name: "NVIDIA GeForce GTX 1080".into(),
             uuid: "GPU-1080".into(),
             family: None,
@@ -794,6 +798,7 @@ fn cards_vyro_does_not_tune() {
     assert!(matches!(c.capability(), TuneCapability::ReadOnly { .. }));
     assert!(c.set_config(on("mine"), true).is_err());
     let ada = GpuInfo {
+        vendor: super::Vendor::Nvidia,
         name: "NVIDIA GeForce RTX 4060 Laptop GPU".into(),
         uuid: "GPU-4060".into(),
         family: Some(Family::Ada),
@@ -981,4 +986,216 @@ fn saved_presets_are_brought_within_narrower_ranges() {
         controller::load_config(&path, &narrow, &sugg),
         TuneConfig::default()
     );
+}
+
+// --- AMD and Intel (2.0) ---------------------------------------------------------------------
+
+#[test]
+fn radeon_and_arc_families_from_their_names() {
+    for (name, family) in [
+        ("AMD Radeon RX 6800 XT", Some(Family::Rdna2)),
+        ("AMD Radeon RX 7900 XTX", Some(Family::Rdna3)),
+        ("AMD Radeon RX 7600M XT", Some(Family::Rdna3)),
+        ("AMD Radeon RX 9070 XT", Some(Family::Rdna4)),
+        ("AMD Radeon RX 5700 XT", None),
+        ("AMD Radeon(TM) 780M", None),
+        ("AMD Radeon Graphics", None),
+    ] {
+        assert_eq!(Family::from_radeon(name), family, "{name}");
+    }
+    for (name, family) in [
+        ("Intel(R) Arc(TM) A770 Graphics", Some(Family::Alchemist)),
+        ("Intel(R) Arc(TM) A370M Graphics", Some(Family::Alchemist)),
+        ("Intel(R) Arc(TM) B580 Graphics", Some(Family::Battlemage)),
+        ("Intel(R) Arc(TM) Graphics", None),
+        ("Intel(R) Arc(TM) 140V GPU (16GB)", None),
+        ("Intel(R) UHD Graphics 770", None),
+    ] {
+        assert_eq!(Family::from_arc(name), family, "{name}");
+    }
+    assert_eq!(Family::Rdna3.vendor(), Vendor::Amd);
+    assert_eq!(Family::Battlemage.vendor(), Vendor::Intel);
+    assert_eq!(Family::Ada.vendor(), Vendor::Nvidia);
+}
+
+#[test]
+fn laptops_by_every_makers_names() {
+    for name in [
+        "NVIDIA GeForce RTX 4060 Laptop GPU",
+        "AMD Radeon RX 7600M XT",
+        "AMD Radeon RX 6800M",
+        "Intel(R) Arc(TM) A770M Graphics",
+    ] {
+        assert!(is_laptop(name), "{name}");
+    }
+    for name in [
+        "NVIDIA GeForce RTX 4070",
+        "AMD Radeon RX 7900 XTX",
+        "Intel(R) Arc(TM) B580 Graphics",
+        "AMD Radeon RX 9070",
+    ] {
+        assert!(!is_laptop(name), "{name}");
+    }
+}
+
+#[test]
+fn a_cards_readings_are_found_whatever_its_maker_calls_it() {
+    assert!(same_card(
+        "NVIDIA GeForce RTX 4070",
+        "NVIDIA GeForce RTX 4070"
+    ));
+    assert!(same_card("GeForce RTX 4070", "NVIDIA GeForce RTX 4070"));
+    assert!(same_card("AMD Radeon RX 7800 XT", "AMD Radeon RX 7800 XT"));
+    assert!(same_card("Radeon RX 7800 XT", "AMD Radeon RX 7800 XT"));
+    assert!(same_card(
+        "Intel(R) Arc(TM) A770 Graphics",
+        "Intel Arc A770"
+    ));
+    assert!(!same_card(
+        "AMD Radeon RX 7800 XT",
+        "NVIDIA GeForce RTX 4070"
+    ));
+    assert!(!same_card("", "AMD Radeon RX 7800 XT"));
+    assert!(
+        !same_card("Intel Graphics", "AMD Radeon Graphics"),
+        "nothing but the makers' words"
+    );
+}
+
+#[test]
+fn a_card_seen_but_not_tuned_is_said_before_a_missing_driver() {
+    let none = || TuneCapability::Unavailable {
+        reason: "no NVIDIA driver".into(),
+    };
+    let seen = TuneCapability::ReadOnly {
+        reason:
+            "Vyro tunes AMD Radeon RX 6000 to RX 9000 cards; the AMD Radeon RX 5700 XT is not one"
+                .into(),
+    };
+    assert_eq!(unavailable(vec![none(), seen.clone(), none()]), seen);
+    assert_eq!(
+        unavailable(vec![none(), none(), none()]),
+        TuneCapability::Unavailable {
+            reason: "no NVIDIA, AMD or Intel card that Vyro tunes was found".into()
+        }
+    );
+}
+
+#[test]
+fn suggestions_fit_amd_and_intel_cards() {
+    // An RX 7800 XT: the power limit from -10 % to +15 %, offsets from its own clocks.
+    let amd = Limits {
+        core: Some(Range {
+            min: -500,
+            max: 500,
+        }),
+        mem: Some(Range {
+            min: -200,
+            max: 150,
+        }),
+        power: Some(Range { min: 90, max: 115 }),
+        power_default_w: None,
+    };
+    let s = suggestions(Some(Family::Rdna3), false, &amd);
+    let get = |id: &str| s.iter().find(|p| p.id == id).map(|p| p.settings);
+    assert_eq!(
+        get(QUIET).unwrap().power_pct,
+        90,
+        "as low as the driver goes"
+    );
+    assert_eq!(
+        get(PERFORMANCE).unwrap(),
+        Settings {
+            core_mhz: 80,
+            mem_mhz: 50,
+            power_pct: 115
+        }
+    );
+    // An Arc A770: no memory setting.
+    let intel = Limits {
+        core: Some(Range { min: 0, max: 250 }),
+        mem: None,
+        power: Some(Range { min: 50, max: 120 }),
+        power_default_w: Some(190.0),
+    };
+    let s = suggestions(Some(Family::Alchemist), false, &intel);
+    let perf = s.iter().find(|p| p.id == PERFORMANCE).unwrap().settings;
+    assert_eq!(
+        perf,
+        Settings {
+            core_mhz: 50,
+            mem_mhz: 0,
+            power_pct: 120
+        }
+    );
+    assert!(s.iter().all(|p| intel.allows(&p.settings)));
+}
+
+#[test]
+fn find_my_best_climbs_in_each_makers_steps() {
+    let amd = Limits {
+        core: Some(Range {
+            min: -500,
+            max: 500,
+        }),
+        mem: Some(Range {
+            min: -200,
+            max: 150,
+        }),
+        power: Some(Range { min: 90, max: 115 }),
+        power_default_w: None,
+    };
+    let start = Settings {
+        core_mhz: 80,
+        mem_mhz: 50,
+        power_pct: 100,
+    };
+    let mut s = Search::new(start, amd, Vendor::Amd);
+    let Next::Test { settings, .. } = s.first() else {
+        panic!()
+    };
+    assert_eq!(
+        settings,
+        Settings {
+            core_mhz: 80,
+            mem_mhz: 0,
+            power_pct: 115
+        }
+    );
+    let Next::Test { settings, .. } = s.result(true, None) else {
+        panic!()
+    };
+    assert_eq!(settings.core_mhz, 95);
+    // The core fails: memory climbs from the Performance suggestion in AMD's smaller steps.
+    let Next::Test { settings, .. } = s.result(false, None) else {
+        panic!()
+    };
+    assert_eq!((settings.core_mhz, settings.mem_mhz), (65, 50));
+    let Next::Test { settings, .. } = s.result(true, Some(600.0)) else {
+        panic!()
+    };
+    assert_eq!(settings.mem_mhz, 75);
+
+    // Intel: no memory phase even if a driver gave one.
+    let intel = Limits {
+        core: Some(Range { min: 0, max: 250 }),
+        mem: Some(Range { min: 0, max: 100 }),
+        power: Some(Range { min: 50, max: 120 }),
+        power_default_w: None,
+    };
+    let mut s = Search::new(
+        Settings {
+            core_mhz: 50,
+            ..Settings::STOCK
+        },
+        intel,
+        Vendor::Intel,
+    );
+    let _ = s.first();
+    let Next::Test { settings, .. } = s.result(true, None) else {
+        panic!()
+    };
+    assert_eq!(settings.core_mhz, 60);
+    let next = s.result(false, None);
+    assert_eq!(s.phase(), search::Phase::Confirm, "{next:?}");
 }

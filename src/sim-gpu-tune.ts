@@ -71,7 +71,7 @@ function inForce(): TunePresetView | undefined {
 export function simGpuTune(): TuneStatus {
   return {
     capability: { state: 'writable', gpu: 'NVIDIA GeForce RTX 5060 Ti' },
-    gpu: { name: 'NVIDIA GeForce RTX 5060 Ti', uuid: 'GPU-preview', family: 'blackwell', laptop: false, driver: '581.57' },
+    gpu: { vendor: 'nvidia', name: 'NVIDIA GeForce RTX 5060 Ti', uuid: 'GPU-preview', family: 'blackwell', laptop: false, driver: '581.57' },
     limits: LIMITS,
     config: structuredClone(config),
     presets: presets(),

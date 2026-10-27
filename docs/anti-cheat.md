@@ -14,7 +14,7 @@ or warns about Vyro, the "If a game complains" section lists what to turn off, f
 | **PresentMon** (`PresentMon.exe` 2.6.0, Intel, signed, MIT). It records frame timing through Event Tracing for Windows (ETW), the same events Windows' own tools read. | Frame rate and frame times of the game in front. | Only while a game is in front and frame capture is on (Settings) |
 | **The overlay window.** It is an ordinary desktop window, always on top and click-through, that never takes focus. | FPS and readings over the game. | Only while a captured game is in front and the overlay is on |
 | **Reads of other processes' names, CPU and memory use** (the Processes tab and the footprint). | Task-Manager-style listing. | While the app is open |
-| **GPU tuning through NVML** (1.6): the service sets an NVIDIA card's clock offsets and power limit with the driver's own calls, as NVIDIA's tools do. Nothing touches the game. | The owner's presets. | Only after the owner turns GPU tuning on and applies a preset other than Stock |
+| **GPU tuning through the maker's driver interface** (1.6; AMD and Intel from 2.0): the service sets the card's clock offsets and power limit with the driver's own calls, as the maker's tools do: NVML for NVIDIA, ADLX for AMD (as AMD Software), the Intel Graphics Control Library for Intel Arc. Nothing touches the game. | The owner's presets. | Only after the owner turns GPU tuning on and applies a preset other than Stock |
 | **Screen capture and input** (1.7): the app copies the screen with Windows' Desktop Duplication, as screen-sharing tools do, and turns a phone's taps and typing into Windows input (`SendInput`, marked by Windows as injected). | A phone the owner allowed sees and uses the screen. | Only during a screen session, which the PC shows with a banner; never otherwise |
 
 ## What Vyro never does
@@ -22,7 +22,7 @@ or warns about Vyro, the "If a game complains" section lists what to turn off, f
 - It never injects code or a DLL into a game, and never hooks its graphics API. The overlay is a separate window.
 - It never reads or writes another process's memory.
 - It never reads keyboard or mouse input. It sends input only during a screen session a phone the owner allowed asked for (1.7), and only what that phone sends; a game may ignore or refuse injected input, as it may with any remote desktop.
-- It never writes CPU settings or any voltage. GPU settings (an NVIDIA card's clock offsets and power limit) are written only once the owner turns GPU tuning on and applies a preset (1.6, decision 37), and only through NVIDIA's own driver interface, NVML. The other hardware writes are fan and pump speeds, on the allow-listed board, once the owner turns fan control on.
+- It never writes CPU settings or any voltage. GPU settings (a card's clock offsets and power limit) are written only once the owner turns GPU tuning on and applies a preset (1.6, decision 37), and only through the card maker's own driver interface: NVML for NVIDIA, ADLX for AMD, the Intel Graphics Control Library for Intel (2.0). The other hardware writes are fan and pump speeds, on the allow-listed board, once the owner turns fan control on.
 
 ## What has been reported
 

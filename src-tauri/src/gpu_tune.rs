@@ -199,6 +199,7 @@ pub(crate) fn start(
         let stop = Arc::clone(&stop);
         let progress = Arc::clone(&state.progress);
         let limits = status.limits;
+        let vendor = status.gpu.as_ref().map(|g| g.vendor).unwrap_or_default();
         std::thread::Builder::new()
             .name("vyro-gpu-test".into())
             .spawn(move || {
@@ -211,7 +212,9 @@ pub(crate) fn start(
                 };
                 let done = match kind {
                     TestKind::Test => test_one(api.as_ref(), target, &stop, &report),
-                    TestKind::Best => find_best(api.as_ref(), target, limits, &stop, &report),
+                    TestKind::Best => {
+                        find_best(api.as_ref(), target, limits, vendor, &stop, &report)
+                    }
                 };
                 if let Err(e) = api.gpu_trial(None) {
                     log::warn!("gpu tuning: ending the trial: {e}");
@@ -364,6 +367,7 @@ fn find_best(
     api: &dyn EngineApi,
     start: Settings,
     limits: gpu_tune::Limits,
+    vendor: gpu_tune::Vendor,
     stop: &AtomicBool,
     report: &dyn Fn(TestProgress),
 ) -> TestDone {
@@ -373,7 +377,7 @@ fn find_best(
         settings,
         message,
     };
-    let mut search = Search::new(start, limits);
+    let mut search = Search::new(start, limits, vendor);
     let mut next = search.first();
     loop {
         match next {

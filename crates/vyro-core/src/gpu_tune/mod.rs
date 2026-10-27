@@ -1,5 +1,7 @@
-//! GPU tuning (1.6, decision 37): core and memory clock offsets and the power limit of an NVIDIA
-//! card, through the driver's own interface (NVML) and only in the service. Off by default.
+//! GPU tuning (1.6, decision 37): core and memory clock offsets and the power limit of a graphics
+//! card, through its maker's own driver interface and only in the service. Off by default. NVIDIA
+//! cards through NVML (1.6); from 2.0 AMD Radeon cards through ADLX and Intel Arc cards through
+//! the Intel Graphics Control Library, each as the maker's own tools do ([`open_device`]).
 //!
 //! What it allows is what the driver reports: tuning is offered only on the families in
 //! [`Family`] (desktop and laptop), and each setting only where the driver gives a range for it.
@@ -18,7 +20,12 @@
 //!   an uninstall all give the card its stock values; after waking they are applied again.
 //! - **Apply at start** applies only settings that passed the stability test ([`TuneConfig::tested`]).
 
+#[cfg(windows)]
+mod amd;
 pub mod controller;
+pub mod ffi;
+#[cfg(windows)]
+mod intel;
 #[cfg(windows)]
 mod nvidia;
 pub mod search;
@@ -28,8 +35,6 @@ mod tests;
 
 #[cfg(windows)]
 pub(crate) use nvidia::load_nvml;
-#[cfg(windows)]
-pub use nvidia::open_device;
 
 use std::collections::BTreeMap;
 
@@ -178,7 +183,18 @@ pub struct Tested {
     pub at: i64,
 }
 
-/// NVIDIA families Vyro has suggestions for. Older and data-centre cards are not tuned.
+/// Whose card it is, and so whose driver interface tunes it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, rename = "GpuVendor")]
+pub enum Vendor {
+    #[default]
+    Nvidia,
+    Amd,
+    Intel,
+}
+
+/// Families Vyro has suggestions for. Older, integrated and data-centre GPUs are not tuned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, rename = "GpuFamily")]
@@ -191,9 +207,67 @@ pub enum Family {
     Ada,
     /// RTX 50.
     Blackwell,
+    /// Radeon RX 6000 (2.0).
+    Rdna2,
+    /// Radeon RX 7000.
+    Rdna3,
+    /// Radeon RX 9000.
+    Rdna4,
+    /// Arc A-series (2.0).
+    Alchemist,
+    /// Arc B-series.
+    Battlemage,
 }
 
 impl Family {
+    pub fn vendor(self) -> Vendor {
+        match self {
+            Self::Turing | Self::Ampere | Self::Ada | Self::Blackwell => Vendor::Nvidia,
+            Self::Rdna2 | Self::Rdna3 | Self::Rdna4 => Vendor::Amd,
+            Self::Alchemist | Self::Battlemage => Vendor::Intel,
+        }
+    }
+
+    /// From AMD's name for the card: "AMD Radeon RX 7900 XTX", "Radeon RX 7600M XT". Only the
+    /// discrete RX 6000, 7000 and 9000 series; integrated Radeon graphics have no RX number.
+    pub fn from_radeon(name: &str) -> Option<Self> {
+        let n = name.to_ascii_lowercase();
+        let digits: String = n
+            .split("rx ")
+            .nth(1)?
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .collect();
+        if digits.len() != 4 {
+            return None;
+        }
+        Some(match digits.as_bytes()[0] {
+            b'6' => Self::Rdna2,
+            b'7' => Self::Rdna3,
+            b'9' => Self::Rdna4,
+            _ => return None,
+        })
+    }
+
+    /// From Intel's name for the card: "Intel(R) Arc(TM) A770 Graphics", "Intel Arc B580". Arc
+    /// graphics built into a processor ("Intel Arc Graphics", "Arc 140V") are not tuned.
+    pub fn from_arc(name: &str) -> Option<Self> {
+        let n = name
+            .to_ascii_lowercase()
+            .replace("(tm)", "")
+            .replace("(r)", "");
+        let model = n.split("arc").nth(1)?.split_whitespace().next()?;
+        let digits = model.get(1..)?;
+        if digits.len() < 3 || !digits.bytes().take(3).all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        match model.as_bytes()[0] {
+            b'a' => Some(Self::Alchemist),
+            b'b' => Some(Self::Battlemage),
+            _ => None,
+        }
+    }
+
     /// From NVML's architecture name ("Turing", "Ada", ...).
     pub fn from_arch(arch: &str) -> Option<Self> {
         Some(match arch.to_ascii_lowercase().as_str() {
@@ -211,14 +285,32 @@ impl Family {
             Self::Ampere => "Ampere (RTX 30)",
             Self::Ada => "Ada Lovelace (RTX 40)",
             Self::Blackwell => "Blackwell (RTX 50)",
+            Self::Rdna2 => "RDNA 2 (RX 6000)",
+            Self::Rdna3 => "RDNA 3 (RX 7000)",
+            Self::Rdna4 => "RDNA 4 (RX 9000)",
+            Self::Alchemist => "Alchemist (Arc A)",
+            Self::Battlemage => "Battlemage (Arc B)",
         }
     }
 }
 
-/// Whether NVIDIA's name for the card is a laptop GPU ("... Laptop GPU", older "... with Max-Q").
+/// Whether the maker's name for the card is a laptop GPU: NVIDIA's "... Laptop GPU" (older
+/// "... with Max-Q"), AMD's "RX 7600M", Intel's "Arc A770M".
 pub fn is_laptop(name: &str) -> bool {
     let n = name.to_ascii_lowercase();
-    n.contains("laptop") || n.contains("max-q") || n.ends_with(" mobile")
+    if n.contains("laptop") || n.contains("max-q") || n.ends_with(" mobile") {
+        return true;
+    }
+    // A model number ending in M: "rx 7600m", "a770m".
+    n.split(|c: char| !c.is_ascii_alphanumeric()).any(|w| {
+        w.len() >= 4
+            && w.ends_with('m')
+            && w[..w.len() - 1]
+                .bytes()
+                .rev()
+                .take(3)
+                .all(|b| b.is_ascii_digit())
+    })
 }
 
 /// The card being tuned.
@@ -226,6 +318,9 @@ pub fn is_laptop(name: &str) -> bool {
 #[serde(rename_all = "camelCase")]
 #[ts(export, rename = "TuneGpu")]
 pub struct GpuInfo {
+    /// Whose card it is (2.0; NVIDIA before).
+    #[serde(default)]
+    pub vendor: Vendor,
     pub name: String,
     /// The driver's id for the card: presets and tested settings belong to it.
     pub uuid: String,
@@ -242,7 +337,7 @@ pub enum TuneCapability {
     Writable { gpu: String },
     /// A card Vyro sees, but not one it tunes (another family, no ranges from the driver).
     ReadOnly { reason: String },
-    /// No NVIDIA card, no driver, or not running in the service.
+    /// No card Vyro tunes, no driver, or not running in the service.
     Unavailable { reason: String },
 }
 
@@ -448,7 +543,9 @@ pub struct TuneEvent {
 
 /// Change per family, desktop and laptop: (Efficient core, Performance core, Performance memory)
 /// in MHz. Deliberately below what most cards of the family reach, so the suggestions run on
-/// nearly every card; "Find my best" finds what this one does.
+/// nearly every card; "Find my best" finds what this one does. NVIDIA counts memory at twice
+/// its clock; AMD's memory figure is its clock, so its steps are smaller. Intel's driver offers
+/// no memory setting.
 fn table(family: Family, laptop: bool) -> (i32, i32, i32) {
     match (family, laptop) {
         (Family::Turing, false) => (30, 60, 300),
@@ -459,6 +556,16 @@ fn table(family: Family, laptop: bool) -> (i32, i32, i32) {
         (Family::Ada, true) => (40, 75, 400),
         (Family::Blackwell, false) => (75, 150, 800),
         (Family::Blackwell, true) => (50, 100, 500),
+        (Family::Rdna2, false) => (25, 50, 50),
+        (Family::Rdna2, true) => (20, 40, 0),
+        (Family::Rdna3, false) => (40, 80, 50),
+        (Family::Rdna3, true) => (25, 50, 0),
+        (Family::Rdna4, false) => (50, 100, 50),
+        (Family::Rdna4, true) => (30, 60, 0),
+        (Family::Alchemist, false) => (25, 50, 0),
+        (Family::Alchemist, true) => (20, 40, 0),
+        (Family::Battlemage, false) => (40, 80, 0),
+        (Family::Battlemage, true) => (25, 50, 0),
     }
 }
 
@@ -702,6 +809,61 @@ pub fn drifted(want: &Settings, read: &Settings, limits: &Limits) -> bool {
     (limits.core.is_some() && want.core_mhz != read.core_mhz)
         || (limits.mem.is_some() && want.mem_mhz != read.mem_mhz)
         || (limits.power.is_some() && (want.power_pct - read.power_pct).abs() > 1)
+}
+
+/// Opens the first card one maker's interface tunes.
+#[cfg(windows)]
+type Opener = fn() -> Result<Box<dyn controller::TuneDevice>, TuneCapability>;
+
+/// The first card Vyro can tune: an NVIDIA card through NVML, an AMD one through ADLX, an Intel
+/// one through its control library, in that order. When none can be, why: a card Vyro sees but
+/// does not tune says so before a missing driver does.
+#[cfg(windows)]
+pub fn open_device() -> Result<Box<dyn controller::TuneDevice>, TuneCapability> {
+    let tries: [Opener; 3] = [nvidia::open_device, amd::open_device, intel::open_device];
+    let mut why = Vec::new();
+    for open in tries {
+        match open() {
+            Ok(dev) => return Ok(dev),
+            Err(cap) => why.push(cap),
+        }
+    }
+    Err(unavailable(why))
+}
+
+/// What to say when no maker's interface found a card to tune.
+pub fn unavailable(why: Vec<TuneCapability>) -> TuneCapability {
+    if let Some(read_only) = why
+        .iter()
+        .find(|c| matches!(c, TuneCapability::ReadOnly { .. }))
+    {
+        return read_only.clone();
+    }
+    TuneCapability::Unavailable {
+        reason: "no NVIDIA, AMD or Intel card that Vyro tunes was found".into(),
+    }
+}
+
+/// Whether a snapshot's GPU name is the tuned card, whatever words either name carries
+/// ("NVIDIA GeForce RTX 4070", "AMD Radeon RX 7800 XT", "Intel(R) Arc(TM) A770 Graphics").
+pub fn same_card(snapshot: &str, tuned: &str) -> bool {
+    let norm = |s: &str| {
+        let s = s
+            .to_ascii_lowercase()
+            .replace("(r)", "")
+            .replace("(tm)", "");
+        s.split_whitespace()
+            .filter(|w| {
+                !matches!(
+                    *w,
+                    "nvidia" | "amd" | "intel" | "graphics" | "geforce" | "radeon"
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let (a, b) = (norm(snapshot), norm(tuned));
+    !a.is_empty() && !b.is_empty() && (a == b || a.contains(&b) || b.contains(&a))
 }
 
 /// "+105 MHz core, +600 MHz memory, power 110 %" (what changes from stock).

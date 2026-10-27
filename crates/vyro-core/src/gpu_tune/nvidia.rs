@@ -7,7 +7,7 @@ use nvml_wrapper::enum_wrappers::device::{Clock, PerformanceState};
 use nvml_wrapper::{Device, Nvml};
 
 use super::controller::TuneDevice;
-use super::{is_laptop, Clocks, Family, GpuInfo, Limits, Range, Settings, TuneCapability};
+use super::{is_laptop, Clocks, Family, GpuInfo, Limits, Range, Settings, TuneCapability, Vendor};
 
 /// NVML from System32 (the DCH driver's copy) or NVIDIA's own folder, never the search path:
 /// the service runs as LocalSystem. The sensor readings load it the same way.
@@ -64,6 +64,7 @@ pub fn open_device() -> Result<Box<dyn TuneDevice>, TuneCapability> {
             continue;
         }
         let info = GpuInfo {
+            vendor: Vendor::Nvidia,
             laptop: is_laptop(&name),
             uuid: device.uuid().unwrap_or_else(|_| format!("index-{i}")),
             name,
