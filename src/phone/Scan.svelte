@@ -70,11 +70,10 @@
         if (stopped || !video) return;
         const text = await read(video).catch(() => null);
         if (stopped) return;
-        if (text) {
-          onlink(text);
-          return;
-        }
-        timer = setTimeout(() => void look(), 200);
+        // A code the app takes closes this view; one it does not (another QR code) is said
+        // above, and looking goes on, after a pause so that code is not read over and over.
+        if (text) onlink(text);
+        timer = setTimeout(() => void look(), text ? 2000 : 200);
       };
       void look();
     })();
