@@ -3420,6 +3420,9 @@ Fixes on `claude/vyro-1.7` after 1.7.6's release, gathered for one release when 
       - **One failed refresh:** in More, a tile went (taking an open section with it) and in
         Health the alerts and Performance Score did, when one of its answers failed; Processes
         and Devices showed only the error until the next. What the PC said last now stays.
+      - **Scanning after another QR code** (from 1.4): the scanner stopped looking at the first
+        code it read, so after one that is not a pairing link the right one was never read until
+        the view opened again. It goes on looking.
 
       Checks here: `cargo test -p vyro-core` (screen), clippy clean for Linux and Windows (the
       workspace, tests included), `npm test`, `npm run check`.
