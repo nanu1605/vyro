@@ -175,16 +175,19 @@
     });
   }
 
-  /** Lets go of the open PC's link. Its screen session is stopped first, through it: the Screen
-   * tab's own Stop, sent as the tab closes, would go through the next PC's link, or none, and
-   * the PC would end the session only when it noticed the phone gone. */
+  /** Stops the open PC's screen session through `l`, its link, waiting at most `STOP_WAIT_MS`.
+   * Leaving the PC, the Screen tab's own Stop, sent as the tab closes, would go through the next
+   * PC's link, or none, and the PC would end the session only when it noticed the phone gone. */
+  const stopScreen = (l: PcLink) =>
+    Promise.race([l.request('screen.stop').catch(() => {}), new Promise((r) => setTimeout(r, STOP_WAIT_MS))]);
+
+  /** Lets go of the open PC's link, its screen session stopped first. */
   function letGo(): void {
     const l = link;
     link = null;
     if (!l) return;
     if (!sharing) return l.stop();
-    const stopped = l.request('screen.stop').catch(() => {});
-    void Promise.race([stopped, new Promise((r) => setTimeout(r, STOP_WAIT_MS))]).then(() => l.stop());
+    void stopScreen(l).then(() => l.stop());
   }
 
   function goHome(): void {
@@ -300,7 +303,10 @@
     const room = current;
     if (!room) return;
     pcSheet = false;
-    await link?.signOut();
+    const l = link;
+    // The PC forgets a phone that signs out, but not its screen session.
+    if (l && sharing) await stopScreen(l);
+    await l?.signOut();
     link = null;
     forget(room);
   }

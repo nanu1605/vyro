@@ -3466,13 +3466,14 @@ deployed, at the owner's go; 1.7.7's phone app is not deployed yet either.
         the PC says what it allows goes. A second tap while one wake is under way starts no
         second (its connection to the same PC took the first one's place, which then said no PC
         could send it), and the answer shows on that PC's page only. Field check 1.7, step 8.
-      - **Leaving a PC with its screen shown:** going to the list of PCs, opening another, or
-        scanning a code with the screen shown left the session on: the Screen tab's Stop went
-        through the next PC's connection, or none, and the PC ended it only on noticing the
-        phone gone (a minute for the slow view, the lock then at once). The PC's own connection
-        stops it first now, and says nothing of the PC opened next while it does. End to end:
-        going to the list of PCs with the screen shown stops its session on the PC. Field check
-        1.7, step 6.
+      - **Leaving a PC with its screen shown:** going to the list of PCs, opening another,
+        scanning a code or signing the phone out of it with the screen shown left the session
+        on: the Screen tab's Stop went through the next PC's connection, or none (a phone that
+        signs out is forgotten, its session not), and the PC ended it only on noticing the phone
+        gone (a minute for the slow view, the lock then at once). The PC's own connection stops
+        it first now, waiting 3 s at most, and says nothing of the PC opened next while it does.
+        End to end: going to the list of PCs with the screen shown stops its session on the PC.
+        Field check 1.7, step 6.
       - **HD that stays HD on mobile data:** in a session in HD, moving onto mobile data set the
         toolbar to the choice made for mobile data (SD) while the PC went on in HD (the slow
         view did switch, unasked), so "Switch to SD" showed under a toolbar that said SD already.
@@ -3488,6 +3489,11 @@ deployed, at the owner's go; 1.7.7's phone app is not deployed yet either.
       - **A new relay address ends a screen session:** changing it signs every phone out, but a
         session went on (a direct one needs no relay) where signing out by hand, starting over
         on the relay and turning it off end it. It ends first now, "the relay was changed".
+      - **A session ends with its phone's pairing:** a phone that signed itself out was
+        forgotten, but its session went on until the phone was noticed gone; so did one whose
+        pairing ran out. The session of a phone no longer paired ends as the phones are saved,
+        the lock (if ticked) as for a phone gone. The phone app above sends its Stop first, so
+        this is for one that does not (1.7.7's, or older).
 
       Checks here: `npm test`, `npm run check`, clippy clean for Windows (the workspace, tests
       included), and the end to end in a local Chromium (143 checks; once more without the

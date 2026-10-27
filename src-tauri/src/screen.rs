@@ -445,6 +445,20 @@ fn end_of(app: &AppHandle, id: &str, why: &str, by: By) {
     }
 }
 
+/// Ends the session of a phone not among `paired` (hex): it signed itself out, or its pairing
+/// ran out. Its Stop may not have come first: the lock goes as for a phone gone.
+pub fn end_unpaired(app: &AppHandle, paired: &[String], why: &str) {
+    let serial = state(app).and_then(|s| {
+        lock(&s.live)
+            .as_ref()
+            .filter(|l| !paired.contains(&l.share.id))
+            .map(|l| l.serial)
+    });
+    if let Some(serial) = serial {
+        end(app, serial, why, By::Phone);
+    }
+}
+
 /// Ends any session (the relay turned off, Vyro closing, Stop at the PC).
 pub fn end_all(app: &AppHandle, why: &str) {
     let serial = state(app).and_then(|s| lock(&s.live).as_ref().map(|l| l.serial));

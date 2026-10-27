@@ -218,7 +218,10 @@ fn relay_hooks(app: &AppHandle) -> RelayHooks {
             wake: wake_target(&about),
             ..info(&about)
         }),
-        saved: Box::new(move || saved(&save)),
+        saved: Box::new(move || {
+            saved(&save);
+            end_unpaired(&save);
+        }),
         watching: Box::new(move |n| {
             if let Some(r) = watched.try_state::<Remote>() {
                 r.relay_watching.store(n, Ordering::SeqCst);
@@ -228,6 +231,19 @@ fn relay_hooks(app: &AppHandle) -> RelayHooks {
         state: Box::new(move |_| emit(&state)),
         request: Box::new(move |r, reply| crate::remote_api::handle(&asked, r, reply)),
     }
+}
+
+/// A screen session ends with its phone's pairing: the phone signed itself out (a phone app
+/// from before 1.7.8 sends no Stop first), or the pairing ran out.
+fn end_unpaired(app: &AppHandle) {
+    let Some(r) = app.try_state::<Remote>() else {
+        return;
+    };
+    let Some(phones) = lock(&r.phones).clone() else {
+        return;
+    };
+    let paired: Vec<String> = lock(&phones).allowed().into_iter().map(|a| a.id).collect();
+    crate::screen::end_unpaired(app, &paired, "the phone is no longer paired");
 }
 
 /// A fresh place on the relay: a random room and key.
