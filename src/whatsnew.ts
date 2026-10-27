@@ -21,6 +21,33 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '2.0.0',
+    items: [
+      {
+        icon: 'phone',
+        title: 'Notifications on your phone',
+        text: 'Turn them on in More → Notifications on your phone: alerts, a low mouse or headset battery, game summaries and this PC going quiet reach you even with the app closed. Each is sealed for your phone on this PC; the relay passes it on and can’t read it.',
+        phone: true,
+      },
+      {
+        icon: 'power',
+        title: 'Told when this PC stops answering',
+        text: 'If this PC loses power, crashes or drops off its network and is not back within two minutes, your phone hears it, and again when it is back. Shutting down, restarting and sleeping say nothing.',
+        phone: true,
+      },
+      {
+        icon: 'gpu',
+        title: 'GPU tuning for AMD and Intel',
+        text: 'Radeon RX 6000 to RX 9000 and Arc A- and B-series cards get the presets, your own settings, the stability test and “Find my best”, through AMD’s and Intel’s own driver interfaces, as NVIDIA cards have since 1.6.',
+      },
+      {
+        icon: 'phone',
+        title: 'Which phones get notifications',
+        text: 'Settings → Remote says which paired phones get notifications. Each phone turns them on and off for itself.',
+      },
+    ],
+  },
+  {
     version: '1.7.8',
     items: [
       {

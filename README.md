@@ -7,9 +7,12 @@ app or library).
 - **Build spec:** [`PROJECT_PLAN.md`](PROJECT_PLAN.md) — what to build and why.
 - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — milestones, phase tracker, decision log.
 
-**Status:** 1.7. Live CPU, GPU, board, fan, voltage, RAM, storage and network sensors on
+**Status:** 2.0. Live CPU, GPU, board, fan, voltage, RAM, storage and network sensors on
 Windows (low-level ones through PawnIO, read by the Vyro Sensor Service), history, System
-Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 1.7: the
+Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 2.0:
+[notifications on your phone](#notifications-20) with the app closed (alerts, low batteries,
+game summaries and the PC going quiet), and [GPU tuning](#gpu-tuning-16) for AMD Radeon and
+Intel Arc cards too. New in 1.7: the
 [phone app](#phone-app-from-anywhere-14) shows the PC's screen and uses it, for a phone you
 allow, straight to the PC where it can and a picture at a time through the relay where it
 cannot, in full screen and in HD or SD; the phone's voice reaches the PC as a clip to paste or as
@@ -57,7 +60,9 @@ named pipe; the app itself runs without administrator rights. Intel's
 [PresentMon](https://github.com/GameTechDev/PresentMon) console app is installed beside the
 service, which runs it to measure the game in front (nothing is injected into games). Without the service the app still
 starts, reads what it can, and says what is missing. "Start with Windows" (Settings) opens it
-in the tray at sign-in. Builds are not code-signed yet, so SmartScreen will warn.
+in the tray at sign-in. Builds are not code-signed yet, so SmartScreen will warn; from 2.0 a
+release signs itself once SignPath Foundation has taken the project on
+([`docs/signing.md`](docs/signing.md)).
 
 ## Fan and pump control
 
@@ -81,9 +86,14 @@ enforces it, its tests and its result on that board.
 
 ## GPU tuning (1.6)
 
-The **GPU tuning** view changes an NVIDIA card's core and memory clocks and its power limit, on
-RTX 20 to RTX 50 cards, desktop and laptop. It is off until you turn it on and confirm, and it
-runs in the service through NVIDIA's own driver interface (NVML), as NVIDIA's tools do.
+The **GPU tuning** view changes a card's core and memory clocks and its power limit: NVIDIA RTX
+20 to RTX 50 cards, and from 2.0 AMD Radeon RX 6000 to RX 9000 and Intel Arc A- and B-series
+cards, desktop and laptop. It is off until you turn it on and confirm, and it runs in the
+service through the maker's own driver interface, as the maker's tools do: NVML for NVIDIA,
+ADLX for AMD (as AMD Software), the Intel Graphics Control Library for Intel. Intel's driver
+offers no memory clock, and an Intel card's warranty waiver is set when you turn tuning on, as
+Intel asks of every tuning tool. The AMD and Intel parts have not yet run on a real card:
+[`docs/field-check-2.0.md`](docs/field-check-2.0.md).
 
 - **Presets** made for the card's family and scaled to what its driver allows: Quiet (lower
   power limit), Efficient (nearly the same speed for less power) and Performance (the highest
@@ -103,8 +113,8 @@ runs in the service through NVIDIA's own driver interface (NVML), as NVIDIA's to
   tested presets can be applied. [`docs/control-safety.md`](docs/control-safety.md) lists each
   rule with its code and tests.
 
-Higher clocks can crash games or the PC, and may affect the card's warranty. AMD and Intel
-graphics are not supported yet.
+Higher clocks can crash games or the PC, and may affect the card's warranty. Graphics built
+into a processor are not tuned.
 
 ## Gaming
 
@@ -378,6 +388,28 @@ the PC (1.5).
   reach the relay. The relay runs on Cloudflare's free plan, shared by everyone: past its
   daily limit it pauses until midnight UTC. Alerts are not sent to phones yet.
 
+### Notifications (2.0)
+
+**On your phone, with the app closed.** On the phone, More → **Notifications** turns them on
+for that PC and picks what they are about: alerts (as Windows shows them), a device's battery
+running low, a game's summary when it ends, and the PC **stopping answering**: its connection
+ended without it shutting down, restarting or going to sleep (a crash, a power cut, a lost
+network) and it was not back within two minutes; you hear again when it is back. "Send a test"
+shows one at once. On iPhone they come only to Vyro on the Home Screen (iOS 16.4 or later).
+
+- **Sealed for the phone.** The phone's browser gives the PC, sealed like everything else, the
+  address its push service (Google's, Apple's, Mozilla's or Microsoft's) takes notifications at
+  and two keys. The PC seals each notification for those keys (the Web Push standard, RFC 8291)
+  and the relay posts it there, signed with a key of its own: neither the relay nor the push
+  service can read it. The relay posts only to those push services, for phones the PC has, a
+  few at once and at most 300 a day per PC.
+- **"Stopped answering"** is a notification the PC seals ahead of time and leaves with the
+  relay, which sends it only if the PC goes quiet without saying it is leaving. Vyro says so as
+  it quits and as Windows shuts down, restarts, signs out or goes to sleep.
+- Settings → Remote says which phones get notifications; each phone turns them off for itself,
+  and signing a phone out ends them. [`docs/remote.md`](docs/remote.md#notifications-20) has
+  the details.
+
 ## Phone companion (1.0)
 
 **Off by default.** Settings → Remote → **On this network** turns on a read-only page that a
@@ -436,6 +468,8 @@ Nothing on it changes the PC.
 | [`docs/field-check-1.4.md`](docs/field-check-1.4.md) | The field check of 1.4: the phone app from anywhere, on Android and iPhone |
 | [`docs/field-check-1.4.1.md`](docs/field-check-1.4.1.md) | The field check of 1.4.1: Bluetooth Connect and Disconnect, connected or not, low batteries |
 | [`docs/field-check-1.5.md`](docs/field-check-1.5.md) | The field check of 1.5: the phone's new tabs, letting a phone change the PC, End task, power, waking a PC |
+| [`docs/field-check-2.0.md`](docs/field-check-2.0.md) | The field check of 2.0: notifications on Android and iPhone, the PC going quiet, AMD and Intel tuning |
+| [`docs/signing.md`](docs/signing.md) | Code signing (2.0): what the release does once SignPath is set up, and what only the owner can do |
 
 `vyro-remote.exe` in the same artifact checks the service from the outside (state, connection,
 sensors; `--capture Game.exe` measures a running game for 15 s). The service logs to `%ProgramData%\Vyro\service.log`.

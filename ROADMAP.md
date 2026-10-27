@@ -25,7 +25,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 8 | Installer | **WiX (MSI)**; bundles `PawnIO_setup.exe` and runs `-install -silent` when PawnIO is missing or older | default |
 | 9 | Extra Super-I/O coverage | Nuvoton NCT6687D first (MSI AM5), then NCT67xx + ITE IT87xx | default |
 | 10 | Low-level hardware access | **PawnIO** (signed, free, HVCI-compatible) replaces our own KMDF driver | decided |
-| 11 | Code signing | **SignPath Foundation** or **Certum Open Source** (no EV certificate) | decided |
+| 11 | Code signing | **SignPath Foundation** or **Certum Open Source** (no EV certificate). From 2.0 a release signs itself through SignPath once its four settings are in the repository ([`docs/signing.md`](docs/signing.md)); making the repository public and applying are the owner's | decided |
 | 12 | Source availability | **Open source**; license MIT OR Apache-2.0 (LICENSE files added in P11; can still change before the repo goes public) | default |
 | 13 | Privilege split (P8) | **LocalSystem service `VyroService`** runs the whole engine (sensors, history, health, alerts) and serves it over `\\.\pipe\vyro-engine`; the app runs unelevated and falls back to an in-process engine without the privileged sensors when the service is missing | decided |
 | 14 | GPU visual | Own stylized parameterized **WebGL** model; no third-party photos; offline | decided |
@@ -51,9 +51,10 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 34 | Reach from anywhere | A phone app installed from the browser (no app stores) reaches the PC through the Vyro relay: a Cloudflare Worker, one Durable Object per PC, in the owner's free account, built into releases for everyone, with any other relay allowed in Settings (the owner, 2026-10-17). Readings sealed end to end (HKDF-SHA256 to an auth key and an AES-256-GCM key; a secret per phone that replaces the pairing link's); the relay keeps only hashes and sees metadata. Off by default; the PC opens no port. Supersedes 19's "LAN only" | decided |
 | 36 | Control from the phone | A phone paired from anywhere may change the PC only if the owner allows it, on the PC, when pairing or later (1.5; the owner's request, 2026-10-18): a fixed list of requests (`relay::api`), each checked on the PC against that phone's permission; protocol 2 gives each connection a session and counts its messages, so nothing can be replayed; what phones changed is kept and shown in Settings. Turning fan control on, confirming a pump and editing GPU settings stay at the PC. The LAN page stays read-only. Amends 34's "read-only" | decided |
 | 35 | 1.3 ships in 1.4.0 | 1.3.0 is not released on its own: its changes (decisions 32 and 33, device names, wireless batteries) ship in 1.4.0, once field check 1.3 passes on the 1.4 test build (the owner, 2026-10-18). One update for installed copies instead of two; the 1.3 branch is neither merged nor released | decided |
-| 37 | GPU tuning | Vyro may change an NVIDIA card's core and memory clock offsets and its power limit (1.6; the owner's request, 2026-10-18, on an NVIDIA desktop card and a laptop GPU): only through the driver's own interface (NVML, loaded from System32), only in the service, off until the owner turns it on and confirms, only on RTX 20 to RTX 50 cards and only what the driver gives a range for. Presets per family scaled to those ranges, the owner's own, one per profile; a stability test and "Find my best"; stock on every exit, after heat, a crash or a driver reset, and when another program keeps changing the values; only tested settings at start; from a phone only Stock and tested presets. AMD and Intel later. Supersedes "never writes GPU settings" (anti-cheat notes) and the plans' "overclocking out of scope" | decided |
+| 37 | GPU tuning | Vyro may change an NVIDIA card's core and memory clock offsets and its power limit (1.6; the owner's request, 2026-10-18, on an NVIDIA desktop card and a laptop GPU): only through the driver's own interface (NVML, loaded from System32), only in the service, off until the owner turns it on and confirms, only on RTX 20 to RTX 50 cards and only what the driver gives a range for. Presets per family scaled to those ranges, the owner's own, one per profile; a stability test and "Find my best"; stock on every exit, after heat, a crash or a driver reset, and when another program keeps changing the values; only tested settings at start; from a phone only Stock and tested presets. AMD Radeon RX 6000 to RX 9000 through ADLX and Intel Arc A- and B-series through the Intel Graphics Control Library from 2.0 (the owner, 2026-10-27), the same way and under the same rules; Intel's warranty waiver is set when tuning is on, as Intel asks. Supersedes "never writes GPU settings" (anti-cheat notes) and the plans' "overclocking out of scope" | decided |
 | 38 | The screen on the phone | A phone may see and use the PC's screen only if the owner allows it, on the PC, apart from control (1.7; the owner's request, 2026-10-18, "direct, slow fallback"): one phone at a time, a banner and a tray item with Stop while it lasts, a notification at the start, a record of each session, an end after 10 minutes unused. Direct over WebRTC (str0m in the app, the phone's own browser), its fingerprints inside the sealed offer and answer so the relay cannot step in; the picture as H.264 from Windows' own encoder, input as Windows input in the signed-in session. Where no direct path exists, the slow view: one JPEG at a time through the relay, at most 2 a second, 20 minutes a day; the relay caps what a PC sends its phones at 1 GB a day. Windows' secure screens cannot be seen or used, and Ctrl+Alt+Del cannot be sent | decided |
 | 39 | Voice from the phone | The phone's voice reaches the PC two ways (1.7; the owner's report, 2026-10-21: a WhatsApp Web voice note sent through the phone's screen recorded nothing, as it records the PC's microphone and the phone's never reached the PC; the owner's choice, "clips and live mic"). Windows adds a microphone only through a driver Microsoft has signed (an EV certificate and a partner account Vyro does not have), so Vyro ships none. A **clip** recorded on the phone is kept on the PC (AAC through Windows' own encoder, or WAV without one; named by Vyro, never the phone; 5 minutes at most; deleted after 7 days) and put on the clipboard as a file, only when the phone sends one, so Paste in a chat attaches it. The **live microphone** plays into a virtual cable the owner installs (VB-CABLE, VoiceMeeter or Virtual Audio Cable, found by name, never bundled); while it plays, the cable's recording side is Windows' default microphone (an option, on by default) through `IPolicyConfig`, an interface Windows does not document but has kept since Windows 7 (EarTrumpet and SoundSwitch use it). The defaults it replaced are kept in a file first and put back when the microphone stops, the session ends or Vyro closes, or at the next start after a crash; a role the owner changed meanwhile is left alone. Both need the Screen permission and a session on; the live microphone the direct connection | decided |
+| 40 | Notifications on the phone | A phone may get notifications with its app closed (2.0; the owner's choice, 2026-10-27): it turns them on for each PC and chooses what about (alerts as Windows shows them, low batteries, game summaries, the PC going quiet), and only it turns them on; any paired phone may, as they concern only it. Web Push: the browser's subscription goes to the PC sealed; the PC seals each notification for it (RFC 8291) and the relay posts it to the browser's push service (Google's, Apple's, Mozilla's or Microsoft's only) signed with a key the relay makes and keeps (VAPID, RFC 8292), at a limited rate. "Stopped answering" is sealed ahead of time and left with the relay, sent when the PC's connection ends or its pings stop without its "leaving", and it is not back within two minutes | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -3542,6 +3543,55 @@ deployed, at the owner's go; 1.7.7's phone app is not deployed yet either.
       files; the 16 hashed scripts among them carry the same names as a local build of 48a4432,
       What's new with 1.7.8's notes among them. The live page itself can't be fetched from here.
 
+### 2.0.0 — notifications on the phone, AMD and Intel tuning, signing ready
+
+The owner, 2026-10-27: "Let's build new features and update it as 2.0", choosing notifications on
+the phone, AMD and Intel GPU tuning, administrator prompts on the phone and code signing, on a new
+branch `claude/vyro-2.0` from 1.7.8's records.
+
+- [x] **Notifications on the phone** (decision 40): More → Notifications on the phone, per PC,
+      with four choices and a test; Settings → Remote says which phones get them. The PC seals
+      each for the phone's browser (`relay::push`, RFC 8291 checked against the RFC's own
+      example, taken from Mozilla's `ece` crate); the relay signs and posts it (`relay/src/keys.ts`,
+      a `Keys` Durable Object, migration `v2`; `/push/key`), only to the browsers' push services,
+      for phones the PC has, 24 at once, one every 5 s after that, 300 a day. The PC's will
+      ("stopped answering", sealed ahead) is sent when its connection ends or its pings stop
+      without its `leaving`, after two minutes; when it is back, the phones hear that too. Vyro
+      says `leaving` as it quits (and so as Windows shuts down, restarts or signs out) and as
+      Windows suspends (`PowerRegisterSuspendResumeNotification`). Alerts as the phone's list
+      has them; a battery that just ran low (or lower); a captured game's summary (5 minutes or
+      more). A PC or relay from before 2.0 is left as it was: the PC sends none of this to a
+      relay that does not say it takes it. Tests: the session and client against a stand-in
+      relay, the relay in workerd with a push service that checks the signature, the phone's
+      subscription and service worker, and 13 more end-to-end checks whose push service opens
+      each notification with Node's own crypto (159 in all). Commit bd80cb6.
+- [x] **AMD and Intel GPU tuning** (decision 37 amended): `gpu_tune::amd` (ADLX:
+      `IADLXManualGraphicsTuning2_1`, `IADLXManualVRAMTuning2_1`, `IADLXManualPowerTuning1`; the
+      highest clocks as offsets from the card's own; stock is AMD's own reset) and
+      `gpu_tune::intel` (`ctlOverclock*V2`; power in watts on the A-series and percent on the
+      B-series, both as % of the card's own; no memory; the waiver set before any change; stock
+      is Intel's own reset). Families RDNA 2/3/4 and Alchemist/Battlemage with their suggestions,
+      "Find my best" in each maker's steps, the turn-on dialog naming Intel's waiver. The
+      interfaces' layouts (`gpu_tune::ffi`) are checked on every platform against the makers'
+      headers compiled for 64-bit Windows (ADLX SDK 2.0.0.125, IGCL 1.1). A test caught a
+      rounding error that would have lost the top percent of an Intel power range. Commit
+      14a0f90.
+- [x] **Code signing, ready** (decision 11): `release.yml` signs `vyro.exe` and
+      `vyro-service.exe` before the MSI is made from them, then the MSI, and makes the updater's
+      signature for the signed MSI, once the four SignPath settings are in the repository;
+      unsigned as before without them. [`docs/signing.md`](docs/signing.md): make the repository
+      public, apply to SignPath Foundation, set up the project. Commit e1567dd.
+- Administrator prompts on the phone: not built. Answering Windows' administrator prompts from a
+  phone would mean seeing and typing on the secure desktop from SYSTEM; it was left out of 2.0.
+  Administrator prompts stay unseen from the phone, as in 1.7.
+- [x] **Version 2.0.0**: `scripts/set-version.py 2.0.0`, What's new in 2.0.0 (notifications, the
+      PC going quiet, AMD and Intel tuning, which phones get notifications); README, `docs/remote.md`
+      and `docs/anti-cheat.md` brought up to date.
+- [ ] Field check 2.0 ([`docs/field-check-2.0.md`](docs/field-check-2.0.md)): notifications on
+      Android and iPhone through the real push services, the PC going quiet, and an AMD and an
+      Intel card. The relay must be deployed from 2.0 first, at the owner's go.
+- [ ] 2.0.0 released, at the owner's go.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on
@@ -3555,6 +3605,13 @@ deployed, at the owner's go; 1.7.7's phone app is not deployed yet either.
   and says so. [`docs/anti-cheat.md`](docs/anti-cheat.md) has the details and the P27 field
   table.
 - PawnIO has a single upstream maintainer; module ABI or signing changes need a Vyro update.
+- AMD and Intel tuning (2.0) have run on no real card: the layouts are checked against the
+  makers' headers, but whether ADLX and Intel's library work from the LocalSystem service, and
+  how each driver answers, only a card shows. Until then, a card whose interface does not start
+  shows tuning as not available, with the reason.
+- Notifications (2.0) go through the browsers' push services, which may delay or drop them (an
+  Android phone saving battery, iOS with the app not on the Home Screen); "stopped answering"
+  depends on the relay noticing within a few minutes.
 - SignPath / Certum OSS require a public repo with an OSI license and a verifiable build.
 - Fan control (P12): some boards' fans are owned by the embedded controller and cannot be
   driven safely, pump headers are easy to mislabel, and another tool (MSI Center, FanControl)

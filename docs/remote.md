@@ -149,6 +149,35 @@ deleted 90 days after the PC was last seen.
   could serve an app that shows the screen to someone else, for a phone allowed to see it. Keep
   "Sees the screen" for phones you would hand the PC to.
 
+### Notifications (2.0)
+
+- **On the phone:** More → Notifications turns them on for that PC, chooses what they are about
+  (alerts, low batteries, game summaries, the PC going quiet) and sends a test. The browser's
+  push subscription (its push service's address for this phone, a P-256 key and a 16-byte
+  secret) goes to the PC as a `push.set` request, sealed like any other. Any paired phone may
+  ask: it concerns only its own notifications. The PC keeps it with the phone in `remote.json`,
+  sealed with DPAPI; signing the phone out removes it.
+- **On the PC:** each notification is a small JSON object (the PC's room, a title, a text, a tag
+  and a time) sealed for the phone's browser with RFC 8291 (`aes128gcm`: a one-time ECDH key,
+  HKDF-SHA256 with the browser's secret, AES-128-GCM), then handed to the relay as
+  `{"t":"push",…}`. `vyro_core::remote::relay::push` has it, checked against the RFC's own example.
+- **On the relay:** it makes a P-256 key the first time one is needed and keeps it in a Durable
+  Object of its own (`Keys`); phones subscribe with its public half (`/push/key`). It posts each
+  notification to the phone's push service with a VAPID token (RFC 8292) signed with that key,
+  only to Google's, Apple's, Mozilla's and Microsoft's push services, only for a phone the PC
+  has, at most 24 at once, one every 5 s after that and 300 a day per PC. It tells the PC when a
+  push service no longer knows a phone, and the PC forgets that subscription; the phone gives it
+  again the next time it opens that PC.
+- **"Stopped answering":** the PC seals that notification ahead of time for each phone that
+  wants it and leaves the list (its will) with the relay. The relay sends it when the PC's
+  connection ends without the PC's `{"t":"leaving"}` (sent as Vyro quits and as Windows goes to
+  sleep; shutting down, restarting and signing out end the app, which says it too), or when the
+  PC's 30-second `ping`s stop (a room with a will looks every two minutes; the runtime answers
+  the pings without waking it and notes when), and the PC is not back within two minutes. When
+  it is back, the relay tells the PC, which tells those phones.
+- **What the relay learns:** when a PC sends a notification, to which phone and which push
+  service, and how big it is; never what it says.
+
 ### Trust points, plainly
 
 - **The phone app's code comes from the relay.** Whoever controls the Cloudflare account could
@@ -172,7 +201,6 @@ deleted 90 days after the PC was last seen.
   does not expose anything. A relay of your own (below) is not shared.
 - **Networks** that block `*.workers.dev`, or that allow the web only through a proxy, cannot
   reach the relay in 1.4.
-- **Notifications** for alerts are not sent to phones yet.
 - The relay caps frames at 64 KiB, 8 phones per PC with 2 connections each, and rates: the PC
   100 messages a second (bursts of 200), a phone 5 (bursts of 20). Breaking a cap closes the
   connection.
@@ -188,6 +216,10 @@ deleted 90 days after the PC was last seen.
    then `pnpm --dir relay exec wrangler login` and `pnpm --dir relay exec wrangler deploy`.
 3. In Vyro: Settings → Remote → Options → **Relay address**: the address `wrangler deploy`
    printed. Phones paired through another relay are signed out when it changes.
+
+A relay set up before 2.0 sends no notifications until it is deployed again from this
+repository: `wrangler.jsonc` adds the `Keys` Durable Object (migration `v2`). Until then the PC
+and the phone leave notifications off, and everything else works as before.
 
 To try it on one computer: `pnpm --dir relay dev` runs the relay at `http://127.0.0.1:8787`, and
 `cargo run -p vyro-core --example companion -- --relay http://127.0.0.1:8787` plays a PC with
