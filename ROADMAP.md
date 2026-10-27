@@ -3368,7 +3368,7 @@ Fixes on `claude/vyro-1.7` after 1.7.5's release, gathered for one release when 
 Fixes on `claude/vyro-1.7` after 1.7.6's release, gathered for one release when the owner says
 (the owner, 2026-10-26: "make all the fixes in a single release").
 
-- [ ] **"Lock this PC when a phone's session ends" waits for the phone's next session**
+- [x] **"Lock this PC when a phone's session ends" waits for the phone's next session**
       (2026-10-27, a review of 1.7's screen sessions): the phone ends its session before the
       next one in two places, choosing another monitor and falling back to the slow view when
       no direct path came (after 15 s), and the PC took that Stop as the end and locked at
@@ -3378,7 +3378,8 @@ Fixes on `claude/vyro-1.7` after 1.7.6's release, gathered for one release when 
       now waits 10 s, and is left out if a session began meanwhile (it locks at its own end);
       the network, the idle rule and the phone gone still lock at once. Test: a session begun
       after the phone stopped one leaves the PC unlocked. Clippy clean for Windows here, tests
-      included. The PC's alone: no relay deploy. Field check 1.7, step 6.
+      included; CI green on d7c6232 (run 40471310802, every job; the Windows job ran the test).
+      The PC's alone: no relay deploy. Field check 1.7, step 6.
 
 ## Risks
 
