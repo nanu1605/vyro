@@ -3534,6 +3534,13 @@ deployed, at the owner's go; 1.7.7's phone app is not deployed yet either.
       serves 81131fc's phone app (run 40344879569), so the phone app's fixes of 1.7.7 and 1.7.8
       and their phone notes reach phones only with a deploy, at the owner's go. The PC's fixes
       need none.
+- [x] **The relay deployed** from `main` at 48a4432 (2026-10-27, at the owner's go: "Deploy the
+      relay"; Actions run 40549284059, its 24 tests first; version 6d379e98), so phones get the
+      phone app's fixes of 1.7.7 and 1.7.8 and their notes the next time they open the app. The
+      relay itself is unchanged since 81131fc (`vyro.1`, and the sealed messages' version 2 on
+      both sides), so every released app still talks to it. Cloudflare took 18 new or changed
+      files; the 16 hashed scripts among them carry the same names as a local build of 48a4432,
+      What's new with 1.7.8's notes among them. The live page itself can't be fetched from here.
 
 ## Risks
 
