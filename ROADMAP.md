@@ -3380,6 +3380,49 @@ Fixes on `claude/vyro-1.7` after 1.7.6's release, gathered for one release when 
       after the phone stopped one leaves the PC unlocked. Clippy clean for Windows here, tests
       included; CI green on d7c6232 (run 40471310802, every job; the Windows job ran the test).
       The PC's alone: no relay deploy. Field check 1.7, step 6.
+- [x] **Every issue the 1.7.6 review left** (2026-10-27, the owner: "fix all the issues small
+      and big in 1.7.7"). The PC's:
+      - **No microphone after a session's end:** a frame of the phone's microphone the
+        connection still delivered after its session ended started the cable again, Windows'
+        default microphone for 10 s (and until Vyro's next start, had it quit meanwhile). The end
+        marks the session ended before it turns the microphone off, and a frame checks that
+        under the microphone's lock; Vyro turns off a microphone left playing as it quits too.
+        Field check 1.7, step 12.
+      - **Notes for the phone:** the session kept one note, so two told within milliseconds
+        (the microphone starting as the resolution changed) reached the phone as the second
+        alone. It keeps the newest of each kind and sends every one due, the end last. Test: a
+        note replaces only one of its kind.
+      - **One notice for the phone's use:** "Your screen is shared" showed again when the phone
+        chose another monitor or fell back to the slow view. A session the same phone begins
+        within 10 s of ending its own goes on from it. Test: a session going on from the last is
+        told once. Field check 1.7, step 6.
+      - **Slow-view input past a refused one:** input Windows refused, or of a kind this PC does
+        not know, stopped its batch, and what came after it (a key let go) never did. Each goes
+        on its own, as on a direct session.
+
+      The phone app's (**need the relay deployed, at the owner's go**):
+      - **The Screen tab through a dropped relay connection:** the tab showed only while the
+        phone's connection to the relay was online, so a relay restart or the phone changing
+        networks left the tab, and leaving ends the session, a direct one too, which needs no
+        relay. The tab now stays while its session is on. End to end (`scripts/relay-e2e.mjs`,
+        where Google Chrome plays H.264): the phone's relay sockets closed mid-session, the
+        picture goes on.
+      - **The slow view through a dropped request:** one request the connection lost ended the
+        slow view. A request now says whether the connection failed it (never sent, or its
+        answer lost) or the PC; the slow view asks again for up to 45 s, saying it is
+        reconnecting, and input that never left goes once the connection is back. A request
+        made while reconnecting said "Update Vyro on the PC."; that is now said only of a PC
+        whose Vyro gives no session. Test: how a failed request is told. Field check 1.7, step 4.
+      - **A clip whose sheet closed:** it went on sending, landed on the PC later, and through
+        the relay its pieces and the next clip's spoiled both. Closing the sheet, or its new
+        Cancel, stops it. End to end: a sheet closed while its clip goes stops sending it. Field
+        check 1.7, step 11.
+      - **One failed refresh:** in More, a tile went (taking an open section with it) and in
+        Health the alerts and Performance Score did, when one of its answers failed; Processes
+        and Devices showed only the error until the next. What the PC said last now stays.
+
+      Checks here: `cargo test -p vyro-core` (screen), clippy clean for Linux and Windows (the
+      workspace, tests included), `npm test`, `npm run check`.
 
 ## Risks
 

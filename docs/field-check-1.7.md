@@ -88,6 +88,10 @@ through the relay where it cannot.
   1.7.5, also when Settings was open before the session started).
 - Drag around the PC's screen for a minute or more: the session goes on, and the top of the phone
   keeps saying **Live**.
+- From 1.7.7: turn the phone's data off for about 10 seconds, then on again. The phone says the
+  connection dropped and it is reconnecting, then the picture goes on: the session does not end.
+  Tap **Ctrl** and type **a** in Notepad as it comes back: everything is selected, and typing
+  after it types letters.
 
 ## 5. What it cannot do
 
@@ -108,7 +112,8 @@ through the relay where it cannot.
 - From 1.7.7, still ticked, with two monitors: show the screen, then choose the other monitor
   on the phone: it shows that monitor, and the PC does not lock. The same where only the slow
   view works (4): once "No direct path" shows, the phone shows the PC's desktop, not its lock
-  screen.
+  screen. Either way the PC shows **Your screen is shared** once, not again for the other
+  monitor or the slow view.
 - Leave the phone with the Screen tab open, then lock the phone for 10 minutes: the session ends
   by itself ("nobody used it for 10 minutes" in the record).
 - Turn the phone's permission off while it shows the screen: the session ends at once.
@@ -171,6 +176,9 @@ through the relay where it cannot.
   arrives as a voice message or as an audio file, and whether it plays.
 - `%LOCALAPPDATA%\app.vyro.monitor\Phone clips` holds it as `Clip <date time>.m4a`.
 - In the slow view (if 4 showed it), a clip of up to a minute goes too, a little slower.
+- From 1.7.7: record a clip of half a minute or more, **Send to *PC***, and while it says
+  "Sending…" tap **Cancel** (once more, close the sheet instead): no clip reaches the PC's
+  clipboard. A clip sent after it arrives whole.
 
 ## 12. The phone as the PC's microphone (VB-CABLE)
 
@@ -187,7 +195,8 @@ through the relay where it cannot.
 - On mobile data, while recording a note, walk somewhere the signal drops for a few seconds:
   the note has silence there, not the room around the PC, and Windows' Input stays CABLE Output.
 - Tap **Mic** again: at once (within a second) Windows' default microphone is the one you noted.
-  The same after stopping the session on the PC with the Mic on.
+  The same after stopping the session on the PC with the Mic on, and (from 1.7.7) on the phone
+  while you speak into it: it stays the one you noted, not CABLE Output again for a few seconds.
 - From 1.7.6: tap **Mic**, and as soon as it lights, tap it off and on again. The phone says the
   PC hears it as CABLE Output, Windows' Input shows CABLE Output and its level moves when you
   speak; tap **Mic** off: the default you noted is back.
