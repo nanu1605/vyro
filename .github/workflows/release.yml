@@ -18,6 +18,14 @@ name: Release
 #   secret   RELEASES_TOKEN                      fine-grained token: Contents read and write on it
 # and, for reach from anywhere (1.4):
 #   variable VYRO_RELAY_URL                      the relay built into the app (relay.yml deploys it)
+# and, to sign the app and its installer (2.0, decision 11; docs/signing.md), all four:
+#   variable SIGNPATH_ORGANIZATION_ID            SignPath's organization id for Vyro
+#   variable SIGNPATH_PROJECT_SLUG               its project (normally "vyro")
+#   variable SIGNPATH_SIGNING_POLICY_SLUG        its signing policy ("release-signing")
+#   secret   SIGNPATH_API_TOKEN                  a CI user's API token there
+# Without them the build is unsigned, as before (SmartScreen warns on install). With them,
+# vyro.exe and vyro-service.exe are signed before the MSI is made from them, then the MSI, and
+# the updater's signature is made for the signed MSI.
 # With RELEASES_REPO the installer and `latest.json` are also published there and installed
 # copies update from it (release downloads of a private repository need a sign-in); without
 # it they update from this repository's releases, which works only while it is public.
@@ -120,12 +128,108 @@ jobs:
           } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 src-tauri/tauri.release.conf.json
 
       - name: Build the app and the MSI installer
+        if: vars.SIGNPATH_ORGANIZATION_ID == ''
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # The relay built into the app (1.4): Settings → Remote → From anywhere.
           VYRO_RELAY_URL: ${{ vars.VYRO_RELAY_URL }}
         run: pnpm tauri build --config src-tauri/tauri.release.conf.json
+
+      # Signed (2.0): the programs first, so the MSI carries signed ones; then the MSI.
+      - name: Signing is set up
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        shell: pwsh
+        env:
+          HAS_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
+          PROJECT: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          POLICY: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+        run: |
+          if ($env:HAS_TOKEN -ne 'true' -or -not $env:PROJECT -or -not $env:POLICY) {
+            throw "SIGNPATH_ORGANIZATION_ID is set: set SIGNPATH_PROJECT_SLUG, SIGNPATH_SIGNING_POLICY_SLUG and the secret SIGNPATH_API_TOKEN too (docs/signing.md)"
+          }
+      - name: Build the app (to be signed)
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        env:
+          VYRO_RELAY_URL: ${{ vars.VYRO_RELAY_URL }}
+        run: pnpm tauri build --no-bundle --config src-tauri/tauri.release.conf.json
+      - name: The programs, for signing
+        id: programs
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: programs-unsigned
+          path: |
+            target/release/vyro.exe
+            target/release/vyro-service.exe
+          if-no-files-found: error
+          retention-days: 1
+      - name: Sign the programs
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: programs
+          github-artifact-id: ${{ steps.programs.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed/programs
+      - name: Bundle the MSI from the signed programs
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          foreach ($name in 'vyro.exe', 'vyro-service.exe') {
+            $signed = Get-Item "signed/programs/$name"
+            $sig = Get-AuthenticodeSignature $signed.FullName
+            if ($sig.Status -ne 'Valid') { throw "$name came back from signing as $($sig.Status)" }
+            Copy-Item $signed.FullName "target/release/$name" -Force
+            "$name signed by $($sig.SignerCertificate.Subject)" >> $env:GITHUB_STEP_SUMMARY
+          }
+          pnpm tauri bundle --config src-tauri/tauri.release.conf.json
+          if ($LASTEXITCODE -ne 0) { throw "tauri bundle failed" }
+      - name: The installer, for signing
+        id: installer
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-unsigned
+          path: target/release/bundle/msi/*.msi
+          if-no-files-found: error
+          retention-days: 1
+      - name: Sign the installer
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.installer.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed/installer
+      - name: The signed installer, and its updater signature
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          $msi = Get-Item target\release\bundle\msi\*.msi | Select-Object -First 1
+          $signed = Get-Item "signed/installer/$($msi.Name)"
+          $sig = Get-AuthenticodeSignature $signed.FullName
+          if ($sig.Status -ne 'Valid') { throw "$($msi.Name) came back from signing as $($sig.Status)" }
+          Copy-Item $signed.FullName $msi.FullName -Force
+          # Signing changed the file: the updater's signature is made again, for this one.
+          Remove-Item "$($msi.FullName).sig" -ErrorAction SilentlyContinue
+          pnpm tauri signer sign $msi.FullName
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$($msi.FullName).sig")) { throw "the updater signature was not made" }
+          "$($msi.Name) signed by $($sig.SignerCertificate.Subject)" >> $env:GITHUB_STEP_SUMMARY
       - name: The relay address built in (1.4)
         shell: pwsh
         env:
