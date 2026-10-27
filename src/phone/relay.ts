@@ -48,8 +48,17 @@ export type PhoneInfo = RemoteInfo & {
 export const FULL = "Today's relay allowance for this PC is used up. It comes back after midnight (UTC).";
 const DAY_MS = 24 * 3600 * 1000;
 
-/** A request that failed: the PC refused it, or did not answer. */
-export class RequestError extends Error {}
+/** A request that failed: the PC refused it, or did not answer. `link`, when the connection to
+ * the PC failed it rather than the PC: `unsent`, it never left the phone (asking again does it
+ * once); `lost`, it went but its answer did not come (it may have been done). */
+export class RequestError extends Error {
+  constructor(
+    message: string,
+    readonly link: 'unsent' | 'lost' | null = null,
+  ) {
+    super(message);
+  }
+}
 /** Why waiting requests fail when the PC leaves the relay. */
 export const GONE = 'The PC went to sleep or off.';
 
@@ -93,6 +102,8 @@ export class PcLink {
   private aadOut: Bytes = new Uint8Array(0);
   /** Connected with the phone's own secret, before the PC confirmed taking it. */
   private onNext = false;
+  /** The PC's info gave no session: its Vyro is older than 1.5, and takes no requests. */
+  private oldPc = false;
   private stopped = true;
   private wait = WAIT_MIN;
   private retry: ReturnType<typeof setTimeout> | null = null;
@@ -163,13 +174,18 @@ export class PcLink {
   request<T = unknown>(method: string, params: object = {}): Promise<T> {
     if (this.fullDay === Math.floor(Date.now() / DAY_MS)) return Promise.reject(new RequestError(FULL));
     if (this.current !== 'online' || !this.session) {
-      return Promise.reject(new RequestError(this.session ? 'Not connected to the PC.' : 'Update Vyro on the PC.'));
+      // Online with no session: an older PC, or one saying hello again.
+      return Promise.reject(
+        this.current === 'online' && this.oldPc
+          ? new RequestError('Update Vyro on the PC.')
+          : new RequestError('Not connected to the PC.', 'unsent'),
+      );
     }
     const id = this.nextId++;
     return new Promise<T>((ok, fail) => {
       const timer = setTimeout(() => {
         this.waiting.delete(id);
-        fail(new RequestError("The PC didn't answer."));
+        fail(new RequestError("The PC didn't answer.", 'lost'));
       }, REQUEST_MS);
       this.waiting.set(id, {
         ok: (v) => {
@@ -186,11 +202,11 @@ export class PcLink {
     });
   }
 
-  /** Requests under way fail: the connection they were made on is gone. */
-  private dropWaiting(why: string): void {
+  /** Requests under way fail: the connection they were made on is gone (`link`), or the PC. */
+  private dropWaiting(why: string, link: RequestError['link'] = null): void {
     const all = [...this.waiting.values()];
     this.waiting.clear();
-    for (const w of all) w.fail(new RequestError(why));
+    for (const w of all) w.fail(new RequestError(why, link));
   }
 
   private set(s: LinkState): void {
@@ -277,7 +293,7 @@ export class PcLink {
     if (ws !== this.ws) return;
     this.ws = null;
     this.session = null;
-    this.dropWaiting('The connection to the PC was lost.');
+    this.dropWaiting('The connection to the PC was lost.', 'lost');
     this.stopPing();
     if (this.stopped) return;
     const pairing = this.pc()?.next !== undefined;
@@ -359,6 +375,7 @@ export class PcLink {
         this.onNext = false;
         this.on.onRekeyed();
       }
+      this.oldPc = !m.session;
       // A new session starts its count again; the same one (a permission change) keeps it.
       const fresh = (m.session ?? null) !== this.session;
       this.session = m.session ?? null;
@@ -378,7 +395,7 @@ export class PcLink {
           this.answered(m.id, JSON.parse(w.parts.join('')) as Incoming);
         } catch {
           this.waiting.delete(m.id);
-          w.fail(new RequestError('The answer did not arrive whole.'));
+          w.fail(new RequestError('The answer did not arrive whole.', 'lost'));
         }
       }
     } else if (m.t === 'view' && m.view) {

@@ -11,8 +11,8 @@
     pc: string;
     /** The longest clip, seconds. */
     limit: number;
-    /** Sends the WAV; gives the file's name on the PC. */
-    send: (bytes: Uint8Array, progress: (done: number) => void) => Promise<string>;
+    /** Sends the WAV, until `stop` cancels it; gives the file's name on the PC. */
+    send: (bytes: Uint8Array, progress: (done: number) => void, stop: AbortSignal) => Promise<string>;
     onpaste: () => void;
     onclose: () => void;
   }
@@ -33,6 +33,9 @@
   // that starts after Cancel or the sheet closed stops at once (`take` moved on).
   let starting = false;
   let take = 0;
+  /** The clip being sent: Cancel, or closing the sheet, stops it, so it does not land on the PC
+   * later (or, through the relay, mix its pieces with the next clip's). */
+  let sending: AbortController | null = null;
 
   async function record(): Promise<void> {
     if (starting || mic) return;
@@ -67,6 +70,8 @@
 
   function halt(): void {
     take++;
+    sending?.abort();
+    sending = null;
     mic?.stop();
     mic = null;
     loud = 0;
@@ -84,12 +89,19 @@
     }
     stage = 'sending';
     sent = 0;
+    const going = new AbortController();
+    sending = going;
     try {
-      name = await send(wav(pcm), (d) => (sent = d));
+      const kept = await send(wav(pcm), (d) => (sent = d), going.signal);
+      if (going.signal.aborted) return;
+      name = kept;
       stage = 'sent';
     } catch (e) {
+      if (going.signal.aborted) return;
       why = e instanceof Error ? e.message : String(e);
       stage = 'failed';
+    } finally {
+      if (sending === going) sending = null;
     }
   }
 
@@ -128,6 +140,9 @@
   {:else if stage === 'sending'}
     <p role="status">Sending… {Math.round(sent * 100)} %</p>
     <div class="bar" aria-hidden="true"><i style:width="{sent * 100}%"></i></div>
+    <div class="actions">
+      <button type="button" class="ghost" onclick={() => ((stage = 'ready'), halt())}>Cancel</button>
+    </div>
   {:else}
     <p role="status"><b>On {pc}'s clipboard</b>{name ? ` (${name})` : ''}. Paste it into the chat.</p>
     <div class="actions">

@@ -284,6 +284,30 @@ describe('a phone and its PC through the relay', () => {
     t.link.stop();
   });
 
+  it('says when the connection, not the PC, failed a request', async () => {
+    const t = setup({ room: ROOM, phone: PHONE, secret: S1, name: 'DESKTOP-7', used: 1 });
+    const pc1 = await pcSide(S1);
+    t.link.start();
+    const s = await socket(t, 0);
+    s.open();
+    s.text('{"t":"pc","online":true}');
+    s.binary(await pc1.frame({ t: 'info', pc: 'DESKTOP-7', protocol: 2, session: 'abc', methods: ['screen.slow'], screen: true }));
+    await until(() => expect(t.infos).toHaveLength(1));
+    const failed = (m: string) => t.link.request(m).catch((e: unknown) => e);
+    const refused = failed('screen.slow');
+    // Hello, watch, then the request.
+    await sent(s, 3);
+    s.binary(await pc1.frame({ t: 'res', id: 1, err: 'The session ended.' }));
+    expect(await refused).toMatchObject({ message: 'The session ended.', link: null });
+    const lost = failed('screen.slow');
+    await sent(s, 4);
+    s.end(1006);
+    expect(await lost).toMatchObject({ message: 'The connection to the PC was lost.', link: 'lost' });
+    // While it reconnects: not sent at all, and not taken for an older PC.
+    expect(await failed('screen.slow')).toMatchObject({ message: 'Not connected to the PC.', link: 'unsent' });
+    t.link.stop();
+  });
+
   it('shows a protocol 1 PC, but asks it nothing', async () => {
     const t = setup({ room: ROOM, phone: PHONE, secret: S1, name: 'DESKTOP-7', used: 1 });
     const pc1 = await pcSide(S1);

@@ -11,6 +11,7 @@
   import Minimize from '@lucide/svelte/icons/minimize';
   import SignalHigh from '@lucide/svelte/icons/signal-high';
   import Square from '@lucide/svelte/icons/square';
+  import { RequestError } from '../relay';
   import { b64url, unb64url } from '../seal';
   import Sheet from '../ui/Sheet.svelte';
   import { toast } from '../ui/toast.svelte';
@@ -95,6 +96,9 @@
   /** The slow view's pace: a picture at most this often, input at most this often. */
   const SLOW_MS = 500;
   const SLOW_INPUT_MS = 300;
+  /** The slow view goes on through a dropped connection to the PC for this long (the PC ends a
+   * slow view nobody asked a picture of for a minute). */
+  const SLOW_RETRY_MS = 45_000;
   const MAX_ZOOM = 4;
 
   const KEYS: Array<{ k: Key; label: string; name: string }> = [
@@ -340,7 +344,10 @@
         try {
           await ask('screen.input', { inputs: batch });
         } catch (e) {
-          error = errText(e);
+          // The connection dropped (the status says so): what never left goes once it is back;
+          // what went may have been done, so it does not go again.
+          if (!(e instanceof RequestError && e.link)) error = errText(e);
+          else if (e.link === 'unsent') queue = [...batch, ...queue];
         }
         await sleep(SLOW_INPUT_MS - (performance.now() - t0));
       }
@@ -481,6 +488,8 @@
     if (my !== run) return;
     mode = 'slow';
     secure = false;
+    reconnecting = false;
+    let answered = performance.now();
     while (my === run && mode === 'slow') {
       if (document.hidden) {
         await sleep(SLOW_MS);
@@ -490,6 +499,8 @@
       try {
         const r = await ask<Slow>('screen.slow', { monitor, quality });
         if (my !== run) return;
+        answered = performance.now();
+        reconnecting = false;
         slowLeft = r.left;
         secure = !!r.secure;
         const bytes = r.jpeg ? unb64url(r.jpeg) : null;
@@ -501,8 +512,13 @@
           size = { w: r.w, h: r.h };
         }
       } catch (e) {
-        if (my === run) finish(errText(e));
-        return;
+        if (my !== run) return;
+        // The connection, not the PC, failed it (patchy mobile data): asked again, for a while.
+        if (!(e instanceof RequestError && e.link) || performance.now() - answered > SLOW_RETRY_MS) {
+          finish(errText(e));
+          return;
+        }
+        reconnecting = true;
       }
       await sleep(SLOW_MS - (performance.now() - t0));
     }
@@ -639,17 +655,21 @@
   /** The PC keeps voice clips (1.7). */
   const canClip = $derived(can('screen.clip'));
 
-  /** A clip over the direct connection: its own channel, the file in pieces, the PC's answer. */
-  async function clipDirect(bytes: Uint8Array, progress: (done: number) => void): Promise<string> {
+  /** A clip over the direct connection: its own channel, the file in pieces, the PC's answer.
+   * Cancelled (`stop`), the channel closes, and the PC drops what came of it. */
+  async function clipDirect(bytes: Uint8Array, progress: (done: number) => void, stop: AbortSignal): Promise<string> {
     const p = peer;
     if (!p) throw new Error(`Not connected to ${pc}.`);
     const ch = p.createDataChannel('clip', { ordered: true });
     const lost = () => new Error(`The connection to ${pc} was lost.`);
+    const cancel = () => ch.close();
+    stop.addEventListener('abort', cancel);
     try {
       await new Promise<void>((ok, fail) => {
         const t = setTimeout(() => fail(new Error(`${pc} did not answer.`)), 10_000);
         ch.onopen = () => (clearTimeout(t), ok());
         ch.onerror = () => (clearTimeout(t), fail(new Error(`${pc} did not take the clip.`)));
+        ch.onclose = () => (clearTimeout(t), fail(lost()));
       });
       const answer = new Promise<string>((ok, fail) => {
         const t = setTimeout(() => fail(new Error(`${pc} did not say it kept the clip.`)), 60_000);
@@ -685,16 +705,19 @@
       ch.send(JSON.stringify({ t: 'end' }));
       return await answer;
     } finally {
+      stop.removeEventListener('abort', cancel);
       ch.close();
     }
   }
 
-  /** A clip through the relay (the slow view): requests of a piece each. */
-  async function clipRelay(bytes: Uint8Array, progress: (done: number) => void): Promise<string> {
+  /** A clip through the relay (the slow view): requests of a piece each, until cancelled
+   * (`stop`; the PC drops a clip whose pieces stopped once the next comes, or the session ends). */
+  async function clipRelay(bytes: Uint8Array, progress: (done: number) => void, stop: AbortSignal): Promise<string> {
     const parts = pieces(bytes, PIECE_RELAY);
     const id = b64url(crypto.getRandomValues(new Uint8Array(8)));
     let name = '';
     for (let i = 0; i < parts.length; i++) {
+      if (stop.aborted) throw new Error('Cancelled.');
       const r = await ask<{ saved?: string }>('screen.clip', { id, i, n: parts.length, d: b64url(parts[i]!) });
       progress((i + 1) / parts.length);
       if (r?.saved) name = r.saved;
@@ -1062,7 +1085,7 @@
     open={clipOpen}
     {pc}
     limit={mode === 'slow' ? CLIP_SECS.relay : CLIP_SECS.direct}
-    send={(bytes, progress) => (mode === 'direct' ? clipDirect(bytes, progress) : clipRelay(bytes, progress))}
+    send={(bytes, progress, stop) => (mode === 'direct' ? clipDirect(bytes, progress, stop) : clipRelay(bytes, progress, stop))}
     onpaste={paste}
     onclose={() => (clipOpen = false)}
   />

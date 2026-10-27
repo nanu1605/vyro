@@ -709,6 +709,21 @@ async function main() {
         await d.page.evaluate(() => (window.__stall = false));
         await d.page.keyboard.press('Escape');
         await clipSheet.waitFor({ state: 'hidden', timeout: 5000 });
+        // Closed while its clip goes: the clip stops, rather than land on the PC's clipboard later.
+        await d.page.evaluate(() => ((window.__stall = true), (window.__stalled = null)));
+        await d.page.getByRole('button', { name: /^Voice clip for / }).click();
+        await clipSheet.getByRole('button', { name: 'Record', exact: true }).click();
+        await clipSheet.getByRole('button', { name: /^Send to / }).waitFor({ timeout: 5000 });
+        await d.page.waitForTimeout(1000);
+        await clipSheet.getByRole('button', { name: /^Send to / }).click();
+        await d.page.waitForFunction(() => window.__stalled?.readyState === 'open', null, { timeout: 10_000 });
+        await d.page.evaluate(() => (window.__stall = false));
+        await d.page.keyboard.press('Escape');
+        await clipSheet.waitFor({ state: 'hidden', timeout: 5000 });
+        await d.page.waitForFunction(() => window.__stalled.readyState !== 'open', null, { timeout: 5000 }).then(
+          () => ok('a clip sheet closed while its clip goes stops sending it'),
+          () => problem('clip', 'the clip went on sending after its sheet closed'),
+        );
         // SD from the toolbar (1.7): smaller pictures at once.
         await d.page.getByRole('button', { name: /^Quality: HD/ }).click();
         await seeText(d.page, /Receiving 960×540/, 'SD from the toolbar: the PC sends 960×540');
