@@ -962,9 +962,12 @@ async function main() {
     await npc.out.wait(/^state: "online"$/);
     const n = await phone(browser, 'phone N');
     await n.ctx.grantPermissions(['notifications'], { origin: RELAY });
-    // The browser's push service is played here: its subscription is the test's.
+    // The browser's push service is played here: its subscription is the test's, and the
+    // browser allows notifications (a headless one may say it never does).
     await n.ctx.addInitScript((sub) => {
       if (!window.PushManager) return;
+      Object.defineProperty(Notification, 'permission', { get: () => 'granted' });
+      Notification.requestPermission = async () => 'granted';
       const dec = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
       let current = null;
       PushManager.prototype.subscribe = async function (o) {
@@ -1023,8 +1026,18 @@ async function main() {
     const tested = sent('a test comes when asked for', 'Notifications work');
     await n.page.getByRole('button', { name: 'Send a test', exact: true }).click();
     await tested;
-    // The service worker shows what the browser opened.
+    // The service worker shows what the browser opened (what it asks the browser to show is
+    // recorded inside it: a headless browser may show nothing).
     try {
+      const sw = n.ctx.serviceWorkers()[0] ?? (await n.ctx.waitForEvent('serviceworker', { timeout: 10_000 }));
+      await sw.evaluate(() => {
+        self.__shown = [];
+        const show = self.registration.showNotification.bind(self.registration);
+        self.registration.showNotification = (title, options) => {
+          self.__shown.push(`${title}: ${options?.body}`);
+          return show(title, options).catch(() => {});
+        };
+      });
       const cdp = await n.ctx.newCDPSession(n.page);
       const reg = new Promise((resolve) =>
         cdp.on('ServiceWorker.workerRegistrationUpdated', ({ registrations }) => {
@@ -1039,7 +1052,7 @@ async function main() {
       let titles = [];
       for (let i = 0; i < 20 && !titles.length; i++) {
         await n.page.waitForTimeout(250);
-        titles = await n.page.evaluate(async () => (await (await navigator.serviceWorker.ready).getNotifications()).map((x) => `${x.title}: ${x.body}`));
+        titles = await sw.evaluate(() => self.__shown);
       }
       if (titles.includes(`Notifications work: ${last.body}`)) ok('the service worker shows a notification as it came');
       else problem('service worker', `it shows ${JSON.stringify(titles)}`);
