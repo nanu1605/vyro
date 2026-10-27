@@ -842,6 +842,25 @@ async function main() {
     await l.page.getByRole('button', { name: 'Cancel', exact: true }).click();
     if ((await l.page.locator('.powered').count()) === 0) problem('footer', 'no "Powered by" line');
     else ok('the footer says who it is powered by');
+
+    // 8. Signing out of a PC with its screen shown (1.7.8): the phone lets go of the PC at once,
+    // the session stops on the PC first, and the PC forgets the phone.
+    await go('Screen');
+    await l.page.getByRole('button', { name: /^Show .*screen$/ }).click();
+    await l.page.locator('.surface img').waitFor({ timeout: 15_000 });
+    const stopped = light.out.next(/^asked: screen\.stop /, 6_000);
+    const forgot = light.out.next(/^saved$/, 10_000);
+    await l.page.getByRole('button', { name: /: your PCs$/ }).click();
+    await l.page.getByRole('button', { name: /^Sign out of / }).click();
+    await seeText(l.page, 'Pair with your PC', 'signing out of a PC with its screen shown leaves it at once', 2_000);
+    await stopped.then(
+      () => ok('…stops its session on the PC'),
+      () => problem('signing out', 'the PC was not asked to stop the screen session'),
+    );
+    await forgot.then(
+      () => ok('…and the PC forgets the phone'),
+      () => problem('signing out', 'the PC did not hear the phone sign out'),
+    );
     light.child.kill('SIGTERM');
   } finally {
     await browser.close();

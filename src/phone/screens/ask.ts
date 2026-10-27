@@ -31,3 +31,20 @@ export function every(ms: number, load: () => Promise<unknown>): () => void {
   }, ms);
   return () => clearInterval(t);
 }
+
+/** Calls `load` now, and again `ms` after each time it fails, until it succeeds; gives a function
+ * that stops it. For what is asked once: the link may be down as the screen opens. */
+export function untilAnswered(ms: number, load: () => Promise<unknown>): () => void {
+  let t: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false;
+  const go = (): void => {
+    load().catch(() => {
+      if (!stopped) t = setTimeout(go, ms);
+    });
+  };
+  go();
+  return () => {
+    stopped = true;
+    clearTimeout(t);
+  };
+}

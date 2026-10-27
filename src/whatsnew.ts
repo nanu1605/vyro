@@ -21,6 +21,45 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '1.7.8',
+    items: [
+      {
+        icon: 'wake',
+        title: 'Wake a PC through another',
+        text: '“Wake” on a sleeping PC’s page on your phone now has another of your PCs wake it, rather than always saying none could.',
+        phone: true,
+      },
+      {
+        icon: 'screen',
+        title: 'Leaving a PC ends its screen session',
+        text: 'Going to your list of PCs, opening another PC, scanning a code or signing out while your phone shows this PC’s screen now ends the session at once, not up to a minute later.',
+        phone: true,
+      },
+      {
+        icon: 'screen',
+        title: 'HD stays HD on mobile data',
+        text: 'Moving onto mobile data during a session no longer shows SD on your phone while this PC goes on sending HD: the session keeps its quality until you switch it.',
+        phone: true,
+      },
+      {
+        icon: 'phone',
+        title: 'Your phone on a slow connection',
+        text: 'Processes and More now wait for this PC’s last answer before asking again, and the Screen tab asks again for this PC’s monitors when it could not get them.',
+        phone: true,
+      },
+      {
+        icon: 'screen',
+        title: 'A new relay address ends a phone session',
+        text: 'Changing the relay address in Settings → Remote signs every phone out, and now ends a phone’s session with this PC’s screen too.',
+      },
+      {
+        icon: 'phone',
+        title: 'A phone’s session ends with its pairing',
+        text: 'A phone that signs itself out of this PC, or whose pairing runs out, now has its session with this PC’s screen ended at once.',
+      },
+    ],
+  },
+  {
     version: '1.7.7',
     items: [
       {

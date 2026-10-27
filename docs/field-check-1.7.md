@@ -117,6 +117,8 @@ through the relay where it cannot.
 - From 1.7.8: show the screen, then tap the PC's name → **All PCs** (or open another paired PC
   there): the PC's banner goes within a second or two, not a minute later; with the lock
   ticked, the PC locks about 10 seconds after.
+  Show it again and tap **Sign out of** *PC* there: the phone is at its list at once, the
+  banner goes the same, and the PC no longer lists the phone.
 - Leave the phone with the Screen tab open, then lock the phone for 10 minutes: the session ends
   by itself ("nobody used it for 10 minutes" in the record).
 - Turn the phone's permission off while it shows the screen: the session ends at once.

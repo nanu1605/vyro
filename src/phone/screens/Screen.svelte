@@ -15,7 +15,7 @@
   import { b64url, unb64url } from '../seal';
   import Sheet from '../ui/Sheet.svelte';
   import { toast } from '../ui/toast.svelte';
-  import { errText, type ScreenProps } from './ask';
+  import { errText, untilAnswered, type ScreenProps } from './ask';
   import ClipSheet from './ClipSheet.svelte';
   import { capture, CLIP_SECS, frame, Framer, level, micError, PIECE_DIRECT, PIECE_RELAY, pieces, type Capture } from './voice';
   import { coalesce, contentBox, Gestures, type Input, type Key, type Pt, toFraction, typed } from './gestures';
@@ -103,6 +103,8 @@
    * slow view nobody asked a picture of for a minute). */
   const SLOW_RETRY_MS = 45_000;
   const MAX_ZOOM = 4;
+  /** The monitors not got (the connection down as the tab opened): asked again after this long. */
+  const MONITORS_RETRY_MS = 5000;
 
   const KEYS: Array<{ k: Key; label: string; name: string }> = [
     { k: 'Escape', label: 'Esc', name: 'Escape' },
@@ -231,9 +233,7 @@
 
   $effect(() => {
     if (!allowed) return;
-    ask<Monitor[]>('screen.monitors')
-      .then((m) => (monitors = m))
-      .catch(() => {});
+    return untilAnswered(MONITORS_RETRY_MS, () => ask<Monitor[]>('screen.monitors').then((m) => (monitors = m)));
   });
 
   // A direct picture: what arrives, and a whole picture asked for when none has for a while (one

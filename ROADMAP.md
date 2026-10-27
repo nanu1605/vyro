@@ -3501,6 +3501,26 @@ deployed, at the owner's go; 1.7.7's phone app is not deployed yet either.
       phone's two fixes for leaving and mobile data, when both their checks failed). CI green on
       915e293 (run 40508920123, every job; the end to end its 143 checks, both new ones among
       them).
+- [x] **The two left after that review** (2026-10-27, the owner: "fix the two small bugs and
+      release it with 1.7.8"):
+      - **The monitors asked again:** the Screen tab asked the PC for its monitors once, as it
+        opened; when that failed (the connection down or dropping just then), the tab offered
+        no other monitor until it was opened again. It asks again every 5 s until they come,
+        and no more once the tab closes. Test: a failed ask is asked again, an answered one
+        not, and none after the tab goes.
+      - **Signing out without a misfire:** signing out of a PC waited for its screen session to
+        stop (3 s at most) and its sign-out to go before letting go of it; another PC opened
+        in that time lost its link to it, and the phone went to its list as the wait ended.
+        The phone lets go of the PC at once now (to its list, the PC removed), then stops the
+        session and signs out through that PC's own link. End to end: signing out of a PC with
+        its screen shown leaves it at once, stops its session on the PC, and the PC forgets the
+        phone. Field check 1.7, step 6.
+- [x] **Version 1.7.8** (the owner, 2026-10-27: "release it with 1.7.8"): `scripts/set-version.py
+      1.7.8`, and What's new in 1.7.8 (waking through another PC, leaving a PC ends its screen
+      session, HD that stays HD on mobile data, the phone on a slow connection, a new relay
+      address and a phone's pairing that end a session). Four items are the phone app's and
+      marked for it; the phone shows them once the relay serves this commit's phone app, which
+      the owner's go on a deploy decides.
 
 ## Risks
 

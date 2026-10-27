@@ -303,12 +303,16 @@
     const room = current;
     if (!room) return;
     pcSheet = false;
+    // The phone is done with the PC at once, its link let go of: a PC opened while that link
+    // signs out is left alone.
     const l = link;
-    // The PC forgets a phone that signs out, but not its screen session.
-    if (l && sharing) await stopScreen(l);
-    await l?.signOut();
+    const shown = sharing;
     link = null;
     forget(room);
+    if (!l) return;
+    // The PC forgets a phone that signs out, but not its screen session.
+    if (shown) await stopScreen(l);
+    await l.signOut();
   }
 
   function forget(room: string): void {
