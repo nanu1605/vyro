@@ -3592,6 +3592,21 @@ branch `claude/vyro-2.0` from 1.7.8's records.
       among them. CI's headless Chromium says notifications are never allowed, so the end to end
       answers that for the browser, as it plays the browser's push service, and reads what the
       service worker asked to show from inside it (2fbeabd).
+- [x] **Review of 2.0** (the owner's "continue"), four fixes:
+      - A PC that went to sleep while the relay was out of reach said `leaving` on the first
+        connection after it woke. A crash in the next ten minutes would then have gone unheard.
+        The PC now tells only the connection it has as Windows suspends (`client::leaving_now`).
+      - "*PC* is back" counted the time away from when the phones were told, four to six
+        minutes late. The relay now gives `back` as the PC's last sign of life: its last `ping`,
+        or when its connection ended.
+      - A notification choice that the PC did not take (out of reach) stayed ticked on the
+        phone. It now shows what the PC has again.
+      - The field check's three-minute cable pull would not reliably have been heard. The field
+        check, README, What's new and `docs/remote.md` now give the real times: two minutes
+        after a connection ends, four to six after the last ping.
+
+      Also: the relay no longer throws when the PC's connection ends while a push service is
+      answering.
 - [ ] Field check 2.0 ([`docs/field-check-2.0.md`](docs/field-check-2.0.md)): notifications on
       Android and iPhone through the real push services, the PC going quiet, and an AMD and an
       Intel card. The relay must be deployed from 2.0 first, at the owner's go.

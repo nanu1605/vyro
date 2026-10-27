@@ -239,7 +239,7 @@ impl Note {
         )
     }
 
-    /// The PC is back after the relay told its phones it went quiet `away` seconds before.
+    /// The PC is back, `away` seconds after it went quiet; the relay told its phones it had.
     pub fn back(pc: &str, away: i64, ts: i64) -> Self {
         let mins = (away + 30) / 60;
         let away = match mins {

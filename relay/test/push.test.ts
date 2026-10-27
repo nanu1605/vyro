@@ -151,6 +151,7 @@ describe("a PC's will", () => {
     p.ws.send(will(phone, '/will/1'));
     await sleep(200);
     const from = posted.length;
+    const closed = Date.now();
     p.close();
     // Not before its grace (1.5 s here).
     expect(await postsAfter(from, 1, 800, '/will/1')).toEqual([]);
@@ -162,7 +163,9 @@ describe("a PC's will", () => {
     const back = relay.sock(`/pc/${r}`, k);
     const hello = (await back.json()) as { t: string; back?: number };
     expect(hello.t).toBe('here');
-    expect(hello.back).toBeGreaterThan(Date.now() - 10_000);
+    // Since when it was quiet: when its connection ended, not when the phones were told.
+    expect(hello.back).toBeGreaterThanOrEqual(closed - 100);
+    expect(hello.back).toBeLessThan(closed + 1000);
     // Its will stays until it leaves another: going quiet again would tell the phones again.
     back.ws.send('{"t":"leaving"}');
     await sleep(200);
@@ -193,13 +196,15 @@ describe("a PC's will", () => {
   });
 
   it("is sent when the PC's pings stop, though its connection never closed", async () => {
-    const { p, phone } = await pcWithPhone();
+    const { r, k, p, phone } = await pcWithPhone();
     p.ws.send(will(phone, '/will/4'));
     const from = posted.length;
     // Pinging, it stays.
+    let pinged = 0;
     for (let i = 0; i < 8; i++) {
       p.ws.send('ping');
       expect(await p.next()).toBe('pong');
+      pinged = Date.now();
       await sleep(500);
     }
     expect(await postsAfter(from, 1, 10, '/will/4')).toEqual([]);
@@ -207,5 +212,12 @@ describe("a PC's will", () => {
     expect((await p.closed).code).toBe(4002);
     const [got] = await postsAfter(from, 1, 4000, '/will/4');
     expect(got!.path).toBe('/will/4');
+    // Back: quiet since its last ping, not since the relay noticed.
+    const back = relay.sock(`/pc/${r}`, k);
+    const hello = (await back.json()) as { back?: number };
+    expect(Math.abs(hello.back! - pinged)).toBeLessThan(500);
+    back.ws.send('{"t":"leaving"}');
+    await sleep(200);
+    back.close();
   });
 });

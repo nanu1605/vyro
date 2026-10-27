@@ -9,7 +9,8 @@
 // also leaves its will: notifications to send should it go quiet. When the PC's connection ends
 // without its `leaving`, or its `ping`s stop (a room with a will looks every two minutes; the
 // pings are answered without waking it, but the runtime notes when), the phones hear unless the
-// PC is back within two minutes; and when it is, the PC hears that they did.
+// PC is back within two minutes; and when it is, the PC hears that they did, and since when it
+// was quiet.
 
 import { DurableObject } from 'cloudflare:workers';
 import { KEYS_NAME, type Keys } from './keys';
@@ -196,8 +197,8 @@ export class Room extends DurableObject {
     // `origin`: the relay's own address, which it gives push services as who it is.
     await this.ctx.storage.put(known === undefined ? { pc: hash, seen: now, origin } : { seen: now, origin });
     // Back within its grace: the phones are not told it went quiet. Back after they were: the
-    // PC is told, so it can tell them it is back.
-    await this.ctx.storage.delete('willDue');
+    // PC is told since when it was quiet, so it can tell them it is back.
+    await this.ctx.storage.delete(['willDue', 'quiet']);
     const back = await this.ctx.storage.get<number>('fired');
     if (back !== undefined) await this.ctx.storage.delete('fired');
     // A reconnect (another network, after sleep) takes the old socket's place.
@@ -269,7 +270,11 @@ export class Room extends DurableObject {
     if (c.t === 'push') {
       const phones = (await this.ctx.storage.get<Phone[]>('phones')) ?? [];
       const sent = phones.some((p) => p.id === c.to) && (await this.allowPush()) ? await this.deliver(c, c.urgency) : null;
-      ws.send(JSON.stringify({ t: 'pushed', to: c.to, ok: sent?.ok ?? false, gone: sent?.gone ?? false }));
+      try {
+        ws.send(JSON.stringify({ t: 'pushed', to: c.to, ok: sent?.ok ?? false, gone: sent?.gone ?? false }));
+      } catch {
+        // The PC's connection ended while the push service answered.
+      }
       return;
     }
     if (c.t === 'will') {
@@ -304,8 +309,9 @@ export class Room extends DurableObject {
   }
 
   /** The PC's socket `ws` is gone: the phones hear it, and unless the PC said it was leaving,
-   * its will falls due after its grace. */
-  private async pcGone(ws: WebSocket, who: Extract<Who, { role: 'pc' }>): Promise<void> {
+   * its will falls due after its grace. `quiet`: the PC's last sign of life (its last `ping`,
+   * when the relay let it go for having stopped them). */
+  private async pcGone(ws: WebSocket, who: Extract<Who, { role: 'pc' }>, quiet = Date.now()): Promise<void> {
     const now = Date.now();
     // The room's 90 days count from now, not from when this connection began.
     await this.ctx.storage.put('seen', now);
@@ -314,7 +320,7 @@ export class Room extends DurableObject {
     if (who.leaving !== undefined && now - who.leaving < LEAVING_MS) return;
     const will = await this.ctx.storage.get<Sealed[]>('will');
     if (!will?.length || (await this.ctx.storage.get<number>('willDue')) !== undefined) return;
-    await this.ctx.storage.put('willDue', now + this.grace);
+    await this.ctx.storage.put({ willDue: now + this.grace, quiet });
     await this.schedule();
   }
 
@@ -348,10 +354,11 @@ export class Room extends DurableObject {
         const who = ws.deserializeAttachment() as Who | null;
         if (who?.role !== 'pc') continue;
         const pinged = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? 0;
-        if (now - Math.max(pinged, who.since ?? 0) <= this.silent) continue;
+        const alive = Math.max(pinged, who.since ?? 0);
+        if (now - alive <= this.silent) continue;
         ws.serializeAttachment({ ...who, ended: true });
         ws.close(CLOSE.silent, 'No ping');
-        await this.pcGone(ws, who);
+        await this.pcGone(ws, who, alive || now);
       }
     }
     if (this.open('pc').length) {
@@ -370,12 +377,14 @@ export class Room extends DurableObject {
     await this.ctx.storage.deleteAll();
   }
 
-  /** Tells the phones that wanted it that the PC went quiet: its will, as the PC sealed it. */
+  /** Tells the phones that wanted it that the PC went quiet: its will, as the PC sealed it. Once
+   * back, the PC hears since when it was quiet (`fired`). */
   private async fireWill(): Promise<void> {
-    await this.ctx.storage.delete('willDue');
+    const quiet = (await this.ctx.storage.get<number>('quiet')) ?? Date.now();
+    await this.ctx.storage.delete(['willDue', 'quiet']);
     const will = (await this.ctx.storage.get<Sealed[]>('will')) ?? [];
     if (!will.length) return;
-    await this.ctx.storage.put('fired', Date.now());
+    await this.ctx.storage.put('fired', quiet);
     await Promise.all(will.map((w) => this.deliver(w, 'high')));
   }
 

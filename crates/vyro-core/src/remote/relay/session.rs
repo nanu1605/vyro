@@ -29,8 +29,8 @@ pub struct Effects {
     pub saved: bool,
     /// The number of phones watching changed.
     pub watching: bool,
-    /// The relay told the phones this PC went quiet, at this time (ms since 1970), while it was
-    /// away: they hear that it is back.
+    /// The relay told the phones this PC went quiet while it was away, quiet since this time (ms
+    /// since 1970): they hear that it is back.
     pub back: Option<i64>,
 }
 

@@ -394,7 +394,7 @@ the PC (1.5).
 for that PC and picks what they are about: alerts (as Windows shows them), a device's battery
 running low, a game's summary when it ends, and the PC **stopping answering**: its connection
 ended without it shutting down, restarting or going to sleep (a crash, a power cut, a lost
-network) and it was not back within two minutes; you hear again when it is back. "Send a test"
+network) and it was not back within a few minutes; you hear again when it is back. "Send a test"
 shows one at once. On iPhone they come only to Vyro on the Home Screen (iOS 16.4 or later).
 
 - **Sealed for the phone.** The phone's browser gives the PC, sealed like everything else, the

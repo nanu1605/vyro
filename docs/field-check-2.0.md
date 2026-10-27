@@ -35,9 +35,13 @@ app, iOS 16.4 or later); 20 minutes per card for tuning.
 7. **Stopped answering.** With Stopped answering ticked:
    - Shut the PC down from Start: no notification. Start it again: none.
    - Put it to sleep: none. Wake it: none.
-   - Pull its network cable (or turn Wi-Fi off) for three minutes: the phone shows "*PC* stopped
-     answering" within about five minutes. Plug it back: "*PC* is back".
-   - Optional, if you can: switch the PC off at the wall while it runs. As above.
+   - Pull its network cable (or turn Wi-Fi off) for under a minute, then plug it back: none.
+   - Pull it again and wait: the phone shows "*PC* stopped answering" four to six minutes later.
+     Plug it back: within a minute or so, "*PC* is back", after about as many minutes as it was
+     unplugged.
+   - End `vyro.exe` in Task Manager's Details tab: "stopped answering" about two minutes later.
+     Start Vyro: "is back".
+   - Optional, if you can: switch the PC off at the wall while it runs. As with the cable.
 8. **iPhone.** In Safari, More → Notifications says to add Vyro to the Home Screen. Do so, open
    it there, pair it, and repeat steps 1–3. iOS asks to allow notifications on the tap.
 9. **Off.** Turn off on one phone: tests and alerts stop for that phone only; Settings → Remote no

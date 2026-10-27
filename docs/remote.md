@@ -173,8 +173,10 @@ deleted 90 days after the PC was last seen.
   connection ends without the PC's `{"t":"leaving"}` (sent as Vyro quits and as Windows goes to
   sleep; shutting down, restarting and signing out end the app, which says it too), or when the
   PC's 30-second `ping`s stop (a room with a will looks every two minutes; the runtime answers
-  the pings without waking it and notes when), and the PC is not back within two minutes. When
-  it is back, the relay tells the PC, which tells those phones.
+  the pings without waking it and notes when), and the PC is not back within two minutes. So
+  the phones hear two minutes after a connection that ended (Vyro crashed), and four to six
+  minutes after the last ping of a PC that lost its power or its network. When it is back, the
+  relay tells the PC since when it was quiet, and the PC tells those phones.
 - **What the relay learns:** when a PC sends a notification, to which phone and which push
   service, and how big it is; never what it says.
 

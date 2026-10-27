@@ -32,7 +32,7 @@ export const NOTES: Release[] = [
       {
         icon: 'power',
         title: 'Told when this PC stops answering',
-        text: 'If this PC loses power, crashes or drops off its network and is not back within two minutes, your phone hears it, and again when it is back. Shutting down, restarting and sleeping say nothing.',
+        text: 'If this PC loses power, crashes or drops off its network and is not back within a few minutes, your phone hears it, and again when it is back. Shutting down, restarting and sleeping say nothing.',
         phone: true,
       },
       {

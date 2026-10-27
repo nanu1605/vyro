@@ -1266,3 +1266,13 @@ fn the_client_leaves_its_will_sends_notifications_and_says_when_it_leaves() {
     assert_eq!(t.as_str(), r#"{"t":"leaving"}"#);
     stop.join().unwrap();
 }
+
+#[test]
+fn a_pc_that_said_it_was_leaving_with_no_connection_does_not_say_so_once_awake() {
+    use super::client::leaving_now;
+    assert!(leaving_now(NOW, NOW) && leaving_now(NOW, NOW + 5));
+    // Said as it went to sleep while the relay was out of reach: the connection made after it
+    // woke does not tell the relay, which would then take a crash for leaving.
+    assert!(!leaving_now(NOW, NOW + 3600));
+    assert!(!leaving_now(0, NOW));
+}

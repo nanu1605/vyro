@@ -7,7 +7,7 @@
 //!   when it answers a list, which is then in place.
 //!
 //! From 2.0, a relay that sends notifications says `"push":true` in the `here` it greets the PC
-//! with (and `"back":<ms>` when it told the phones the PC went quiet while it was away); only
+//! with (and `"back":<ms>`, since when the PC was quiet, when it told the phones so); only
 //! then does the PC send it, as text:
 //! - `{"t":"push","to","endpoint","body","ttl","urgency"}`: a notification sealed for one
 //!   phone's browser ([`super::push`]), to post to its push service; the relay answers
@@ -66,7 +66,8 @@ pub enum FromRelay {
         /// The relay sends notifications (2.0).
         #[serde(default)]
         push: bool,
-        /// When the relay told the phones this PC went quiet (ms since 1970), while it was away.
+        /// The relay told the phones this PC went quiet while it was away: since when it was
+        /// (ms since 1970).
         #[serde(default)]
         back: Option<i64>,
     },

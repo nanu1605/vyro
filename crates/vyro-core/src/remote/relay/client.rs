@@ -9,7 +9,7 @@
 use std::collections::VecDeque;
 use std::io::ErrorKind;
 use std::net::{TcpStream, ToSocketAddrs};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -49,6 +49,9 @@ const MAX_MESSAGE: usize = 128 * 1024;
 /// Notifications kept for the connection to send, at most, and for how long.
 const MAX_NOTES: usize = 32;
 const NOTE_LIFE: Duration = Duration::from_secs(15 * 60);
+/// The PC said it was about to sleep this long ago at most: the connection tells the relay. Any
+/// older, it was said while there was no connection (the PC slept, and is awake again).
+const LEAVING_SECS: i64 = 5;
 const STACK: usize = 256 * 1024;
 
 /// What the client asks of the app.
@@ -106,8 +109,8 @@ struct Shared {
     answers: Arc<Mutex<VecDeque<Answer>>>,
     /// Notifications for the phones, with when they were made.
     notes: Mutex<VecDeque<(Instant, Note)>>,
-    /// The PC is about to sleep or shut down: tell the relay.
-    leaving: AtomicBool,
+    /// When the PC said it was about to sleep (Unix seconds; 0: it did not): tell the relay.
+    leaving: AtomicI64,
     hooks: RelayHooks,
 }
 
@@ -147,7 +150,7 @@ impl RelayClient {
             listed: (Mutex::new(0), Condvar::new()),
             answers: Arc::new(Mutex::new(VecDeque::new())),
             notes: Mutex::new(VecDeque::new()),
-            leaving: AtomicBool::new(false),
+            leaving: AtomicI64::new(0),
             hooks,
         });
         let s = Arc::clone(&shared);
@@ -188,17 +191,13 @@ impl RelayClient {
 
     /// A notification for the phones that want its kind, sent as soon as the connection can.
     pub fn notify(&self, note: Note) {
-        let mut q = lock(&self.shared.notes);
-        if q.len() >= MAX_NOTES {
-            q.pop_front();
-        }
-        q.push_back((Instant::now(), note));
+        queue(&self.shared, note);
     }
 
     /// The PC is about to sleep or shut down: the relay is told, so it does not tell the phones
     /// that the PC went quiet.
     pub fn leaving(&self) {
-        self.shared.leaving.store(true, Ordering::SeqCst);
+        self.shared.leaving.store(unix_now(), Ordering::SeqCst);
     }
 
     /// The phones changed (a pairing opened, a phone was signed out): tell the relay now.
@@ -444,6 +443,21 @@ fn send(ws: &mut Ws, outs: Vec<Out>) -> Result<(), String> {
     Ok(())
 }
 
+/// Keeps `note` for the connection to send; the oldest goes when the queue is full.
+fn queue(s: &Shared, note: Note) {
+    let mut q = lock(&s.notes);
+    if q.len() >= MAX_NOTES {
+        q.pop_front();
+    }
+    q.push_back((Instant::now(), note));
+}
+
+/// Whether the PC said it was leaving (at `said`, Unix seconds) recently enough, at `now`, for
+/// this connection to tell the relay.
+pub(super) fn leaving_now(said: i64, now: i64) -> bool {
+    said != 0 && (0..=LEAVING_SECS).contains(&(now - said))
+}
+
 /// The notifications waiting, without those too old to be worth sending.
 fn take_notes(s: &Shared) -> Vec<Note> {
     lock(&s.notes)
@@ -496,7 +510,7 @@ fn talk(s: &Shared, ws: &mut Ws) -> Ended {
             Vec::new()
         };
         let tests = session.take_tests();
-        let leaving = s.leaving.swap(false, Ordering::SeqCst);
+        let leaving = leaving_now(s.leaving.swap(0, Ordering::SeqCst), now.at);
         let (outs, gone) = {
             let mut p = lock(&s.phones);
             let gone = session.forget_gone(&p);
@@ -558,8 +572,7 @@ fn talk(s: &Shared, ws: &mut Ws) -> Ended {
                         let fx = session.on_text(&mut lock(&s.phones), t.as_str());
                         if let Some(at) = fx.back {
                             let away = (unix_now() - at / 1000).max(0);
-                            let note = Note::back(&(s.hooks.info)().pc, away, unix_now());
-                            lock(&s.notes).push_back((Instant::now(), note));
+                            queue(s, Note::back(&(s.hooks.info)().pc, away, unix_now()));
                         }
                         if let Some(g) = session.listed() {
                             let (m, c) = &s.listed;

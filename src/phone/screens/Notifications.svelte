@@ -69,9 +69,11 @@
     change(async () => ask<PushState>('push.set', { ...(await subscribe()), kinds: st?.on ? st.kinds : DEFAULT_KINDS }), true, `Notifications from ${pc} are on.`);
   const turnOff = () => change(() => ask<PushState>('push.off'), false, `Notifications from ${pc} are off.`);
 
-  function setKind(id: keyof PushKinds, on: boolean): Promise<void> {
-    const kinds = { ...(st?.kinds ?? DEFAULT_KINDS), [id]: on };
-    return change(async () => ask<PushState>('push.set', { ...((await current()) ?? (await subscribe())), kinds }), true);
+  async function setKind(id: keyof PushKinds, box: HTMLInputElement): Promise<void> {
+    const kinds = { ...(st?.kinds ?? DEFAULT_KINDS), [id]: box.checked };
+    await change(async () => ask<PushState>('push.set', { ...((await current()) ?? (await subscribe())), kinds }), true);
+    // Not changed (the PC was out of reach): the box shows what the PC has again.
+    if (st) box.checked = st.kinds[id];
   }
 
   async function test(): Promise<void> {
@@ -122,7 +124,7 @@
           {#each KINDS as k (k.id)}
             <li>
               <label class="check">
-                <input type="checkbox" checked={st.kinds[k.id]} disabled={busy} onchange={(e) => void setKind(k.id, e.currentTarget.checked)} />
+                <input type="checkbox" checked={st.kinds[k.id]} disabled={busy} onchange={(e) => void setKind(k.id, e.currentTarget)} />
                 <span><b>{k.label}</b><span class="muted small">{k.hint}</span></span>
               </label>
             </li>
