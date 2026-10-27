@@ -3464,8 +3464,9 @@ deployed, at the owner's go; 1.7.7's phone app is not deployed yet either.
         allows, and the connection told the page so before it counted itself online, so the
         request was refused as not connected. It is online first now. Test: a request made as
         the PC says what it allows goes. A second tap while one wake is under way starts no
-        second (its connection to the same PC took the first one's place, which then said no PC
-        could send it), and the answer shows on that PC's page only. Field check 1.7, step 8.
+        second (two connections of the phone to the same PC get in each other's way: each hello
+        starts a new session with it), and the answer shows on that PC's page only. Field check
+        1.7, step 8.
       - **Leaving a PC with its screen shown:** going to the list of PCs, opening another,
         scanning a code or signing the phone out of it with the screen shown left the session
         on: the Screen tab's Stop went through the next PC's connection, or none (a phone that

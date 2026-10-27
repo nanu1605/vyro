@@ -321,8 +321,8 @@
     goHome();
   }
 
-  /** A wake under way: a second tap starts no second one (its link to the same helper would
-   * take the first one's place, and the first would say no PC could send it). */
+  /** A wake under way: a second tap starts no second one (two links of this phone to the same
+   * helper get in each other's way: each hello starts a new session with it). */
   let wakeUnder = false;
 
   /** Has another paired PC, awake and allowing this phone, send `target` the wake signal. */
