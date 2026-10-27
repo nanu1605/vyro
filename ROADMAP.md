@@ -3587,6 +3587,11 @@ branch `claude/vyro-2.0` from 1.7.8's records.
 - [x] **Version 2.0.0**: `scripts/set-version.py 2.0.0`, What's new in 2.0.0 (notifications, the
       PC going quiet, AMD and Intel tuning, which phones get notifications); README, `docs/remote.md`
       and `docs/anti-cheat.md` brought up to date.
+- [x] **CI green on 2fbeabd** (run 40561422821; Linux, Windows with the smoke test, the relay and
+      phone app with the end to end, accessibility): 159 end-to-end checks, the notifications'
+      among them. CI's headless Chromium says notifications are never allowed, so the end to end
+      answers that for the browser, as it plays the browser's push service, and reads what the
+      service worker asked to show from inside it (2fbeabd).
 - [ ] Field check 2.0 ([`docs/field-check-2.0.md`](docs/field-check-2.0.md)): notifications on
       Android and iPhone through the real push services, the PC going quiet, and an AMD and an
       Intel card. The relay must be deployed from 2.0 first, at the owner's go.
