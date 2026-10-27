@@ -3436,6 +3436,20 @@ Fixes on `claude/vyro-1.7` after 1.7.6's release, gathered for one release when 
       stops when cancelled, pages that keep what they showed). Three items are the phone app's
       and marked for it; the phone shows them once the relay serves this commit's phone app,
       which the owner's go on a deploy decides.
+- [x] **1.7.7 released** (2026-10-27, on the owner's go): CI passed on 8154da4 (run
+      40485325029; Linux, Windows with the smoke test, the relay and phone app with the
+      end-to-end test, accessibility). `main` fast-forwarded to it from 1.7.6's records, and
+      Release run 40487711276 tagged `v1.7.7`, found the relay's address in `vyro.exe` and
+      published the 14.0 MB MSI, `latest.json` and checksums here and to
+      `nanu1605/vyro-releases` (its `v1.7.7` tag seen over git; this session cannot read that
+      repository's releases through the API); GitHub's own digests of the files published here
+      match the checksums the run printed (MSI `56076ba5…`, `latest.json` `64f2720b…`), and
+      `latest.json` offers 1.7.7 from `nanu1605/vyro-releases`. Installed copies on 1.4.1 to
+      1.7.6 are offered it. **The relay is not deployed yet:** since run 40344879569 it serves
+      81131fc's phone app, so the phone app's fixes above (the Screen tab through a dropped
+      connection, the slow view through a dropped request, a closed clip that stops, one failed
+      refresh, scanning) and 1.7.7's phone notes reach phones only with a deploy, at the
+      owner's go. The PC's fixes need none.
 
 ## Risks
 
