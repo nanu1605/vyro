@@ -84,7 +84,7 @@ export function relayAt(base: string) {
   async function pc(r: string, k: Uint8Array): Promise<Sock> {
     const s = sock(`/pc/${r}`, k);
     await s.opened;
-    expect(await s.json()).toEqual({ t: 'here', phones: [] });
+    expect(await s.json()).toEqual({ t: 'here', phones: [], push: true });
     return s;
   }
 

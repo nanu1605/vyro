@@ -16,7 +16,9 @@
 //! (1.7) is a test picture in the slow view; a direct session sends real H.264 the way the app
 //! does (the app's own producer): on Windows the monitor through Windows' encoder, elsewhere a
 //! moving test pattern through OpenH264 (`still` stops it moving, `moving` starts it again).
-//! Input is printed (`screen input: {…}`), never done.
+//! Input is printed (`screen input: {…}`), never done. Notifications (2.0): `alert`, `battery` and
+//! `game` send one of each to the phones that want them, `sleep` tells the relay the PC is
+//! leaving, and `crash` ends at once without a word, as a PC that lost power would.
 //!
 //! ```sh
 //! cargo run -p vyro-core --example companion -- --relay http://127.0.0.1:8787
@@ -30,6 +32,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use vyro_core::engine::{ClientPids, EngineApi, EngineConfig, LocalEngine};
 use vyro_core::remote::relay::proto::{pairing_link, relay_base};
+use vyro_core::remote::relay::push::{self, Kind};
 use vyro_core::remote::relay::{Phones, RelayClient, RelayHooks, Request};
 use vyro_core::remote::{net, random, Auth, Hooks, RemoteInfo, RemoteServer, ServerConfig};
 use vyro_core::screen::producer::{self, Status};
@@ -378,6 +381,33 @@ fn relay(url: &str, theme: String) -> Result<(), String> {
                 moving().store(which == "moving", Ordering::SeqCst);
                 println!("the screen is {which}");
             }
+            Ok(which @ ("alert" | "battery" | "game")) => {
+                let (kind, title, body) = match which {
+                    "alert" => (
+                        Kind::Alert,
+                        "CPU temperature at 97 °C",
+                        "Above 95 °C for 30 s.",
+                    ),
+                    "battery" => (
+                        Kind::Battery,
+                        "G502's battery is low",
+                        "15 % left. Charge it soon.",
+                    ),
+                    _ => (
+                        Kind::Game,
+                        "Cyberpunk 2077 ended",
+                        "1 h 12 min · 98 fps average",
+                    ),
+                };
+                client.notify(push::Note::new(kind, title, body, which, unix_now()));
+                println!("notified: {which}");
+            }
+            Ok("sleep") => {
+                client.leaving();
+                println!("leaving");
+            }
+            // As a PC that lost power: no word to the relay, the connection simply ends.
+            Ok("crash") => std::process::exit(3),
             Ok(_) => show(),
         }
     }

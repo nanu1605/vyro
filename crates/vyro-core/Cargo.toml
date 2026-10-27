@@ -14,6 +14,8 @@ hkdf = "0.12.4"
 httparse = "1.10.1"
 indexmap = { version = "2.11.4", features = ["serde"] }
 log = "0.4.34"
+# Web Push (2.0): the PC seals each notification to the phone's key; already built for WebRTC.
+p256 = { version = "0.13.2", default-features = false, features = ["ecdh"] }
 qrcodegen = "1.8.0"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }

@@ -7,11 +7,13 @@
 //! used at least once in the owner's chosen number of days (Settings → Remote).
 //!
 //! Each phone may only look, or also control the PC (1.5): the owner chooses when pairing and
-//! can change it later, on the PC only.
+//! can change it later, on the PC only. A phone may also give the PC its push subscription
+//! (2.0), so it hears about alerts with its app closed; only the phone turns that on or off.
 
 use serde::{Deserialize, Serialize};
 
 use super::proto::Allowed;
+use super::push::{Kind, Push};
 use super::seal::{Keys, PhoneId, Room, Secret, PHONE_LEN, ROOM_LEN, SECRET_LEN};
 use super::{vault, PAIR_SECS};
 use crate::remote::auth::{clean_name, hex};
@@ -38,6 +40,9 @@ pub struct StoredPhone {
     /// May see and use the PC's screen (1.7); off until the owner turns it on.
     #[serde(default)]
     pub screen: bool,
+    /// Its push subscription and what it wants to hear about (2.0), sealed ([`vault`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub push: Option<String>,
 }
 
 /// `remote.json`'s `relay`.
@@ -69,6 +74,7 @@ struct Phone {
     pending: bool,
     control: bool,
     screen: bool,
+    push: Option<Push>,
 }
 
 /// What a phone's `hello` did.
@@ -93,6 +99,9 @@ pub struct Phones {
     generation: u64,
     /// Phones whose `info` changed (their permission): tell them while they are here.
     info_due: Vec<PhoneId>,
+    /// Bumped whenever a phone's push subscription changes: the relay's offline notification
+    /// is sealed again.
+    push_generation: u64,
 }
 
 fn arr<const N: usize>(hex_text: &str) -> Option<[u8; N]> {
@@ -117,6 +126,7 @@ impl Phones {
             dirty: true,
             generation: 1,
             info_due: Vec::new(),
+            push_generation: 1,
         }
     }
 
@@ -142,6 +152,11 @@ impl Phones {
                     pending: false,
                     control: p.control,
                     screen: p.screen,
+                    push: p
+                        .push
+                        .as_deref()
+                        .and_then(vault::unprotect)
+                        .and_then(|b| serde_json::from_slice(&b).ok()),
                 })
             })
             .take(MAX_DEVICES)
@@ -154,6 +169,7 @@ impl Phones {
             dirty: dropped,
             generation: 1,
             info_due: Vec::new(),
+            push_generation: 1,
         })
     }
 
@@ -179,6 +195,10 @@ impl Phones {
                         last_seen: p.last_seen,
                         control: p.control,
                         screen: p.screen,
+                        push: p
+                            .push
+                            .as_ref()
+                            .and_then(|x| vault::protect(&serde_json::to_vec(x).ok()?)),
                     })
                 })
                 .collect(),
@@ -203,9 +223,12 @@ impl Phones {
         self.generation
     }
 
+    /// The phones the relay lets in changed; with them, perhaps who hears that the PC went
+    /// quiet.
     fn changed(&mut self) {
         self.dirty = true;
         self.generation += 1;
+        self.push_generation += 1;
     }
 
     /// The phones the relay lets in, the open pairing among them.
@@ -239,6 +262,7 @@ impl Phones {
             pending: true,
             control: false,
             screen: false,
+            push: None,
         });
         self.generation += 1;
         Ok(())
@@ -288,6 +312,42 @@ impl Phones {
         self.phones
             .iter()
             .any(|p| &p.id == id && !p.pending && p.screen)
+    }
+
+    /// Gives a phone's push subscription, or takes it away (`None`); `false` when there is no
+    /// such paired phone. Only the phone itself asks for this, or the relay when its push
+    /// service says the subscription is gone.
+    pub fn set_push(&mut self, id: &PhoneId, push: Option<Push>) -> bool {
+        let Some(p) = self.phones.iter_mut().find(|p| &p.id == id && !p.pending) else {
+            return false;
+        };
+        if p.push != push {
+            p.push = push;
+            self.dirty = true;
+            self.push_generation += 1;
+        }
+        true
+    }
+
+    pub fn push(&self, id: &PhoneId) -> Option<&Push> {
+        self.phones
+            .iter()
+            .find(|p| &p.id == id && !p.pending)
+            .and_then(|p| p.push.as_ref())
+    }
+
+    /// The phones that want to hear about `kind`, with their subscriptions.
+    pub fn pushes(&self, kind: Kind) -> Vec<(PhoneId, &Push)> {
+        self.phones
+            .iter()
+            .filter(|p| !p.pending)
+            .filter_map(|p| p.push.as_ref().map(|x| (p.id, x)))
+            .filter(|(_, x)| kind.wanted(&x.kinds))
+            .collect()
+    }
+
+    pub fn push_generation(&self) -> u64 {
+        self.push_generation
     }
 
     /// Phones to send their `info` again, since it changed.
@@ -425,6 +485,7 @@ impl Phones {
                     anywhere: true,
                     control: p.control,
                     screen: p.screen,
+                    push: p.push.is_some(),
                 }
             })
             .collect()

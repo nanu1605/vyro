@@ -10,6 +10,8 @@
 //! - [`session`]: one connection's conversation, without I/O, so it is tested as is.
 //! - [`client`]: the connection itself, on its own thread, reconnecting as needed.
 //! - [`api`]: what a phone may ask (1.5), and which requests need its permission to control.
+//! - [`push`]: notifications on a phone while its app is closed (2.0), through Web Push.
+//! - [`suspend`]: told as the PC goes to sleep, so the relay does not take it for gone quiet.
 //!
 //! Like the local companion it runs in the app, as the signed-in user, never in the service.
 
@@ -17,8 +19,10 @@ pub mod api;
 pub mod client;
 pub mod phones;
 pub mod proto;
+pub mod push;
 pub mod seal;
 pub mod session;
+pub mod suspend;
 pub mod vault;
 
 use serde::{Deserialize, Serialize};

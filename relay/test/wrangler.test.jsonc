@@ -4,9 +4,16 @@
   "main": "../src/index.ts",
   "compatibility_date": "2026-09-01",
   "durable_objects": {
-    "bindings": [{ "name": "ROOMS", "class_name": "Room" }]
+    "bindings": [
+      { "name": "ROOMS", "class_name": "Room" },
+      // The relay's key for push services (2.0): one Durable Object for the whole relay.
+      { "name": "KEYS", "class_name": "Keys" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Room"] },
+    { "tag": "v2", "new_sqlite_classes": ["Keys"] }
+  ],
   "assets": { "directory": "./assets", "binding": "ASSETS", "run_worker_first": true },
   // A small daily allowance, so a test can use it up.
   "vars": { "DAILY_BYTES": "300000" }

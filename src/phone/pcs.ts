@@ -18,6 +18,9 @@ export interface PairedPc {
   used: number;
   /** Its wired adapter's address, while it lets phones have another PC wake it (1.5). */
   wake?: string;
+  /** The phone turned notifications on for this PC (2.0): it gives the PC its subscription
+   * again should the PC lose it. */
+  push?: boolean;
 }
 
 /** A pairing link's contents. */
@@ -72,7 +75,8 @@ function valid(p: unknown): p is PairedPc {
     (v.next === undefined || (typeof v.next === 'string' && secretOk(v.next))) &&
     typeof v.name === 'string' &&
     typeof v.used === 'number' &&
-    (v.wake === undefined || (typeof v.wake === 'string' && MAC.test(v.wake)))
+    (v.wake === undefined || (typeof v.wake === 'string' && MAC.test(v.wake))) &&
+    (v.push === undefined || typeof v.push === 'boolean')
   );
 }
 
@@ -111,12 +115,13 @@ export function confirmNext(pcs: PairedPc[], room: string): PairedPc[] {
   });
 }
 
-export function updatePc(pcs: PairedPc[], room: string, change: Partial<Pick<PairedPc, 'name' | 'used' | 'wake'>>): PairedPc[] {
+export function updatePc(pcs: PairedPc[], room: string, change: Partial<Pick<PairedPc, 'name' | 'used' | 'wake' | 'push'>>): PairedPc[] {
   return pcs.map((p) => {
     if (p.room !== room) return p;
     const next = { ...p, ...change };
     // No address any more: the owner turned "Wake from phone" off.
     if ('wake' in change && change.wake === undefined) delete next.wake;
+    if ('push' in change && !change.push) delete next.push;
     return next;
   });
 }

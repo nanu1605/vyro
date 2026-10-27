@@ -1,6 +1,6 @@
 /// <reference types="vitest/config" />
 import { createHash } from 'node:crypto';
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
@@ -17,7 +17,8 @@ function files(dir: string): string[] {
 }
 
 /** The page as `index.html`, and a service worker that keeps the app's files for opening
- * offline (the page itself is fetched fresh whenever there is a network, so updates arrive). */
+ * offline (the page itself is fetched fresh whenever there is a network, so updates arrive) and,
+ * from 2.0, shows notifications with the app closed (`src/phone/sw-push.js`). */
 function installable(): Plugin {
   return {
     name: 'vyro-phone-installable',
@@ -30,7 +31,8 @@ function installable(): Plugin {
       const all = ['/', ...Object.values(bundle).map((f) => `/${f.fileName}`), ...files(PUBLIC)]
         .filter((f) => f !== '/index.html')
         .sort();
-      const version = createHash('sha256').update(all.join('\n')).digest('hex').slice(0, 12);
+      const push = readFileSync('src/phone/sw-push.js', 'utf8');
+      const version = createHash('sha256').update(all.join('\n')).update(push).digest('hex').slice(0, 12);
       this.emitFile({
         type: 'asset',
         fileName: 'sw.js',
@@ -48,7 +50,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
-  if (url.pathname.startsWith('/pc/') || url.pathname.startsWith('/phone/')) return;
+  if (url.pathname.startsWith('/pc/') || url.pathname.startsWith('/phone/') || url.pathname.startsWith('/push/')) return;
   if (e.request.mode === 'navigate') {
     // The page fresh when there is a network (a new version), the kept one when not. The
     // address's fragment (a pairing link) never reaches here: browsers do not send it.
@@ -57,7 +59,8 @@ self.addEventListener('fetch', (e) => {
   }
   e.respondWith(caches.match(e.request).then((r) => r || fetch(e.request)));
 });
-`,
+
+${push}`,
       });
     },
   };

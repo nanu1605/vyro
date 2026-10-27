@@ -5,6 +5,8 @@
 //!
 //! Reach from anywhere (1.4): the relay connection (`vyro_core::remote::relay`) runs here too,
 //! with the phones paired through it kept in the same file (their secrets sealed with DPAPI).
+//! Notifications (2.0) go out through it ([`notify`]); as the PC goes to sleep the relay is told
+//! it is leaving, so its phones do not hear that it stopped answering.
 
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
@@ -17,6 +19,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use vyro_core::actions::wake::WakeReadiness;
 use vyro_core::remote::auth::{hex, Auth, Stored, STORED_VERSION};
 use vyro_core::remote::relay::proto::{pairing_link, relay_base};
+use vyro_core::remote::relay::push::Note;
+use vyro_core::remote::relay::suspend::{on_suspend, SuspendWatch};
 use vyro_core::remote::relay::{
     Phones, RelayClient, RelayHooks, RelayPairing, RelayState, RelayStatus, StoredRelay,
 };
@@ -66,6 +70,8 @@ pub struct Remote {
     relay_error: Mutex<Option<String>>,
     /// Phones with the app open, through the relay.
     relay_watching: AtomicU32,
+    /// Tells the relay the PC is leaving as it goes to sleep.
+    suspend: Mutex<Option<SuspendWatch>>,
 }
 
 /// Reads `remote.json`; one that does not parse is set aside as `remote.bad.json` (see
@@ -280,6 +286,7 @@ impl Remote {
             client: Mutex::new(None),
             relay_error: Mutex::new(None),
             relay_watching: AtomicU32::new(0),
+            suspend: Mutex::new(None),
         }
     }
 
@@ -291,6 +298,17 @@ impl Remote {
         if lock(&self.relay).enabled {
             self.start_relay(app);
         }
+        let app = app.clone();
+        *lock(&self.suspend) = on_suspend(move || {
+            if let Some(r) = app.try_state::<Remote>() {
+                if let Some(c) = lock(&r.client).as_ref() {
+                    c.leaving();
+                }
+            }
+            // The connection's thread sends it within a quarter of a second; Windows waits for
+            // this call before it sleeps.
+            std::thread::sleep(Duration::from_millis(600));
+        });
     }
 
     pub fn running(&self) -> bool {
@@ -778,6 +796,16 @@ pub fn publish(app: &AppHandle, snap: &SensorSnapshot) {
     }
     if let Some(c) = client.as_ref() {
         c.publish(snap, unit);
+    }
+}
+
+/// A notification for the phones that want its kind (2.0), sent through the relay while it is
+/// on; nothing otherwise.
+pub fn notify(app: &AppHandle, note: Note) {
+    if let Some(r) = app.try_state::<Remote>() {
+        if let Some(c) = lock(&r.client).as_ref() {
+            c.notify(note);
+        }
     }
 }
 

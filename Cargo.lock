@@ -5731,6 +5731,7 @@ dependencies = [
  "log",
  "nvml-wrapper",
  "openh264",
+ "p256",
  "qrcodegen",
  "rusqlite",
  "rustls",

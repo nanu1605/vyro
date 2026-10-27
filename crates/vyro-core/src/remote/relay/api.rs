@@ -67,6 +67,12 @@ pub const METHODS: &[(&str, Access)] = &[
     // PC has a cable for the live microphone.
     ("screen.clip", Access::Screen),
     ("screen.audio", Access::Screen),
+    // Notifications with the app closed (2.0): only the phone's own, so any paired phone may.
+    // Answered by the connection itself ([`super::session`]), never the app.
+    ("push.state", Access::View),
+    ("push.set", Access::View),
+    ("push.off", Access::View),
+    ("push.test", Access::View),
 ];
 
 /// Who may make `method`; `None`: no such request.

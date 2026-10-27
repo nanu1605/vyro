@@ -1,6 +1,10 @@
 //! The relay connection (1.4): one thread that keeps a socket to the relay open, reconnecting
 //! with growing pauses, and runs a [`Session`] over it. Certificates are checked by Windows'
 //! own store (rustls with the platform verifier). Nothing listens on the PC.
+//!
+//! Notifications (2.0) wait in a short queue until the connection can send them: an alert that
+//! fires while the relay is out of reach still reaches the phones if the connection comes back
+//! within [`NOTE_LIFE`].
 
 use std::collections::VecDeque;
 use std::io::ErrorKind;
@@ -18,11 +22,12 @@ use tungstenite::{Connector, HandshakeError, Message, WebSocket};
 
 use super::phones::Phones;
 use super::proto::{self, b64url, SOCKET_PROTOCOL};
+use super::push::{Kind, Note};
 use super::session::{Effects, Now, Out, Request, Session};
 use super::RelayState;
 use crate::remote::view::{self, FiredView};
 use crate::remote::RemoteInfo;
-use crate::units::TempUnit;
+use crate::units::{temps_in, TempUnit};
 use crate::{lock, unix_now, SensorSnapshot};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -41,6 +46,9 @@ const PAUSE_REFUSED: Duration = Duration::from_secs(300);
 const STABLE: Duration = Duration::from_secs(60);
 /// Largest message taken from the relay.
 const MAX_MESSAGE: usize = 128 * 1024;
+/// Notifications kept for the connection to send, at most, and for how long.
+const MAX_NOTES: usize = 32;
+const NOTE_LIFE: Duration = Duration::from_secs(15 * 60);
 const STACK: usize = 256 * 1024;
 
 /// What the client asks of the app.
@@ -96,6 +104,10 @@ struct Shared {
     listed: (Mutex<u64>, Condvar),
     /// The app's answers, sent by the connection's thread.
     answers: Arc<Mutex<VecDeque<Answer>>>,
+    /// Notifications for the phones, with when they were made.
+    notes: Mutex<VecDeque<(Instant, Note)>>,
+    /// The PC is about to sleep or shut down: tell the relay.
+    leaving: AtomicBool,
     hooks: RelayHooks,
 }
 
@@ -134,6 +146,8 @@ impl RelayClient {
             watching: Mutex::new(Vec::new()),
             listed: (Mutex::new(0), Condvar::new()),
             answers: Arc::new(Mutex::new(VecDeque::new())),
+            notes: Mutex::new(VecDeque::new()),
+            leaving: AtomicBool::new(false),
             hooks,
         });
         let s = Arc::clone(&shared);
@@ -148,10 +162,21 @@ impl RelayClient {
         })
     }
 
-    /// Feeds a reading to the phones watching.
+    /// Feeds a reading to the phones watching; the alerts it fired go to the phones that want
+    /// them as notifications.
     pub fn publish(&self, snap: &SensorSnapshot, unit: TempUnit) {
         let mut feed = lock(&self.shared.feed);
         view::note_fired(&mut feed.recent, snap, unit);
+        // The same alerts the phone's list gets: the ones Windows would show.
+        for a in snap.alerts.iter().filter(|a| a.notify && a.also.is_none()) {
+            self.notify(Note::new(
+                Kind::Alert,
+                &temps_in(&a.title, unit),
+                &temps_in(&a.message, unit),
+                &a.rule_id,
+                a.ts,
+            ));
+        }
         match serde_json::to_string(&view::build(snap, &feed.recent, unit)) {
             Ok(json) => {
                 feed.json = Some(json.into());
@@ -159,6 +184,21 @@ impl RelayClient {
             }
             Err(e) => log::warn!("relay: view: {e}"),
         }
+    }
+
+    /// A notification for the phones that want its kind, sent as soon as the connection can.
+    pub fn notify(&self, note: Note) {
+        let mut q = lock(&self.shared.notes);
+        if q.len() >= MAX_NOTES {
+            q.pop_front();
+        }
+        q.push_back((Instant::now(), note));
+    }
+
+    /// The PC is about to sleep or shut down: the relay is told, so it does not tell the phones
+    /// that the PC went quiet.
+    pub fn leaving(&self) {
+        self.shared.leaving.store(true, Ordering::SeqCst);
     }
 
     /// The phones changed (a pairing opened, a phone was signed out): tell the relay now.
@@ -404,6 +444,15 @@ fn send(ws: &mut Ws, outs: Vec<Out>) -> Result<(), String> {
     Ok(())
 }
 
+/// The notifications waiting, without those too old to be worth sending.
+fn take_notes(s: &Shared) -> Vec<Note> {
+    lock(&s.notes)
+        .drain(..)
+        .filter(|(at, _)| at.elapsed() < NOTE_LIFE)
+        .map(|(_, n)| n)
+        .collect()
+}
+
 fn apply(s: &Shared, session: &Session, fx: Effects) {
     if fx.saved {
         (s.hooks.saved)();
@@ -420,6 +469,9 @@ fn talk(s: &Shared, ws: &mut Ws) -> Ended {
     let mut pinged = Instant::now();
     loop {
         if stopped(s) {
+            // Quitting, or the owner turned the relay off: the relay does not tell the phones
+            // the PC went quiet.
+            let _ = send(ws, session.leaving().into_iter().collect());
             let _ = ws.close(None);
             let _ = ws.flush();
             return Ended::Stopped;
@@ -436,6 +488,15 @@ fn talk(s: &Shared, ws: &mut Ws) -> Ended {
             info: &info,
             view: json.as_deref(),
         };
+        // Notifications wait while the relay has not said it sends them (it greets the PC
+        // first).
+        let notes = if session.pushes() {
+            take_notes(s)
+        } else {
+            Vec::new()
+        };
+        let tests = session.take_tests();
+        let leaving = s.leaving.swap(false, Ordering::SeqCst);
         let (outs, gone) = {
             let mut p = lock(&s.phones);
             let gone = session.forget_gone(&p);
@@ -447,6 +508,24 @@ fn talk(s: &Shared, ws: &mut Ws) -> Ended {
             for (phone, id, result) in &answers {
                 outs.extend(session.answer(&p, phone, *id, result));
             }
+            if !notes.is_empty() || !tests.is_empty() || session.will_due(&p) {
+                let name = (s.hooks.info)().pc;
+                outs.extend(session.will(&p, &name));
+                outs.extend(session.notes(&p, &notes, &name, None));
+                for id in &tests {
+                    let test = Note::new(
+                        Kind::Test,
+                        "Notifications work",
+                        "This phone will hear from this PC like this.",
+                        "test",
+                        now.at,
+                    );
+                    outs.extend(session.notes(&p, &[test], &name, Some(id)));
+                }
+            }
+            if leaving {
+                outs.extend(session.leaving());
+            }
             (outs, gone)
         };
         if gone {
@@ -456,7 +535,14 @@ fn talk(s: &Shared, ws: &mut Ws) -> Ended {
             return Ended::Lost(e);
         }
         if pinged.elapsed() >= KEEPALIVE {
-            if let Err(e) = ws.send(Message::Ping(Default::default())) {
+            // A relay that sends notifications times the PC's `ping`s (it answers them without
+            // waking): one that stopped coming is a PC that went quiet.
+            let ping = if session.pushes() {
+                Message::Text("ping".into())
+            } else {
+                Message::Ping(Default::default())
+            };
+            if let Err(e) = ws.send(ping) {
                 return Ended::Lost(e.to_string());
             }
             pinged = Instant::now();
@@ -469,7 +555,12 @@ fn talk(s: &Shared, ws: &mut Ws) -> Ended {
                 heard = Instant::now();
                 match msg {
                     Message::Text(t) => {
-                        let fx = session.on_text(t.as_str());
+                        let fx = session.on_text(&mut lock(&s.phones), t.as_str());
+                        if let Some(at) = fx.back {
+                            let away = (unix_now() - at / 1000).max(0);
+                            let note = Note::back(&(s.hooks.info)().pc, away, unix_now());
+                            lock(&s.notes).push_back((Instant::now(), note));
+                        }
                         if let Some(g) = session.listed() {
                             let (m, c) = &s.listed;
                             let mut listed = lock(m);

@@ -17,6 +17,7 @@
   import { deviceName, pageTitle, STALE_SECS } from '../remote/companion';
   import LiveView from '../remote/LiveView.svelte';
   import { addPc, confirmNext, linkFrom, loadPcs, MAX_PCS, parseLink, removePc, savePcs, sleepers, updatePc, type Link, type PairedPc } from './pcs';
+  import { keepUp } from './push';
   import { PcLink, RequestError, type LinkState, type PhoneInfo } from './relay';
   import { errText } from './screens/ask';
   import { b64url, randomBytes, SECRET_LEN } from './seal';
@@ -405,6 +406,17 @@
     else if (upTo === newest) remember(newest);
   }
 
+  // A PC this phone turned notifications on for gets its subscription again when it lost it
+  // (the push service forgot it) or has an old one (the browser made a new one): once each time
+  // it is opened, without asking anyone.
+  let keptUp = '';
+  $effect(() => {
+    const room = current;
+    if (!room || !pc?.push || linkState !== 'online' || !info?.methods?.includes('push.set') || keptUp === room) return;
+    keptUp = room;
+    void keepUp(ask).catch(() => (keptUp = ''));
+  });
+
   // Asked once the open PC says which Vyro it runs.
   let newsFor = '';
   $effect(() => {
@@ -423,13 +435,28 @@
     }
   }
 
+  /** The PC a tapped notification is about (`/?pc=<room>`), if this phone has it. */
+  function asked(): string | null {
+    const room = new URLSearchParams(location.search).get('pc');
+    if (room === null) return null;
+    history.replaceState(null, '', location.pathname + location.hash);
+    return pcs.some((p) => p.room === room) ? room : null;
+  }
+
   onMount(() => {
+    const fromNote = asked();
     takeLink();
     if (screen === 'home') {
-      const first = pcs[0];
-      if (first && !notice) openPc(first.room);
+      const first = fromNote ?? pcs[0]?.room;
+      if (first && !notice) openPc(first);
       else if (pcs.length) startList();
     }
+    // A notification tapped while the app is open: the service worker says which PC.
+    const onMessage = (e: MessageEvent) => {
+      const m = e.data as { t?: string; pc?: string } | null;
+      if (m?.t === 'open' && typeof m.pc === 'string' && pcs.some((p) => p.room === m.pc) && m.pc !== current) openPc(m.pc);
+    };
+    navigator.serviceWorker?.addEventListener('message', onMessage);
     const tick = setInterval(() => (now = Date.now()), 1000);
     const onVisibility = () => {
       link?.setWatch(!document.hidden);
@@ -462,6 +489,7 @@
       window.removeEventListener('online', onOnline);
       window.removeEventListener('hashchange', takeLink);
       window.removeEventListener('beforeinstallprompt', onPrompt);
+      navigator.serviceWorker?.removeEventListener('message', onMessage);
     };
   });
 
@@ -533,7 +561,16 @@
               {/await}
             {:else}
               {#await import('./screens/More.svelte') then m}
-                <m.default {ask} {can} pc={pc.name} sleepers={others} low={lowBattery} />
+                <m.default
+                  {ask}
+                  {can}
+                  pc={pc.name}
+                  sleepers={others}
+                  low={lowBattery}
+                  {ios}
+                  {standalone}
+                  onwish={(on: boolean) => current && save(updatePc(pcs, current, { push: on }))}
+                />
               {/await}
             {/if}
             {#if !info?.control && tab !== 'screen'}

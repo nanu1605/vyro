@@ -1,5 +1,25 @@
+import { webcrypto } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { allow, assetHeaders, control, cutOff, DAILY_BYTES, frameFits, isSocketPath, keyFrom, MAX_FRAME, MAX_PHONES, MIN_SEALED, route, same, spend, USAGE_STEP } from '../src/rules';
+import {
+  allow,
+  assetHeaders,
+  b64url,
+  control,
+  cutOff,
+  DAILY_BYTES,
+  frameFits,
+  isSocketPath,
+  keyFrom,
+  MAX_FRAME,
+  MAX_PHONES,
+  MIN_SEALED,
+  pushTarget,
+  route,
+  same,
+  spend,
+  USAGE_STEP,
+  vapidToken,
+} from '../src/rules';
 
 const ROOM = '00112233445566778899aabbccddeeff';
 const KEY = 'A'.repeat(43); // 32 bytes of base64url
@@ -132,5 +152,71 @@ describe("a room's daily allowance", () => {
     expect(spend(start, noon, 10).save).toBe(true);
     // A day of live readings is far below the default.
     expect(5 * 1024 * 86_400).toBeLessThan(DAILY_BYTES);
+  });
+});
+
+describe('notifications (2.0)', () => {
+  const body = b64url(new Uint8Array(200).fill(7));
+  const sealed = { to: '0a1b2c3d', endpoint: 'https://fcm.googleapis.com/fcm/send/x', body, ttl: 600 };
+
+  it("takes a PC's notification, will and leaving, and nothing malformed", () => {
+    expect(control(JSON.stringify({ t: 'push', urgency: 'high', ...sealed }))).toEqual({ t: 'push', urgency: 'high', ...sealed });
+    expect(control(JSON.stringify({ t: 'will', list: [sealed] }))).toEqual({ t: 'will', list: [sealed] });
+    expect(control(JSON.stringify({ t: 'will', list: [] }))).toEqual({ t: 'will', list: [] });
+    expect(control('{"t":"leaving"}')).toEqual({ t: 'leaving' });
+    const bad = [
+      { ...sealed, urgency: 'very' },
+      { ...sealed, urgency: 'high', to: 'nope' },
+      { ...sealed, urgency: 'high', body: 'not base64!' },
+      { ...sealed, urgency: 'high', body: b64url(new Uint8Array(4097)) },
+      { ...sealed, urgency: 'high', body: b64url(new Uint8Array(50)) },
+      { ...sealed, urgency: 'high', ttl: -1 },
+      { ...sealed, urgency: 'high', ttl: 90_000 },
+      { ...sealed, urgency: 'high', endpoint: `https://fcm.googleapis.com/${'x'.repeat(1100)}` },
+    ];
+    for (const b of bad) expect(control(JSON.stringify({ t: 'push', ...b })), JSON.stringify(b).slice(0, 80)).toBeNull();
+    expect(control(JSON.stringify({ t: 'will', list: Array(MAX_PHONES + 1).fill(sealed) }))).toBeNull();
+    expect(control(JSON.stringify({ t: 'will', list: [{ ...sealed, ttl: 'x' }] }))).toBeNull();
+    // A will for every phone fits; a phone list stays as small as it was.
+    expect(control(JSON.stringify({ t: 'will', list: Array(MAX_PHONES).fill({ ...sealed, body: b64url(new Uint8Array(4000)) }) }))).not.toBeNull();
+    expect(control(JSON.stringify({ t: 'phones', list: [], pad: 'x'.repeat(5000) }))).toBeNull();
+  });
+
+  it("posts only to the browsers' push services, over https", () => {
+    for (const ok of [
+      'https://fcm.googleapis.com/fcm/send/abc',
+      'https://web.push.apple.com/QGx',
+      'https://updates.push.services.mozilla.com/wpush/v2/x',
+      'https://wns2-par02p.notify.windows.com/w/?token=x',
+      'https://fcm.googleapis.com:443/x',
+    ]) {
+      expect(pushTarget(ok)?.toString(), ok).toBeTruthy();
+    }
+    for (const bad of [
+      'http://fcm.googleapis.com/fcm/send/abc',
+      'https://fcm.googleapis.com.evil.example/x',
+      'https://evilfcm.googleapis.com.example/x',
+      'https://notgoogleapis.com/x',
+      'https://fcm.googleapis.com:8443/x',
+      'https://user:pw@fcm.googleapis.com/x',
+      'https://127.0.0.1/x',
+      'not a url',
+    ]) {
+      expect(pushTarget(bad), bad).toBeNull();
+    }
+    expect(pushTarget('http://127.0.0.1:9000/p', ['127.0.0.1'])?.host).toBe('127.0.0.1:9000');
+    expect(pushTarget('http://127.0.0.1:9000/p')).toBeNull();
+  });
+
+  it('signs for a push service as VAPID asks (ES256 over its origin)', async () => {
+    const pair = await webcrypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+    const token = await vapidToken(pair.privateKey as CryptoKey, 'https://fcm.googleapis.com', 'https://relay.example', 1_900_000_000);
+    const [h, c, sig] = token.split('.');
+    const dec = (x: string) => JSON.parse(Buffer.from(x, 'base64url').toString()) as unknown;
+    expect(dec(h!)).toEqual({ typ: 'JWT', alg: 'ES256' });
+    expect(dec(c!)).toEqual({ aud: 'https://fcm.googleapis.com', exp: 1_900_000_000, sub: 'https://relay.example' });
+    const raw = Buffer.from(sig!, 'base64url');
+    expect(raw.length).toBe(64);
+    expect(await webcrypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pair.publicKey, raw, new TextEncoder().encode(`${h}.${c}`))).toBe(true);
   });
 });

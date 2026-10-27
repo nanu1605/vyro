@@ -41,7 +41,7 @@ export function isSocketPath(path: string): boolean {
   return path.startsWith('/pc/') || path.startsWith('/phone/');
 }
 
-function unb64url(s: string): Uint8Array | null {
+export function unb64url(s: string): Uint8Array | null {
   if (!/^[A-Za-z0-9_-]+$/.test(s) || s.length % 4 === 1) return null;
   try {
     const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4));
@@ -85,12 +85,53 @@ export interface Phone {
   hash: string;
 }
 
-/** What a PC may tell the relay. */
-export type Control = { t: 'phones'; list: Phone[] };
+/** A notification for one phone (2.0), sealed by the PC for the phone's browser: the relay posts
+ * it to the phone's push service and cannot read it. */
+export interface Sealed {
+  /** The phone's id. */
+  to: string;
+  /** Its push service's address for it. */
+  endpoint: string;
+  /** The sealed body, base64url. */
+  body: string;
+  /** Seconds the push service keeps it for a phone that is off. */
+  ttl: number;
+}
+
+/** What a PC may tell the relay: its phones; and from 2.0 a notification to pass on, the ones to
+ * send should it go quiet (its will), and that it is about to go (it quits, sleeps or shuts
+ * down), so that its going is not taken for going quiet. */
+export type Control =
+  | { t: 'phones'; list: Phone[] }
+  | ({ t: 'push'; urgency: 'high' | 'normal' } & Sealed)
+  | { t: 'will'; list: Sealed[] }
+  | { t: 'leaving' };
+
+/** A push service takes at most 4096 bytes; a sealed notification has at least its header (86),
+ * its end mark and its tag. */
+export const MAX_PUSH_BODY = 4096;
+const MIN_PUSH_BODY = 86 + 1 + 16;
+export const MAX_ENDPOINT = 1024;
+export const MAX_TTL = 24 * 3600;
+/** Longest text a PC may send: a will for every phone. */
+const MAX_CONTROL = 64 * 1024;
+const B64URL = /^[A-Za-z0-9_-]+$/;
+
+function sealedFrom(v: unknown): Sealed | null {
+  if (typeof v !== 'object' || v === null) return null;
+  const { to, endpoint, body, ttl } = v as Record<string, unknown>;
+  if (typeof to !== 'string' || !PHONE.test(to)) return null;
+  if (typeof endpoint !== 'string' || endpoint.length > MAX_ENDPOINT) return null;
+  if (typeof body !== 'string' || !B64URL.test(body)) return null;
+  const bytes = Math.floor((body.length * 3) / 4);
+  if (bytes < MIN_PUSH_BODY || bytes > MAX_PUSH_BODY) return null;
+  if (typeof ttl !== 'number' || !Number.isInteger(ttl) || ttl < 0 || ttl > MAX_TTL) return null;
+  return { to, endpoint, body, ttl };
+}
 
 /** A PC's text message, or `null` when it is not one the relay knows (the socket is closed). */
 export function control(text: string): Control | null {
-  if (text.length > 4096) return null;
+  if (text.length > MAX_CONTROL) return null;
   let v: unknown;
   try {
     v = JSON.parse(text);
@@ -98,7 +139,20 @@ export function control(text: string): Control | null {
     return null;
   }
   if (typeof v !== 'object' || v === null) return null;
-  const m = v as { t?: unknown; list?: unknown };
+  const m = v as { t?: unknown; list?: unknown; urgency?: unknown };
+  if (m.t === 'leaving') return { t: 'leaving' };
+  if (m.t === 'push') {
+    const sealed = sealedFrom(v);
+    if (!sealed || (m.urgency !== 'high' && m.urgency !== 'normal')) return null;
+    return { t: 'push', urgency: m.urgency, ...sealed };
+  }
+  if (m.t === 'will') {
+    if (!Array.isArray(m.list) || m.list.length > MAX_PHONES) return null;
+    const list = (m.list as unknown[]).map(sealedFrom);
+    if (list.some((x) => x === null)) return null;
+    return { t: 'will', list: list as Sealed[] };
+  }
+  if (text.length > 4096) return null;
   if (m.t !== 'phones' || !Array.isArray(m.list) || m.list.length > MAX_PHONES) return null;
   const list: Phone[] = [];
   for (const p of m.list as unknown[]) {
@@ -171,6 +225,54 @@ export function spend(u: Usage, now: number, n: number, limit = DAILY_BYTES): { 
     ok: true,
     save: today !== u || Math.floor(bytes / USAGE_STEP) !== Math.floor(today.bytes / USAGE_STEP),
   };
+}
+
+/** Push services the relay posts to (2.0): the browsers' own. Anything else is refused, so the
+ * relay cannot be used to post elsewhere. */
+export const PUSH_HOSTS = ['fcm.googleapis.com', 'android.googleapis.com', 'push.services.mozilla.com', 'push.apple.com', 'notify.windows.com'];
+
+/** `endpoint` when it is a push service's address: `https`, on one of `PUSH_HOSTS` or a host
+ * under one (`web.push.apple.com`); `extra` hosts (a test's own) may also use plain `http`. */
+export function pushTarget(endpoint: string, extra: string[] = []): URL | null {
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return null;
+  }
+  if (url.username || url.password) return null;
+  const host = url.hostname.toLowerCase();
+  if (extra.includes(host) && (url.protocol === 'http:' || url.protocol === 'https:')) return url;
+  if (url.protocol !== 'https:' || (url.port !== '' && url.port !== '443')) return null;
+  return PUSH_HOSTS.some((h) => host === h || host.endsWith(`.${h}`)) ? url : null;
+}
+
+/** Notifications a room's PC may have sent at once, and after that (one every 5 s). */
+export const PUSH_RATE = { perSecond: 0.2, burst: 24 };
+/** Notifications a room's PC may send in a day (UTC). */
+export const DAILY_PUSHES = 300;
+/** The PC sends a `ping` every 30 s; this long without one, it went quiet. */
+export const SILENT_MS = 100_000;
+/** How often a room with a will checks that its PC still pings. */
+export const CHECK_MS = 120_000;
+/** A PC whose connection ended unannounced has this long to come back before its phones hear. */
+export const GRACE_MS = 120_000;
+/** A PC's `leaving` covers its connection ending within this long after. */
+export const LEAVING_MS = 10 * 60_000;
+
+/** The JSON Web Token a push service asks of the relay (VAPID, RFC 8292): ES256 over the push
+ * service's origin `aud`, valid until `exp` (s), naming the relay `sub`. */
+export async function vapidToken(key: CryptoKey, aud: string, sub: string, exp: number): Promise<string> {
+  const enc = (o: unknown) => b64url(new TextEncoder().encode(JSON.stringify(o)));
+  const data = `${enc({ typ: 'JWT', alg: 'ES256' })}.${enc({ aud, exp, sub })}`;
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, new TextEncoder().encode(data));
+  return `${data}.${b64url(new Uint8Array(sig))}`;
+}
+
+export function b64url(b: Uint8Array): string {
+  let s = '';
+  for (const x of b) s += String.fromCharCode(x);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 /** When a room is forgotten, given when its PC was last connected. */

@@ -1,9 +1,10 @@
 <script lang="ts">
   // Everything else Vyro does, from the phone (1.5): shut down, restart, sleep or lock the PC,
   // its profile and fans, GPU tuning (1.6), a benchmark, diagnostics, updates, waking another PC,
-  // and (1.7) its devices. A tile for each says how it is; a tap opens it. What changes the PC
-  // shows only to a phone the owner allowed to control it.
+  // (1.7) its devices and (2.0) notifications. A tile for each says how it is; a tap opens it.
+  // What changes the PC shows only to a phone the owner allowed to control it.
   import Battery from '@lucide/svelte/icons/battery-low';
+  import Bell from '@lucide/svelte/icons/bell';
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
   import Cpu from '@lucide/svelte/icons/cpu';
   import Download from '@lucide/svelte/icons/download';
@@ -31,16 +32,22 @@
   import Sheet from '../ui/Sheet.svelte';
   import { toast } from '../ui/toast.svelte';
   import { GONE } from '../relay';
+  import type { PushState } from '../push';
   import { errText, every, type ScreenProps } from './ask';
   import Devices from './Devices.svelte';
+  import Notifications from './Notifications.svelte';
 
   interface Props extends ScreenProps {
     /** Other paired PCs that told this phone how to wake them. */
     sleepers: Array<{ name: string; mac: string }>;
     /** A device's battery is low: what the PC says of it. */
     low: string | null;
+    ios: boolean;
+    standalone: boolean;
+    /** The phone turned notifications from this PC on or off. */
+    onwish: (on: boolean) => void;
   }
-  let { ask, can, pc, sleepers, low }: Props = $props();
+  let { ask, can, pc, sleepers, low, ios, standalone, onwish }: Props = $props();
 
   interface UpdateStatus {
     configured: boolean;
@@ -50,7 +57,7 @@
     error: string | null;
     installing: boolean;
   }
-  type Section = 'devices' | 'power' | 'gpu' | 'profile' | 'fans' | 'bench' | 'diag' | 'updates' | 'wake';
+  type Section = 'devices' | 'alerts' | 'power' | 'gpu' | 'profile' | 'fans' | 'bench' | 'diag' | 'updates' | 'wake';
 
   let power = $state.raw<PowerState | null>(null);
   let profiles = $state.raw<{ list: ProfileSpec[]; state: Effective } | null>(null);
@@ -60,6 +67,7 @@
   let diags = $state.raw<DiagSummary[]>([]);
   let updates = $state.raw<UpdateStatus | null>(null);
   let gpu = $state.raw<TuneStatus | null>(null);
+  let push = $state.raw<PushState | null>(null);
   let busy = $state(false);
   let section = $state<Section | null>(null);
   /** The power action being confirmed. */
@@ -83,6 +91,7 @@
       take(ask<DiagSummary[]>('diag.runs'), (v) => (diags = v ?? [])),
       take(ask<UpdateStatus>('updates'), (v) => (updates = v)),
       take(ask<TuneStatus>('gpu.tune'), (v) => (gpu = v)),
+      can('push.state') ? take(ask<PushState>('push.state'), (v) => (push = v)) : null,
     ]);
   }
   $effect(() => every(5000, load));
@@ -148,6 +157,7 @@
   const tiles = $derived(
     [
       { id: 'devices' as const, label: 'Devices', icon: Battery, status: low ? low.replace(/^low battery: /, 'Low: ') : 'Batteries and connections', tone: low ? 'warn' : '', show: can('devices') },
+      { id: 'alerts' as const, label: 'Notifications', icon: Bell, status: push ? (push.on ? 'On' : 'Off') : '', tone: push?.on ? 'ok' : '', show: can('push.state') },
       { id: 'power' as const, label: 'Power', icon: Power, status: power?.pending ? `${label(power.pending.action)} pending` : 'Shut down, restart, sleep, lock', tone: power?.pending ? 'warn' : '', show: can('power') },
       { id: 'gpu' as const, label: 'GPU tuning', icon: Cpu, status: gpu ? runningText(gpu) : '', tone: '', show: gpuOn },
       { id: 'profile' as const, label: 'Profile', icon: Sliders, status: profileName ? `${profileName}${profiles?.state.game ? ` for ${profiles.state.game}` : ''}` : '', tone: '', show: profiles != null },
@@ -182,6 +192,18 @@
 
     {#if open.id === 'devices'}
       <Devices {ask} {can} {pc} />
+    {:else if open.id === 'alerts'}
+      <Notifications
+        {ask}
+        {can}
+        {pc}
+        {ios}
+        {standalone}
+        onwish={(on) => {
+          onwish(on);
+          void load();
+        }}
+      />
     {:else if open.id === 'power'}
       <section class="panel" aria-labelledby="power-title">
         <h1 id="power-title">Power</h1>

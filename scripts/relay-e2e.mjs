@@ -11,10 +11,14 @@
 // the relay is readable; signs the phone out from the PC; shows a PC that went away as asleep;
 // and runs axe on each screen at phone and desktop width. From 1.7 also: no screen scrolls
 // sideways at 320, 360, 390 or 430 px, every tab and sheet again on the light theme, and the
-// phone's What's new shows once to a phone that used an older app. Exits 1 on any failure. With
-// SHOTS=<folder>, it also saves a screenshot of each screen there.
+// phone's What's new shows once to a phone that used an older app. From 2.0: notifications with
+// the app closed, through a push service played here, which checks the relay's signature and
+// opens each notification as a browser would (Node's own crypto, apart from the PC's). Exits 1 on
+// any failure. With SHOTS=<folder>, it also saves a screenshot of each screen there.
 
 import { spawn } from 'node:child_process';
+import { createDecipheriv, createECDH, hkdfSync, randomBytes, webcrypto } from 'node:crypto';
+import { createServer } from 'node:http';
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -346,9 +350,95 @@ async function scene(phone, pc, relay) {
   ].join('; ');
 }
 
+/** A push service, as the browsers' are (2.0): it takes what the relay posts for this phone's
+ * stand-in subscription, checks the relay signed it, and opens it with the subscription's keys. */
+async function pushService() {
+  const ecdh = createECDH('prime256v1');
+  ecdh.generateKeys();
+  const auth = randomBytes(16);
+  const got = [];
+  const waiters = [];
+  const server = createServer((req, res) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', async () => {
+      res.writeHead(201).end();
+      const body = Buffer.concat(chunks);
+      let note = null;
+      let problemWith = null;
+      try {
+        note = await opened(req.headers, body);
+      } catch (e) {
+        problemWith = e.message;
+      }
+      const entry = { path: req.url, headers: req.headers, note, problem: problemWith };
+      got.push(entry);
+      for (const w of [...waiters]) {
+        if (w.test(entry)) {
+          waiters.splice(waiters.indexOf(w), 1);
+          w.resolve(entry);
+        }
+      }
+    });
+  });
+  async function opened(headers, body) {
+    const m = /^vapid t=([^,]+), k=([A-Za-z0-9_-]+)$/.exec(String(headers.authorization));
+    if (!m) throw new Error(`no VAPID signature (${headers.authorization})`);
+    const [h, c, sig] = m[1].split('.');
+    const claims = JSON.parse(Buffer.from(c, 'base64url').toString());
+    if (claims.aud !== base) throw new Error(`signed for ${claims.aud}, not this push service`);
+    const pub = await webcrypto.subtle.importKey('raw', Buffer.from(m[2], 'base64url'), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+    if (!(await webcrypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pub, Buffer.from(sig, 'base64url'), Buffer.from(`${h}.${c}`)))) {
+      throw new Error('the signature does not verify');
+    }
+    if (headers['content-encoding'] !== 'aes128gcm') throw new Error(`content-encoding ${headers['content-encoding']}`);
+    // RFC 8291, the browser's side.
+    const salt = body.subarray(0, 16);
+    const idlen = body[20];
+    const keyid = body.subarray(21, 21 + idlen);
+    const sealed = body.subarray(21 + idlen);
+    const shared = ecdh.computeSecret(keyid);
+    const info = Buffer.concat([Buffer.from('WebPush: info\0'), ecdh.getPublicKey(), keyid]);
+    const ikm = Buffer.from(hkdfSync('sha256', shared, auth, info, 32));
+    const cek = Buffer.from(hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: aes128gcm\0'), 16));
+    const nonce = Buffer.from(hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: nonce\0'), 12));
+    const d = createDecipheriv('aes-128-gcm', cek, nonce);
+    d.setAuthTag(sealed.subarray(sealed.length - 16));
+    const plain = Buffer.concat([d.update(sealed.subarray(0, sealed.length - 16)), d.final()]);
+    let end = plain.length - 1;
+    while (end > 0 && plain[end] === 0) end--;
+    if (plain[end] !== 2) throw new Error('not one last record');
+    return JSON.parse(plain.subarray(0, end).toString());
+  }
+  await new Promise((done) => server.listen(0, '127.0.0.1', done));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  return {
+    got,
+    /** The stand-in subscription the phone's browser gives the PC. */
+    subscription: { endpoint: `${base}/sub/phone`, p256dh: ecdh.getPublicKey().toString('base64url'), auth: auth.toString('base64url') },
+    /** The next post (from now) that `test` takes. */
+    next(test, ms = 15_000) {
+      return new Promise((resolve, reject) => {
+        const w = { test, resolve };
+        waiters.push(w);
+        setTimeout(() => {
+          if (waiters.includes(w)) {
+            waiters.splice(waiters.indexOf(w), 1);
+            reject(new Error(`no notification in ${ms} ms`));
+          }
+        }, ms);
+      });
+    },
+    close: () => server.close(),
+  };
+}
+
 async function main() {
   if (!existsSync(`${root}/relay/public/index.html`)) throw new Error('relay/public is empty: run `pnpm build:phone` first');
-  const wrangler = run(`${root}/relay/node_modules/.bin/wrangler`, ['dev', '--port', String(PORT), '--ip', '127.0.0.1', '--log-level', 'warn'], {
+  const push = await pushService();
+  // The relay posts to this push service on plain http, and a PC that went quiet has 3 s.
+  const vars = ['--var', 'PUSH_HOSTS:127.0.0.1', '--var', 'GRACE_MS:3000'];
+  const wrangler = run(`${root}/relay/node_modules/.bin/wrangler`, ['dev', '--port', String(PORT), '--ip', '127.0.0.1', '--log-level', 'warn', ...vars], {
     cwd: `${root}/relay`,
     env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: 'true' },
   });
@@ -862,6 +952,109 @@ async function main() {
       () => problem('signing out', 'the PC did not hear the phone sign out'),
     );
     light.child.kill('SIGTERM');
+
+    // 9. Notifications with the app closed (2.0): turned on from More, sent by the PC through the
+    // relay to this phone's push service, sealed so only the phone opens them; what the phone
+    // chose decides what comes; a test on demand; the service worker shows one; and a PC that
+    // goes without a word is told of by the relay.
+    const npc = startPc();
+    const link4 = (await npc.out.wait(/^link: (.+)$/, 600_000))[1];
+    await npc.out.wait(/^state: "online"$/);
+    const n = await phone(browser, 'phone N');
+    await n.ctx.grantPermissions(['notifications'], { origin: RELAY });
+    // The browser's push service is played here: its subscription is the test's.
+    await n.ctx.addInitScript((sub) => {
+      if (!window.PushManager) return;
+      const dec = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+      let current = null;
+      PushManager.prototype.subscribe = async function (o) {
+        current = {
+          endpoint: sub.endpoint,
+          options: { applicationServerKey: o.applicationServerKey },
+          getKey: (k) => dec(k === 'p256dh' ? sub.p256dh : sub.auth).buffer,
+          unsubscribe: async () => ((current = null), true),
+        };
+        return current;
+      };
+      PushManager.prototype.getSubscription = async () => current;
+    }, push.subscription);
+    await n.page.goto(link4);
+    await seeText(n.page, 'Live', 'a phone pairs with a PC that sends notifications');
+    const pcName = (await n.page.getByRole('button', { name: /: your PCs$/ }).getAttribute('aria-label'))?.replace(/: your PCs$/, '') ?? '';
+    await n.page.getByRole('navigation').getByRole('button', { name: 'More', exact: true }).click();
+    await n.page.getByRole('button', { name: /^Notifications/ }).click({ timeout: 10_000 });
+    await n.page.getByRole('heading', { name: 'Notifications' }).waitFor({ timeout: 10_000 });
+    await axeBoth(n.page, 'phone app, notifications (off)');
+    await n.page.getByRole('button', { name: 'Turn on', exact: true }).click();
+    await seeText(n.page, 'Send a test', 'notifications turn on from More (even on a phone that may only look)');
+    await axeBoth(n.page, 'phone app, notifications (on)');
+    const of = (title) => (e) => e.note?.title === title || e.problem;
+    const sent = async (what, title, check) => {
+      try {
+        const e = await push.next(of(title));
+        if (e.problem) problem(what, e.problem);
+        else if (check && check(e) !== true) problem(what, check(e));
+        else ok(what);
+      } catch (e) {
+        problem(what, e.message);
+      }
+    };
+    npc.say('alert');
+    await sent('an alert reaches the push service, signed by the relay and sealed for the phone', 'CPU temperature at 97 °C', (e) =>
+      e.note.body === `${pcName} · Above 95 °C for 30 s.` && e.note.kind === 'alert' && e.headers.urgency === 'high' ? true : `got ${JSON.stringify(e.note)}`,
+    );
+    npc.say('battery');
+    await sent('…and a low battery', "G502's battery is low");
+    // Game summaries are off unless chosen; low batteries, once turned off, come no more.
+    const quiet = push.next(of('Cyberpunk 2077 ended'), 3000).then(
+      () => problem('notifications', 'a game summary came, though the phone left them off'),
+      () => ok('…but no game summary, which the phone left off'),
+    );
+    npc.say('game');
+    await quiet;
+    await n.page.getByRole('checkbox', { name: /Low batteries/ }).uncheck();
+    await n.page.waitForTimeout(1000);
+    const noBattery = push.next(of("G502's battery is low"), 3000).then(
+      () => problem('notifications', 'a low battery came after the phone turned them off'),
+      () => ok('…nor low batteries once turned off'),
+    );
+    npc.say('battery');
+    await noBattery;
+    const tested = sent('a test comes when asked for', 'Notifications work');
+    await n.page.getByRole('button', { name: 'Send a test', exact: true }).click();
+    await tested;
+    // The service worker shows what the browser opened.
+    try {
+      const cdp = await n.ctx.newCDPSession(n.page);
+      const reg = new Promise((resolve) =>
+        cdp.on('ServiceWorker.workerRegistrationUpdated', ({ registrations }) => {
+          const r = registrations.find((x) => x.scopeURL.startsWith(RELAY) && !x.isDeleted);
+          if (r) resolve(r);
+        }),
+      );
+      await cdp.send('ServiceWorker.enable');
+      const { registrationId } = await reg;
+      const last = push.got.at(-1).note;
+      await cdp.send('ServiceWorker.deliverPushMessage', { origin: RELAY, registrationId, data: JSON.stringify(last) });
+      let titles = [];
+      for (let i = 0; i < 20 && !titles.length; i++) {
+        await n.page.waitForTimeout(250);
+        titles = await n.page.evaluate(async () => (await (await navigator.serviceWorker.ready).getNotifications()).map((x) => `${x.title}: ${x.body}`));
+      }
+      if (titles.includes(`Notifications work: ${last.body}`)) ok('the service worker shows a notification as it came');
+      else problem('service worker', `it shows ${JSON.stringify(titles)}`);
+    } catch (e) {
+      problem('service worker', e.message);
+    }
+    // Gone without a word (no shutdown, no sleep): the relay tells the phone after its grace.
+    const quietPc = push.next(of(`${pcName} stopped answering`), 20_000);
+    npc.say('crash');
+    await quietPc.then(
+      (e) => (e.problem ? problem('stopped answering', e.problem) : ok('a PC gone without a word: the relay tells the phone it stopped answering')),
+      (e) => problem('stopped answering', e.message),
+    );
+    if (push.got.some((e) => e.problem)) problem('push service', push.got.find((e) => e.problem).problem);
+    push.close();
   } finally {
     await browser.close();
   }

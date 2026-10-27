@@ -230,13 +230,13 @@ describe('limits and comings and goings', () => {
     expect(await sa.quiet()).toBe(true);
 
     const back = sock(`/pc/${r}`, k);
-    expect(await back.json()).toEqual({ t: 'here', phones: [a.id] });
+    expect(await back.json()).toEqual({ t: 'here', phones: [a.id], push: true });
     expect(await sa.json()).toEqual({ t: 'pc', online: true });
     sa.ws.send(sealed(2));
     expect(await back.next()).toEqual(new Uint8Array([0, 0, 0, 0x0a, ...sealed(2)]));
 
     const again = sock(`/pc/${r}`, k);
-    expect(await again.json()).toEqual({ t: 'here', phones: [a.id] });
+    expect(await again.json()).toEqual({ t: 'here', phones: [a.id], push: true });
     expect((await back.closed).code).toBe(4000);
     expect(await sa.json()).toEqual({ t: 'pc', online: true });
     expect(await sa.quiet(500)).toBe(true);

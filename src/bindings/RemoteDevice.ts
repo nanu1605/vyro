@@ -27,4 +27,8 @@ control: boolean,
 /**
  * May see and use the PC's screen (1.7); only phones paired through the relay can.
  */
-screen: boolean, };
+screen: boolean, 
+/**
+ * Gets notifications with its app closed (2.0); the phone turns them on and off.
+ */
+push: boolean, };

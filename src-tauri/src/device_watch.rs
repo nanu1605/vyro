@@ -9,6 +9,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 use vyro_core::devices::{DeviceInfo, Devices};
 use vyro_core::lock;
+use vyro_core::remote::relay::push::Note;
 
 /// Emitted with the devices whose battery is low (empty when none) whenever that list changes.
 pub const LOW_BATTERY_EVENT: &str = "low-battery";
@@ -84,7 +85,8 @@ pub fn poke(app: &AppHandle) {
     }
 }
 
-/// Keeps a fresh list's low batteries, and tells the window when they changed.
+/// Keeps a fresh list's low batteries, and tells the window when they changed; a battery that
+/// just ran low (or lower) is a notification for the phones that want one (2.0).
 pub fn store(app: &AppHandle, devices: &Devices) {
     let Some(w) = app.try_state::<DeviceWatch>() else {
         return;
@@ -99,6 +101,15 @@ pub fn store(app: &AppHandle, devices: &Devices) {
         let mut kept = lock(&w.low);
         if *kept == low {
             return;
+        }
+        let now = vyro_core::unix_now();
+        for d in low
+            .iter()
+            .filter(|d| !kept.iter().any(|k| k.id == d.id && k.low == d.low))
+        {
+            if let Some(note) = Note::battery(d, now) {
+                crate::remote::notify(app, note);
+            }
         }
         kept.clone_from(&low);
     }

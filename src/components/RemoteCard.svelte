@@ -452,7 +452,7 @@
                 <small>
                   Paired {fmtDate(d.paired)} · until {fmtDate(d.expires)}{d.anywhere ? ', renewed each time it is used' : ''}{d.lastSeen
                     ? ` · last seen ${fmtDateTime(d.lastSeen)}`
-                    : ''}{d.lastAddress ? ` from ${d.lastAddress}` : ''}
+                    : ''}{d.lastAddress ? ` from ${d.lastAddress}` : ''}{d.push ? ' · gets notifications (the phone turns them off)' : ''}
                 </small>
               </div>
               <span class="row-actions">

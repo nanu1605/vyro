@@ -2,6 +2,7 @@
 //! capture it; while it runs, puts the game's profile, fan settings, overlay choice and update
 //! rate in force, and the owner's own back when it closes. The engine (the service) runs
 //! PresentMon; this app picks the process, since only it sees the signed-in user's desktop.
+//! When a captured game ends, its summary is a notification for the phones that want one (2.0).
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,6 +13,8 @@ use vyro_core::alerts::AlertBrief;
 use vyro_core::gaming::auto::{Effective, Switcher};
 use vyro_core::gaming::GameContext;
 use vyro_core::profiles::Profile;
+#[cfg(windows)]
+use vyro_core::remote::relay::push::Note;
 use vyro_core::{lock, SensorSnapshot};
 
 use crate::engine::Engine;
@@ -198,7 +201,12 @@ fn run(app: &AppHandle) {
     let mut load = LoadWatch::default();
     // The process the engine captures (frame rates are measured only with the setting on).
     let mut captured: Option<u32> = None;
+    // After a capture ends, its session is looked for among those the engine logged, for a
+    // while (it is logged at the engine's next tick): from when it ended, until when.
+    let mut summary: Option<(i64, std::time::Instant)> = None;
+    let mut tick: u64 = 0;
     loop {
+        tick += 1;
         std::thread::sleep(std::time::Duration::from_secs(1));
         let (Some(engine), Some(store), Some(state)) = (
             app.try_state::<Engine>(),
@@ -248,9 +256,32 @@ fn run(app: &AppHandle) {
         }
         let capture = watcher.current().filter(|_| settings.game_capture).cloned();
         if capture.as_ref().map(|t| t.pid) != captured {
+            if captured.is_some() {
+                summary = Some((
+                    vyro_core::unix_now(),
+                    std::time::Instant::now() + std::time::Duration::from_secs(30),
+                ));
+            }
             captured = capture.as_ref().map(|t| t.pid);
             if let Err(e) = engine.api.set_capture_target(capture) {
                 log::warn!("gaming: {e}");
+            }
+        }
+        if let Some((ended, until)) = summary {
+            if std::time::Instant::now() > until {
+                summary = None;
+            } else if tick.is_multiple_of(3) {
+                let logged = engine.api.game_sessions().ok().and_then(|s| {
+                    s.into_iter()
+                        .find(|g| g.ended.is_some_and(|e| e >= ended - 60))
+                });
+                if let Some(g) = logged {
+                    summary = None;
+                    let unit = store.unit();
+                    if let Some(note) = Note::game(&g, unit, vyro_core::unix_now()) {
+                        crate::remote::notify(app, note);
+                    }
+                }
             }
         }
         sync_context(app);

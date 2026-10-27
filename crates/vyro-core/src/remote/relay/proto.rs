@@ -6,6 +6,16 @@
 //! - relay → PC: `{"t":"here","phones":[…]}`: the phones connected now; with `"listed":true`
 //!   when it answers a list, which is then in place.
 //!
+//! From 2.0, a relay that sends notifications says `"push":true` in the `here` it greets the PC
+//! with (and `"back":<ms>` when it told the phones the PC went quiet while it was away); only
+//! then does the PC send it, as text:
+//! - `{"t":"push","to","endpoint","body","ttl","urgency"}`: a notification sealed for one
+//!   phone's browser ([`super::push`]), to post to its push service; the relay answers
+//!   `{"t":"pushed","to","gone"}`, `gone` when the push service no longer knows the phone;
+//! - `{"t":"will","list":[{"to","endpoint","body","ttl"}]}`: the notifications to send should the
+//!   PC go quiet without saying it would (an empty list: none);
+//! - `{"t":"leaving"}`: the PC is about to go (it quits, sleeps or shuts down).
+//!
 //! Data, binary, never opened by the relay: `[phone id: 4 bytes][sealed frame]` (see
 //! [`super::seal`]). Inside a sealed frame, JSON:
 //! - phone → PC: `hello {name, next?, protocol?}`, `watch`, `unwatch`, `bye`, and from protocol 2
@@ -53,9 +63,54 @@ pub enum FromRelay {
         /// The answer to a list: the relay has it.
         #[serde(default)]
         listed: bool,
+        /// The relay sends notifications (2.0).
+        #[serde(default)]
+        push: bool,
+        /// When the relay told the phones this PC went quiet (ms since 1970), while it was away.
+        #[serde(default)]
+        back: Option<i64>,
+    },
+    /// What came of a notification for phone `to`.
+    Pushed {
+        to: String,
+        /// The push service no longer knows the phone's subscription.
+        #[serde(default)]
+        gone: bool,
     },
     #[serde(other)]
     Other,
+}
+
+/// A notification for one phone, sealed for its browser.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Sealed {
+    /// The phone, hex.
+    pub to: String,
+    pub endpoint: String,
+    /// The sealed body, base64url.
+    pub body: String,
+    /// Seconds the push service keeps it for a phone that is off.
+    pub ttl: u32,
+}
+
+pub fn push_message(note: &Sealed, urgency: &str) -> String {
+    serde_json::json!({
+        "t": "push",
+        "to": note.to,
+        "endpoint": note.endpoint,
+        "body": note.body,
+        "ttl": note.ttl,
+        "urgency": urgency,
+    })
+    .to_string()
+}
+
+pub fn will_message(list: &[Sealed]) -> String {
+    serde_json::json!({ "t": "will", "list": list }).to_string()
+}
+
+pub fn leaving_message() -> String {
+    r#"{"t":"leaving"}"#.to_owned()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

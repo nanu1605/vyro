@@ -26,6 +26,7 @@ let status: RemoteStatus = {
       anywhere: false,
       control: false,
       screen: false,
+      push: false,
     },
     {
       id: '5e6f7a8b',
@@ -38,6 +39,7 @@ let status: RemoteStatus = {
       anywhere: true,
       control: true,
       screen: true,
+      push: true,
     },
   ],
   watching: 0,

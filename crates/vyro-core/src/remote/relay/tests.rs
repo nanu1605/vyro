@@ -355,9 +355,9 @@ fn pairing_over_the_relay_then_reading() {
     assert!(s.views(&p, 2, r#"{"ts":2}"#).is_empty(), "each view once");
 
     // The relay says the phone left; this is not an answer to a list.
-    assert!(s.on_text(r#"{"t":"here","phones":[]}"#).watching);
+    assert!(s.on_text(&mut p, r#"{"t":"here","phones":[]}"#).watching);
     assert_eq!(s.listed(), None);
-    let _ = s.on_text(r#"{"t":"here","phones":[],"listed":true}"#);
+    let _ = s.on_text(&mut p, r#"{"t":"here","phones":[],"listed":true}"#);
     assert_eq!(s.listed(), Some(p.generation()));
     assert!(s.views(&p, 3, r#"{"ts":3}"#).is_empty());
 }
@@ -527,7 +527,7 @@ fn requests_need_the_session_a_new_count_and_permission() {
         .2
         .is_empty());
     // And a phone that left the relay starts over too.
-    let _ = s.on_text(r#"{"t":"here","phones":[]}"#);
+    let _ = s.on_text(&mut p, r#"{"t":"here","phones":[]}"#);
     let gone = phone.frame(&req(&fresh, 10, 7, "power"));
     assert!(s.on_frame(&mut p, &gone, &now(&info_fn, None)).2.is_empty());
 }
@@ -969,4 +969,300 @@ fn the_client_shows_its_key_sends_the_list_answers_phones_and_reconnects() {
 
     client.stop();
     assert_eq!(client.status().0, RelayState::Off);
+}
+
+// --- notifications (2.0) ---------------------------------------------------------------------
+
+/// A phone's browser: its push key, and the subscription it gives the PC.
+fn browser(seed: u8) -> (p256::SecretKey, String) {
+    use p256::elliptic_curve::sec1::ToEncodedPoint;
+    let key = p256::SecretKey::from_slice(&[seed; 32]).unwrap();
+    let public = b64url(key.public_key().to_encoded_point(false).as_bytes());
+    let sub = format!(
+        r#"{{"endpoint":"https://fcm.googleapis.com/fcm/send/{seed}","p256dh":"{public}","auth":"{}","kinds":{{"alerts":true,"batteries":false,"games":false,"offline":true}}}}"#,
+        b64url(&[seed; 16])
+    );
+    (key, sub)
+}
+
+fn req_p(session: &str, n: u64, id: u64, m: &str, p: &str) -> String {
+    format!(r#"{{"t":"req","s":"{session}","n":{n},"id":{id},"m":"{m}","p":{p}}}"#)
+}
+
+/// What a sealed `push` or `will` entry says, opened as the phone's browser would.
+fn opened(key: &p256::SecretKey, seed: u8, body: &str) -> serde_json::Value {
+    let plain = super::push::tests::open(key, &[seed; 16], &proto::unb64url(body).unwrap());
+    serde_json::from_slice(&plain).unwrap()
+}
+
+const GREETING: &str = r#"{"t":"here","phones":["0a1b2c3d"],"push":true}"#;
+
+#[test]
+fn a_phone_turns_notifications_on_and_hears_only_what_it_chose() {
+    let mut p = paired();
+    let mut s = Session::new();
+    let info_fn = info;
+    let phone = TestPhone::new(ID, &OWN_SECRET);
+    let (session, info) = hello2(&mut s, &mut p, &phone);
+    for m in ["push.state", "push.set", "push.off", "push.test"] {
+        assert!(
+            info["methods"].as_array().unwrap().iter().any(|x| x == m),
+            "{m}: even a phone that only looks"
+        );
+    }
+    let (key, sub) = browser(7);
+
+    let (outs, fx, requests) = s.on_frame(
+        &mut p,
+        &phone.frame(&req_p(&session, 1, 1, "push.set", &sub)),
+        &now(&info_fn, None),
+    );
+    assert!(requests.is_empty(), "answered here, not by the app");
+    assert!(fx.saved);
+    let res = phone.read(&outs[0]).unwrap();
+    assert_eq!(res["ok"]["on"], true);
+    assert_eq!(res["ok"]["kinds"]["batteries"], false);
+    assert_eq!(
+        res["ok"]["relay"], false,
+        "the relay has not said it sends them"
+    );
+    assert!(p.devices(&[])[0].push);
+
+    // Nothing goes out before the relay says it sends notifications.
+    let alert = super::push::Note::new(
+        super::push::Kind::Alert,
+        "CPU at 97 °C",
+        "Held for 30 s",
+        "cpu-temp",
+        NOW,
+    );
+    assert!(s
+        .notes(&p, std::slice::from_ref(&alert), "DESKTOP-TEST", None)
+        .is_empty());
+    assert!(!s.will_due(&p) && s.leaving().is_none());
+    let _ = s.on_text(&mut p, GREETING);
+
+    let outs = s.notes(&p, &[alert], "DESKTOP-TEST", None);
+    assert_eq!(outs.len(), 1);
+    let Out::Text(t) = &outs[0] else { panic!() };
+    let m: serde_json::Value = serde_json::from_str(t).unwrap();
+    assert_eq!(
+        (m["t"].as_str(), m["to"].as_str(), m["urgency"].as_str()),
+        (Some("push"), Some("0a1b2c3d"), Some("high"))
+    );
+    assert_eq!(m["endpoint"], "https://fcm.googleapis.com/fcm/send/7");
+    let note = opened(&key, 7, m["body"].as_str().unwrap());
+    assert_eq!(note["title"], "CPU at 97 °C");
+    assert_eq!(note["body"], "DESKTOP-TEST · Held for 30 s");
+    assert_eq!(note["pc"], hex(&ROOM));
+
+    // Batteries were left off.
+    let battery = super::push::Note::new(super::push::Kind::Battery, "Mouse", "12 %", "b", NOW);
+    assert!(s.notes(&p, &[battery], "DESKTOP-TEST", None).is_empty());
+
+    // The relay keeps a sealed "stopped answering" for it.
+    let Some(Out::Text(will)) = s.will(&p, "DESKTOP-TEST") else {
+        panic!("a will")
+    };
+    let will: serde_json::Value = serde_json::from_str(&will).unwrap();
+    assert_eq!(will["t"], "will");
+    let entry = &will["list"][0];
+    assert_eq!(entry["to"], "0a1b2c3d");
+    assert_eq!(
+        opened(&key, 7, entry["body"].as_str().unwrap())["title"],
+        "DESKTOP-TEST stopped answering"
+    );
+    assert!(
+        s.will(&p, "DESKTOP-TEST").is_none(),
+        "once, until the phones change"
+    );
+
+    // A test, for this phone only, once the relay sends them.
+    let (outs, _, _) = s.on_frame(
+        &mut p,
+        &phone.frame(&req_p(&session, 2, 2, "push.test", "{}")),
+        &now(&info_fn, None),
+    );
+    assert_eq!(phone.read(&outs[0]).unwrap()["ok"]["relay"], true);
+    assert_eq!(s.take_tests(), vec![ID]);
+    assert!(s.take_tests().is_empty());
+
+    // Off: no more, and the relay's will is sealed again without it.
+    let (outs, _, _) = s.on_frame(
+        &mut p,
+        &phone.frame(&req_p(&session, 3, 3, "push.off", "{}")),
+        &now(&info_fn, None),
+    );
+    assert_eq!(phone.read(&outs[0]).unwrap()["ok"]["on"], false);
+    let Some(Out::Text(will)) = s.will(&p, "DESKTOP-TEST") else {
+        panic!("a new will")
+    };
+    assert_eq!(will, r#"{"list":[],"t":"will"}"#);
+    let (outs, _, _) = s.on_frame(
+        &mut p,
+        &phone.frame(&req_p(&session, 4, 4, "push.test", "{}")),
+        &now(&info_fn, None),
+    );
+    assert_eq!(
+        phone.read(&outs[0]).unwrap()["err"],
+        "Turn notifications on first."
+    );
+    assert_eq!(s.leaving(), Some(Out::Text(r#"{"t":"leaving"}"#.into())));
+}
+
+#[test]
+fn a_bad_subscription_is_refused_and_a_gone_one_is_dropped() {
+    let mut p = paired();
+    let mut s = Session::new();
+    let info_fn = info;
+    let phone = TestPhone::new(ID, &OWN_SECRET);
+    let (session, _) = hello2(&mut s, &mut p, &phone);
+    let (_, sub) = browser(8);
+    let bad = sub.replace("https://fcm.googleapis.com", "http://evil.example");
+    let (outs, _, _) = s.on_frame(
+        &mut p,
+        &phone.frame(&req_p(&session, 1, 1, "push.set", &bad)),
+        &now(&info_fn, None),
+    );
+    assert_eq!(
+        phone.read(&outs[0]).unwrap()["err"],
+        "That is not a push service's address."
+    );
+    assert!(p.push(&ID).is_none());
+
+    let _ = s.on_frame(
+        &mut p,
+        &phone.frame(&req_p(&session, 2, 2, "push.set", &sub)),
+        &now(&info_fn, None),
+    );
+    assert!(p.push(&ID).is_some());
+    let _ = p.take_dirty();
+    // The push service no longer knows the phone: forgotten, and saved.
+    assert!(
+        s.on_text(&mut p, r#"{"t":"pushed","to":"0a1b2c3d","gone":true}"#)
+            .saved
+    );
+    assert!(p.push(&ID).is_none());
+    assert!(
+        !s.on_text(&mut p, r#"{"t":"pushed","to":"0a1b2c3d","gone":true}"#)
+            .saved,
+        "once"
+    );
+    assert!(
+        !s.on_text(&mut p, r#"{"t":"pushed","to":"0a1b2c3d","gone":false}"#)
+            .saved
+    );
+}
+
+#[test]
+fn subscriptions_are_kept_sealed_and_a_relay_that_saw_the_pc_go_quiet_says_so() {
+    let mut p = paired();
+    let (_, sub) = browser(9);
+    let v: serde_json::Value = serde_json::from_str(&sub).unwrap();
+    let push = super::push::Push::new(
+        v["endpoint"].as_str().unwrap(),
+        v["p256dh"].as_str().unwrap(),
+        v["auth"].as_str().unwrap(),
+        super::push::PushKinds::default(),
+    )
+    .unwrap();
+    assert!(p.set_push(&ID, Some(push.clone())));
+    let stored = p.stored(true, None);
+    let saved = stored.phones[0].push.as_deref().unwrap();
+    assert!(!saved.contains("fcm.googleapis.com"), "sealed, not plain");
+    let back = Phones::load(&stored, NOW).unwrap();
+    assert_eq!(back.push(&ID), Some(&push));
+    assert!(!p.set_push(&[9, 9, 9, 9], None), "no such phone");
+    let generation = p.push_generation();
+    p.sign_out("0a1b2c3d");
+    assert!(
+        p.push_generation() > generation,
+        "who hears it went quiet changed"
+    );
+
+    let mut s = Session::new();
+    let fx = s.on_text(
+        &mut p,
+        r#"{"t":"here","phones":[],"push":true,"back":1760000000000}"#,
+    );
+    assert_eq!(fx.back, Some(1_760_000_000_000));
+    assert!(s.pushes());
+}
+
+#[test]
+fn the_client_leaves_its_will_sends_notifications_and_says_when_it_leaves() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let mut store = paired();
+    let (key, sub) = browser(11);
+    let v: serde_json::Value = serde_json::from_str(&sub).unwrap();
+    let push = super::push::Push::new(
+        v["endpoint"].as_str().unwrap(),
+        v["p256dh"].as_str().unwrap(),
+        v["auth"].as_str().unwrap(),
+        super::push::PushKinds::default(),
+    )
+    .unwrap();
+    store.set_push(&ID, Some(push));
+    let phones = Arc::new(Mutex::new(store));
+    let mut client = RelayClient::start(
+        base,
+        Arc::clone(&phones),
+        30,
+        RelayHooks {
+            info: Box::new(info),
+            saved: Box::new(|| {}),
+            watching: Box::new(|_| {}),
+            state: Box::new(|_| {}),
+            request: Box::new(|_, _| {}),
+        },
+    )
+    .unwrap();
+    // Made before the relay said it sends them: they wait.
+    let alert = super::push::Note::new(
+        super::push::Kind::Alert,
+        "GPU at 88 °C",
+        "Held",
+        "gpu-temp",
+        NOW,
+    );
+    client.notify(alert);
+
+    let mut relay = accept(&listener);
+    let Message::Text(list) = relay.next() else {
+        panic!("expected the phone list")
+    };
+    assert!(list.as_str().contains(r#""t":"phones""#));
+    relay.ws.send(Message::Text(GREETING.into())).unwrap();
+    let mut texts = Vec::new();
+    while texts.len() < 2 {
+        if let Message::Text(t) = relay.next() {
+            texts.push(serde_json::from_str::<serde_json::Value>(t.as_str()).unwrap());
+        }
+    }
+    let will = texts.iter().find(|t| t["t"] == "will").expect("a will");
+    assert_eq!(
+        opened(&key, 11, will["list"][0]["body"].as_str().unwrap())["title"],
+        "DESKTOP-TEST stopped answering"
+    );
+    let pushed = texts.iter().find(|t| t["t"] == "push").expect("the alert");
+    let note = opened(&key, 11, pushed["body"].as_str().unwrap());
+    assert_eq!(
+        (note["kind"].as_str(), note["title"].as_str()),
+        (Some("alert"), Some("GPU at 88 °C"))
+    );
+
+    // Going to sleep: the relay is told.
+    client.leaving();
+    let Message::Text(t) = relay.next() else {
+        panic!()
+    };
+    assert_eq!(t.as_str(), r#"{"t":"leaving"}"#);
+    // Quitting too.
+    let stop = std::thread::spawn(move || client.stop());
+    let Message::Text(t) = relay.next() else {
+        panic!()
+    };
+    assert_eq!(t.as_str(), r#"{"t":"leaving"}"#);
+    stop.join().unwrap();
 }

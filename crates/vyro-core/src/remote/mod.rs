@@ -108,6 +108,9 @@ pub struct RemoteDevice {
     /// May see and use the PC's screen (1.7); only phones paired through the relay can.
     #[serde(default)]
     pub screen: bool,
+    /// Gets notifications with its app closed (2.0); the phone turns them on and off.
+    #[serde(default)]
+    pub push: bool,
 }
 
 /// The current pairing code.

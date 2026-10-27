@@ -1,13 +1,16 @@
 //! One connection's conversation with the relay (1.4), without I/O: what comes in, what goes
 //! out. The client ([`super::client`]) moves the bytes; this decides. A phone's requests (1.5)
 //! are checked here (its connection's session and count, the request's access) and handed to
-//! the app; the app's answers come back through [`Session::answer`].
+//! the app; the app's answers come back through [`Session::answer`]. Notifications (2.0) are
+//! the exception: a phone's `push.*` requests are about its own subscription and are answered
+//! here, and [`Session::notes`] seals what the app has to tell for each phone that wants it.
 
 use std::collections::{BTreeSet, HashMap};
 
 use super::api::{self, Access};
 use super::phones::{Hello, Phones};
-use super::proto::{self, b64url, FromPhone, FromRelay, Stamp};
+use super::proto::{self, b64url, FromPhone, FromRelay, Sealed, Stamp};
+use super::push::{self, Kind, Note, Push, PushKinds};
 use super::seal::{aad, Dir, Keys, PhoneId, PHONE_LEN};
 use crate::remote::auth::hex;
 use crate::remote::{random, RemoteInfo};
@@ -26,6 +29,9 @@ pub struct Effects {
     pub saved: bool,
     /// The number of phones watching changed.
     pub watching: bool,
+    /// The relay told the phones this PC went quiet, at this time (ms since 1970), while it was
+    /// away: they hear that it is back.
+    pub back: Option<i64>,
 }
 
 /// A request let through, for the app to answer.
@@ -60,6 +66,12 @@ pub struct Session {
     view: u64,
     /// Phones on protocol 2, by their latest `hello`.
     conns: HashMap<PhoneId, Conn>,
+    /// The relay sends notifications (it said so in its greeting).
+    push: bool,
+    /// The relay has the offline notifications of this [`Phones::push_generation`].
+    will: Option<u64>,
+    /// Notifications for phones that asked for a test.
+    tests: Vec<PhoneId>,
 }
 
 /// What a phone may be told now.
@@ -105,10 +117,43 @@ impl Session {
     }
 
     /// A text message from the relay.
-    pub fn on_text(&mut self, text: &str) -> Effects {
-        let Ok(FromRelay::Here { phones, listed }) = serde_json::from_str::<FromRelay>(text) else {
-            return Effects::default();
+    pub fn on_text(&mut self, store: &mut Phones, text: &str) -> Effects {
+        let (phones, listed) = match serde_json::from_str::<FromRelay>(text) {
+            Ok(FromRelay::Here {
+                phones,
+                listed,
+                push,
+                back,
+            }) => {
+                self.push |= push;
+                if back.is_some() {
+                    return Effects {
+                        back,
+                        ..self.here(phones, listed)
+                    };
+                }
+                (phones, listed)
+            }
+            Ok(FromRelay::Pushed { to, gone: true }) => {
+                // The browser unsubscribed, or the push service forgot it: the phone turns
+                // notifications on again the next time it opens this PC.
+                let saved = proto::unhex(&to)
+                    .and_then(|b| PhoneId::try_from(b).ok())
+                    .is_some_and(|id| store.push(&id).is_some() && store.set_push(&id, None));
+                if saved {
+                    log::info!("relay: a phone's push subscription is gone");
+                }
+                return Effects {
+                    saved: saved && store.take_dirty(),
+                    ..Effects::default()
+                };
+            }
+            _ => return Effects::default(),
         };
+        self.here(phones, listed)
+    }
+
+    fn here(&mut self, phones: Vec<String>, listed: bool) -> Effects {
         // The relay answers lists in the order they were sent, and its answer to the latest one
         // comes last, so `listed` may lag a list just sent, never run ahead of it.
         if listed {
@@ -123,6 +168,7 @@ impl Session {
         Effects {
             saved: false,
             watching: self.watching.len() != before,
+            back: None,
         }
     }
 
@@ -220,6 +266,10 @@ impl Session {
                 };
                 match refused {
                     Some(why) => out.extend(self.answer(phones, &name, rid, &Err(why.into()))),
+                    None if m.starts_with("push.") => {
+                        let result = self.push_request(phones, &id, &m, &p);
+                        out.extend(self.answer(phones, &name, rid, &result));
+                    }
                     None => requests.push(Request {
                         phone: name,
                         name: phones.about(&id).map(|a| a.0).unwrap_or_default(),
@@ -299,6 +349,132 @@ impl Session {
             .iter()
             .filter_map(|m| seal_to(phones.room(), &pid, keys, m))
             .collect()
+    }
+
+    /// A phone's `push.*` request: its own subscription, answered here.
+    fn push_request(
+        &mut self,
+        phones: &mut Phones,
+        id: &PhoneId,
+        method: &str,
+        p: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        let state = |phones: &Phones| {
+            let push = phones.push(id);
+            serde_json::json!({
+                "on": push.is_some(),
+                "kinds": push.map(|x| x.kinds).unwrap_or_default(),
+                "endpoint": push.map(|x| x.endpoint.as_str()),
+                "relay": self.push,
+            })
+        };
+        match method {
+            "push.state" => Ok(state(phones)),
+            "push.set" => {
+                let s = |k: &str| p.get(k).and_then(|v| v.as_str()).unwrap_or("");
+                let kinds: PushKinds = p
+                    .get("kinds")
+                    .cloned()
+                    .and_then(|k| serde_json::from_value(k).ok())
+                    .unwrap_or_default();
+                let push = Push::new(s("endpoint"), s("p256dh"), s("auth"), kinds)?;
+                phones.set_push(id, Some(push));
+                Ok(state(phones))
+            }
+            "push.off" => {
+                phones.set_push(id, None);
+                Ok(state(phones))
+            }
+            "push.test" if !self.push => Err(
+                "This relay can't send notifications. Update the relay, or use Vyro's own.".into(),
+            ),
+            "push.test" if phones.push(id).is_none() => Err("Turn notifications on first.".into()),
+            "push.test" => {
+                if !self.tests.contains(id) {
+                    self.tests.push(*id);
+                }
+                Ok(state(phones))
+            }
+            _ => Err(api::UNKNOWN.into()),
+        }
+    }
+
+    /// Phones that asked for a test notification since the last call: the client seals one
+    /// for each ([`Session::notes`]).
+    pub fn take_tests(&mut self) -> Vec<PhoneId> {
+        std::mem::take(&mut self.tests)
+    }
+
+    /// `note` sealed for one phone's browser; `name` is this PC's.
+    fn seal_note(room: &str, id: &PhoneId, push: &Push, note: &Note, name: &str) -> Option<Sealed> {
+        let note = note.from_pc(name);
+        Some(Sealed {
+            to: hex(id),
+            endpoint: push.endpoint.clone(),
+            body: b64url(&push.seal(&note.payload(room))?),
+            ttl: push::ttl(note.kind),
+        })
+    }
+
+    /// The notifications for the phones that want each, sealed for the relay to pass on; `to`,
+    /// only that phone (a test). Nothing while the relay does not send them.
+    pub fn notes(
+        &self,
+        phones: &Phones,
+        notes: &[Note],
+        name: &str,
+        to: Option<&PhoneId>,
+    ) -> Vec<Out> {
+        if !self.push {
+            return Vec::new();
+        }
+        let room = hex(phones.room());
+        notes
+            .iter()
+            .flat_map(|note| {
+                phones
+                    .pushes(note.kind)
+                    .into_iter()
+                    .filter(|(id, _)| to.is_none_or(|t| t == id))
+                    .filter_map(|(id, push)| Self::seal_note(&room, &id, push, note, name))
+                    .map(|sealed| Out::Text(proto::push_message(&sealed, push::urgency(note.kind))))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+
+    /// Whether the relay should be given the offline notifications again: the phones that want
+    /// them changed, or this is a new connection.
+    pub fn will_due(&self, phones: &Phones) -> bool {
+        self.push && self.will != Some(phones.push_generation())
+    }
+
+    /// The offline notifications for the relay to keep, sealed now for each phone that wants
+    /// them; `name` is this PC's.
+    pub fn will(&mut self, phones: &Phones, name: &str) -> Option<Out> {
+        if !self.will_due(phones) {
+            return None;
+        }
+        self.will = Some(phones.push_generation());
+        let room = hex(phones.room());
+        let note = Note::offline(name);
+        let list: Vec<Sealed> = phones
+            .pushes(Kind::Offline)
+            .into_iter()
+            .filter_map(|(id, push)| Self::seal_note(&room, &id, push, &note, name))
+            .collect();
+        Some(Out::Text(proto::will_message(&list)))
+    }
+
+    /// Tells the relay the PC is about to go (it quits, sleeps or shuts down), so it does not
+    /// tell the phones it went quiet.
+    pub fn leaving(&self) -> Option<Out> {
+        self.push.then(|| Out::Text(proto::leaving_message()))
+    }
+
+    /// The relay sends notifications.
+    pub fn pushes(&self) -> bool {
+        self.push
     }
 
     /// Phones here whose permission changed get their `info` again.

@@ -1,0 +1,19 @@
+// The relay as the notification tests run it (2.0): the tests' own push service on this computer,
+// and short waits for a PC that went quiet.
+{
+  "name": "vyro-relay-push-test",
+  "main": "../src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOMS", "class_name": "Room" },
+      { "name": "KEYS", "class_name": "Keys" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Room"] },
+    { "tag": "v2", "new_sqlite_classes": ["Keys"] }
+  ],
+  "assets": { "directory": "./assets", "binding": "ASSETS", "run_worker_first": true },
+  "vars": { "PUSH_HOSTS": "127.0.0.1", "GRACE_MS": "1500", "CHECK_MS": "1000", "SILENT_MS": "2500" }
+}
