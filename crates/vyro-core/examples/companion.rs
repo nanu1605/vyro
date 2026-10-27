@@ -116,16 +116,13 @@ fn moving() -> &'static Arc<AtomicBool> {
 fn video(session: &rtc::Session, stop: &AtomicBool) -> Result<(), String> {
     let status = |s: Status| match s {
         Status::Sending { width, height, .. } => {
-            session.tell(
-                Note::Sending {
-                    w: width,
-                    h: height,
-                }
-                .json(),
-            );
+            session.tell(&Note::Sending {
+                w: width,
+                h: height,
+            });
             println!("screen: sending {width}x{height}");
         }
-        Status::Report(r) => session.report(Note::report(&r).json()),
+        Status::Report(r) => session.tell(&Note::report(&r)),
         Status::Secure => {}
     };
     #[cfg(windows)]
@@ -185,15 +182,12 @@ fn screen_start(r: &Request) -> Result<serde_json::Value, String> {
                     // The first frame: the phone is told it plays, as the app tells it.
                     if !MIC_ON.swap(true, Ordering::SeqCst) {
                         if let Some(live) = vyro_core::lock(&SCREEN).as_ref() {
-                            live.session.tell(
-                                Note::Mic {
-                                    on: true,
-                                    into: Some(CABLE.into()),
-                                    default: true,
-                                    why: None,
-                                }
-                                .json(),
-                            );
+                            live.session.tell(&Note::Mic {
+                                on: true,
+                                into: Some(CABLE.into()),
+                                default: true,
+                                why: None,
+                            });
                         }
                     }
                     if seq % 50 == 0 {

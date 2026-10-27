@@ -217,7 +217,7 @@ fn loopback(mdns: bool) {
     )
     .unwrap();
     assert!(answer.contains("H264"), "{answer}");
-    session.tell(r#"{"t":"sending","w":2,"h":2}"#.into());
+    session.tell(&super::share::Note::Sending { w: 2, h: 2 });
     phone
         .sdp_api()
         .accept_answer(pending, SdpAnswer::from_sdp_string(&answer).unwrap())

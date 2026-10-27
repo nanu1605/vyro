@@ -158,18 +158,15 @@ fn main() -> Result<(), String> {
         move || {
             let status = |s: Status| match s {
                 Status::Sending { width, height, .. } => {
-                    session.tell(
-                        Note::Sending {
-                            w: width,
-                            h: height,
-                        }
-                        .json(),
-                    );
+                    session.tell(&Note::Sending {
+                        w: width,
+                        h: height,
+                    });
                     println!("sending {width}x{height}");
                 }
                 Status::Secure => println!("secure"),
                 Status::Report(r) => {
-                    session.report(Note::report(&r).json());
+                    session.tell(&Note::report(&r));
                     println!("report {r}");
                 }
             };

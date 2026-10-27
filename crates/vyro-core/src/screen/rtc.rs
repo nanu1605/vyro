@@ -25,6 +25,7 @@ use str0m::{Candidate, Event, IceConnectionState, Input, Output, Rtc, RtcConfig}
 use super::frames;
 use super::input;
 use super::producer::Quality;
+use super::share::Note;
 use super::stun;
 
 /// Frames waiting to be sent; more than this and the newest is dropped (the phone is behind).
@@ -40,6 +41,8 @@ const RECONNECT: Duration = Duration::from_secs(10);
 const START_ESTIMATE: u64 = 3_000_000;
 /// The most the estimate looks for: the producer's top rate with room for the rest.
 const WANTED: u64 = 6_000_000;
+/// The kinds of note for the phone ([`slot`]).
+const NOTE_KINDS: usize = 4;
 
 /// Where the session finds its addresses.
 #[derive(Debug, Clone)]
@@ -133,15 +136,23 @@ enum Channel {
 
 pub type EventSink = Box<dyn Fn(SessionEvent) + Send>;
 
+/// Where a note waits for the phone: one of each kind, so a note never takes another kind's
+/// place, and the end goes last.
+fn slot(note: &Note) -> usize {
+    match note {
+        Note::Sending { .. } | Note::Secure => 0,
+        Note::Mic { .. } => 1,
+        Note::Report { .. } => 2,
+        Note::End { .. } => 3,
+    }
+}
+
 #[derive(Default)]
 struct State {
     connected: bool,
     closed: bool,
-    /// The newest note for the phone, and whether it still has to go.
-    note: Option<(String, bool)>,
-    /// The newest report for the phone (what went out lately), likewise; kept apart so a report
-    /// never takes a note's place.
-    report: Option<(String, bool)>,
+    /// The newest note of each kind for the phone ([`slot`]), and whether it still has to go.
+    notes: [Option<(String, bool)>; NOTE_KINDS],
     /// Answers to clips, for their channels.
     replies: Vec<(ChannelId, String)>,
 }
@@ -208,18 +219,12 @@ impl Session {
         Some(self.estimate.load(Ordering::SeqCst)).filter(|&b| b > 0)
     }
 
-    /// Tells the phone something over the data channel (the screen's state, as JSON). Only the
-    /// newest note matters: one not yet sent is replaced, and a phone whose channel opens later
-    /// gets it then.
-    pub fn tell(&self, note: String) {
-        crate::lock(&self.state).note = Some((note, true));
-    }
-
-    /// Tells the phone what went out lately (JSON); only the newest matters, as with [`tell`].
-    ///
-    /// [`tell`]: Session::tell
-    pub fn report(&self, report: String) {
-        crate::lock(&self.state).report = Some((report, true));
+    /// Tells the phone something over the data channel (the screen's state). Only the newest
+    /// note of each kind matters: one not yet sent is replaced by the next of its kind (the
+    /// picture's shape, the microphone, what went out lately, the end), never by another kind,
+    /// and a phone whose channel opens later gets them then.
+    pub fn tell(&self, note: &Note) {
+        crate::lock(&self.state).notes[slot(note)] = Some((note.json(), true));
     }
 
     pub fn closed(&self) -> bool {
@@ -382,20 +387,31 @@ fn h264_pt(rtc: &mut Rtc, mid: Mid) -> Option<str0m::format::PayloadParams> {
     best.map(|(_, p)| p)
 }
 
-/// Writes the note (or else the report) still due to the phone's channel; whether there was one.
-fn send_note(rtc: &mut Rtc, id: ChannelId, state: &Mutex<State>) -> bool {
-    let note = {
-        let mut s = crate::lock(state);
-        let State { note, report, .. } = &mut *s;
-        let Some((text, due)) = [note, report].into_iter().flatten().find(|(_, due)| *due) else {
-            return false;
-        };
-        *due = false;
-        text.clone()
-    };
+/// The notes still due to the phone, in their kinds' order; they are due no more.
+fn take_due(state: &mut State) -> Vec<String> {
+    state
+        .notes
+        .iter_mut()
+        .flatten()
+        .filter(|(_, due)| *due)
+        .map(|(text, due)| {
+            *due = false;
+            text.clone()
+        })
+        .collect()
+}
+
+/// Writes the notes still due to the phone's channel; whether there were any.
+fn send_notes(rtc: &mut Rtc, id: ChannelId, state: &Mutex<State>) -> bool {
+    let notes = take_due(&mut crate::lock(state));
+    if notes.is_empty() {
+        return false;
+    }
     if let Some(mut ch) = rtc.channel(id) {
-        if let Err(e) = ch.write(false, note.as_bytes()) {
-            log::debug!("screen: note not sent: {e}");
+        for note in &notes {
+            if let Err(e) = ch.write(false, note.as_bytes()) {
+                log::debug!("screen: note not sent: {e}");
+            }
         }
     }
     true
@@ -487,9 +503,7 @@ fn run(
                     Event::ChannelOpen(id, _) => {
                         channel = Some(id);
                         channels.insert(id, Channel::Input);
-                        let mut s = crate::lock(state);
-                        let State { note, report, .. } = &mut *s;
-                        for (_, due) in [note, report].into_iter().flatten() {
+                        for (_, due) in crate::lock(state).notes.iter_mut().flatten() {
                             *due = true;
                         }
                     }
@@ -550,9 +564,9 @@ fn run(
             }
         };
         if stop.load(Ordering::SeqCst) {
-            // A last note (why it ended) still goes, once.
+            // The last notes (why it ended) still go, once.
             if let Some(id) = channel {
-                if send_note(&mut rtc, id, state) {
+                if send_notes(&mut rtc, id, state) {
                     while let Ok(Output::Transmit(t)) = rtc.poll_output() {
                         let _ = socket.send_to(&t.contents, t.destination);
                     }
@@ -578,8 +592,8 @@ fn run(
                 }
             }
         }
-        // A note for the phone, once its channel is open.
-        if channel.is_some_and(|id| send_note(&mut rtc, id, state)) {
+        // Notes for the phone, once its channel is open.
+        if channel.is_some_and(|id| send_notes(&mut rtc, id, state)) {
             continue;
         }
         // A frame to send: one mutation, then back to draining the output.
@@ -637,5 +651,42 @@ fn run(
         if let Err(e) = rtc.handle_input(input) {
             log::debug!("screen: {e}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The microphone's note and the picture's shape told at once both go; a newer note of a
+    /// kind replaces the one not yet sent, and the end goes last.
+    #[test]
+    fn a_note_replaces_only_its_own_kind() {
+        let state = Mutex::new(State::default());
+        let tell = |n: &Note| crate::lock(&state).notes[slot(n)] = Some((n.json(), true));
+        let mic = Note::Mic {
+            on: true,
+            into: Some("CABLE Output".into()),
+            default: true,
+            why: None,
+        };
+        tell(&Note::End {
+            why: "stopped".into(),
+        });
+        tell(&mic);
+        tell(&Note::Sending { w: 1280, h: 720 });
+        tell(&Note::Secure);
+        assert_eq!(
+            take_due(&mut crate::lock(&state)),
+            [
+                Note::Secure.json(),
+                mic.json(),
+                Note::End {
+                    why: "stopped".into()
+                }
+                .json()
+            ]
+        );
+        assert!(take_due(&mut crate::lock(&state)).is_empty(), "sent once");
     }
 }
