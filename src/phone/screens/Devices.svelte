@@ -50,10 +50,10 @@
   {#if low}
     <p class="note {low.tone === 'fail' ? 'hot' : 'warn'}" role="status"><b>Low battery:</b> {low.text}</p>
   {/if}
-  {#if error}
-    <p class="error" role="alert">{error}</p>
-  {:else if !data}
-    <div class="skeleton" role="status" aria-label="Reading…"><span></span><span></span><span></span></div>
+  <!-- One answer failed: the list it last gave stays under the error. -->
+  {#if error}<p class="error" role="alert">{error}</p>{/if}
+  {#if !data}
+    {#if !error}<div class="skeleton" role="status" aria-label="Reading…"><span></span><span></span><span></span></div>{/if}
   {:else}
     {#each groups as g (g.id)}
       <h2 id="dev-{g.id}">{g.title}</h2>

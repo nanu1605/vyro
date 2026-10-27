@@ -21,8 +21,9 @@
     ])
       .then(([h, s, a]) => {
         health = h;
-        score = s;
-        alerts = a;
+        // One answer failed (a slow link): what it said last stays.
+        score = s ?? score;
+        alerts = a ?? alerts;
         error = null;
       })
       .catch((e: unknown) => (error = errText(e)));

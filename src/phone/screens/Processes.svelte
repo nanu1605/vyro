@@ -58,10 +58,10 @@
       <button type="button" class="ghost" aria-pressed={sort === id} onclick={() => (sort = id)}>{label}</button>
     {/each}
   </div>
-  {#if error}
-    <p class="error" role="alert">{error}</p>
-  {:else if !list}
-    <div class="skeleton" role="status" aria-label="Reading…"><span></span><span></span><span></span><span></span></div>
+  <!-- One answer failed: the list it last gave stays under the error. -->
+  {#if error}<p class="error" role="alert">{error}</p>{/if}
+  {#if !list}
+    {#if !error}<div class="skeleton" role="status" aria-label="Reading…"><span></span><span></span><span></span><span></span></div>{/if}
   {:else}
     <ul class="rows">
       {#each shown as p (p.pid)}

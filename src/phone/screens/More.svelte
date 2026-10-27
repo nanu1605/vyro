@@ -69,17 +69,19 @@
   /** Installing an update is being confirmed. */
   let confirmInstall = $state(false);
 
-  const quiet = <T,>(p: Promise<T>) => p.catch(() => null);
+  /** Takes what the PC answers; when one answer fails (a slow link), what it said last stays,
+   * so a tile does not go and take its open section with it. */
+  const take = <T,>(p: Promise<T>, set: (v: T) => void) => void p.then(set, () => {});
 
   function load(): void {
-    void quiet(ask<PowerState>('power.state')).then((v) => (power = v));
-    void quiet(ask<typeof profiles>('profiles')).then((v) => (profiles = v));
-    void quiet(ask<FanStatus>('fans')).then((v) => (fans = v));
-    void quiet(ask<typeof bench>('bench.progress')).then((v) => (bench = v));
-    void quiet(ask<RunSummary[]>('bench.runs')).then((v) => (runs = v ?? []));
-    void quiet(ask<DiagSummary[]>('diag.runs')).then((v) => (diags = v ?? []));
-    void quiet(ask<UpdateStatus>('updates')).then((v) => (updates = v));
-    void quiet(ask<TuneStatus>('gpu.tune')).then((v) => (gpu = v));
+    take(ask<PowerState>('power.state'), (v) => (power = v));
+    take(ask<typeof profiles>('profiles'), (v) => (profiles = v));
+    take(ask<FanStatus>('fans'), (v) => (fans = v));
+    take(ask<typeof bench>('bench.progress'), (v) => (bench = v));
+    take(ask<RunSummary[]>('bench.runs'), (v) => (runs = v ?? []));
+    take(ask<DiagSummary[]>('diag.runs'), (v) => (diags = v ?? []));
+    take(ask<UpdateStatus>('updates'), (v) => (updates = v));
+    take(ask<TuneStatus>('gpu.tune'), (v) => (gpu = v));
   }
   $effect(() => every(5000, load));
 
