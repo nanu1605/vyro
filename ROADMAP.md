@@ -3608,9 +3608,19 @@ branch `claude/vyro-2.0` from 1.7.8's records.
       Also: the relay no longer throws when the PC's connection ends while a push service is
       answering. Commit ed13029; CI green on it (run 40571699966, all four jobs, 159 end-to-end
       checks).
+- [x] **The relay deployed** from this branch at 5f73267 (2026-10-27, at the owner's go: "deploy
+      the relay"; Actions run 40588431507, its 35 tests first; version 32ec62cc), with the
+      `Keys` Durable Object (migration `v2`) bound beside the rooms. Phones get 2.0's phone app
+      the next time they open it; Notifications shows in More only for a PC that offers
+      `push.state`, so a PC on 1.7.8 or older shows the phone as before. The relay still speaks
+      `vyro.1` and the sealed messages' version 2, and checks pings only in a room whose PC left
+      a will, which no released Vyro does, so every released app still talks to it. Cloudflare
+      took 21 new or changed files; the 19 hashed scripts and styles among them carry the same
+      names as a local build of 5f73267. The live relay can't be reached from here.
 - [ ] Field check 2.0 ([`docs/field-check-2.0.md`](docs/field-check-2.0.md)): notifications on
       Android and iPhone through the real push services, the PC going quiet, and an AMD and an
-      Intel card. The relay must be deployed from 2.0 first, at the owner's go.
+      Intel card. The relay is deployed from 2.0 (run 40588431507); the PC needs a 2.0 build
+      (a `vyro-windows-…` build from CI on this branch, or 2.0.0 once released).
 - [ ] 2.0.0 released, at the owner's go.
 
 ## Risks

@@ -7,9 +7,10 @@ the relay with a push service played by the test, which opens every notification
 crypto (159 checks). The AMD and Intel interfaces' layouts are checked against the makers'
 headers; no AMD or Intel card has run them.
 
-Install the 2.0 MSI (or the artifact of the latest green run on `claude/vyro-2.0`) over 1.7, and
-deploy the relay from the same commit first (Actions → Relay): notifications need the relay's
-new `Keys` object. Reload the phone app once to get its new version.
+Install the 2.0 MSI (or the artifact of the latest green run on `claude/vyro-2.0`) over 1.7.
+Notifications need the relay's new `Keys` object: the relay is deployed from 2.0 at 5f73267
+(2026-10-27); deploy it again (Actions → Relay) only if `relay/` or `src/phone/` changed since.
+Reload the phone app once to get its new version.
 
 About 45 minutes for notifications, with an Android phone (Chrome) and an iPhone (the Home Screen
 app, iOS 16.4 or later); 20 minutes per card for tuning.
