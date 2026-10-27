@@ -3498,7 +3498,9 @@ deployed, at the owner's go; 1.7.7's phone app is not deployed yet either.
 
       Checks here: `npm test`, `npm run check`, clippy clean for Windows (the workspace, tests
       included), and the end to end in a local Chromium (143 checks; once more without the
-      phone's two fixes for leaving and mobile data, when both their checks failed).
+      phone's two fixes for leaving and mobile data, when both their checks failed). CI green on
+      915e293 (run 40508920123, every job; the end to end its 143 checks, both new ones among
+      them).
 
 ## Risks
 
