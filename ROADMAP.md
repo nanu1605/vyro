@@ -3606,7 +3606,8 @@ branch `claude/vyro-2.0` from 1.7.8's records.
         after a connection ends, four to six after the last ping.
 
       Also: the relay no longer throws when the PC's connection ends while a push service is
-      answering.
+      answering. Commit ed13029; CI green on it (run 40571699966, all four jobs, 159 end-to-end
+      checks).
 - [ ] Field check 2.0 ([`docs/field-check-2.0.md`](docs/field-check-2.0.md)): notifications on
       Android and iPhone through the real push services, the PC going quiet, and an AMD and an
       Intel card. The relay must be deployed from 2.0 first, at the owner's go.
