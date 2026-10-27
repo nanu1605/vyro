@@ -3352,6 +3352,16 @@ Fixes on `claude/vyro-1.7` after 1.7.5's release, gathered for one release when 
       updates that end a phone session first). Both items are the PC's only, so the phone app
       the relay serves (81131fc's, its notes up to 1.7.1) behaves as 1.7.6's would and needs no
       deploy.
+- [x] **1.7.6 released** (2026-10-27, on the owner's go): CI passed on 77c0770 (run
+      40464086874; Linux, Windows with the smoke test, the relay and phone app with the
+      end-to-end test, accessibility). `main` fast-forwarded to it from 1.7.5's records, and
+      Release run 40465864603 tagged `v1.7.6`, found the relay's address in `vyro.exe` and
+      published the 13.4 MB MSI, `latest.json` and checksums here and to
+      `nanu1605/vyro-releases`; GitHub's own digests of the files published here match the
+      checksums the run printed (MSI `d64dd0e3…`, `latest.json` `cf804cdb…`), and `latest.json`
+      offers 1.7.6. Installed copies on 1.4.1 to 1.7.5 are offered it. The relay was not
+      deployed again: since run 40344879569 it serves 81131fc's phone app and relay, which
+      differ from this commit's only in the PC-only notes of 1.7.2 to 1.7.6.
 
 ## Risks
 
