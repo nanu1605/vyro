@@ -35,8 +35,11 @@
   interface Props extends ScreenProps {
     /** The screen fills the phone: the app's bars go (full screen). */
     onimmersive?: (on: boolean) => void;
+    /** A session is on, or starting: the app keeps this view while its connection to the relay
+     * drops, which a direct session does not need and the slow view rides out. */
+    onsharing?: (on: boolean) => void;
   }
-  let { ask, can, pc, onimmersive }: Props = $props();
+  let { ask, can, pc, onimmersive, onsharing }: Props = $props();
 
   interface Monitor {
     index: number;
@@ -284,6 +287,11 @@
       clearInterval(here);
       clearInterval(tick);
     };
+  });
+
+  $effect(() => {
+    onsharing?.(showing);
+    return () => onsharing?.(false);
   });
 
   // Leaving the tab ends the session.

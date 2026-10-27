@@ -17,7 +17,7 @@
   import { deviceName, pageTitle, STALE_SECS } from '../remote/companion';
   import LiveView from '../remote/LiveView.svelte';
   import { addPc, confirmNext, linkFrom, loadPcs, MAX_PCS, parseLink, removePc, savePcs, sleepers, updatePc, type Link, type PairedPc } from './pcs';
-  import { PcLink, type LinkState, type PhoneInfo } from './relay';
+  import { PcLink, RequestError, type LinkState, type PhoneInfo } from './relay';
   import { errText } from './screens/ask';
   import { b64url, randomBytes, SECRET_LEN } from './seal';
   import AppBar, { type ChipTone } from './ui/AppBar.svelte';
@@ -82,6 +82,8 @@
   let news = $state<{ from: string | null; upTo: string } | null>(null);
   /** Something in the open tab hides the bars (the PC's screen, full screen). */
   let immersive = $state(false);
+  /** The PC's screen shows (a session on, or starting). */
+  let sharing = $state(false);
 
   let link: PcLink | null = null;
   let listLinks: PcLink[] = [];
@@ -91,7 +93,7 @@
   const asks = $derived((info?.methods?.length ?? 0) > 0);
   const can = (m: string) => info?.methods?.includes(m) ?? false;
   const ask = <T,>(m: string, p: object = {}) =>
-    link ? link.request<T>(m, p) : Promise.reject<T>(new Error('Not connected to the PC.'));
+    link ? link.request<T>(m, p) : Promise.reject<T>(new RequestError('Not connected to the PC.', 'unsent'));
   const others = $derived(sleepers(pcs, current));
   const tabs = $derived(
     TABS.filter((t) => t.id !== 'screen' || info?.screen !== undefined).map((t) => ({
@@ -112,6 +114,10 @@
     tooOld: 'Update Vyro on the PC',
   };
   const navOn = $derived(screen === 'pc' && linkState === 'online' && asks && !immersive);
+  /** The Screen tab stays while its session is on, though the connection to the relay drops
+   * (a relay restart, the phone changing networks): leaving it would end the session, and a
+   * direct one does not need the relay. */
+  const keepScreen = $derived(screen === 'pc' && tab === 'screen' && sharing);
 
   $effect(() => {
     document.title = screen === 'pc' ? pageTitle(pc?.name ?? '', view) : 'Vyro';
@@ -431,7 +437,7 @@
     screen === 'scan' || screen === 'install' ? { label: pcs.length ? 'Your PCs' : 'Back', go: () => (pcs.length ? goHome() : (screen = 'home')) } : null,
   );
   /** What decides which view shows, for its entrance. */
-  const viewKey = $derived(screen === 'pc' ? `pc:${current}:${navOn || immersive ? tab : linkState}` : screen);
+  const viewKey = $derived(screen === 'pc' ? `pc:${current}:${navOn || immersive || keepScreen ? tab : linkState}` : screen);
 </script>
 
 <div class="app" class:with-nav={navOn} class:immersive>
@@ -470,14 +476,20 @@
             <m.default onlink={(text: string) => fromText(text)} oncancel={() => (pcs.length ? goHome() : (screen = 'home'))} />
           {/await}
         {:else if screen === 'pc' && pc}
-          {#if linkState === 'online' && asks && tab !== 'live'}
+          {#if (linkState === 'online' && asks && tab !== 'live') || keepScreen}
             {#if tab === 'processes'}
               {#await import('./screens/Processes.svelte') then m}<m.default {ask} {can} pc={pc.name} />{/await}
             {:else if tab === 'health'}
               {#await import('./screens/Health.svelte') then m}<m.default {ask} {can} pc={pc.name} />{/await}
             {:else if tab === 'screen'}
               {#await import('./screens/Screen.svelte') then m}
-                <m.default {ask} {can} pc={pc.name} onimmersive={(on: boolean) => (immersive = on)} />
+                <m.default
+                  {ask}
+                  {can}
+                  pc={pc.name}
+                  onimmersive={(on: boolean) => (immersive = on)}
+                  onsharing={(on: boolean) => (sharing = on)}
+                />
               {/await}
             {:else}
               {#await import('./screens/More.svelte') then m}

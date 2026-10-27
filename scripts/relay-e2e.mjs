@@ -208,13 +208,15 @@ async function phone(browser, name) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   // The browser's fake microphone (a tone) for voice clips and the live microphone (1.7).
   await ctx.grantPermissions(['microphone']).catch(() => {});
-  // How each of the page's sockets closed.
+  // The page's sockets, and how each closed.
   await ctx.addInitScript(() => {
     const Native = window.WebSocket;
     window.__closes = [];
+    window.__sockets = [];
     window.WebSocket = class extends Native {
       constructor(...args) {
         super(...args);
+        window.__sockets.push(this);
         this.addEventListener('close', (e) => window.__closes.push({ at: Date.now(), code: e.code, reason: e.reason }));
       }
     };
@@ -734,6 +736,19 @@ async function main() {
         else if (still.decoded <= moving.decoded) problem('still screen', `no picture arrived in 4 s of a still screen (${still.decoded} decoded)`);
         else ok(`a still screen stays on the phone and is sent again (${still.decoded - moving.decoded} pictures in 4 s)`);
         pc.say('moving');
+        // The phone's connection to the relay drops (a relay restart, the phone changing
+        // networks): a direct session needs no relay, so it goes on, and the phone reconnects.
+        const before = await picture();
+        const stops = pc.out.next(/^asked: screen\.stop /, 6_000).then(
+          () => true,
+          () => false,
+        );
+        await d.page.evaluate(() => window.__sockets.filter((s) => s.readyState === 1).forEach((s) => s.close()));
+        await d.page.waitForTimeout(4000);
+        const after = await picture();
+        if (await stops) problem('relay drop', 'the phone ended its direct session as its connection to the relay dropped');
+        else if (after.decoded <= before.decoded) problem('relay drop', `no picture came after the relay connection dropped (${after.decoded} decoded)`);
+        else ok(`a direct session goes on while the connection to the relay drops (${after.decoded - before.decoded} pictures in 4 s)`);
         const box = await d.page.locator('.surface').boundingBox();
         const pressed = pc.out.next(/^screen input: Button/);
         if (box) await d.page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
