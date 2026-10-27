@@ -3425,7 +3425,11 @@ Fixes on `claude/vyro-1.7` after 1.7.6's release, gathered for one release when 
         the view opened again. It goes on looking.
 
       Checks here: `cargo test -p vyro-core` (screen), clippy clean for Linux and Windows (the
-      workspace, tests included), `npm test`, `npm run check`.
+      workspace, tests included), `npm test`, `npm run check`, and the end to end in a local
+      Chromium (141 checks; once more without the Screen tab's fix, when the relay-drop check
+      failed: no picture after the drop). CI green on 6a4a139 (run 40477715492, every job; the
+      Windows job ran the app's tests, the end to end its 141 checks, the direct session in
+      Google Chrome among them).
 
 ## Risks
 
