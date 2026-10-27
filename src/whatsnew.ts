@@ -21,6 +21,21 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '1.7.6',
+    items: [
+      {
+        icon: 'mic',
+        title: 'Your phone’s microphone stays the one Windows hears',
+        text: 'Turning your phone’s microphone off and on again just as it starts no longer leaves Windows’ apps hearing this PC’s own microphone instead of your phone’s.',
+      },
+      {
+        icon: 'screen',
+        title: 'Updates end a phone session first',
+        text: 'Installing an update while your phone shows this PC’s screen now lets go of keys the phone held, and puts your default microphone back, before Vyro closes for the installer.',
+      },
+    ],
+  },
+  {
     version: '1.7.5',
     items: [
       {

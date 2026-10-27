@@ -3320,7 +3320,8 @@ them in the one release.
 ### 1.7.6 — after 1.7.5
 
 Fixes on `claude/vyro-1.7` after 1.7.5's release, gathered for one release when the owner says
-(the owner, 2026-10-26: "make all the fixes in a single release").
+(the owner, 2026-10-26: "make all the fixes in a single release"); 1.7.6 on the owner's go
+(2026-10-27), all of them in the one release.
 
 - [x] **The phone's microphone starts once when turned off and on as it starts** (2026-10-26, a
       review of 1.7's microphone): the first frame starts the cable on a thread of its own (a
@@ -3346,6 +3347,11 @@ Fixes on `claude/vyro-1.7` after 1.7.5's release, gathered for one release when 
       the process's end, so an installer that did not start leaves Vyro working. Clippy clean
       for Windows here; CI green on 210a6bb (run 40415227849, every job). The PC's alone: no
       relay deploy. Field check 1.7, step 6.
+- [x] **Version 1.7.6** (the owner, 2026-10-27: "release 1.7.6"): `scripts/set-version.py
+      1.7.6`, and What's new in 1.7.6 (the phone's microphone that stays the one Windows hears,
+      updates that end a phone session first). Both items are the PC's only, so the phone app
+      the relay serves (81131fc's, its notes up to 1.7.1) behaves as 1.7.6's would and needs no
+      deploy.
 
 ## Risks
 
