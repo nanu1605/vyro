@@ -518,7 +518,8 @@ impl Remote {
     }
 
     /// The owner's own relay (`None`: the built-in one). Phones paired through the old one
-    /// cannot reach the new one, so they are signed out.
+    /// cannot reach the new one, so they are signed out, and a screen session ends first, as
+    /// when they are signed out by hand (a direct one needs no relay, and would go on).
     fn set_relay_url(&self, app: &AppHandle, url: Option<&str>) -> Result<(), String> {
         let url = match url.map(str::trim).filter(|u| !u.is_empty()) {
             Some(u) => Some(relay_base(u)?),
@@ -527,6 +528,7 @@ impl Remote {
         let before = self.relay_url();
         lock(&self.relay).url = url;
         if self.relay_url() != before {
+            crate::screen::end_all(app, "the relay was changed");
             let on = lock(&self.relay).enabled;
             self.stop_relay();
             if let Some(p) = lock(&self.phones).as_ref() {

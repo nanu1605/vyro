@@ -15,11 +15,19 @@ export function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** Calls `load` now and every `ms` while the screen shows; gives a function that stops it. */
-export function every(ms: number, load: () => void): () => void {
-  load();
+/** Calls `load` now and every `ms` while the screen shows; gives a function that stops it. A
+ * load still under way (a slow link) is waited out, not asked again on top of. */
+export function every(ms: number, load: () => Promise<unknown>): () => void {
+  let under = false;
+  const go = () => {
+    if (under) return;
+    under = true;
+    const done = () => (under = false);
+    load().then(done, done);
+  };
+  go();
   const t = setInterval(() => {
-    if (!document.hidden) load();
+    if (!document.hidden) go();
   }, ms);
   return () => clearInterval(t);
 }

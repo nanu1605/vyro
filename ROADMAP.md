@@ -3451,6 +3451,48 @@ Fixes on `claude/vyro-1.7` after 1.7.6's release, gathered for one release when 
       refresh, scanning) and 1.7.7's phone notes reach phones only with a deploy, at the
       owner's go. The PC's fixes need none.
 
+### 1.7.8 — after 1.7.7
+
+Fixes on `claude/vyro-1.7` after 1.7.7's release, gathered for one release when the owner says
+(the owner, 2026-10-26: "make all the fixes in a single release"). The phone app's need the relay
+deployed, at the owner's go; 1.7.7's phone app is not deployed yet either.
+
+- [x] **A review of the phone app after 1.7.7** (2026-10-27, the owner: "continue"). The phone
+      app's:
+      - **Waking a PC through another** (from 1.5): "Wake *PC*" on a sleeping PC's page always
+        said no other PC could send the signal. The phone asks the other PC as it says what it
+        allows, and the connection told the page so before it counted itself online, so the
+        request was refused as not connected. It is online first now. Test: a request made as
+        the PC says what it allows goes. A second tap while one wake is under way starts no
+        second (its connection to the same PC took the first one's place, which then said no PC
+        could send it), and the answer shows on that PC's page only. Field check 1.7, step 8.
+      - **Leaving a PC with its screen shown:** going to the list of PCs, opening another, or
+        scanning a code with the screen shown left the session on: the Screen tab's Stop went
+        through the next PC's connection, or none, and the PC ended it only on noticing the
+        phone gone (a minute for the slow view, the lock then at once). The PC's own connection
+        stops it first now, and says nothing of the PC opened next while it does. End to end:
+        going to the list of PCs with the screen shown stops its session on the PC. Field check
+        1.7, step 6.
+      - **HD that stays HD on mobile data:** in a session in HD, moving onto mobile data set the
+        toolbar to the choice made for mobile data (SD) while the PC went on in HD (the slow
+        view did switch, unasked), so "Switch to SD" showed under a toolbar that said SD already.
+        A session keeps its quality until the phone switches it; between sessions the quality
+        follows the connection, as before. End to end: the session says HD until it is
+        switched. Field check 1.7, step 10.
+      - **Asking again on a slow link:** Processes asked every 3 s, More every 5 s, whether or
+        not the last answers had come, so on a slow link requests piled up (and the relay's
+        daily allowance with them). A page waits out its last request now. Test: a load under
+        way is waited out; one that failed is asked again.
+
+      The PC's (in the installer):
+      - **A new relay address ends a screen session:** changing it signs every phone out, but a
+        session went on (a direct one needs no relay) where signing out by hand, starting over
+        on the relay and turning it off end it. It ends first now, "the relay was changed".
+
+      Checks here: `npm test`, `npm run check`, clippy clean for Windows (the workspace, tests
+      included), and the end to end in a local Chromium (143 checks; once more without the
+      phone's two fixes for leaving and mobile data, when both their checks failed).
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

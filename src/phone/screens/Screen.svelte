@@ -615,17 +615,24 @@
   };
   const connection = () => (navigator as Navigator & { connection?: Connection & EventTarget }).connection;
 
-  // Mobile data, as the phone says it now and when it changes; during a session in HD, a change
-  // to mobile data offers SD.
+  /** The quality chosen before for this PC, or for mobile data on it. */
+  const chosen = (m: boolean | null) => startWith(m, readQuality(storage.get(KEY_MOBILE)), readQuality(storage.get(keyFor(pc)))).quality;
+
+  // Mobile data, as the phone says it now and when it changes. Between sessions the quality
+  // follows the choice made for the connection; a session keeps its own until the phone switches
+  // it, and in HD a change to mobile data offers SD. (`mobile` is not read here: a change of it
+  // would run this again and take the session's quality away.)
   $effect(() => {
     const c = connection();
-    mobile = onMobileData(c);
-    quality = startWith(mobile, readQuality(storage.get(KEY_MOBILE)), readQuality(storage.get(keyFor(pc)))).quality;
+    const m = onMobileData(c);
+    mobile = m;
+    quality = chosen(m);
     if (!c?.addEventListener) return;
     const changed = () => {
       const was = mobile;
       mobile = onMobileData(c);
-      if (mobile && !was && showing && quality === 'hd') toMobile = true;
+      if (!showing) quality = chosen(mobile);
+      else if (mobile && !was && quality === 'hd') toMobile = true;
     };
     c.addEventListener('change', changed);
     return () => c.removeEventListener('change', changed);

@@ -39,6 +39,8 @@
   ];
   /** Low batteries are asked for this often (a dot on More). */
   const BATTERY_MS = 120_000;
+  /** How long a PC's link stays, once let go of, for its screen session's Stop to be answered. */
+  const STOP_WAIT_MS = 3000;
   const NEWS_KEY = 'vyro.phone.news';
 
   /** Chrome's install prompt (Android, desktop). */
@@ -173,10 +175,21 @@
     });
   }
 
+  /** Lets go of the open PC's link. Its screen session is stopped first, through it: the Screen
+   * tab's own Stop, sent as the tab closes, would go through the next PC's link, or none, and
+   * the PC would end the session only when it noticed the phone gone. */
+  function letGo(): void {
+    const l = link;
+    link = null;
+    if (!l) return;
+    if (!sharing) return l.stop();
+    const stopped = l.request('screen.stop').catch(() => {});
+    void Promise.race([stopped, new Promise((r) => setTimeout(r, STOP_WAIT_MS))]).then(() => l.stop());
+  }
+
   function goHome(): void {
     pcSheet = false;
-    link?.stop();
-    link = null;
+    letGo();
     immersive = false;
     screen = 'home';
     if (pcs.length) startList();
@@ -185,7 +198,7 @@
   function openPc(room: string): void {
     pcSheet = false;
     stopList();
-    link?.stop();
+    letGo();
     current = room;
     info = null;
     view = null;
@@ -198,16 +211,21 @@
     notice = null;
     waking = null;
     save(updatePc(pcs, room, { used: Date.now() }));
-    link = new PcLink(
+    // A link let go of (still stopping its screen session) says nothing of the PC open now.
+    const l: PcLink = new PcLink(
       () => pcs.find((p) => p.room === room),
       {
-        onState: (s) => (linkState = s),
+        onState: (s) => {
+          if (link === l) linkState = s;
+        },
         onInfo: (i) => {
-          info = i;
           save(updatePc(pcs, room, { name: i.pc || (pcs.find((p) => p.room === room)?.name ?? ''), wake: i.wake?.mac }));
+          if (link !== l) return;
+          info = i;
           applyLook({ theme: i.theme as ThemeId, accent: i.accent as AccentChoice, openOn: 'dashboard' });
         },
         onView: (v) => {
+          if (link !== l) return;
           view = v;
           lastAt = Date.now();
         },
@@ -215,7 +233,8 @@
       },
       { name: NAME, watch: !document.hidden, base: location.origin },
     );
-    link.start();
+    link = l;
+    l.start();
   }
 
   function select(t: Tab): void {
@@ -271,8 +290,7 @@
 
   function scan(): void {
     pcSheet = false;
-    link?.stop();
-    link = null;
+    letGo();
     screen = 'scan';
     notice = null;
     stopList();
@@ -297,9 +315,24 @@
     goHome();
   }
 
+  /** A wake under way: a second tap starts no second one (its link to the same helper would
+   * take the first one's place, and the first would say no PC could send it). */
+  let wakeUnder = false;
+
   /** Has another paired PC, awake and allowing this phone, send `target` the wake signal. */
   async function wakeThrough(target: PairedPc): Promise<void> {
-    if (!target.wake) return;
+    if (!target.wake || wakeUnder) return;
+    wakeUnder = true;
+    try {
+      const said = await wakeFrom(target);
+      // Said on that PC's page, not another's opened meanwhile.
+      if (current === target.room) waking = said;
+    } finally {
+      wakeUnder = false;
+    }
+  }
+
+  async function wakeFrom(target: PairedPc): Promise<string> {
     waking = `Asking another PC to wake ${target.name}…`;
     for (const helper of pcs.filter((p) => p.room !== target.room)) {
       const result = await new Promise<string | null>((resolve) => {
@@ -332,12 +365,9 @@
         );
         l.start();
       });
-      if (result) {
-        waking = `${result} sent ${target.name} the wake signal. It shows here once it is up.`;
-        return;
-      }
+      if (result) return `${result} sent ${target.name} the wake signal. It shows here once it is up.`;
     }
-    waking = `No other PC could send it. One of them has to be on, on the same network, and let this phone control it.`;
+    return `No other PC could send it. One of them has to be on, on the same network, and let this phone control it.`;
   }
 
   async function install(): Promise<void> {

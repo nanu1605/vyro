@@ -21,8 +21,8 @@
   let asking = $state<ProcessSnapshot | null>(null);
   let busy = $state(false);
 
-  function load(): void {
-    ask<ProcessSnapshot[]>('processes')
+  function load(): Promise<unknown> {
+    return ask<ProcessSnapshot[]>('processes')
       .then((v) => {
         list = v;
         error = null;
@@ -41,7 +41,7 @@
     try {
       await ask('process.end', { pid: p.pid, name: p.name });
       toast(`Ended ${p.name}.`);
-      load();
+      void load();
     } catch (e) {
       toast(errText(e), 'hot');
     } finally {

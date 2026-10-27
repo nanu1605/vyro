@@ -77,7 +77,7 @@ async function pcSide(secret: string) {
   };
 }
 
-function setup(start: PairedPc) {
+function setup(start: PairedPc, onInfo?: (i: PhoneInfo) => void) {
   let pcs = [start];
   const sockets: FakeSocket[] = [];
   const states: LinkState[] = [];
@@ -87,7 +87,10 @@ function setup(start: PairedPc) {
     () => pcs.find((p) => p.room === ROOM),
     {
       onState: (s) => states.push(s),
-      onInfo: (i) => infos.push(i),
+      onInfo: (i) => {
+        infos.push(i);
+        onInfo?.(i);
+      },
       onView: (v) => views.push(v),
       onRekeyed: () => (pcs = confirmNext(pcs, ROOM)),
     },
@@ -305,6 +308,30 @@ describe('a phone and its PC through the relay', () => {
     expect(await lost).toMatchObject({ message: 'The connection to the PC was lost.', link: 'lost' });
     // While it reconnects: not sent at all, and not taken for an older PC.
     expect(await failed('screen.slow')).toMatchObject({ message: 'Not connected to the PC.', link: 'unsent' });
+    t.link.stop();
+  });
+
+  it('takes a request made as the PC says what it allows (another PC asked to wake one)', async () => {
+    let outcome: Promise<string> = Promise.resolve('not asked');
+    const t = setup({ room: ROOM, phone: PHONE, secret: S1, name: 'DESKTOP-7', used: 1 }, (i) => {
+      if (!i.methods?.includes('wake')) return;
+      outcome = t.link.request('wake', { mac: '00:11:22:33:44:55', pc: 'Study' }).then(
+        () => 'woken',
+        (e: unknown) => (e instanceof Error ? e.message : String(e)),
+      );
+    });
+    const pc1 = await pcSide(S1);
+    t.link.start();
+    const s = await socket(t, 0);
+    s.open();
+    s.text('{"t":"pc","online":true}');
+    s.binary(await pc1.frame({ t: 'info', pc: 'DESKTOP-7', protocol: 2, session: 'abc', methods: ['wake'] }));
+    await until(() => expect(t.infos).toHaveLength(1));
+    // Hello, the request, then watch.
+    const frames = await Promise.all((await sent(s, 3)).map((f) => pc1.read(f)));
+    expect(frames.find((m) => m?.t === 'req')).toMatchObject({ m: 'wake', id: 1 });
+    s.binary(await pc1.frame({ t: 'res', id: 1, ok: null }));
+    expect(await outcome).toBe('woken');
     t.link.stop();
   });
 

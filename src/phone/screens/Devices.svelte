@@ -12,8 +12,8 @@
   let busy = $state<string | null>(null);
   let result = $state<Record<string, string>>({});
 
-  function load(): void {
-    ask<Devices>('devices')
+  function load(): Promise<unknown> {
+    return ask<Devices>('devices')
       .then((v) => {
         data = v;
         error = null;
@@ -36,7 +36,7 @@
         ...result,
         [d.id]: seen === want ? (connect ? 'Connected' : 'Disconnected') : connect ? "Didn't connect" : "Didn't disconnect",
       };
-      load();
+      void load();
     } catch (e) {
       result = { ...result, [d.id]: errText(e) };
     } finally {

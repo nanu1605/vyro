@@ -71,17 +71,19 @@
 
   /** Takes what the PC answers; when one answer fails (a slow link), what it said last stays,
    * so a tile does not go and take its open section with it. */
-  const take = <T,>(p: Promise<T>, set: (v: T) => void) => void p.then(set, () => {});
+  const take = <T,>(p: Promise<T>, set: (v: T) => void) => p.then(set, () => {});
 
-  function load(): void {
-    take(ask<PowerState>('power.state'), (v) => (power = v));
-    take(ask<typeof profiles>('profiles'), (v) => (profiles = v));
-    take(ask<FanStatus>('fans'), (v) => (fans = v));
-    take(ask<typeof bench>('bench.progress'), (v) => (bench = v));
-    take(ask<RunSummary[]>('bench.runs'), (v) => (runs = v ?? []));
-    take(ask<DiagSummary[]>('diag.runs'), (v) => (diags = v ?? []));
-    take(ask<UpdateStatus>('updates'), (v) => (updates = v));
-    take(ask<TuneStatus>('gpu.tune'), (v) => (gpu = v));
+  function load(): Promise<unknown> {
+    return Promise.all([
+      take(ask<PowerState>('power.state'), (v) => (power = v)),
+      take(ask<typeof profiles>('profiles'), (v) => (profiles = v)),
+      take(ask<FanStatus>('fans'), (v) => (fans = v)),
+      take(ask<typeof bench>('bench.progress'), (v) => (bench = v)),
+      take(ask<RunSummary[]>('bench.runs'), (v) => (runs = v ?? [])),
+      take(ask<DiagSummary[]>('diag.runs'), (v) => (diags = v ?? [])),
+      take(ask<UpdateStatus>('updates'), (v) => (updates = v)),
+      take(ask<TuneStatus>('gpu.tune'), (v) => (gpu = v)),
+    ]);
   }
   $effect(() => every(5000, load));
 
@@ -93,7 +95,7 @@
         const d = r as DiagReport;
         toast(`Diagnostics done: ${d.checks.filter((c) => c.status === 'attention').length} to look at.`);
       } else toast(what);
-      load();
+      void load();
     } catch (e) {
       toast(errText(e), 'hot');
     } finally {

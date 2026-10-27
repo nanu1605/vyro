@@ -114,6 +114,9 @@ through the relay where it cannot.
   view works (4): once "No direct path" shows, the phone shows the PC's desktop, not its lock
   screen. Either way the PC shows **Your screen is shared** once, not again for the other
   monitor or the slow view.
+- From 1.7.8: show the screen, then tap the PC's name → **All PCs** (or open another paired PC
+  there): the PC's banner goes within a second or two, not a minute later; with the lock
+  ticked, the PC locks about 10 seconds after.
 - Leave the phone with the Screen tab open, then lock the phone for 10 minutes: the session ends
   by itself ("nobody used it for 10 minutes" in the record).
 - Turn the phone's permission off while it shows the screen: the session ends at once.
@@ -145,6 +148,9 @@ through the relay where it cannot.
   Reduce Motion), none of it moves.
 - The Wi-Fi companion page (Settings → Remote → On this network) shows the same line at its
   foot.
+- From 1.7.8, with two PCs paired and **Wake from phone** on one of them (field check 1.5,
+  Wake): put that one to sleep, and on its page tap **Wake *PC***: the phone says the other PC
+  sent the wake signal, and the PC starts. Before, it always said no other PC could send it.
 
 ## 9. Full screen
 
@@ -162,7 +168,8 @@ through the relay where it cannot.
 - In a session on Wi-Fi in HD, turn Wi-Fi off: the phone offers "Switch to SD"; switching, or
   **HD/SD** in the toolbar, changes the picture within a second or two, also with nothing
   moving on the PC (the details under the picture say the new size). Again in full screen: the
-  offer shows over the picture.
+  offer shows over the picture. From 1.7.8, until you switch, the toolbar still says HD, as the
+  picture is.
 - iPhone (it does not say it is on mobile data): the HD/SD choice shows on the start card and in
   the toolbar.
 

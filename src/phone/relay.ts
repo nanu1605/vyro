@@ -380,9 +380,11 @@ export class PcLink {
       const fresh = (m.session ?? null) !== this.session;
       this.session = m.session ?? null;
       if (fresh) this.count = 0;
-      this.on.onInfo(m);
+      // Online before the page hears: a request made as it hears (another PC asked to wake one)
+      // goes, rather than being refused as not connected.
       const wasOnline = this.current === 'online';
       this.set('online');
+      this.on.onInfo(m);
       if (this.opts.watch && (fresh || !wasOnline)) await this.send({ t: 'watch' });
     } else if (m.t === 'res' && m.id != null) {
       this.answered(m.id, m);

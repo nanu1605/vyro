@@ -569,6 +569,12 @@ async function main() {
       (e) => problem('mobile data', e.message),
     );
     await axeBoth(a.page, 'phone app, screen (full screen, mobile data offer)');
+    // The session keeps HD until the phone switches it, and its toolbar says so meanwhile.
+    if (!(await a.page.getByRole('button', { name: 'Exit full screen' }).isVisible())) {
+      await a.page.getByRole('button', { name: 'Show the controls' }).click();
+    }
+    if (await a.page.getByRole('button', { name: /^Quality: HD/ }).count()) ok('…and the session says HD until it is switched');
+    else problem('mobile data', 'moving onto mobile data changed the session’s quality by itself');
     if (await offer.count()) {
       await offer.click();
       await offer.waitFor({ state: 'detached', timeout: 5000 }).catch((e) => problem('mobile data', e.message));
@@ -767,11 +773,19 @@ async function main() {
       }
     }
 
-    // 4. The list of PCs: the PC's name opens them (1.7).
+    // 4. The list of PCs: the PC's name opens them (1.7). Going there while the screen shows
+    // stops its session, through the PC's link before it goes (1.7.8).
+    await a.page.getByRole('button', { name: /^Show (it again|.*screen)$/ }).click();
+    await a.page.locator('.surface img, .surface video').first().waitFor({ timeout: 15_000 });
+    const left = pc.out.next(/^asked: screen\.stop /, 6_000);
     await a.page.getByRole('button', { name: /: your PCs$/ }).click();
     await a.page.getByRole('dialog', { name: 'Your PCs' }).waitFor({ timeout: 5000 });
     await axeBoth(a.page, 'phone app, your PCs');
     await a.page.getByRole('button', { name: 'All PCs' }).click();
+    await left.then(
+      () => ok('going to the list of PCs with the screen shown stops its session on the PC'),
+      () => problem('leaving the PC', 'the PC was not asked to stop the screen session the phone left'),
+    );
     await seeText(a.page, 'Your PCs', 'the home screen lists the PC');
     await a.page.locator('.pc-state.online').first().waitFor({ timeout: 10_000 }).then(() => ok('…as online'), () => problem('home', 'the PC is not shown online'));
     await axeBoth(a.page, 'phone app, home');

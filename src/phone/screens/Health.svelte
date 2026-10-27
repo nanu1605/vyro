@@ -13,8 +13,8 @@
   let error = $state<string | null>(null);
   let busy = $state(false);
 
-  function load(): void {
-    Promise.all([
+  function load(): Promise<unknown> {
+    return Promise.all([
       ask<HealthReport>('health'),
       ask<ScoreReport>('score').catch(() => null),
       ask<{ rules: AlertRule[]; log: AlertFired[] }>('alerts').catch(() => null),
@@ -37,7 +37,7 @@
     busy = true;
     try {
       await ask('alerts.enable', { id: r.id, on: !r.enabled });
-      load();
+      void load();
     } catch (e) {
       error = errText(e);
     } finally {
