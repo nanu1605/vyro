@@ -3521,6 +3521,19 @@ deployed, at the owner's go; 1.7.7's phone app is not deployed yet either.
       address and a phone's pairing that end a session). Four items are the phone app's and
       marked for it; the phone shows them once the relay serves this commit's phone app, which
       the owner's go on a deploy decides.
+- [x] **1.7.8 released** (2026-10-27, on the owner's go): the end to end in a local Chromium
+      first (146 checks, the three of signing out with the screen shown among them), then CI
+      passed on 5b68a6e (run 40525231185; Linux, Windows with the smoke test, the relay and
+      phone app with the end-to-end test, accessibility). `main` fast-forwarded to it from
+      1.7.7's records, and Release run 40527880716 tagged `v1.7.8`, found the relay's address in
+      `vyro.exe` and published the 14.0 MB MSI, `latest.json` and checksums here and to
+      `nanu1605/vyro-releases` (its `v1.7.8` tag seen over git); GitHub's own digests of the
+      files published here match the checksums the run printed (MSI `247c605a…`, `latest.json`
+      `78ef103c…`), and `latest.json` offers 1.7.8 from `nanu1605/vyro-releases`. Installed
+      copies on 1.4.1 to 1.7.7 are offered it. **The relay is not deployed yet:** it still
+      serves 81131fc's phone app (run 40344879569), so the phone app's fixes of 1.7.7 and 1.7.8
+      and their phone notes reach phones only with a deploy, at the owner's go. The PC's fixes
+      need none.
 
 ## Risks
 
