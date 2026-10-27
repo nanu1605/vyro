@@ -36,6 +36,10 @@ const MAX_OFFER: usize = 32 * 1024;
 const MAX_INPUTS: usize = 20;
 /// What today's slow view used is saved this often.
 const SAVE_EVERY: Duration = Duration::from_secs(30);
+/// After the phone's Stop, "Lock this PC when a phone's session ends" waits this long: the phone
+/// also stops a session to start the next at once (another monitor, or the slow view when no
+/// direct path came), and a PC locked meanwhile would show it only the secure screen.
+const LOCK_AFTER: Duration = Duration::from_secs(10);
 #[cfg(not(windows))]
 const ONLY_WINDOWS: &str = "Only Vyro on Windows shares its screen.";
 
@@ -64,8 +68,11 @@ impl Default for Stored {
 enum By {
     /// The owner, at the PC: no lock.
     Pc,
-    /// The phone, the network, the idle rule.
+    /// The network, the idle rule, the phone gone: the lock at once.
     Phone,
+    /// The phone's Stop: the lock waits [`LOCK_AFTER`], and is left out if a session began
+    /// meanwhile.
+    Stopped,
     /// The same phone started again.
     Replaced,
 }
@@ -76,6 +83,9 @@ pub struct ScreenState {
     saved: Mutex<Instant>,
     live: Mutex<Option<Live>>,
     serial: AtomicU64,
+    /// Sessions begun so far: a lock left waiting by the phone's Stop is not due once another
+    /// has begun.
+    begun: AtomicU64,
     /// The phone's voice clips and microphone (1.7).
     pub(crate) voice: crate::voice::Voice,
 }
@@ -129,6 +139,7 @@ impl ScreenState {
             saved: Mutex::new(Instant::now()),
             live: Mutex::new(None),
             serial: AtomicU64::new(0),
+            begun: AtomicU64::new(0),
             voice: crate::voice::Voice::new(dir),
         }
     }
@@ -141,6 +152,12 @@ impl ScreenState {
                 log::warn!("screen: {e}");
             }
         }
+    }
+
+    /// Whether the lock the phone's Stop left waiting is still due: the owner still wants it,
+    /// and no session began since (`begun`: the count of sessions begun then).
+    fn lock_due(&self, begun: u64) -> bool {
+        lock(&self.stored).lock_on_end && self.begun.load(Ordering::SeqCst) == begun
     }
 
     pub fn status(&self) -> ScreenStatus {
@@ -253,6 +270,7 @@ fn begin(app: &AppHandle, live: Live) -> Result<(), String> {
             return Err(format!("The screen is already shared with {name}."));
         }
         *current = Some(live);
+        state.begun.fetch_add(1, Ordering::SeqCst);
     }
     log::info!(
         "screen: shared with a phone{}",
@@ -354,15 +372,37 @@ fn end(app: &AppHandle, serial: u64, why: &str, by: By) {
     let _ = std::thread::Builder::new()
         .name("vyro-screen-end".into())
         .spawn(move || drop(live));
-    if by == By::Phone && lock(&state.stored).lock_on_end {
-        let lock_pc = vyro_core::actions::power::PowerRequest {
-            action: vyro_core::actions::power::PowerAction::Lock,
-            wait: 0,
-            force: false,
-        };
-        if let Err(e) = vyro_core::actions::power::act(&lock_pc, "the end of a screen session") {
-            log::warn!("screen: lock: {e}");
+    match by {
+        By::Phone if lock(&state.stored).lock_on_end => lock_pc(),
+        By::Stopped if lock(&state.stored).lock_on_end => {
+            let (app, begun) = (app.clone(), state.begun.load(Ordering::SeqCst));
+            let spawned = std::thread::Builder::new()
+                .name("vyro-screen-lock".into())
+                .spawn(move || {
+                    std::thread::sleep(LOCK_AFTER);
+                    match app.try_state::<ScreenState>() {
+                        Some(s) if s.lock_due(begun) => lock_pc(),
+                        Some(_) => log::info!("screen: not locked after the phone's Stop"),
+                        None => {}
+                    }
+                });
+            if spawned.is_err() {
+                lock_pc();
+            }
         }
+        _ => {}
+    }
+}
+
+/// "Lock this PC when a phone's session ends".
+fn lock_pc() {
+    let lock_pc = vyro_core::actions::power::PowerRequest {
+        action: vyro_core::actions::power::PowerAction::Lock,
+        wait: 0,
+        force: false,
+    };
+    if let Err(e) = vyro_core::actions::power::act(&lock_pc, "the end of a screen session") {
+        log::warn!("screen: lock: {e}");
     }
 }
 
@@ -409,7 +449,8 @@ mod win {
             "screen.monitors" => monitors(),
             "screen.start" => start(app, r),
             "screen.stop" => {
-                end_of(app, &r.phone, "stopped on the phone", By::Phone);
+                // Also before the next session (another monitor, the slow view): see LOCK_AFTER.
+                end_of(app, &r.phone, "stopped on the phone", By::Stopped);
                 Ok(json!({ "done": true }))
             }
             "screen.slow" => slow(app, r),
@@ -836,6 +877,7 @@ mod tests {
             saved: Mutex::new(Instant::now()),
             live: Mutex::new(None),
             serial: AtomicU64::new(0),
+            begun: AtomicU64::new(0),
             voice: crate::voice::Voice::new(None),
         }
     }
@@ -860,6 +902,21 @@ mod tests {
                 mic_switch: true,
             }
         );
+    }
+
+    /// The phone stops a session to start the next (another monitor, the slow view): the lock
+    /// its Stop left waiting is not due once that one has begun.
+    #[test]
+    fn a_session_begun_after_the_phone_stopped_one_leaves_the_pc_unlocked() {
+        let s = state();
+        lock(&s.stored).lock_on_end = true;
+        let begun = s.begun.load(Ordering::SeqCst);
+        assert!(s.lock_due(begun));
+        s.begun.fetch_add(1, Ordering::SeqCst);
+        assert!(!s.lock_due(begun));
+        let begun = s.begun.load(Ordering::SeqCst);
+        lock(&s.stored).lock_on_end = false;
+        assert!(!s.lock_due(begun));
     }
 
     #[test]

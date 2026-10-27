@@ -103,7 +103,12 @@ through the relay where it cannot.
 - Stop sharing from the PC's banner, then once more from the tray: the phone says the session
   ended.
 - Settings → Remote: tick **Lock this PC when a phone's session ends**; start a session and stop
-  it on the phone: the PC locks. Stopping at the PC does not lock it.
+  it on the phone: the PC locks (from 1.7.7, about 10 seconds later). Stopping at the PC does not
+  lock it.
+- From 1.7.7, still ticked, with two monitors: show the screen, then choose the other monitor
+  on the phone: it shows that monitor, and the PC does not lock. The same where only the slow
+  view works (4): once "No direct path" shows, the phone shows the PC's desktop, not its lock
+  screen.
 - Leave the phone with the Screen tab open, then lock the phone for 10 minutes: the session ends
   by itself ("nobody used it for 10 minutes" in the record).
 - Turn the phone's permission off while it shows the screen: the session ends at once.
