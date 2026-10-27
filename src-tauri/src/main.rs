@@ -236,4 +236,6 @@ pub(crate) fn wind_down(handle: &tauri::AppHandle, why: &str) {
     gpu_tune::stop_and_wait(handle, std::time::Duration::from_secs(3));
     // Lets go of keys a phone holds, and puts the default microphone back.
     screen::end_all(handle, why);
+    // A microphone left playing without a session too.
+    voice::mic_off(handle, why);
 }

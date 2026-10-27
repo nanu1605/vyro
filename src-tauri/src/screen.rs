@@ -36,10 +36,12 @@ const MAX_OFFER: usize = 32 * 1024;
 const MAX_INPUTS: usize = 20;
 /// What today's slow view used is saved this often.
 const SAVE_EVERY: Duration = Duration::from_secs(30);
-/// After the phone's Stop, "Lock this PC when a phone's session ends" waits this long: the phone
-/// also stops a session to start the next at once (another monitor, or the slow view when no
-/// direct path came), and a PC locked meanwhile would show it only the secure screen.
-const LOCK_AFTER: Duration = Duration::from_secs(10);
+/// The phone also stops a session to start the next at once (another monitor, or the slow view
+/// when no direct path came): one of its sessions begun this soon after it stopped the last goes
+/// on from it. After the phone's Stop, "Lock this PC when a phone's session ends" waits this
+/// long (a PC locked meanwhile would show the phone only the secure screen), and the owner is
+/// not told again that the screen is shared.
+const NEXT_WITHIN: Duration = Duration::from_secs(10);
 #[cfg(not(windows))]
 const ONLY_WINDOWS: &str = "Only Vyro on Windows shares its screen.";
 
@@ -70,7 +72,7 @@ enum By {
     Pc,
     /// The network, the idle rule, the phone gone: the lock at once.
     Phone,
-    /// The phone's Stop: the lock waits [`LOCK_AFTER`], and is left out if a session began
+    /// The phone's Stop: the lock waits [`NEXT_WITHIN`], and is left out if a session began
     /// meanwhile.
     Stopped,
     /// The same phone started again.
@@ -86,6 +88,9 @@ pub struct ScreenState {
     /// Sessions begun so far: a lock left waiting by the phone's Stop is not due once another
     /// has begun.
     begun: AtomicU64,
+    /// The phone (its id) that last ended its own session (Stop, or started again), and when: its
+    /// next one within [`NEXT_WITHIN`] goes on from it.
+    moved_on: Mutex<Option<(String, Instant)>>,
     /// The phone's voice clips and microphone (1.7).
     pub(crate) voice: crate::voice::Voice,
 }
@@ -140,6 +145,7 @@ impl ScreenState {
             live: Mutex::new(None),
             serial: AtomicU64::new(0),
             begun: AtomicU64::new(0),
+            moved_on: Mutex::new(None),
             voice: crate::voice::Voice::new(dir),
         }
     }
@@ -158,6 +164,14 @@ impl ScreenState {
     /// and no session began since (`begun`: the count of sessions begun then).
     fn lock_due(&self, begun: u64) -> bool {
         lock(&self.stored).lock_on_end && self.begun.load(Ordering::SeqCst) == begun
+    }
+
+    /// Whether a session of phone `id` beginning now goes on from the one it ended itself just
+    /// before (another monitor, the slow view): the owner was told of that one.
+    fn goes_on(&self, id: &str) -> bool {
+        lock(&self.moved_on)
+            .take()
+            .is_some_and(|(by, at)| by == id && at.elapsed() < NEXT_WITHIN)
     }
 
     pub fn status(&self) -> ScreenStatus {
@@ -206,11 +220,11 @@ pub(crate) fn span(d: Duration) -> String {
 }
 
 /// Tells the phone of a direct session (over its data channel), if there is one.
-pub(crate) fn tell(app: &AppHandle, note: &str) {
+pub(crate) fn tell(app: &AppHandle, note: &share::Note) {
     #[cfg(windows)]
     if let Some(state) = state(app) {
         if let Some(Kind::Direct(s)) = lock(&state.live).as_ref().map(|l| &l.kind) {
-            s.tell(note.to_owned());
+            s.tell(note);
         }
     }
     #[cfg(not(windows))]
@@ -260,6 +274,7 @@ fn begin(app: &AppHandle, live: Live) -> Result<(), String> {
     let state = state(app).ok_or("Vyro is starting.")?;
     let (serial, phone, slow) = (live.serial, live.share.phone.clone(), live.share.slow);
     let (stop, used) = (Arc::clone(&live.stop), Arc::clone(&live.used));
+    let goes_on = state.goes_on(&live.share.id);
     {
         let mut current = lock(&state.live);
         if let Some(other) = current.as_ref() {
@@ -285,16 +300,20 @@ fn begin(app: &AppHandle, live: Live) -> Result<(), String> {
             "Started sharing the screen".into()
         },
     );
-    if let Err(e) = app
-        .notification()
-        .builder()
-        .title("Your screen is shared")
-        .body(format!(
-            "{phone} sees this screen and can use it. Stop it from Vyro's window or its tray icon."
-        ))
-        .show()
-    {
-        log::warn!("screen: notification failed: {e}");
+    // Once for the phone's use: not again for a session going on from its last.
+    if !goes_on {
+        if let Err(e) = app
+            .notification()
+            .builder()
+            .title("Your screen is shared")
+            .body(format!(
+                "{phone} sees this screen and can use it. Stop it from Vyro's window or its tray \
+                 icon."
+            ))
+            .show()
+        {
+            log::warn!("screen: notification failed: {e}");
+        }
     }
     announce(app);
     watch(app, serial, stop, used, slow);
@@ -350,13 +369,16 @@ fn end(app: &AppHandle, serial: u64, why: &str, by: By) {
     let Some(live) = live else {
         return;
     };
+    if matches!(by, By::Stopped | By::Replaced) {
+        *lock(&state.moved_on) = Some((live.share.id.clone(), Instant::now()));
+    }
     live.stop.store(true, Ordering::SeqCst);
     #[cfg(windows)]
     vyro_core::screen::inject::let_go(&lock(&live.held).end());
     crate::voice::session_ended(app, why);
     #[cfg(windows)]
     if let Kind::Direct(s) = &live.kind {
-        s.tell(share::Note::End { why: why.into() }.json());
+        s.tell(&share::Note::End { why: why.into() });
         s.end();
     }
     let lasted = live.started.elapsed();
@@ -379,7 +401,7 @@ fn end(app: &AppHandle, serial: u64, why: &str, by: By) {
             let spawned = std::thread::Builder::new()
                 .name("vyro-screen-lock".into())
                 .spawn(move || {
-                    std::thread::sleep(LOCK_AFTER);
+                    std::thread::sleep(NEXT_WITHIN);
                     match app.try_state::<ScreenState>() {
                         Some(s) if s.lock_due(begun) => lock_pc(),
                         Some(_) => log::info!("screen: not locked after the phone's Stop"),
@@ -449,7 +471,7 @@ mod win {
             "screen.monitors" => monitors(),
             "screen.start" => start(app, r),
             "screen.stop" => {
-                // Also before the next session (another monitor, the slow view): see LOCK_AFTER.
+                // Also before the next session (another monitor, the slow view): see NEXT_WITHIN.
                 end_of(app, &r.phone, "stopped on the phone", By::Stopped);
                 Ok(json!({ "done": true }))
             }
@@ -536,9 +558,10 @@ mod win {
         let used = Arc::new(Mutex::new(Instant::now()));
         let held = Arc::new(Mutex::new(input::Held::default()));
         let rect = Arc::new(Mutex::new(None));
+        let stop = Arc::new(AtomicBool::new(false));
         let sink: rtc::EventSink = {
             let (app, used, rect) = (app.clone(), Arc::clone(&used), Arc::clone(&rect));
-            let held = Arc::clone(&held);
+            let (held, ended) = (Arc::clone(&held), Arc::clone(&stop));
             let phone = r.name.clone();
             Box::new(move |e| match e {
                 SessionEvent::Connected => log::info!("screen: the phone is connected"),
@@ -572,16 +595,20 @@ mod win {
                 }
                 SessionEvent::Mic(frame) => {
                     *lock(&used) = Instant::now();
-                    crate::voice::mic_frame(&app, &phone, &frame);
+                    crate::voice::mic_frame(&app, &phone, &ended, &frame);
                 }
-                SessionEvent::MicEnd => crate::voice::mic_off(&app, "turned off on the phone"),
+                // One the connection still delivers after the end would turn off the next
+                // session's.
+                SessionEvent::MicEnd if !ended.load(Ordering::SeqCst) => {
+                    crate::voice::mic_off(&app, "turned off on the phone");
+                }
+                SessionEvent::MicEnd => {}
                 SessionEvent::Closed(why) => end(&app, serial, &why, By::Phone),
             })
         };
         let (session, answer) = rtc::start(&offer, &opts, sink)?;
         session.set_quality(quality_param(r));
         let session = Arc::new(session);
-        let stop = Arc::new(AtomicBool::new(false));
         begin(
             app,
             Live {
@@ -610,17 +637,14 @@ mod win {
                         rect: on,
                     } => {
                         *lock(&rect) = Some(on);
-                        session.tell(
-                            Note::Sending {
-                                w: width,
-                                h: height,
-                            }
-                            .json(),
-                        );
+                        session.tell(&Note::Sending {
+                            w: width,
+                            h: height,
+                        });
                     }
-                    producer::Status::Secure => session.tell(Note::Secure.json()),
+                    producer::Status::Secure => session.tell(&Note::Secure),
                     producer::Status::Report(r) => {
-                        session.report(Note::report(&r).json());
+                        session.tell(&Note::report(&r));
                         // The first few, then one every half minute.
                         let n = reports.fetch_add(1, Ordering::SeqCst);
                         if n < 3 || n.is_multiple_of(15) {
@@ -793,10 +817,16 @@ mod win {
         if list.len() > MAX_INPUTS {
             return Err("Too much input at once.".into());
         }
-        let inputs = list
+        // One this PC does not know (a newer phone app's) is left out, not the rest with it, as
+        // on a direct session.
+        let inputs: Vec<input::Input> = list
             .iter()
-            .map(|v| input::parse(&v.to_string()))
-            .collect::<Result<Vec<_>, _>>()?;
+            .filter_map(|v| {
+                input::parse(&v.to_string())
+                    .inspect_err(|e| log::debug!("screen: input refused: {e}"))
+                    .ok()
+            })
+            .collect();
         let state = state(app).ok_or("Vyro is starting.")?;
         let (on, held) = {
             let current = lock(&state.live);
@@ -815,7 +845,11 @@ mod win {
             if !held.note(i) {
                 return Err("The session ended.".into());
             }
-            inject::apply(i, on)?;
+            // One Windows refused goes, not the rest with it: a key let go after it would stay
+            // held down.
+            if let Err(e) = inject::apply(i, on) {
+                log::debug!("screen: {e}");
+            }
         }
         Ok(json!({ "done": true }))
     }
@@ -878,6 +912,7 @@ mod tests {
             live: Mutex::new(None),
             serial: AtomicU64::new(0),
             begun: AtomicU64::new(0),
+            moved_on: Mutex::new(None),
             voice: crate::voice::Voice::new(None),
         }
     }
@@ -917,6 +952,25 @@ mod tests {
         let begun = s.begun.load(Ordering::SeqCst);
         lock(&s.stored).lock_on_end = false;
         assert!(!s.lock_due(begun));
+    }
+
+    /// Another monitor, or the slow view after no direct path: the owner was told of the phone's
+    /// last session, and is not told again.
+    #[test]
+    fn a_session_going_on_from_the_last_is_told_once() {
+        let s = state();
+        assert!(!s.goes_on("phone"), "the first is told");
+        *lock(&s.moved_on) = Some(("phone".into(), Instant::now()));
+        assert!(s.goes_on("phone"));
+        assert!(!s.goes_on("phone"), "once");
+        *lock(&s.moved_on) = Some(("phone".into(), Instant::now()));
+        assert!(!s.goes_on("another phone"));
+        assert!(!s.goes_on("phone"), "another phone's session came between");
+        let long_ago = Instant::now().checked_sub(NEXT_WITHIN + Duration::from_secs(1));
+        if let Some(at) = long_ago {
+            *lock(&s.moved_on) = Some(("phone".into(), at));
+            assert!(!s.goes_on("phone"), "a while later");
+        }
     }
 
     #[test]

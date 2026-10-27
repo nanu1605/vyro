@@ -10,6 +10,7 @@
 #![cfg_attr(not(windows), allow(dead_code, unused_imports))]
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -314,9 +315,10 @@ pub fn cable_name() -> Result<Option<String>, String> {
     Ok(None)
 }
 
-/// A frame of the phone's microphone, from the phone named `phone`.
+/// A frame of the phone's microphone, from the phone named `phone`, in the session `ended` marks
+/// as ended.
 #[cfg(windows)]
-pub fn mic_frame(app: &AppHandle, phone: &str, frame: &[u8]) {
+pub fn mic_frame(app: &AppHandle, phone: &str, ended: &AtomicBool, frame: &[u8]) {
     let (seq, samples) = match voice::read_frame(frame) {
         Ok(f) => f,
         Err(e) => {
@@ -328,6 +330,11 @@ pub fn mic_frame(app: &AppHandle, phone: &str, frame: &[u8]) {
         return;
     };
     let mut mic = lock(&state.voice.mic);
+    // A frame the connection still delivered after the session ended starts nothing: the end
+    // marks the session ended before it takes this lock to turn the microphone off.
+    if ended.load(Ordering::SeqCst) {
+        return;
+    }
     if let Mic::On(on) = &mut *mic {
         on.last = Instant::now();
         lock(&on.player.frames).push(seq, samples);
@@ -357,8 +364,7 @@ fn tell(app: &AppHandle, on: bool, into: Option<String>, default: bool, why: Opt
             into,
             default,
             why,
-        }
-        .json(),
+        },
     );
 }
 
