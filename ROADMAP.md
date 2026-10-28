@@ -3734,6 +3734,9 @@ The owner's "continue" after 2.0.1 (2026-10-28): a review. On `claude/vyro-2.0`;
       counted exactly 24 notifications let through; on CI (run 40774650771) the 30 took 7.7 s,
       the relay rightly let one more through after 5 s, and the test failed. It now allows one
       more for each 5 s the sending took, and checks that the burst passed and the rest did not.
+- [x] **CI green on 5f198d5** (run 40776409009; Linux, Windows with the smoke test, the relay
+      and phone app with the end-to-end test, accessibility). Locally: fmt, clippy (Linux and
+      windows-gnu), the push tests in the core and the relay.
 
 ## Risks
 
