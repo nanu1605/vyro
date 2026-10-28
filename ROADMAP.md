@@ -3619,9 +3619,21 @@ branch `claude/vyro-2.0` from 1.7.8's records.
       names as a local build of 5f73267. The live relay can't be reached from here.
 - [ ] Field check 2.0 ([`docs/field-check-2.0.md`](docs/field-check-2.0.md)): notifications on
       Android and iPhone through the real push services, the PC going quiet, and an AMD and an
-      Intel card. The relay is deployed from 2.0 (run 40588431507); the PC needs a 2.0 build
-      (a `vyro-windows-…` build from CI on this branch, or 2.0.0 once released).
-- [ ] 2.0.0 released, at the owner's go.
+      Intel card. The relay is deployed from 2.0 (run 40588431507); the PC needs 2.0.0 (released
+      below) or a later build.
+- [x] **2.0.0 released** (2026-10-28, on the owner's go: "release 2.0.0"; asked first for the
+      injected overlay and administrator prompts on the phone too, which were not built, and
+      the release went ahead without them). CI passed on bc9cc06 (run 40588862822; Linux,
+      Windows with the smoke test, the relay and phone app with the end-to-end test,
+      accessibility). `main` fast-forwarded to it from 1.7.8's records, and Release run
+      40742956130 tagged `v2.0.0`, found the relay's address in `vyro.exe` and published the
+      14.1 MB MSI, `latest.json` and checksums here and to `nanu1605/vyro-releases` (its
+      `v2.0.0` tag seen over git); GitHub's own digests of the files published here match the
+      checksums the run printed (MSI `57d4b0c2…`, `latest.json` `3c0cfd56…`), and `latest.json`
+      offers 2.0.0 from `nanu1605/vyro-releases`. Installed copies on 1.4.1 to 1.7.8 are offered
+      it. Unsigned, as before: the SignPath settings are not in the repository yet
+      ([`docs/signing.md`](docs/signing.md)). The relay already serves 2.0's phone app and
+      notifications (run 40588431507).
 
 ## Risks
 
