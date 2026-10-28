@@ -3694,7 +3694,13 @@ any time constraint?". On `claude/vyro-2.0`; 2.0.1 and the relay deploy on the o
   which Vyro can neither see nor type on (as with administrator prompts, left out of 2.0).
   After sleep, Windows can skip it: Settings → Accounts → Sign-in options → "If you've been
   away, when should Windows require you to sign in again?" → Never.
-- [ ] The relay deployed (the owner's go): the TURN offer and the phone app's side of it.
+- [x] **The relay deployed** from this branch at 8c53592 (2026-10-28, at the owner's go: "deploy
+      the relay"; Actions run 40764531668, its 41 tests first, the TURN ones among them; version
+      50569c3f). Phones get 2.0.1's phone app the next time they open it: it asks for TURN
+      servers only where the relay says it has them, so until the owner sets the TURN secrets
+      every room is offered none and the screen goes as before. Cloudflare took 19 new or changed
+      files; the 17 hashed scripts and styles among them carry the same names as a local build
+      of 8c53592. The live relay can't be reached from here.
 - [ ] TURN turned on (the owner's): a TURN key and the three secrets ([`docs/remote.md`](docs/remote.md)).
 - [ ] Field check: on mobile data and on Wi-Fi, the details say "through the TURN server" or
       show the picture's size and rate (on Wi-Fi without TURN: if it is still the slow view,
