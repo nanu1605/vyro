@@ -9,7 +9,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 use vyro_core::devices::{DeviceInfo, Devices};
 use vyro_core::lock;
-use vyro_core::remote::relay::push::Note;
+use vyro_core::remote::relay::push::{LowTold, Note};
 
 /// Emitted with the devices whose battery is low (empty when none) whenever that list changes.
 pub const LOW_BATTERY_EVENT: &str = "low-battery";
@@ -29,6 +29,8 @@ const BUSY_LOGGED: u32 = 12;
 pub struct DeviceWatch {
     /// Devices whose battery is low, as last read.
     low: Mutex<Vec<DeviceInfo>>,
+    /// The low batteries the phones were told of (2.0.2).
+    told: Mutex<LowTold>,
     /// Wakes the reader after a hot-plug change.
     poke: Mutex<Option<mpsc::Sender<()>>>,
 }
@@ -86,11 +88,21 @@ pub fn poke(app: &AppHandle) {
 }
 
 /// Keeps a fresh list's low batteries, and tells the window when they changed; a battery that
-/// just ran low (or lower) is a notification for the phones that want one (2.0).
+/// just ran low (or lower) is a notification for the phones that want one (2.0), once until it
+/// has been charged (2.0.2, [`LowTold`]).
 pub fn store(app: &AppHandle, devices: &Devices) {
     let Some(w) = app.try_state::<DeviceWatch>() else {
         return;
     };
+    let now = vyro_core::unix_now();
+    let notes: Vec<Note> = lock(&w.told)
+        .news(&devices.devices)
+        .into_iter()
+        .filter_map(|d| Note::battery(d, now))
+        .collect();
+    for note in notes {
+        crate::remote::notify(app, note);
+    }
     let low: Vec<DeviceInfo> = devices
         .devices
         .iter()
@@ -101,15 +113,6 @@ pub fn store(app: &AppHandle, devices: &Devices) {
         let mut kept = lock(&w.low);
         if *kept == low {
             return;
-        }
-        let now = vyro_core::unix_now();
-        for d in low
-            .iter()
-            .filter(|d| !kept.iter().any(|k| k.id == d.id && k.low == d.low))
-        {
-            if let Some(note) = Note::battery(d, now) {
-                crate::remote::notify(app, note);
-            }
         }
         kept.clone_from(&low);
     }

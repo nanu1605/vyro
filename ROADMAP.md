@@ -3718,6 +3718,19 @@ any time constraint?". On `claude/vyro-2.0`; 2.0.1 and the relay deploy on the o
       ([`docs/signing.md`](docs/signing.md)). The relay serves 2.0.1's phone app (run
       40764531668).
 
+### 2.0.2 — after 2.0.1
+
+The owner's "continue" after 2.0.1 (2026-10-28): a review. On `claude/vyro-2.0`; not released.
+
+- [x] **A low battery told once.** A phone that wanted battery notifications heard again at
+      every change of a device's level, a higher one too: a mouse on its charger going from
+      critical to low, a reading going back and forth across a line (since 2.0.1 Vyro's own read
+      of a phone's battery comes first, and Windows' in steps of 10 % when that read fails), and
+      headphones each time they came out of their case. Now a battery is told when it runs low,
+      and again when it runs lower, and not again until it has been charged (to 30 %, or
+      XInput's "medium") (`push::LowTold`). The window's low-battery notice is as before. Test:
+      a mouse's readings in turn and a controller's levels.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

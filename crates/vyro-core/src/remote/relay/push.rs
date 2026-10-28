@@ -9,6 +9,8 @@
 //! would. That last one is a notification the PC seals ahead of time and leaves with the relay,
 //! which sends it only when the PC's connection ends unannounced and it does not come back.
 
+use std::collections::HashMap;
+
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes128Gcm, Nonce};
 use hkdf::Hkdf;
@@ -18,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use ts_rs::TS;
 
-use crate::devices::{DeviceInfo, LowBattery};
+use crate::devices::{Battery, BatteryLevel, DeviceInfo, LowBattery};
 use crate::gaming::GameSession;
 use crate::remote::random;
 use crate::units::{temps_in, TempUnit};
@@ -334,6 +336,45 @@ impl Note {
     }
 }
 
+/// A battery the phones were told was low is told again only once it has been charged: to this
+/// percentage, or XInput's "medium" or "full".
+pub const CHARGED: u8 = crate::devices::LOW + 10;
+
+/// The low batteries the phones were told of (2.0.2). A battery that runs low, or lower, is told
+/// once. Every change of its level was told before, a higher one too: a mouse on its charger
+/// going from critical to low, or a reading that went back and forth across a line (Vyro's own
+/// read of a phone's battery, then Windows' in steps of 10 %), told it again each time, and so
+/// did headphones each time they came out of their case.
+#[derive(Debug, Default)]
+pub struct LowTold(HashMap<String, LowBattery>);
+
+impl LowTold {
+    /// The devices in a fresh list to tell the phones about now.
+    pub fn news<'a>(&mut self, devices: &'a [DeviceInfo]) -> Vec<&'a DeviceInfo> {
+        let mut out = Vec::new();
+        for d in devices {
+            match d.low {
+                Some(low) if self.0.get(&d.id).is_none_or(|told| low > *told) => {
+                    self.0.insert(d.id.clone(), low);
+                    out.push(d);
+                }
+                None if d.battery.as_ref().is_some_and(charged) => {
+                    self.0.remove(&d.id);
+                }
+                _ => {}
+            }
+        }
+        out
+    }
+}
+
+fn charged(b: &Battery) -> bool {
+    match b.percent {
+        Some(p) => p >= CHARGED,
+        None => matches!(b.level, Some(BatteryLevel::Medium | BatteryLevel::Full)),
+    }
+}
+
 /// How long a push service keeps a notification for a phone that is off, in seconds.
 pub fn ttl(kind: Kind) -> u32 {
     match kind {
@@ -500,7 +541,7 @@ pub(crate) mod tests {
 
     #[test]
     fn batteries_and_games_read_well() {
-        use crate::devices::{Battery, BatterySource};
+        use crate::devices::BatterySource;
         let mut d: DeviceInfo = serde_json::from_value(serde_json::json!({
             "id": "abc", "name": "G502", "kind": "mouse", "manufacturer": null,
             "connection": "receiver", "wireless": true, "connected": true, "state": "connected",
@@ -559,6 +600,63 @@ pub(crate) mod tests {
             Note::game(&g, TempUnit::C, 1).unwrap().body,
             "1 h 12 min · GPU up to 71 °C"
         );
+    }
+
+    /// A low battery is told once, and again lower; not when it reads higher or comes back, until
+    /// it has been charged.
+    #[test]
+    fn a_low_battery_is_told_once_until_charged() {
+        use crate::devices::{low, BatterySource};
+        let device = |id: &str, percent: Option<u8>, level: Option<BatteryLevel>| {
+            let mut d: DeviceInfo = serde_json::from_value(serde_json::json!({
+                "id": id, "name": id, "kind": "mouse", "manufacturer": null,
+                "connection": "receiver", "wireless": true, "connected": true,
+                "state": "connected", "battery": null, "low": null, "problem": null,
+                "parent": null, "control": null
+            }))
+            .unwrap();
+            d.battery = (percent.is_some() || level.is_some()).then_some(Battery {
+                percent,
+                level,
+                charging: None,
+                source: BatterySource::Windows,
+            });
+            d.low = low(d.battery.as_ref());
+            d
+        };
+        let mut told = LowTold::default();
+        let mut says = |list: &[DeviceInfo]| -> Vec<String> {
+            told.news(list)
+                .into_iter()
+                .map(|d| format!("{} {:?}", d.id, d.low.unwrap()))
+                .collect()
+        };
+        assert!(says(&[device("mouse", Some(45), None)]).is_empty());
+        assert_eq!(says(&[device("mouse", Some(15), None)]), ["mouse Low"]);
+        assert!(says(&[device("mouse", Some(14), None)]).is_empty());
+        assert_eq!(says(&[device("mouse", Some(9), None)]), ["mouse Critical"]);
+        // Higher, as a reading in steps of 10 % gives it: before, "low" again.
+        assert!(says(&[device("mouse", Some(10), None)]).is_empty());
+        assert!(says(&[device("mouse", Some(9), None)]).is_empty());
+        // Gone (disconnected) and back as it was; charged a little, not enough.
+        assert!(says(&[device("mouse", None, None)]).is_empty());
+        assert!(says(&[device("mouse", Some(9), None)]).is_empty());
+        assert!(says(&[device("mouse", Some(25), None)]).is_empty());
+        assert!(says(&[device("mouse", Some(18), None)]).is_empty());
+        // Charged: told again when it runs low.
+        assert!(says(&[device("mouse", Some(CHARGED), None)]).is_empty());
+        assert_eq!(says(&[device("mouse", Some(18), None)]), ["mouse Low"]);
+
+        // XInput's levels; each device on its own.
+        let pad = |l| device("pad", None, Some(l));
+        assert_eq!(
+            says(&[pad(BatteryLevel::Low), device("mouse", Some(18), None)]),
+            ["pad Low"]
+        );
+        assert!(says(&[pad(BatteryLevel::Low)]).is_empty());
+        assert!(says(&[pad(BatteryLevel::Medium)]).is_empty());
+        assert_eq!(says(&[pad(BatteryLevel::Low)]), ["pad Low"]);
+        assert_eq!(says(&[pad(BatteryLevel::Empty)]), ["pad Critical"]);
     }
 
     #[test]
