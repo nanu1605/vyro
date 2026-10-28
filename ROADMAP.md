@@ -3642,7 +3642,8 @@ The owner, 2026-10-28, after 2.0.0: Connect and Disconnect of a device did not w
 device showed Connected after it was disconnected; an iPhone at 56 % (as Windows showed it)
 showed 60 %; the screen's quality was very low on Wi-Fi; after waking the PC from the phone,
 how to enter the PIN; and only 20 minutes of the screen on mobile data, "can we cast without
-any time constraint?". On `claude/vyro-2.0`.
+any time constraint?". On `claude/vyro-2.0`; 2.0.1 and the relay deploy on the owner's go
+(2026-10-28: "deploy the relay", "release 2.0.1").
 
 - [x] **Connected as Settings shows it, for a device paired twice.** A device paired over both
       Bluetooth and Bluetooth LE (a phone, many headphones) has a paired entry for each. The
@@ -3686,6 +3687,9 @@ any time constraint?". On `claude/vyro-2.0`.
       and phone app with the end-to-end test, accessibility). Locally: fmt, clippy (Linux and
       windows-gnu), 806 core tests, 269 frontend tests, 41 relay tests (the TURN ones among
       them), the end to end in a local Chromium (159 checks).
+- [x] **Version 2.0.1** (the owner, 2026-10-28: "release 2.0.1"): `scripts/set-version.py
+      2.0.1`; What's new in 2.0.1 (the screen through a TURN server, for the phone app too;
+      Disconnect that shows; a phone's battery to the percent) came with the fixes.
 - PIN after waking from the phone: not built. The sign-in screen is Windows' secure desktop,
   which Vyro can neither see nor type on (as with administrator prompts, left out of 2.0).
   After sleep, Windows can skip it: Settings → Accounts → Sign-in options → "If you've been

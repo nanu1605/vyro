@@ -5700,7 +5700,7 @@ dependencies = [
 
 [[package]]
 name = "vyro"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "log",
  "serde",
@@ -5719,7 +5719,7 @@ dependencies = [
 
 [[package]]
 name = "vyro-core"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -5751,7 +5751,7 @@ dependencies = [
 
 [[package]]
 name = "vyro-service"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "log",
  "tempfile",
