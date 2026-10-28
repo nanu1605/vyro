@@ -8,6 +8,7 @@ import { webcrypto } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createTestHarness, type TestHarness } from 'wrangler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { PUSH_RATE } from '../src/rules';
 import { b64url, key, relayAt, room, type Sock } from './sockets';
 
 interface Posted {
@@ -134,11 +135,16 @@ describe('a notification from the PC', () => {
   it('comes a few at once, then slowly', async () => {
     const { p, phone } = await pcWithPhone();
     const results: boolean[] = [];
+    const start = Date.now();
     for (let i = 0; i < 30; i++) {
       p.ws.send(JSON.stringify({ t: 'push', to: phone, endpoint: `${pushBase}/sub/burst`, body: body(8), ttl: 60, urgency: 'normal' }));
       results.push(((await p.json()) as { ok: boolean }).ok);
     }
-    expect(results.filter(Boolean).length).toBe(24);
+    // The burst, and one more for each 5 s the sending took (a slow runner took 7.7 s).
+    const refilled = Math.floor(((Date.now() - start) / 1000) * PUSH_RATE.perSecond);
+    expect(results.slice(0, PUSH_RATE.burst).every(Boolean)).toBe(true);
+    expect(results.filter(Boolean).length).toBeLessThanOrEqual(PUSH_RATE.burst + refilled);
+    expect(results).toContain(false);
     p.close();
   });
 });

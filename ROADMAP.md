@@ -3730,6 +3730,10 @@ The owner's "continue" after 2.0.1 (2026-10-28): a review. On `claude/vyro-2.0`;
       and again when it runs lower, and not again until it has been charged (to 30 %, or
       XInput's "medium") (`push::LowTold`). The window's low-battery notice is as before. Test:
       a mouse's readings in turn and a controller's levels.
+- [x] **The relay's burst test, as slow as a runner is.** "Comes a few at once, then slowly"
+      counted exactly 24 notifications let through; on CI (run 40774650771) the 30 took 7.7 s,
+      the relay rightly let one more through after 5 s, and the test failed. It now allows one
+      more for each 5 s the sending took, and checks that the burst passed and the rest did not.
 
 ## Risks
 
