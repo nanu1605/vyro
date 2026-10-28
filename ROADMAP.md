@@ -3706,6 +3706,17 @@ any time constraint?". On `claude/vyro-2.0`; 2.0.1 and the relay deploy on the o
       show the picture's size and rate (on Wi-Fi without TURN: if it is still the slow view,
       Settings → Remote's firewall line); Disconnect on the iPhone and on headphones; the
       iPhone's battery.
+- [x] **2.0.1 released** (2026-10-28, on the owner's go: "release 2.0.1"). CI passed on 8c53592
+      (run 40762318971; Linux, Windows with the smoke test, the relay and phone app with the
+      end-to-end test, accessibility). `main` fast-forwarded to it from 2.0.0's records, and
+      Release run 40764542883 tagged `v2.0.1`, found the relay's address in `vyro.exe` and
+      published the 14.1 MB MSI, `latest.json` and checksums here and to
+      `nanu1605/vyro-releases` (its `v2.0.1` tag seen over git); GitHub's own digests of the
+      files published here match the checksums the run printed (MSI `f5aa44f4…`, `latest.json`
+      `93040494…`), and `latest.json` offers 2.0.1 from `nanu1605/vyro-releases`. Installed
+      copies on 1.4.1 to 2.0.0 are offered it. Unsigned, as before
+      ([`docs/signing.md`](docs/signing.md)). The relay serves 2.0.1's phone app (run
+      40764531668).
 
 ## Risks
 
