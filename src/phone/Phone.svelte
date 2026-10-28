@@ -557,6 +557,8 @@
                   pc={pc.name}
                   onimmersive={(on: boolean) => (immersive = on)}
                   onsharing={(on: boolean) => (sharing = on)}
+                  ice={() => link?.iceServers() ?? Promise.resolve([])}
+                  room={pc.room}
                 />
               {/await}
             {:else}

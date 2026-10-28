@@ -13,10 +13,13 @@ import {
   MAX_FRAME,
   MAX_PHONES,
   MIN_SEALED,
+  iceServers,
+  phoneAsksIce,
   pushTarget,
   route,
   same,
   spend,
+  turnAllowed,
   USAGE_STEP,
   vapidToken,
 } from '../src/rules';
@@ -218,5 +221,61 @@ describe('notifications (2.0)', () => {
     const raw = Buffer.from(sig!, 'base64url');
     expect(raw.length).toBe(64);
     expect(await webcrypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pair.publicKey, raw, new TextEncoder().encode(`${h}.${c}`))).toBe(true);
+  });
+});
+
+describe('TURN for the screen (2.0.1)', () => {
+  it("is for the rooms the owner lists, or every room with '*'", () => {
+    expect(turnAllowed(undefined, ROOM)).toBe(false);
+    expect(turnAllowed('', ROOM)).toBe(false);
+    expect(turnAllowed(` ${ROOM.toUpperCase()} , ffff`, ROOM)).toBe(true);
+    expect(turnAllowed('ffff', ROOM)).toBe(false);
+    expect(turnAllowed('*', ROOM)).toBe(true);
+  });
+
+  it("gives phones only TURN servers from the service's answer, with their credentials, not on port 53", () => {
+    const answer = {
+      iceServers: [
+        { urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.cloudflare.com:53'] },
+        {
+          urls: [
+            'turn:turn.cloudflare.com:3478?transport=udp',
+            'turn:turn.cloudflare.com:53?transport=udp',
+            'turn:turn.cloudflare.com:3478?transport=tcp',
+            'turns:turn.cloudflare.com:5349?transport=tcp',
+            'turns:turn.cloudflare.com:443?transport=tcp',
+            'turn:turn.cloudflare.com:53',
+          ],
+          username: 'u',
+          credential: 'c',
+        },
+      ],
+    };
+    expect(iceServers(answer)).toEqual([
+      {
+        urls: [
+          'turn:turn.cloudflare.com:3478?transport=udp',
+          'turn:turn.cloudflare.com:3478?transport=tcp',
+          'turns:turn.cloudflare.com:5349?transport=tcp',
+          'turns:turn.cloudflare.com:443?transport=tcp',
+        ],
+        username: 'u',
+        credential: 'c',
+      },
+    ]);
+    // The older answer: one server, its addresses maybe a string.
+    expect(iceServers({ iceServers: { urls: 'turn:t:3478', username: 'u', credential: 'c' } })).toEqual([
+      { urls: ['turn:t:3478'], username: 'u', credential: 'c' },
+    ]);
+    expect(iceServers({ iceServers: [{ urls: ['turn:t:3478'] }] })).toBeNull();
+    expect(iceServers({})).toBeNull();
+    expect(iceServers(null)).toBeNull();
+  });
+
+  it('takes "ice" from a phone, and no other text', () => {
+    expect(phoneAsksIce('{"t":"ice"}')).toBe(true);
+    expect(phoneAsksIce('{"t":"push"}')).toBe(false);
+    expect(phoneAsksIce('ice')).toBe(false);
+    expect(phoneAsksIce('null')).toBe(false);
   });
 });

@@ -11,6 +11,9 @@
 // pings are answered without waking it, but the runtime notes when), the phones hear unless the
 // PC is back within two minutes; and when it is, the PC hears that they did, and since when it
 // was quiet.
+//
+// TURN (2.0.1): for the rooms the owner lists, a phone may ask the room for TURN servers for its
+// screen session, which the room gets from Cloudflare's TURN service with the owner's key.
 
 import { DurableObject } from 'cloudflare:workers';
 import { KEYS_NAME, type Keys } from './keys';
@@ -25,11 +28,13 @@ import {
   frameFits,
   GRACE_MS,
   hex,
+  iceServers,
   keyFrom,
   LEAVING_MS,
   PC_RATE,
   PHONE_ID_BYTES,
   PHONE_RATE,
+  phoneAsksIce,
   PROTOCOL,
   PUSH_RATE,
   pushTarget,
@@ -40,8 +45,15 @@ import {
   SILENT_MS,
   SOCKETS_PER_PHONE,
   spend,
+  TURN_API,
+  TURN_RETRY_MS,
+  TURN_REUSE_MS,
+  TURN_TIMEOUT_MS,
+  TURN_TTL_S,
+  turnAllowed,
   unb64url,
   type Bucket,
+  type IceServer,
   type Phone,
   type Sealed,
   type Usage,
@@ -62,7 +74,7 @@ export const CLOSE = {
 } as const;
 
 /** A PC's socket: since when, when it said it was leaving, and whether its going was handled. */
-type Who = { role: 'pc'; since?: number; leaving?: number; ended?: boolean } | { role: 'phone'; id: string };
+type Who = { role: 'pc'; since?: number; leaving?: number; ended?: boolean } | { role: 'phone'; id: string; turn?: boolean };
 
 /** What the room is given beyond the defaults: the keys, and the tests' shorter times. */
 interface RelayEnv {
@@ -74,6 +86,12 @@ interface RelayEnv {
   GRACE_MS?: string;
   CHECK_MS?: string;
   SILENT_MS?: string;
+  /** TURN (2.0.1): the owner's key at Cloudflare's TURN service and its API token (secrets), and
+   * the rooms that may use it (`*`: all). The tests give their own service's address. */
+  TURN_KEY_ID?: string;
+  TURN_KEY_API_TOKEN?: string;
+  TURN_ROOMS?: string;
+  TURN_API?: string;
 }
 
 /** How long a push service has to answer. */
@@ -113,6 +131,10 @@ export class Room extends DurableObject {
   private readonly silent: number;
   /** Notifications the PC may send now (`PUSH_RATE`). */
   private pushBucket: Bucket | null = null;
+  private readonly turn: { key: string; token: string; rooms: string; api: string } | null;
+  /** The TURN servers last had, and when (none: the service did not answer). */
+  private turnHad: { at: number; servers: IceServer[] } | null = null;
+  private turnAsking: Promise<IceServer[]> | null = null;
 
   constructor(ctx: DurableObjectState, env: Cloudflare.Env) {
     super(ctx, env);
@@ -126,6 +148,10 @@ export class Room extends DurableObject {
     this.grace = Number(vars.GRACE_MS) || GRACE_MS;
     this.check = Number(vars.CHECK_MS) || CHECK_MS;
     this.silent = Number(vars.SILENT_MS) || SILENT_MS;
+    this.turn =
+      vars.TURN_KEY_ID && vars.TURN_KEY_API_TOKEN && vars.TURN_ROOMS
+        ? { key: vars.TURN_KEY_ID, token: vars.TURN_KEY_API_TOKEN, rooms: vars.TURN_ROOMS, api: vars.TURN_API || TURN_API }
+        : null;
   }
 
   /** Whether `n` more bytes may go to the phone sockets `to` today; tells each of them once a day
@@ -162,7 +188,7 @@ export class Room extends DurableObject {
       return new Response('Bad request', { status: 400 });
     }
     const hash = await sha256(key);
-    return r.kind === 'pc' ? this.pc(hash, new URL(req.url).origin) : this.phone(r.phone, hash);
+    return r.kind === 'pc' ? this.pc(hash, new URL(req.url).origin) : this.phone(r.phone, hash, r.room);
   }
 
   /** Open sockets with `tag`, leaving out `except` (one that is closing). */
@@ -212,7 +238,7 @@ export class Room extends DurableObject {
     return upgraded(client);
   }
 
-  private async phone(id: string, hash: string): Promise<Response> {
+  private async phone(id: string, hash: string, room: string): Promise<Response> {
     const phones = (await this.ctx.storage.get<Phone[]>('phones')) ?? [];
     const known = phones.find((p) => p.id === id);
     if (!known || !same(known.hash, hash)) return this.refuse(CLOSE.refused, 'This phone is not paired with this PC');
@@ -222,8 +248,10 @@ export class Room extends DurableObject {
     }
     const { client, server } = pair();
     this.ctx.acceptWebSocket(server, ['phone', `phone:${id}`]);
-    server.serializeAttachment({ role: 'phone', id } satisfies Who);
-    server.send(JSON.stringify({ t: 'pc', online: this.open('pc').length > 0 }));
+    // `turn`: the phone may ask this room for TURN servers.
+    const turn = this.turn !== null && turnAllowed(this.turn.rooms, room);
+    server.serializeAttachment({ role: 'phone', id, ...(turn ? { turn } : {}) } satisfies Who);
+    server.send(JSON.stringify({ t: 'pc', online: this.open('pc').length > 0, ...(turn ? { turn } : {}) }));
     this.toPc({ t: 'here', phones: this.here() });
     return upgraded(client);
   }
@@ -249,14 +277,53 @@ export class Room extends DurableObject {
       for (const p of to) p.send(body);
       return;
     }
-    // A phone sends only sealed frames ("ping" is answered before it gets here).
-    if (typeof msg === 'string') return ws.close(1003, 'Sealed frames only');
+    // A phone sends only sealed frames ("ping" is answered before it gets here), and asks for TURN
+    // servers where the room has them.
+    if (typeof msg === 'string') {
+      if (who.turn && phoneAsksIce(msg)) return this.sendIce(ws);
+      return ws.close(1003, 'Sealed frames only');
+    }
     const bytes = new Uint8Array(msg);
     if (!frameFits(bytes.length, 0)) return ws.close(1009, 'Frame size');
     const out = new Uint8Array(PHONE_ID_BYTES + bytes.length);
     out.set(unhex(who.id), 0);
     out.set(bytes, PHONE_ID_BYTES);
     for (const pc of this.open('pc')) pc.send(out);
+  }
+
+  /** The TURN servers, for a phone that asked (none when the service does not answer). */
+  private async sendIce(ws: WebSocket): Promise<void> {
+    this.turnAsking ??= this.iceServers().finally(() => (this.turnAsking = null));
+    const servers = await this.turnAsking;
+    try {
+      ws.send(JSON.stringify({ t: 'ice', servers }));
+    } catch {
+      // The phone's connection ended meanwhile.
+    }
+  }
+
+  /** Credentials from the TURN service, reused while at least half their life is left; after a
+   * failure, none for a minute. */
+  private async iceServers(): Promise<IceServer[]> {
+    const now = Date.now();
+    const had = this.turnHad;
+    if (had && now - had.at < (had.servers.length ? TURN_REUSE_MS : TURN_RETRY_MS)) return had.servers;
+    let servers: IceServer[] = [];
+    if (this.turn) {
+      try {
+        const res = await fetch(`${this.turn.api}/${encodeURIComponent(this.turn.key)}/credentials/generate-ice-servers`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${this.turn.token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ttl: TURN_TTL_S }),
+          signal: AbortSignal.timeout(TURN_TIMEOUT_MS),
+        });
+        if (res.ok) servers = iceServers(await res.json()) ?? [];
+      } catch {
+        // No answer in time: the phone goes on without.
+      }
+    }
+    this.turnHad = { at: now, servers };
+    return servers;
   }
 
   private async fromPc(ws: WebSocket, text: string): Promise<void> {

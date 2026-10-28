@@ -55,6 +55,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 38 | The screen on the phone | A phone may see and use the PC's screen only if the owner allows it, on the PC, apart from control (1.7; the owner's request, 2026-10-18, "direct, slow fallback"): one phone at a time, a banner and a tray item with Stop while it lasts, a notification at the start, a record of each session, an end after 10 minutes unused. Direct over WebRTC (str0m in the app, the phone's own browser), its fingerprints inside the sealed offer and answer so the relay cannot step in; the picture as H.264 from Windows' own encoder, input as Windows input in the signed-in session. Where no direct path exists, the slow view: one JPEG at a time through the relay, at most 2 a second, 20 minutes a day; the relay caps what a PC sends its phones at 1 GB a day. Windows' secure screens cannot be seen or used, and Ctrl+Alt+Del cannot be sent | decided |
 | 39 | Voice from the phone | The phone's voice reaches the PC two ways (1.7; the owner's report, 2026-10-21: a WhatsApp Web voice note sent through the phone's screen recorded nothing, as it records the PC's microphone and the phone's never reached the PC; the owner's choice, "clips and live mic"). Windows adds a microphone only through a driver Microsoft has signed (an EV certificate and a partner account Vyro does not have), so Vyro ships none. A **clip** recorded on the phone is kept on the PC (AAC through Windows' own encoder, or WAV without one; named by Vyro, never the phone; 5 minutes at most; deleted after 7 days) and put on the clipboard as a file, only when the phone sends one, so Paste in a chat attaches it. The **live microphone** plays into a virtual cable the owner installs (VB-CABLE, VoiceMeeter or Virtual Audio Cable, found by name, never bundled); while it plays, the cable's recording side is Windows' default microphone (an option, on by default) through `IPolicyConfig`, an interface Windows does not document but has kept since Windows 7 (EarTrumpet and SoundSwitch use it). The defaults it replaced are kept in a file first and put back when the microphone stops, the session ends or Vyro closes, or at the next start after a crash; a role the owner changed meanwhile is left alone. Both need the Screen permission and a session on; the live microphone the direct connection | decided |
 | 40 | Notifications on the phone | A phone may get notifications with its app closed (2.0; the owner's choice, 2026-10-27): it turns them on for each PC and chooses what about (alerts as Windows shows them, low batteries, game summaries, the PC going quiet), and only it turns them on; any paired phone may, as they concern only it. Web Push: the browser's subscription goes to the PC sealed; the PC seals each notification for it (RFC 8291) and the relay posts it to the browser's push service (Google's, Apple's, Mozilla's or Microsoft's only) signed with a key the relay makes and keeps (VAPID, RFC 8292), at a limited rate. "Stopped answering" is sealed ahead of time and left with the relay, sent when the PC's connection ends or its pings stop without its "leaving", and it is not back within two minutes | decided |
+| 41 | TURN for the screen | Where a phone has no direct path to the PC (most mobile networks; the owner, 2026-10-28: "can we cast without any time constraint?"), its screen session may go through Cloudflare's TURN service instead of the slow view (2.0.1): only where the relay's owner set a TURN key and listed the PC's room (`TURN_ROOMS`, or `*`), as the relay is shared by every installed Vyro and Cloudflare charges past 1,000 GB a month. The relay gets day-long credentials with the key, which never leaves it, and hands them to a phone of a listed room; the picture stays encrypted end to end, the TURN server passing packets it cannot read. The slow view stays for where there is neither | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -3634,6 +3635,63 @@ branch `claude/vyro-2.0` from 1.7.8's records.
       it. Unsigned, as before: the SignPath settings are not in the repository yet
       ([`docs/signing.md`](docs/signing.md)). The relay already serves 2.0's phone app and
       notifications (run 40588431507).
+
+### 2.0.1 — after 2.0.0
+
+The owner, 2026-10-28, after 2.0.0: Connect and Disconnect of a device did not work, and a
+device showed Connected after it was disconnected; an iPhone at 56 % (as Windows showed it)
+showed 60 %; the screen's quality was very low on Wi-Fi; after waking the PC from the phone,
+how to enter the PIN; and only 20 minutes of the screen on mobile data, "can we cast without
+any time constraint?". On `claude/vyro-2.0`.
+
+- [x] **Connected as Settings shows it, for a device paired twice.** A device paired over both
+      Bluetooth and Bluetooth LE (a phone, many headphones) has a paired entry for each. The
+      list took the last of the two and the check after Connect or Disconnect the first, so a
+      Disconnect that had worked (the Bluetooth entry not connected) was followed by a list that
+      still said Connected (the LE entry, whose link stays up). Every reader now takes them the
+      same way (`devices::paired`): the Bluetooth entry decides, else the LE one; its name
+      first too.
+- [x] **Disconnect on a phone drops the phone.** A phone with a hands-free audio connection was
+      disconnected through its audio, as headphones are: that ended its calls' connection only,
+      and Windows (Phone Link) kept it connected, so Disconnect seemed to do nothing. A phone
+      now has the link's Connect and Disconnect (the Vyro service drops its link at the radio),
+      and an iPhone is a phone by its name, not a headset by its audio.
+- [x] **A battery to the percent before one in steps.** A phone's hands-free connection gives
+      its battery in steps of 10 or 20 % (an iPhone at 56 % showed 60 %), and Windows' first
+      reading on any node came first. Now: Windows' reading from the device's Battery Service
+      (an LE node or entry), then Vyro's own read of the Battery Service (now also made when
+      Windows has only a reading in steps), then the paired entry's, the container's and the
+      other nodes'. Tests: both orders of the two entries, the iPhone's readings, a phone's
+      control (each fails before).
+- [x] **The screen through a TURN server** (decision 41). The phone's direct path fails on most
+      mobile networks, and where Windows' firewall holds back what the phone sends first (on
+      Wi-Fi too); the session then fell back to the slow view (a JPEG at a time, 960×600 at
+      most, 20 minutes a day), which is what the owner saw on mobile data, and likely on Wi-Fi.
+      The relay can now give a PC's phones Cloudflare's TURN service: with the owner's key (the
+      secrets `TURN_KEY_ID` and `TURN_KEY_API_TOKEN`), for the rooms in `TURN_ROOMS`, it gets
+      credentials for a day and hands them to a phone that asks as its screen session starts
+      (`{"t":"ice"}`, which a phone sends only after the relay said `turn`, since an older relay
+      closes a phone's socket on any text). The phone offers the TURN server's address with its
+      own; the PC (str0m, full ICE) answers as before and sends to it, so neither its firewall
+      nor its router stands in the way. The picture stays encrypted end to end (the
+      fingerprints are in the sealed offer and answer), with no time limit; Cloudflare charges
+      past 1,000 GB a month. The phone's details say "through the TURN server", and the slow
+      view's "Why the slow view?" gives the PC's room for the owner's list.
+      [`docs/remote.md`](docs/remote.md) has the setup. Tests: the relay's rules (rooms, the
+      service's answer, port 53 left out), the relay as deployed with a stand-in TURN service (a
+      listed room's phone gets the servers with the owner's key, reused; another room's phone
+      is not offered them and may send no text; a refusal gives none), and the phone asking
+      only a relay that offered them.
+- PIN after waking from the phone: not built. The sign-in screen is Windows' secure desktop,
+  which Vyro can neither see nor type on (as with administrator prompts, left out of 2.0).
+  After sleep, Windows can skip it: Settings → Accounts → Sign-in options → "If you've been
+  away, when should Windows require you to sign in again?" → Never.
+- [ ] The relay deployed (the owner's go): the TURN offer and the phone app's side of it.
+- [ ] TURN turned on (the owner's): a TURN key and the three secrets ([`docs/remote.md`](docs/remote.md)).
+- [ ] Field check: on mobile data and on Wi-Fi, the details say "through the TURN server" or
+      show the picture's size and rate (on Wi-Fi without TURN: if it is still the slow view,
+      Settings → Remote's firewall line); Disconnect on the iPhone and on headphones; the
+      iPhone's battery.
 
 ## Risks
 

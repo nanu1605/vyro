@@ -62,6 +62,23 @@ export class RequestError extends Error {
 /** Why waiting requests fail when the PC leaves the relay. */
 export const GONE = 'The PC went to sleep or off.';
 
+/** How long the relay has to give TURN servers (2.0.1). */
+export const ICE_MS = 6000;
+
+/** TURN servers as the relay gives them (2.0.1), each with its username and credential; anything
+ * else is left out. */
+export function iceList(raw: unknown): RTCIceServer[] {
+  if (!Array.isArray(raw)) return [];
+  const out: RTCIceServer[] = [];
+  for (const s of raw as { urls?: unknown; username?: unknown; credential?: unknown }[]) {
+    const urls = Array.isArray(s?.urls) ? s.urls.filter((u): u is string => typeof u === 'string' && /^turns?:/.test(u)) : [];
+    if (urls.length && typeof s.username === 'string' && typeof s.credential === 'string') {
+      out.push({ urls, username: s.username, credential: s.credential });
+    }
+  }
+  return out;
+}
+
 export interface Handlers {
   onState(s: LinkState): void;
   onInfo(info: PhoneInfo): void;
@@ -121,6 +138,9 @@ export class PcLink {
   /** Messages this socket may send now (`PACE`), as of `paceAt`. */
   private allowance = PACE.burst;
   private paceAt = 0;
+  /** The relay has TURN servers for this PC (2.0.1), and who waits for them. */
+  private hasTurn = false;
+  private iceWaiting: ((s: RTCIceServer[]) => void)[] = [];
   private waiting = new Map<number, { ok: (v: unknown) => void; fail: (e: Error) => void; parts: string[] }>();
 
   constructor(
@@ -202,6 +222,32 @@ export class PcLink {
     });
   }
 
+  /** TURN servers for a screen session (2.0.1), where the relay has them for this PC; none
+   * otherwise, or when it does not answer in time. Only asked of a relay that said it has them:
+   * an older one closes a phone's socket on any text but "ping". */
+  iceServers(): Promise<RTCIceServer[]> {
+    const ws = this.ws;
+    if (!this.hasTurn || !ws || ws.readyState !== 1) return Promise.resolve([]);
+    return new Promise((done) => {
+      const finish = (servers: RTCIceServer[]): void => {
+        clearTimeout(timer);
+        this.iceWaiting = this.iceWaiting.filter((w) => w !== finish);
+        done(servers);
+      };
+      const timer = setTimeout(() => finish([]), ICE_MS);
+      this.iceWaiting.push(finish);
+      // In its turn: the relay counts it with the sealed messages.
+      void this.turn(ws).then((ok) => {
+        if (!ok) return finish([]);
+        try {
+          ws.send(JSON.stringify({ t: 'ice' }));
+        } catch {
+          finish([]);
+        }
+      });
+    });
+  }
+
   /** Requests under way fail: the connection they were made on is gone (`link`), or the PC. */
   private dropWaiting(why: string, link: RequestError['link'] = null): void {
     const all = [...this.waiting.values()];
@@ -244,6 +290,7 @@ export class PcLink {
     }
     ws.binaryType = 'arraybuffer';
     this.ws = ws;
+    this.hasTurn = false;
     // The relay counts each socket afresh.
     this.allowance = PACE.burst;
     this.paceAt = Date.now();
@@ -323,10 +370,15 @@ export class PcLink {
     this.heard = Date.now();
     if (typeof data === 'string') {
       if (data === 'pong') return;
-      let m: { t?: string; online?: boolean };
+      let m: { t?: string; online?: boolean; turn?: boolean; servers?: unknown };
       try {
         m = JSON.parse(data) as typeof m;
       } catch {
+        return;
+      }
+      if (m.t === 'ice') {
+        const servers = iceList(m.servers);
+        for (const w of [...this.iceWaiting]) w(servers);
         return;
       }
       if (m.t === 'full') {
@@ -336,6 +388,7 @@ export class PcLink {
         return;
       }
       if (m.t !== 'pc') return;
+      if (m.turn === true) this.hasTurn = true;
       this.wait = WAIT_MIN;
       if (m.online) {
         // The PC is there: say hello (it answers with its info and, from protocol 2, a session).

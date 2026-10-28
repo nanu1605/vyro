@@ -470,6 +470,7 @@ fn names_come_from_the_device_then_its_parts_then_its_kind() {
         name: Some(n.into()),
         battery: None,
         connected: None,
+        le: false,
     };
 
     // The container's own name wins.
@@ -573,6 +574,7 @@ fn windows_battery_also_from_the_container_or_paired_entry() {
                 name: None,
                 battery: a_battery,
                 connected: None,
+                le: false,
             }],
             ..Raw::default()
         }
@@ -629,6 +631,114 @@ fn battery_prefers_windows_then_the_battery_service() {
         vec![]
     ))
     .is_empty());
+}
+
+/// 2.0.1: an iPhone at 56 % showed 60 %. Its hands-free link reports the battery in steps of
+/// 10 or 20 %, and that reading came first.
+#[test]
+fn battery_to_the_percent_comes_before_one_in_steps() {
+    use BatterySource as B;
+    let with = |enumerator: &str, battery: Option<u8>| {
+        let mut n = node("A", "Bluetooth", enumerator);
+        n.battery = battery;
+        n
+    };
+    let raw = |nodes: Vec<RawNode>, aeps: Vec<RawAep>, gatt: Vec<(String, u8)>| Raw {
+        containers: vec![container("{A}", "iPhone")],
+        nodes,
+        aeps,
+        gatt,
+        ..Raw::default()
+    };
+    let entry = |battery: u8, le: bool| RawAep {
+        container: Some("a".into()),
+        battery: Some(battery),
+        le,
+        ..RawAep::default()
+    };
+    let pct = |r: &Raw| one(r).battery.map(|b| (b.percent, b.source));
+    let steps = || with("BTHHFENUM", Some(60));
+    // Windows has the exact reading, on the LE node or the LE entry.
+    assert_eq!(
+        pct(&raw(vec![steps(), with("BTHLE", Some(56))], vec![], vec![])),
+        Some((Some(56), B::Windows))
+    );
+    assert_eq!(
+        pct(&raw(
+            vec![steps(), with("BTHLE", None)],
+            vec![entry(60, false), entry(56, true)],
+            vec![]
+        )),
+        Some((Some(56), B::Windows))
+    );
+    // Only the one in steps: Vyro reads the Battery Service, and that comes first.
+    let r = raw(vec![steps(), with("BTHLE", None)], vec![], vec![]);
+    assert_eq!(gatt_wanted(&r), ["a"]);
+    assert_eq!(
+        pct(&raw(
+            vec![steps(), with("BTHLE", None)],
+            vec![],
+            vec![("a".into(), 56)]
+        )),
+        Some((Some(56), B::BluetoothLe))
+    );
+    // No Battery Service: the reading in steps, as before.
+    assert_eq!(pct(&r), Some((Some(60), B::Windows)));
+    // Settings' entry before the container and the hands-free node.
+    let mut r = raw(vec![steps()], vec![entry(56, false)], vec![]);
+    r.containers[0].battery = Some(60);
+    assert_eq!(pct(&r), Some((Some(56), B::Windows)));
+}
+
+/// 2.0.1: a device paired over both Bluetooth and Bluetooth LE has a paired entry for each. The
+/// list took the last and the check after Disconnect the first: headphones Disconnect had just
+/// disconnected went on showing Connected, their LE link still up.
+#[test]
+fn a_device_paired_twice_is_connected_as_its_bluetooth_entry_says() {
+    let entry = |connected: Option<bool>, le: bool| RawAep {
+        container: Some("{A}".into()),
+        connected,
+        le,
+        ..RawAep::default()
+    };
+    let raw = |aeps: Vec<RawAep>| Raw {
+        containers: vec![container("a", "WH-1000XM4 Headphones")],
+        nodes: vec![
+            node("a", "Bluetooth", "BTHENUM"),
+            node("a", "Bluetooth", "BTHLE"),
+        ],
+        aeps,
+        ..Raw::default()
+    };
+    let check = |r: &Raw| paired(&r.aeps).get("a").and_then(Paired::connected);
+    for aeps in [
+        vec![entry(Some(false), false), entry(Some(true), true)],
+        vec![entry(Some(true), true), entry(Some(false), false)],
+    ] {
+        let r = raw(aeps);
+        assert_eq!(one(&r).state, LinkState::NotConnected);
+        // What Connect and Disconnect check afterwards says the same.
+        assert_eq!(check(&r), Some(false));
+    }
+    // An LE entry decides when the Bluetooth one says nothing, or there is none.
+    let r = raw(vec![entry(None, false), entry(Some(true), true)]);
+    assert_eq!(
+        (one(&r).state, check(&r)),
+        (LinkState::Connected, Some(true))
+    );
+    let r = raw(vec![entry(Some(true), true)]);
+    assert_eq!(
+        (one(&r).state, check(&r)),
+        (LinkState::Connected, Some(true))
+    );
+    // The Bluetooth entry's name before the LE one's.
+    let mut classic = entry(None, false);
+    classic.name = Some("WH-1000XM4".into());
+    let mut le = entry(None, true);
+    le.name = Some("LE_WH-1000XM4".into());
+    let mut r = raw(vec![le, classic]);
+    r.containers[0].name = None;
+    assert_eq!(one(&r).name, "WH-1000XM4");
 }
 
 #[test]
@@ -1044,6 +1154,30 @@ fn bluetooth_devices_get_connect_and_disconnect() {
             "MX Master 3S"
         ),
         Some(Control::Link)
+    );
+    // A phone too, though it has a hands-free audio connection (2.0.1): dropping that left it
+    // connected for everything else.
+    let calls = || {
+        vec![
+            endpoint("o", Some("a"), true),
+            endpoint("i", Some("a"), false),
+        ]
+    };
+    assert_eq!(
+        d(vec![node("a", "Bluetooth", "BTHENUM")], calls(), "iPhone"),
+        Some(Control::Link)
+    );
+    let mut pixel = container("a", "Pixel 8");
+    pixel.categories = vec!["Communication.Phone".into()];
+    let phone = one(&Raw {
+        containers: vec![pixel],
+        nodes: vec![node("a", "Bluetooth", "BTHENUM")],
+        endpoints: calls(),
+        ..Raw::default()
+    });
+    assert_eq!(
+        (phone.kind, phone.control),
+        (DeviceKind::Phone, Some(Control::Link))
     );
     // Wired and receiver devices: nothing.
     assert_eq!(

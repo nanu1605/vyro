@@ -357,12 +357,14 @@ the PC (1.5).
   Remote (apart from changing the PC) can watch the PC's screen in its Screen tab and use it: tap
   to click, hold for a right click, drag, two fingers to scroll, pinch to zoom, a key bar and a
   box to type into, and a choice of monitor. It connects straight to the PC where it can (fast,
-  encrypted end to end, the relay only introduces them); where it cannot, a slow view sends a
-  picture at a time through the relay, 20 minutes a day. The picture follows the connection: on
-  a slow one (mobile data) it is sent smaller and less often so it stays current. One phone at
-  a time; the PC shows a banner and a tray item with Stop while it lasts, and a session left
-  alone ends after 10 minutes. Windows' sign-in and administrator prompts cannot be seen or
-  used, and Ctrl+Alt+Del cannot be sent. Optionally the PC locks when a phone's session ends.
+  encrypted end to end, the relay only introduces them), or (2.0.1) through a TURN server
+  where the relay's owner turned one on for the PC, still end to end and without a time limit
+  ([remote.md](docs/remote.md#a-turn-server-for-the-screen-201)); where it cannot, a slow view
+  sends a picture at a time through the relay, 20 minutes a day. The picture follows the
+  connection: on a slow one (mobile data) it is sent smaller and less often so it stays
+  current. One phone at a time; the PC shows a banner and a tray item with Stop while it
+  lasts, and a session left alone ends after 10 minutes. Windows' sign-in and administrator
+  prompts cannot be seen or used, and Ctrl+Alt+Del cannot be sent. Optionally the PC locks when a phone's session ends.
   **Full** fills the phone with the PC's screen (sideways for a wide one on Android); **HD** or
   **SD** chooses the quality, and on mobile data the phone asks first (SD uses about 7 MB a
   minute at most, HD up to 35).

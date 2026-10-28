@@ -252,6 +252,9 @@ pub struct RawAep {
     pub battery: Option<u8>,
     /// System.Devices.Aep.IsConnected: what Settings shows as Connected.
     pub connected: Option<bool>,
+    /// A Bluetooth LE entry (2.0.1): a device paired over both Bluetooth and Bluetooth LE (a
+    /// phone, many headphones) has one of each.
+    pub le: bool,
 }
 
 /// `DEVICE_STATE_ACTIVE`.
@@ -377,9 +380,12 @@ fn generic(name: &str) -> bool {
 /// The name Settings shows, as far as Windows gives one: the device's own (its container),
 /// the paired Bluetooth entry, the product string on its bus, then the most specific function
 /// name (a Bluetooth device's own node before its services).
-fn known_name(c: &RawContainer, nodes: &[&RawNode], aep: Option<&RawAep>) -> Option<String> {
+fn known_name(c: &RawContainer, nodes: &[&RawNode], paired: Paired) -> Option<String> {
     let own = |s: Option<&String>| s.filter(|s| !s.trim().is_empty()).cloned();
-    if let Some(n) = own(c.name.as_ref()).or_else(|| own(aep.and_then(|a| a.name.as_ref()))) {
+    if let Some(n) = own(c.name.as_ref())
+        .or_else(|| own(paired.classic.and_then(|a| a.name.as_ref())))
+        .or_else(|| own(paired.le.and_then(|a| a.name.as_ref())))
+    {
         return Some(n);
     }
     let specific = |s: &Option<String>| s.clone().filter(|s| !s.trim().is_empty() && !generic(s));
@@ -521,6 +527,8 @@ fn classify(
         (&["microphone"][..], K::Microphone),
         (&["webcam", "camera"][..], K::Camera),
         (&["printer"][..], K::Printer),
+        // 2.0.1: else its hands-free audio made an iPhone a headset.
+        (&["iphone"][..], K::Phone),
     ] {
         if has_word(&name, words) {
             return Some(kind);
@@ -607,14 +615,28 @@ fn maker(s: Option<&String>) -> Option<String> {
     (!s.is_empty() && !s.starts_with('(')).then(|| s.to_owned())
 }
 
-/// Windows' own battery reading: on a node, the container or the paired entry.
-fn windows_battery(c: &RawContainer, nodes: &[&RawNode], aep: Option<&RawAep>) -> Option<u8> {
-    nodes
-        .iter()
-        .filter_map(|n| n.battery)
-        .chain(c.battery)
-        .chain(aep.and_then(|a| a.battery))
-        .find(|b| *b <= 100)
+/// Windows' own battery readings for a device (2.0.1): `exact`, what a Bluetooth LE node or
+/// entry has from the device's Battery Service, to the percent; `other`, the paired entry's,
+/// the container's or another node's. A phone's hands-free link gives its battery in steps of
+/// 10 or 20 %, and that reading came first: an iPhone at 56 % showed 60 %.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct Readings {
+    exact: Option<u8>,
+    other: Option<u8>,
+}
+
+fn windows_battery(c: &RawContainer, nodes: &[&RawNode], paired: Paired) -> Readings {
+    let valid = |b: Option<u8>| b.filter(|b| *b <= 100);
+    Readings {
+        exact: nodes
+            .iter()
+            .filter(|n| is_ble(n))
+            .find_map(|n| valid(n.battery))
+            .or_else(|| valid(paired.le.and_then(|a| a.battery))),
+        other: valid(paired.classic.and_then(|a| a.battery))
+            .or(valid(c.battery))
+            .or_else(|| nodes.iter().find_map(|n| valid(n.battery))),
+    }
 }
 
 /// Whether a paired Bluetooth device is connected (1.4.1): its paired entry says, as Settings
@@ -661,10 +683,11 @@ fn endpoints_by_container(list: &[RawEndpoint]) -> HashMap<String, Vec<&RawEndpo
 }
 
 /// Bluetooth LE containers worth a Battery Service read: not known to be disconnected, and
-/// Windows has no battery reading of its own for them.
+/// Windows has no exact battery reading of its own for them (2.0.1: also when it has only a
+/// hands-free link's, in steps).
 pub fn gatt_wanted(raw: &Raw) -> Vec<String> {
     let groups = group(&raw.nodes);
-    let aeps = aeps(&raw.aeps);
+    let paired = paired(&raw.aeps);
     let endpoints = endpoints_by_container(&raw.endpoints);
     raw.containers
         .iter()
@@ -672,24 +695,54 @@ pub fn gatt_wanted(raw: &Raw) -> Vec<String> {
         .filter_map(|c| {
             let id = norm_guid(&c.id);
             let nodes = groups.get(&id)?;
-            let aep = aeps.get(&id).copied();
+            let entries = paired.get(&id).copied().unwrap_or_default();
             let audio = endpoints.get(&id).map_or(&[][..], Vec::as_slice);
-            if bt_state(aep.and_then(|a| a.connected), audio, c.connected)
-                == LinkState::NotConnected
-            {
+            if bt_state(entries.connected(), audio, c.connected) == LinkState::NotConnected {
                 return None;
             }
-            let windows = windows_battery(c, nodes, aep);
-            (nodes.iter().any(|n| is_ble(n)) && windows.is_none()).then_some(id)
+            let windows = windows_battery(c, nodes, entries);
+            (nodes.iter().any(|n| is_ble(n)) && windows.exact.is_none()).then_some(id)
         })
         .collect()
 }
 
+/// A device's entries among the paired Bluetooth devices (2.0.1): one, or one of each for a
+/// device paired over both Bluetooth and Bluetooth LE. Every reader takes them the same way:
+/// the list took the last of the two and the check after Connect or Disconnect the first, so a
+/// pair of headphones Disconnect had just disconnected went on showing Connected (its LE link
+/// stays up).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Paired<'a> {
+    pub classic: Option<&'a RawAep>,
+    pub le: Option<&'a RawAep>,
+}
+
+impl Paired<'_> {
+    /// Whether it is connected, as Settings shows it: its Bluetooth entry, where its audio and
+    /// its other profiles are and what Connect and Disconnect change; else its LE one.
+    pub fn connected(&self) -> Option<bool> {
+        self.classic
+            .and_then(|a| a.connected)
+            .or_else(|| self.le.and_then(|a| a.connected))
+    }
+}
+
 /// Paired entries by container.
-fn aeps(list: &[RawAep]) -> HashMap<String, &RawAep> {
-    list.iter()
-        .filter_map(|a| Some((norm_guid(a.container.as_deref()?), a)))
-        .collect()
+pub fn paired(list: &[RawAep]) -> HashMap<String, Paired<'_>> {
+    let mut by: HashMap<String, Paired> = HashMap::new();
+    for a in list {
+        let Some(c) = a.container.as_deref() else {
+            continue;
+        };
+        let entry = by.entry(norm_guid(c)).or_default();
+        let slot = if a.le {
+            &mut entry.le
+        } else {
+            &mut entry.classic
+        };
+        slot.get_or_insert(a);
+    }
+    by
 }
 
 fn group(nodes: &[RawNode]) -> HashMap<String, Vec<&RawNode>> {
@@ -760,10 +813,11 @@ fn vid_pid(ids: &[String]) -> Option<(u16, u16)> {
 }
 
 /// A Bluetooth device's audio connection is what Settings connects and disconnects; anything
-/// else has only its link.
+/// else has only its link. A phone's audio is its hands-free link for calls (2.0.1): dropping
+/// it left the phone connected for everything else, so Disconnect seemed to do nothing.
 fn control(kind: DeviceKind, endpoints: &[&RawEndpoint]) -> Control {
     use DeviceKind as K;
-    if !endpoints.is_empty()
+    if (!endpoints.is_empty() && kind != K::Phone)
         || matches!(
             kind,
             K::Headset | K::Headphones | K::Speakers | K::Microphone
@@ -813,7 +867,7 @@ impl Throttle {
 /// The Devices tab's list.
 pub fn build(raw: &Raw) -> Devices {
     let groups = group(&raw.nodes);
-    let aeps = aeps(&raw.aeps);
+    let paired = paired(&raw.aeps);
     let direct: HashMap<String, &RawHid> = raw
         .hid
         .iter()
@@ -844,26 +898,31 @@ pub fn build(raw: &Raw) -> Devices {
             continue;
         }
         let endpoints = by_container.get(&id).map_or(&[][..], Vec::as_slice);
-        let aep = aeps.get(&id).copied();
-        let known = known_name(c, nodes, aep);
+        let entries = paired.get(&id).copied().unwrap_or_default();
+        let known = known_name(c, nodes, entries);
         let Some(kind) = classify(c, known.as_deref().unwrap_or(""), nodes, endpoints) else {
             continue;
         };
         let conn = connection(c, nodes);
         let bluetooth = matches!(conn, Connection::Bluetooth | Connection::BluetoothLe);
         let state = if bluetooth {
-            bt_state(aep.and_then(|a| a.connected), endpoints, c.connected)
+            bt_state(entries.connected(), endpoints, c.connected)
         } else {
             LinkState::Connected
         };
         // Readings and problems are shown unless it is known to be disconnected.
         let live = state != LinkState::NotConnected;
         let name = known.unwrap_or_else(|| kind_label(kind).into());
+        let readings = windows_battery(c, nodes, entries);
         let battery = live
             .then(|| {
-                windows_battery(c, nodes, aep)
+                // To the percent first: Windows' from the Battery Service, then Vyro's own read
+                // of it, then Windows' other readings.
+                readings
+                    .exact
                     .map(|p| (p, BatterySource::Windows))
                     .or_else(|| gatt.get(&id).map(|p| (*p, BatterySource::BluetoothLe)))
+                    .or_else(|| readings.other.map(|p| (p, BatterySource::Windows)))
                     .map(|(p, source)| Battery {
                         percent: Some(p),
                         level: None,

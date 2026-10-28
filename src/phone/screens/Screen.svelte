@@ -38,8 +38,13 @@
     /** A session is on, or starting: the app keeps this view while its connection to the relay
      * drops, which a direct session does not need and the slow view rides out. */
     onsharing?: (on: boolean) => void;
+    /** TURN servers from the relay (2.0.1), where it has them: a session goes through one where
+     * no direct path exists (most mobile networks) instead of the slow view. */
+    ice?: () => Promise<RTCIceServer[]>;
+    /** The PC's room on the relay, which its owner lists for a TURN server. */
+    room?: string;
   }
-  let { ask, can, pc, onimmersive, onsharing }: Props = $props();
+  let { ask, can, pc, onimmersive, onsharing, ice, room }: Props = $props();
 
   interface Monitor {
     index: number;
@@ -82,6 +87,8 @@
     lost: number;
     /** How bright the decoded picture is, on the PC's scale; null when it cannot be read. */
     look: { luma: number; spread: number } | null;
+    /** Through a TURN server (2.0.1), not straight from the PC. */
+    relayed: boolean;
   }
   type Mode = 'idle' | 'connecting' | 'direct' | 'slow' | 'ended';
   type Mod = 'Control' | 'Alt' | 'Shift' | 'Meta';
@@ -255,14 +262,21 @@
         packetsLost?: number;
         bytesReceived?: number;
       } | null = null;
-      (await p.getStats().catch(() => null))?.forEach((r) => {
+      const stats = await p.getStats().catch(() => null);
+      let pairId: string | undefined;
+      let nominated: { localCandidateId?: string } | undefined;
+      stats?.forEach((r) => {
         if (r.type === 'inbound-rtp' && r.kind === 'video') v = r;
+        else if (r.type === 'transport') pairId ??= r.selectedCandidatePairId;
+        else if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded') nominated ??= r;
       });
       if (!v) return;
+      const pair = (pairId ? stats?.get(pairId) : undefined) ?? nominated;
+      const relayed = (pair?.localCandidateId ? stats?.get(pair.localCandidateId) : undefined)?.candidateType === 'relay';
       const { framesDecoded = 0, frameWidth = 0, frameHeight = 0, framesPerSecond = 0, keyFramesDecoded = 0, packetsLost = 0, bytesReceived = 0 } = v;
       used = bytesReceived;
       received = frameWidth
-        ? { w: frameWidth, h: frameHeight, fps: Math.round(framesPerSecond), keys: keyFramesDecoded, lost: packetsLost, look: look(video) }
+        ? { w: frameWidth, h: frameHeight, fps: Math.round(framesPerSecond), keys: keyFramesDecoded, lost: packetsLost, look: look(video), relayed }
         : null;
       const now = performance.now();
       if (framesDecoded !== frames) {
@@ -419,7 +433,9 @@
       return;
     }
     try {
-      const p = new RTCPeerConnection({ iceServers: STUN });
+      const turn = (await ice?.().catch(() => [])) ?? [];
+      if (my !== run) return;
+      const p = new RTCPeerConnection({ iceServers: [...STUN, ...turn] });
       peer = p;
       p.addTransceiver('video', { direction: 'recvonly' });
       const ch = p.createDataChannel('input');
@@ -1071,7 +1087,10 @@
         </div>
         {#if mode === 'direct' && received}
           <details class="arrives">
-            <summary class="muted small">Receiving {received.w}×{received.h}, {received.fps} pictures a second · {dataText(used)} so far.</summary>
+            <summary class="muted small">
+              Receiving {received.w}×{received.h}, {received.fps} pictures a second{received.relayed ? ' through the TURN server' : ''} · {dataText(used)}
+              so far.
+            </summary>
             <ul class="muted small">
               <li>
                 Here: {received.look ? lookText(received.look) : 'brightness unknown'}; {received.keys} whole
@@ -1088,7 +1107,13 @@
           </details>
           {#if verdict}<p class="note" role="status">{verdict}</p>{/if}
         {:else if mode === 'slow'}
-          <p class="muted small">{dataText(used)} so far.</p>
+          <details class="arrives">
+            <summary class="muted small">{dataText(used)} so far. Why the slow view?</summary>
+            <p class="muted small">
+              This network has no direct path to {pc} (most mobile networks have none). A TURN server on the relay carries the
+              full picture instead: the relay's owner turns one on for this PC{room ? ` (its room: ${room})` : ''}.
+            </p>
+          </details>
         {/if}
       {/if}
     {/if}
@@ -1433,6 +1458,10 @@
   .arrives ul {
     margin: 0.25rem 0 0;
     padding-left: 1.1rem;
+  }
+  .arrives p {
+    margin: 0.25rem 0 0;
+    overflow-wrap: anywhere;
   }
   .visually-hidden {
     position: absolute;

@@ -69,8 +69,8 @@ use windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore;
 use super::bounded::Bounded;
 use super::watch::{Connections, Seen};
 use super::{
-    bt_state, build, gatt_wanted, key, norm_guid, plain_text, Devices, LinkState, Raw, RawAep,
-    RawContainer, RawEndpoint, RawHid, RawNode, RawPad,
+    bt_state, build, gatt_wanted, key, norm_guid, paired, plain_text, Devices, LinkState, Paired,
+    Raw, RawAep, RawContainer, RawEndpoint, RawHid, RawNode, RawPad,
 };
 use crate::live::dll::Library;
 
@@ -98,8 +98,8 @@ const AEP_PROTOCOL: DEVPROPKEY = DEVPROPKEY {
     fmtid: GUID::from_u128(0x3b2c_e006_5e61_4fde_bab8_9b8a_ac9b_26df),
     pid: 5,
 };
-/// Bluetooth and Bluetooth LE association protocols. Static: the watch's filters point at
-/// them.
+/// Bluetooth and Bluetooth LE association protocols, in that order. Static: the watch's filters
+/// point at them.
 static AEP_BLUETOOTH: [GUID; 2] = [
     GUID::from_u128(0xe0cb_f06c_cd8b_4647_bb8a_263b_43f0_f974),
     GUID::from_u128(0xbb7b_b05e_5972_42b5_94fc_76ea_a708_4d49),
@@ -189,10 +189,9 @@ pub fn state_of(id: &str) -> Option<LinkState> {
     let target = norm_guid(&c.id);
     let ours =
         |container: Option<&str>| container.map(norm_guid).as_deref() == Some(target.as_str());
-    let aep = aeps
-        .into_iter()
-        .find(|a| ours(a.container.as_deref()))
-        .and_then(|a| a.connected);
+    // As the list takes it (2.0.1): this read took a device's first paired entry, the list its
+    // last.
+    let aep = paired(&aeps).get(&target).and_then(Paired::connected);
     let audio: Vec<&RawEndpoint> = endpoints
         .iter()
         .filter(|e| ours(e.container.as_deref()))
@@ -392,7 +391,7 @@ fn aeps() -> Vec<RawAep> {
     let mut out = Vec::new();
     // One query per protocol, filtered as Windows' own Bluetooth selectors are: an unfiltered
     // endpoint query would also search the network.
-    for protocol in &AEP_BLUETOOTH {
+    for (i, protocol) in AEP_BLUETOOTH.iter().enumerate() {
         let filter = paired_filter(protocol);
         query(DevObjectTypeAEP, &keys, Some(&filter), |_, p| {
             if p.bool(&AEP_PAIRED) == Some(false) {
@@ -403,6 +402,7 @@ fn aeps() -> Vec<RawAep> {
                 name: p.string(&DEVPKEY_NAME),
                 battery: p.small(&DEVPKEY_BLUETOOTH_BATTERY),
                 connected: p.bool(&AEP_CONNECTED),
+                le: i == 1,
             });
         });
     }

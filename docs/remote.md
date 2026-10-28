@@ -127,10 +127,15 @@ deleted 90 days after the PC was last seen.
   the middle: it never sees the picture or the input. The picture then goes straight from the PC
   to the phone over UDP: on the same network, or through the router at the public address a
   STUN server (Cloudflare's, Google's) reports. The STUN server sees that address, nothing else.
-  No TURN server is used.
-- **The slow view.** Where no direct path exists (some mobile networks and firewalls), the phone
-  asks for one picture at a time through the relay, sealed like everything else: JPEG, at most
-  2 a second, 20 minutes a day per PC.
+- **Through a TURN server (2.0.1).** Most mobile networks give a phone no direct path. Where the
+  relay's owner has turned one on for the PC ([below](#a-turn-server-for-the-screen-201)), the
+  phone also offers a TURN server's address (Cloudflare's), and the picture goes through it: the
+  same picture, still encrypted end to end (DTLS-SRTP, with the fingerprints from the sealed
+  offer), with no time limit. The TURN server passes packets it cannot read. The phone's
+  details say "through the TURN server" when it is used.
+- **The slow view.** Where no path exists at all, the phone asks for one picture at a time
+  through the relay, sealed like everything else: JPEG, at most 2 a second, 20 minutes a day per
+  PC. Its "Why the slow view?" gives the PC's room on the relay, for the owner's TURN list.
 - **What it cannot do.** Vyro runs as the signed-in user: Windows' sign-in, lock and
   administrator prompts are a secure screen it can neither see nor use (the phone says so), a
   window running as administrator can be seen but not used, and Ctrl+Alt+Del cannot be sent.
@@ -222,6 +227,26 @@ deleted 90 days after the PC was last seen.
 A relay set up before 2.0 sends no notifications until it is deployed again from this
 repository: `wrangler.jsonc` adds the `Keys` Durable Object (migration `v2`). Until then the PC
 and the phone leave notifications off, and everything else works as before.
+
+### A TURN server for the screen (2.0.1)
+
+The relay can give a PC's phones Cloudflare's TURN service for the screen, so a session works in
+full on mobile data. Cloudflare charges $0.05 a GB sent through it, after 1,000 GB free each
+month (shared with its other real-time services); a phone watching the screen in HD takes up to
+about 2 GB an hour. It is off until all three secrets below are set:
+
+1. In the Cloudflare dashboard: **Realtime → TURN Server → Create**. Note the key's **Turn Token
+   ID** and **API Token**.
+2. **Workers & Pages → vyro-relay → Settings → Variables and Secrets → Add**, each as a
+   **Secret**: `TURN_KEY_ID` (the Turn Token ID), `TURN_KEY_API_TOKEN` (the API Token), and
+   `TURN_ROOMS`: the rooms that may use it, comma-separated. A PC's room is in the phone app:
+   Screen → "Why the slow view?" (or the `?pc=` in its address). `*` lets every room on the relay
+   use it, and anyone who installs Vyro uses this relay: list your own.
+3. Phones get it the next time they connect; no deploy is needed (secrets stay through deploys).
+
+The relay asks Cloudflare for credentials that last a day, with the key, only when a phone of a
+listed room starts a screen session, and gives them to that phone; it hands the same out again
+while half their day is left. The key never leaves the relay.
 
 To try it on one computer: `pnpm --dir relay dev` runs the relay at `http://127.0.0.1:8787`, and
 `cargo run -p vyro-core --example companion -- --relay http://127.0.0.1:8787` plays a PC with

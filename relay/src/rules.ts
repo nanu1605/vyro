@@ -311,3 +311,59 @@ export function assetHeaders(url: URL): Record<string, string> {
   if (url.protocol === 'https:') h['Strict-Transport-Security'] = 'max-age=31536000';
   return h;
 }
+
+/** A TURN server for a phone's screen session (2.0.1): where no direct path exists (most mobile
+ * networks), the picture goes through it, still sealed end to end, instead of the slow view.
+ * The credentials come from Cloudflare's TURN service, with the owner's key, for the rooms the
+ * owner lists; they last a day, and one is handed out again while at least half of that is
+ * left. */
+export const TURN_API = 'https://rtc.live.cloudflare.com/v1/turn/keys';
+export const TURN_TTL_S = 24 * 3600;
+export const TURN_REUSE_MS = (TURN_TTL_S * 1000) / 2;
+/** After a failed request, the next waits this long. */
+export const TURN_RETRY_MS = 60_000;
+/** How long the TURN service has to answer. */
+export const TURN_TIMEOUT_MS = 5000;
+
+export interface IceServer {
+  urls: string[];
+  username?: string;
+  credential?: string;
+}
+
+/** Whether `room` may use TURN: `rooms` is the owner's list of rooms (comma-separated), or `*`
+ * for every room on the relay. None given: none. */
+export function turnAllowed(rooms: string | undefined, room: string): boolean {
+  const list = (rooms ?? '')
+    .split(',')
+    .map((r) => r.trim().toLowerCase())
+    .filter(Boolean);
+  return list.includes('*') || list.includes(room.toLowerCase());
+}
+
+/** The TURN servers in the TURN service's answer, as a phone's browser takes them: no STUN (the
+ * phone has its own), no port 53 (browsers refuse it), each with its username and credential.
+ * Null when the answer has none. */
+export function iceServers(body: unknown): IceServer[] | null {
+  const raw = (body as { iceServers?: unknown } | null)?.iceServers;
+  const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  const out: IceServer[] = [];
+  for (const s of list as { urls?: unknown; username?: unknown; credential?: unknown }[]) {
+    const urls = (Array.isArray(s?.urls) ? s.urls : [s?.urls]).filter(
+      (u): u is string => typeof u === 'string' && /^turns?:/.test(u) && !/:53(\?|$)/.test(u),
+    );
+    if (!urls.length || typeof s.username !== 'string' || typeof s.credential !== 'string') continue;
+    out.push({ urls, username: s.username, credential: s.credential });
+  }
+  return out.length ? out : null;
+}
+
+/** What a phone may say to the relay itself, as text (2.0.1): only "ice", asking for the TURN
+ * servers, and only after the relay said it has them. */
+export function phoneAsksIce(text: string): boolean {
+  try {
+    return (JSON.parse(text) as { t?: unknown })?.t === 'ice';
+  } catch {
+    return false;
+  }
+}

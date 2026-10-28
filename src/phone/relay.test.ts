@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { RemoteView } from '../types';
 import { confirmNext, type PairedPc } from './pcs';
-import { FULL, PcLink, RequestError, type LinkState, type PhoneInfo } from './relay';
+import { FULL, iceList, PcLink, RequestError, type LinkState, type PhoneInfo } from './relay';
 import { aad, b64url, deriveKeys, open, seal, unhex, type Bytes } from './seal';
 
 const ROOM = '00112233445566778899aabbccddeeff';
@@ -359,5 +359,45 @@ describe('a phone and its PC through the relay', () => {
     await t.link.signOut();
     expect(await pc1.read(s.sent.at(-1)!)).toEqual({ t: 'bye' });
     expect(s.readyState).toBe(3);
+  });
+
+  it('asks for TURN servers only of a relay that said it has them (2.0.1)', async () => {
+    const t = setup({ room: ROOM, phone: PHONE, secret: S1, name: 'DESKTOP-7', used: 1 });
+    t.link.start();
+    const s = await socket(t, 0);
+    s.open();
+    // An older relay closes a phone's socket on any text but "ping": nothing is asked of it.
+    s.text('{"t":"pc","online":true}');
+    await sent(s, 1);
+    expect(await t.link.iceServers()).toEqual([]);
+    expect(s.sent.filter((f) => typeof f === 'string')).toEqual([]);
+
+    s.end(1006);
+    const s2 = await socket(t, 1);
+    s2.open();
+    s2.text('{"t":"pc","online":true,"turn":true}');
+    await sent(s2, 1);
+    const asked = t.link.iceServers();
+    await until(() => expect(s2.sent).toContain('{"t":"ice"}'));
+    const turn = { urls: ['turn:turn.example.dev:3478?transport=udp'], username: 'u', credential: 'c' };
+    s2.text(JSON.stringify({ t: 'ice', servers: [turn, { urls: ['stun:x'] }] }));
+    expect(await asked).toEqual([turn]);
+
+    // The relay does not answer: none, in time.
+    vi.useFakeTimers();
+    try {
+      const late = t.link.iceServers();
+      await vi.advanceTimersByTimeAsync(7000);
+      expect(await late).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('takes from the relay only TURN servers with a username and credential', () => {
+    const ok = { urls: ['turns:turn.example.dev:443?transport=tcp'], username: 'u', credential: 'c' };
+    expect(iceList([ok, { urls: ['turn:a'] }, { urls: 'turn:b', username: 'u', credential: 'c' }, null, 'x'])).toEqual([ok]);
+    expect(iceList({ servers: [ok] })).toEqual([]);
+    expect(iceList(undefined)).toEqual([]);
   });
 });

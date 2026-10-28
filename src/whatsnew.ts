@@ -21,6 +21,27 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '2.0.1',
+    items: [
+      {
+        icon: 'screen',
+        title: 'The full picture on mobile data',
+        text: 'Where your phone has no direct path to this PC (most mobile networks), the screen can now go through a TURN server, in HD and with no time limit, instead of the slow view. The relay’s owner turns it on; the slow view’s “Why the slow view?” gives this PC’s room for it.',
+        phone: true,
+      },
+      {
+        icon: 'sparkles',
+        title: 'Disconnect that shows',
+        text: 'Headphones or a phone paired over both Bluetooth and Bluetooth LE showed Connected after Disconnect had worked. They now show what Settings shows, and Disconnect on a phone drops its whole connection, not only its calls.',
+      },
+      {
+        icon: 'phone',
+        title: 'A phone’s battery to the percent',
+        text: 'A phone’s battery now shows as Windows shows it: an iPhone at 56 % showed 60 %, the step its hands-free connection reports.',
+      },
+    ],
+  },
+  {
     version: '2.0.0',
     items: [
       {
