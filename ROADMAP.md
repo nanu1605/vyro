@@ -3682,6 +3682,10 @@ any time constraint?". On `claude/vyro-2.0`.
       listed room's phone gets the servers with the owner's key, reused; another room's phone
       is not offered them and may send no text; a refusal gives none), and the phone asking
       only a relay that offered them.
+- [x] **CI green on da58249** (run 40759101920; Linux, Windows with the smoke test, the relay
+      and phone app with the end-to-end test, accessibility). Locally: fmt, clippy (Linux and
+      windows-gnu), 806 core tests, 269 frontend tests, 41 relay tests (the TURN ones among
+      them), the end to end in a local Chromium (159 checks).
 - PIN after waking from the phone: not built. The sign-in screen is Windows' secure desktop,
   which Vyro can neither see nor type on (as with administrator prompts, left out of 2.0).
   After sleep, Windows can skip it: Settings → Accounts → Sign-in options → "If you've been
