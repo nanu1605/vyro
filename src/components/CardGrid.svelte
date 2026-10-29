@@ -224,3 +224,54 @@
   {/each}
 </div>
 <div class="sr-only" aria-live="polite">{said}</div>
+
+<style>
+  /* As many columns as fit, each card as tall as it is, packed in order the way the Dashboard's
+     widgets are (`pack` sets each one's span and place), so the next card moves up into the room a
+     short one leaves. A card is a container: what is inside it can follow its width, not the
+     window's. Here rather than in the theme, which the phone pages load too. */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--card-min, 22rem)), 1fr));
+    grid-auto-rows: 0.25rem;
+    column-gap: 1rem;
+  }
+  .card-cell {
+    align-self: start;
+    min-width: 0;
+    grid-row: auto / span var(--span, 40);
+    container-type: inline-size;
+  }
+  .card-cell > :global(*) {
+    margin: 0;
+  }
+  /* Being dragged: its place, outlined. The card itself rides under the pointer. */
+  .card-cell.lifted {
+    border-radius: var(--radius);
+    outline: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+    outline-offset: -2px;
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+  .card-cell.lifted > :global(*) {
+    visibility: hidden;
+  }
+  /* The top of a tall card is enough to see which it is. */
+  :global(.card-ghost) {
+    position: fixed;
+    z-index: 50;
+    top: 0;
+    left: 0;
+    max-height: 60vh;
+    overflow: hidden;
+    border-radius: var(--radius);
+    /* Solid: a see-through theme's card would show the page under it. */
+    background: var(--bg);
+    box-shadow: var(--shadow-lift);
+    pointer-events: none;
+  }
+  :global(:root.card-dragging),
+  :global(:root.card-dragging *) {
+    cursor: grabbing !important;
+    user-select: none;
+  }
+</style>
