@@ -3850,6 +3850,19 @@ again; columns and order chosen to fill; each card down to the next.
       2.0.2`; What's new in 2.0.2: cards that fill the window, cards you can move, no sideways
       scrolling, search that keeps up, fewer battery notifications. All five are this PC's, so
       none is marked for the phone app.
+- [x] **2.0.2 released** (2026-10-29, on the owner's go: "release 2.0.2"). CI passed on c83a122
+      (run 40876438822; Linux, Windows with the smoke test, the relay and phone app with the
+      end-to-end test, accessibility). `main` fast-forwarded to it from 2.0.1's records, and
+      Release run 40879139776 tagged `v2.0.2`, found the relay's address in `vyro.exe` and
+      published the 14.1 MB MSI, `latest.json` and checksums here and to
+      `nanu1605/vyro-releases`; GitHub's own digests of the files published here match the
+      checksums the run printed (MSI `8634a58e…`, `latest.json` `5f39033a…`), and the
+      `latest.json` installed copies read (`nanu1605/vyro-releases`' latest) is that file,
+      offering 2.0.2 from there. Installed copies on 1.4.1 to 2.0.1 are offered it. Unsigned, as
+      before ([`docs/signing.md`](docs/signing.md)). The relay was not deployed again: it serves
+      8c53592's phone app and relay (run 40764531668). Built here, 8c53592's phone app and this
+      commit's differ only in 2.0.2's notes (none for the phone), the Dashboard's `--cols` in the
+      shared theme and the service worker's file list; the relay only in its burst test.
 
 ## Risks
 
