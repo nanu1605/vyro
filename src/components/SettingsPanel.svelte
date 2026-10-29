@@ -83,9 +83,10 @@
     const next = on ? [...prefs.overlay.metrics, id] : prefs.overlay.metrics.filter((m) => m !== id);
     if (next.length) void setOverlay({ metrics: next });
   }
-  // Preview: the game being played, else the simulated one.
+  // Preview: the game being played, else the simulated one. Only while Settings shows: its graph
+  // draws up to 30 frames a second.
   const preview = $derived.by(() => {
-    if (!snap) return null;
+    if (!snap || !active) return null;
     const g = snap.game ?? simGame(snap.ts, snap.gpu[0]?.usage ?? 80, Math.random);
     return overlayData(prefs.overlay, snap, g);
   });

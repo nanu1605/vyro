@@ -210,7 +210,16 @@
     background: none;
   }
   .led.ring.live {
+    position: relative;
     background: var(--accent);
+  }
+  /* The pulse grows a ring of its own: a box-shadow pulse painted the bar again every frame. */
+  .led.ring.live::after {
+    position: absolute;
+    inset: -1.5px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--accent) 25%, transparent);
+    content: '';
     animation: pulse 2s ease-in-out infinite;
   }
   .led.hot {
@@ -218,7 +227,7 @@
   }
   @keyframes pulse {
     50% {
-      box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
+      transform: scale(2);
     }
   }
   .search {

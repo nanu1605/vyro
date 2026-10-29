@@ -31,6 +31,12 @@
     kind: string;
     run: () => void;
   }
+  /** An item with what typing is matched against, lowercased once rather than on every key. */
+  interface Found extends Item {
+    hay: string;
+    low: string;
+  }
+  const found = (i: Item): Found => ({ ...i, hay: `${i.label} ${i.hint} ${i.kind}`.toLowerCase(), low: i.label.toLowerCase() });
 
   const SECTIONS: Array<[Tab, string, string, string]> = [
     ['settings', 'appearance', 'Appearance', 'Theme, accent, open on'],
@@ -47,7 +53,8 @@
     ['health', 'alerts', 'Alerts', 'Rules, actions and the log'],
   ];
 
-  let sensors = $state<Item[]>([]);
+  // Raw: hundreds of sensors, read on every key, need no deep proxies.
+  let sensors = $state.raw<Found[]>([]);
   let loaded = false;
   async function loadSensors(): Promise<void> {
     if (loaded) return;
@@ -55,63 +62,60 @@
     try {
       const tree = await getSensorTree(snap);
       sensors = tree.groups.flatMap((g) =>
-        g.sensors.map((s) => ({
-          key: `sensor:${s.id}`,
-          label: s.name,
-          hint: `${g.group} · open in History`,
-          kind: 'Sensor',
-          run: () => onhistory(s.id),
-        })),
+        g.sensors.map((s) =>
+          found({
+            key: `sensor:${s.id}`,
+            label: s.name,
+            hint: `${g.group} · open in History`,
+            kind: 'Sensor',
+            run: () => onhistory(s.id),
+          }),
+        ),
       );
     } catch {
       loaded = false;
     }
   }
 
-  const base = $derived<Item[]>([
-    ...VIEWS.map((v) => ({ key: `tab:${v.id}`, label: v.label, hint: v.blurb, kind: 'Go to', run: () => onselect(v.id) })),
-    ...(fansActive ? [{ key: 'bios', label: 'Return fans to BIOS', hint: 'Hand every fan back', kind: 'Action', run: onbios }] : []),
-    { key: 'whatsnew', label: 'What’s new', hint: 'This version’s notes', kind: 'Action', run: onwhatsnew },
-    ...SECTIONS.map(([t, id, label, hint]) => ({ key: `sec:${id}`, label, hint, kind: t === 'settings' ? 'Settings' : 'Health', run: () => onsection(t, id) })),
-    ...THEMES.map((t) => ({
-      key: `theme:${t.id}`,
-      label: `Theme: ${t.name}`,
-      hint: prefs.theme === t.id ? 'in use' : t.description,
-      kind: 'Look',
-      run: () => void savePrefs({ theme: t.id }).catch(() => {}),
-    })),
-    ...[{ id: 'theme' as const, name: 'Theme’s own' }, ...ACCENTS].map((a) => ({
-      key: `accent:${a.id}`,
-      label: `Accent: ${a.name}`,
-      hint: prefs.accent === a.id ? 'in use' : 'colour of highlights and gauges',
-      kind: 'Look',
-      run: () => void savePrefs({ accent: a.id }).catch(() => {}),
-    })),
-    {
-      key: 'accent:custom',
-      label: 'Accent: Custom…',
-      hint: prefs.accent.startsWith('#') ? `in use: ${prefs.accent}` : 'any colour, on a colour wheel',
-      kind: 'Look',
-      run: () => onsection('settings', 'appearance'),
-    },
-  ]);
+  const base = $derived<Found[]>(
+    [
+      ...VIEWS.map((v) => ({ key: `tab:${v.id}`, label: v.label, hint: v.blurb, kind: 'Go to', run: () => onselect(v.id) })),
+      ...(fansActive ? [{ key: 'bios', label: 'Return fans to BIOS', hint: 'Hand every fan back', kind: 'Action', run: onbios }] : []),
+      { key: 'whatsnew', label: 'What’s new', hint: 'This version’s notes', kind: 'Action', run: onwhatsnew },
+      ...SECTIONS.map(([t, id, label, hint]) => ({ key: `sec:${id}`, label, hint, kind: t === 'settings' ? 'Settings' : 'Health', run: () => onsection(t, id) })),
+      ...THEMES.map((t) => ({
+        key: `theme:${t.id}`,
+        label: `Theme: ${t.name}`,
+        hint: prefs.theme === t.id ? 'in use' : t.description,
+        kind: 'Look',
+        run: () => void savePrefs({ theme: t.id }).catch(() => {}),
+      })),
+      ...[{ id: 'theme' as const, name: 'Theme’s own' }, ...ACCENTS].map((a) => ({
+        key: `accent:${a.id}`,
+        label: `Accent: ${a.name}`,
+        hint: prefs.accent === a.id ? 'in use' : 'colour of highlights and gauges',
+        kind: 'Look',
+        run: () => void savePrefs({ accent: a.id }).catch(() => {}),
+      })),
+      {
+        key: 'accent:custom',
+        label: 'Accent: Custom…',
+        hint: prefs.accent.startsWith('#') ? `in use: ${prefs.accent}` : 'any colour, on a colour wheel',
+        kind: 'Look',
+        run: () => onsection('settings', 'appearance'),
+      },
+    ].map(found),
+  );
 
   let query = $state('');
   let at = $state(0);
   const results = $derived.by(() => {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
     const all = words.length ? [...base, ...sensors] : base.filter((i) => i.kind === 'Go to' || i.kind === 'Action');
-    const hits = all.filter((i) => {
-      const hay = `${i.label} ${i.hint} ${i.kind}`.toLowerCase();
-      return words.every((w) => hay.includes(w));
-    });
+    const hits = all.filter((i) => words.every((w) => i.hay.includes(w)));
     // Names that start with what was typed first.
-    if (words[0]) hits.sort((a, b) => Number(!a.label.toLowerCase().startsWith(words[0]!)) - Number(!b.label.toLowerCase().startsWith(words[0]!)));
+    if (words[0]) hits.sort((a, b) => Number(!a.low.startsWith(words[0]!)) - Number(!b.low.startsWith(words[0]!)));
     return hits.slice(0, 60);
-  });
-  $effect(() => {
-    void results;
-    at = 0;
   });
 
   let dialog = $state<HTMLDialogElement | undefined>();
@@ -121,6 +125,7 @@
     if (!dialog) return;
     if (open && !dialog.open) {
       query = '';
+      at = 0;
       dialog.showModal();
       input?.focus();
       void loadSensors();
@@ -154,6 +159,7 @@
       <input
         bind:this={input}
         bind:value={query}
+        oninput={() => (at = 0)}
         onkeydown={onKey}
         type="text"
         role="combobox"
@@ -184,9 +190,10 @@
 </dialog>
 
 <style>
+  /* As tall when one result shows as when sixty do: typing never resizes the dialog. */
   .palette {
     width: min(40rem, calc(100vw - 2rem));
-    max-height: min(32rem, 76vh);
+    height: min(32rem, 76vh);
     margin: 12vh auto auto;
     padding: 0;
     border: 1px solid var(--accent-line);
@@ -198,14 +205,15 @@
       0 24px 60px -20px color-mix(in srgb, var(--accent) 35%, transparent);
     color: var(--text);
   }
+  /* A plain dim, no blur: blurring the whole window again on every frame of what moves under it
+     (the overlay preview, a pulsing chip) made typing here lag by a quarter second (2.0.2). */
   .palette::backdrop {
-    background: rgb(0 0 0 / 45%);
-    backdrop-filter: blur(3px);
+    background: rgb(0 0 0 / 55%);
   }
   .box {
     display: flex;
     flex-direction: column;
-    max-height: inherit;
+    height: 100%;
   }
   .field {
     display: flex;
@@ -237,6 +245,8 @@
     font-size: 0.68rem;
   }
   .list {
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: 0.4rem;
   }

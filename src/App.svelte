@@ -523,7 +523,7 @@
 
       {#if visited.processes}
         <div id="panel-processes" role="tabpanel" aria-labelledby="tab-processes" hidden={tab !== 'processes'}>
-          <ProcessesPanel processes={snap?.processes ?? []} />
+          <ProcessesPanel processes={snap?.processes ?? []} active={tab === 'processes'} />
         </div>
       {/if}
 

@@ -5,8 +5,12 @@
 
   interface Props {
     processes: ProcessSnapshot[];
+    /** The view shows: while hidden the table keeps its rows rather than sorting every reading. */
+    active: boolean;
   }
-  let { processes }: Props = $props();
+  let { processes, active }: Props = $props();
+  const kept = { rows: [] as ProcessSnapshot[] };
+  const shown = $derived(active ? (kept.rows = processes) : kept.rows);
 
   type Col = 'name' | 'pid' | 'cpuPct' | 'ramMB' | 'gpuPct';
   const COLS: Array<{ id: Col; label: string; num: boolean }> = [
@@ -32,8 +36,8 @@
   const rows = $derived.by(() => {
     const q = filter.trim().toLowerCase();
     const list = q
-      ? processes.filter((p) => p.name.toLowerCase().includes(q) || String(p.pid).startsWith(q))
-      : processes.slice();
+      ? shown.filter((p) => p.name.toLowerCase().includes(q) || String(p.pid).startsWith(q))
+      : shown.slice();
     const dir = desc ? -1 : 1;
     list.sort((a, b) => {
       if (sortBy === 'name') return dir * a.name.localeCompare(b.name) || a.pid - b.pid;
@@ -120,7 +124,7 @@
             </td>
           </tr>
         {:else}
-          <tr><td colspan={COLS.length + 1} class="empty">{processes.length ? 'No matches.' : 'Waiting for data…'}</td></tr>
+          <tr><td colspan={COLS.length + 1} class="empty">{shown.length ? 'No matches.' : 'Waiting for data…'}</td></tr>
         {/each}
       </tbody>
     </table>
