@@ -3,6 +3,7 @@
   // The service changes the card and checks it; this view only asks.
   import { onMount, untrack } from 'svelte';
   import Card from './Card.svelte';
+  import CardGrid, { type CardItem } from './CardGrid.svelte';
   import { fmt, fmtDateTime } from '../format';
   import { MAX_NAME, MAX_PRESETS, STOCK, clamp, describe, inForce, isStock, nameProblem, newId, runningText, same, testedText, withPreset, withoutPreset } from '../gputune';
   import {
@@ -218,6 +219,16 @@
     void save({ ...status.config, applyAtStart: v }, false);
   }
   const w = (pct: number) => (limits?.powerDefaultW != null ? ` (${fmt((limits.powerDefaultW * pct) / 100, 0)} W)` : '');
+  // The cards, in Vyro's order or the owner's (2.0.2).
+  const CARDS: CardItem[] = [
+    { id: 'gpu-now', title: 'Now' },
+    { id: 'gpu-presets', title: 'Presets', w: 2 },
+    { id: 'gpu-custom', title: 'Custom' },
+    { id: 'gpu-best', title: 'Find my best' },
+    { id: 'gpu-options', title: 'Options' },
+    { id: 'gpu-safety', title: 'Safety' },
+    { id: 'gpu-events', title: 'Recent events' },
+  ];
 </script>
 
 <section class="panel-wrap">
@@ -298,163 +309,168 @@
         </div>
       {/if}
 
-      <div class="grid">
-        <Card title="Now">
-          <p class="state"><b>{runningText(status)}</b></p>
-          <dl class="kv">
-            <dt>Core offset</dt>
-            <dd>{status.current ? `${status.current.coreMhz > 0 ? '+' : ''}${status.current.coreMhz} MHz` : '—'}</dd>
-            <dt>Memory offset</dt>
-            <dd>{status.current ? `${status.current.memMhz > 0 ? '+' : ''}${status.current.memMhz} MHz` : '—'}</dd>
-            <dt>Power limit</dt>
-            <dd>{status.current ? `${status.current.powerPct} %` : '—'}{status.clocks.powerLimitW != null ? ` · ${fmt(status.clocks.powerLimitW, 0)} W` : ''}</dd>
-            <dt>Highest core clock</dt>
-            <dd>{status.clocks.coreMaxMhz != null ? `${fmt(status.clocks.coreMaxMhz, 0)} MHz` : '—'}</dd>
-            <dt>Memory clock</dt>
-            <dd>{status.clocks.memMaxMhz != null ? `${fmt(status.clocks.memMaxMhz, 0)} MHz` : '—'}</dd>
-          </dl>
-          {#if missing.length}
-            <p class="note">This card's driver does not allow changing its {missing.join(' or ')}.</p>
-          {/if}
-        </Card>
-
-        <Card title="Presets" subtitle="Suggested for this card's family, scaled to what its driver allows" wide>
-          <ul class="presets">
-            {#each status.presets as p (p.id)}
-              {@const tested = testedText(p.testedAt)}
-              <li class:current={status.applied === p.id || (p.id === 'stock' && status.applied == null && !status.trial)}>
-                <div class="what">
-                  <b>{p.name}</b>
-                  {#if force?.id === p.id}<span class="tag on">chosen</span>{/if}
-                  {#if tested && p.id !== 'stock'}<span class="tag ok">{tested}</span>{/if}
-                  <span class="vals">{describe(p.settings)}{p.settings.powerPct !== 100 ? w(p.settings.powerPct) : ''}</span>
-                  {#if p.note}<span class="pnote">{p.note}</span>{/if}
-                </div>
-                <div class="row-actions">
-                  <button type="button" class="primary" disabled={busy || testing} onclick={() => apply(p)}>
-                    Apply<span class="sr-only"> {p.name}</span>
-                  </button>
-                  {#if p.id !== 'stock'}
-                    <button type="button" disabled={busy || testing} onclick={() => test(p.settings)}>
-                      Test<span class="sr-only"> {p.name}</span>
-                    </button>
-                    <button type="button" disabled={busy} onclick={() => edit(p)}>
-                      {p.kind === 'custom' ? 'Edit' : 'Copy'}<span class="sr-only"> {p.name}</span>
-                    </button>
-                  {/if}
-                  {#if p.kind === 'custom'}
-                    <button type="button" class="danger" disabled={busy} onclick={() => remove(p)}>
-                      Delete<span class="sr-only"> {p.name}</span>
-                    </button>
-                  {/if}
-                </div>
-              </li>
-            {/each}
-          </ul>
-          <p class="note">
-            “Test” runs the stability test for about 5 minutes: full load with every result checked. Settings that pass are
-            marked tested, and only tested settings are applied when Vyro starts.
-          </p>
-        </Card>
-
-        <Card title="Custom" subtitle={editing ? `Editing ${draftName}` : 'Your own settings'} id="gpu-custom">
-          {#if limits.core}
-            <label class="slider">
-              <span>Core offset <b>{draft.coreMhz > 0 ? '+' : ''}{draft.coreMhz} MHz</b></span>
-              <input type="range" min={limits.core.min} max={limits.core.max} step="5" bind:value={draft.coreMhz} />
-              <small>{limits.core.min} to +{limits.core.max} MHz allowed by the driver</small>
-            </label>
-          {/if}
-          {#if limits.mem}
-            <label class="slider">
-              <span>Memory offset <b>{draft.memMhz > 0 ? '+' : ''}{draft.memMhz} MHz</b></span>
-              <input type="range" min={limits.mem.min} max={limits.mem.max} step="25" bind:value={draft.memMhz} />
-              <small>{limits.mem.min} to +{limits.mem.max} MHz allowed by the driver</small>
-            </label>
-          {/if}
-          {#if limits.power}
-            <label class="slider">
-              <span>Power limit <b>{draft.powerPct} %{w(draft.powerPct)}</b></span>
-              <input type="range" min={limits.power.min} max={limits.power.max} step="1" bind:value={draft.powerPct} />
-              <small>{limits.power.min} to {limits.power.max} % allowed by the driver</small>
-            </label>
-          {/if}
-          <label class="name">
-            <span>Name</span>
-            <input type="text" maxlength={MAX_NAME} bind:value={draftName} placeholder="My settings" />
-          </label>
-          {#if draftName && nameIssue}<p class="note warn-text">{nameIssue}</p>{/if}
-          {#if full}<p class="note warn-text">You have {MAX_PRESETS} presets: delete one to save another.</p>{/if}
-          <div class="actions">
-            <button type="button" disabled={busy || !!nameIssue || full || testing} onclick={() => keep(false)}>Save</button>
-            <button type="button" class="primary" disabled={busy || !!nameIssue || full || testing} onclick={() => keep(true)}>Save and apply</button>
-            <button type="button" disabled={busy || testing || isStock(draft)} onclick={() => test(clamp(draft, limits))}>Test</button>
-            <button type="button" class="ghost" disabled={busy} onclick={() => ((draft = { ...STOCK }), (draftName = ''), (editing = null))}>Clear</button>
-          </div>
-          {#if !same(clamp(draft, limits), draft)}
-            <p class="note">Values outside the driver's range are brought within it.</p>
-          {/if}
-        </Card>
-
-        <Card title="Find my best">
-          <p class="small">
-            Raises the core clock step by step while the stability test passes, then the memory clock while it stays fast,
-            keeps a margin below the last step that passed, and tests the result for 5 minutes. About 20 to 40 minutes, at the
-            highest power limit. The result is saved as “Best for this card”.
-          </p>
-          <div class="actions">
-            <button type="button" class="primary" disabled={busy || testing} onclick={findBest}>Find my best</button>
-          </div>
-          <p class="note">It does not start while a game runs, a benchmark runs or Health shows a warning.</p>
-        </Card>
-
-        <Card title="Options">
-          <label class="check">
-            <input type="checkbox" checked={status.config.applyAtStart} disabled={busy} onchange={(e) => setApplyAtStart(e.currentTarget.checked)} />
-            <span>Apply at start <small>(only settings that passed the stability test)</small></span>
-          </label>
-          <h3>Per profile</h3>
-          <div class="profiles">
-            {#each profiles as pr (pr.id)}
-              <label>
-                <span>{pr.name}</span>
-                <select value={status.config.profiles[pr.id] ?? ''} disabled={busy} onchange={(e) => setProfile(pr.id, e.currentTarget.value)}>
-                  <option value="">As chosen above</option>
-                  {#each status.presets as p (p.id)}
-                    <option value={p.id}>{p.name}</option>
-                  {/each}
-                </select>
+      {@const now = status}
+      <CardGrid view="gpu" items={CARDS} min="19rem">
+        {#snippet card(id)}
+          {#if id === 'gpu-now'}
+            <Card title="Now" id="gpu-now">
+              <p class="state"><b>{runningText(now)}</b></p>
+              <dl class="kv">
+                <dt>Core offset</dt>
+                <dd>{now.current ? `${now.current.coreMhz > 0 ? '+' : ''}${now.current.coreMhz} MHz` : '—'}</dd>
+                <dt>Memory offset</dt>
+                <dd>{now.current ? `${now.current.memMhz > 0 ? '+' : ''}${now.current.memMhz} MHz` : '—'}</dd>
+                <dt>Power limit</dt>
+                <dd>{now.current ? `${now.current.powerPct} %` : '—'}{now.clocks.powerLimitW != null ? ` · ${fmt(now.clocks.powerLimitW, 0)} W` : ''}</dd>
+                <dt>Highest core clock</dt>
+                <dd>{now.clocks.coreMaxMhz != null ? `${fmt(now.clocks.coreMaxMhz, 0)} MHz` : '—'}</dd>
+                <dt>Memory clock</dt>
+                <dd>{now.clocks.memMaxMhz != null ? `${fmt(now.clocks.memMaxMhz, 0)} MHz` : '—'}</dd>
+              </dl>
+              {#if missing.length}
+                <p class="note">This card's driver does not allow changing its {missing.join(' or ')}.</p>
+              {/if}
+            </Card>
+          {:else if id === 'gpu-presets'}
+            <Card title="Presets" id="gpu-presets" subtitle="Suggested for this card's family, scaled to what its driver allows">
+              <ul class="presets">
+                {#each now.presets as p (p.id)}
+                  {@const tested = testedText(p.testedAt)}
+                  <li class:current={now.applied === p.id || (p.id === 'stock' && now.applied == null && !now.trial)}>
+                    <div class="what">
+                      <b>{p.name}</b>
+                      {#if force?.id === p.id}<span class="tag on">chosen</span>{/if}
+                      {#if tested && p.id !== 'stock'}<span class="tag ok">{tested}</span>{/if}
+                      <span class="vals">{describe(p.settings)}{p.settings.powerPct !== 100 ? w(p.settings.powerPct) : ''}</span>
+                      {#if p.note}<span class="pnote">{p.note}</span>{/if}
+                    </div>
+                    <div class="row-actions">
+                      <button type="button" class="primary" disabled={busy || testing} onclick={() => apply(p)}>
+                        Apply<span class="sr-only"> {p.name}</span>
+                      </button>
+                      {#if p.id !== 'stock'}
+                        <button type="button" disabled={busy || testing} onclick={() => test(p.settings)}>
+                          Test<span class="sr-only"> {p.name}</span>
+                        </button>
+                        <button type="button" disabled={busy} onclick={() => edit(p)}>
+                          {p.kind === 'custom' ? 'Edit' : 'Copy'}<span class="sr-only"> {p.name}</span>
+                        </button>
+                      {/if}
+                      {#if p.kind === 'custom'}
+                        <button type="button" class="danger" disabled={busy} onclick={() => remove(p)}>
+                          Delete<span class="sr-only"> {p.name}</span>
+                        </button>
+                      {/if}
+                    </div>
+                  </li>
+                {/each}
+              </ul>
+              <p class="note">
+                “Test” runs the stability test for about 5 minutes: full load with every result checked. Settings that pass are
+                marked tested, and only tested settings are applied when Vyro starts.
+              </p>
+            </Card>
+          {:else if id === 'gpu-custom'}
+            <Card title="Custom" subtitle={editing ? `Editing ${draftName}` : 'Your own settings'} id="gpu-custom">
+              {#if limits.core}
+                <label class="slider">
+                  <span>Core offset <b>{draft.coreMhz > 0 ? '+' : ''}{draft.coreMhz} MHz</b></span>
+                  <input type="range" min={limits.core.min} max={limits.core.max} step="5" bind:value={draft.coreMhz} />
+                  <small>{limits.core.min} to +{limits.core.max} MHz allowed by the driver</small>
+                </label>
+              {/if}
+              {#if limits.mem}
+                <label class="slider">
+                  <span>Memory offset <b>{draft.memMhz > 0 ? '+' : ''}{draft.memMhz} MHz</b></span>
+                  <input type="range" min={limits.mem.min} max={limits.mem.max} step="25" bind:value={draft.memMhz} />
+                  <small>{limits.mem.min} to +{limits.mem.max} MHz allowed by the driver</small>
+                </label>
+              {/if}
+              {#if limits.power}
+                <label class="slider">
+                  <span>Power limit <b>{draft.powerPct} %{w(draft.powerPct)}</b></span>
+                  <input type="range" min={limits.power.min} max={limits.power.max} step="1" bind:value={draft.powerPct} />
+                  <small>{limits.power.min} to {limits.power.max} % allowed by the driver</small>
+                </label>
+              {/if}
+              <label class="name">
+                <span>Name</span>
+                <input type="text" maxlength={MAX_NAME} bind:value={draftName} placeholder="My settings" />
               </label>
-            {/each}
-          </div>
-          <p class="note">In use now: the {profileName(status.profile)} profile.</p>
-        </Card>
-
-        <Card title="Safety">
-          <ul class="safety">
-            <li>The card goes back to stock at 90 °C, or 105 °C at its hotspot, until you apply a preset again.</li>
-            <li>After a crash or a display driver reset while tuned, it starts at stock and “Apply at start” is turned off.</li>
-            <li>Stock before sleep, when the Vyro service stops and when Vyro is uninstalled.</li>
-            <li>Vyro reads the values back every 5 seconds; if another program keeps changing them, Vyro stops tuning.</li>
-            <li>From a phone, only Stock and tested presets can be applied.</li>
-          </ul>
-        </Card>
-
-        <Card title="Recent events" subtitle={events.length ? null : 'Nothing yet'}>
-          {#if events.length}
-            <ul class="events">
-              {#each events as ev, i (i)}
-                <li class:bad={ev.kind === 'fault' || ev.kind === 'hot' || ev.kind === 'crash' || ev.kind === 'failed'}>
-                  <time datetime={new Date(ev.ts * 1000).toISOString()}>{fmtDateTime(ev.ts)}</time>
-                  <span>{ev.message}</span>
-                </li>
-              {/each}
-            </ul>
-          {:else}
-            <p class="note">Presets applied, tests, guards and profile changes show here.</p>
+              {#if draftName && nameIssue}<p class="note warn-text">{nameIssue}</p>{/if}
+              {#if full}<p class="note warn-text">You have {MAX_PRESETS} presets: delete one to save another.</p>{/if}
+              <div class="actions">
+                <button type="button" disabled={busy || !!nameIssue || full || testing} onclick={() => keep(false)}>Save</button>
+                <button type="button" class="primary" disabled={busy || !!nameIssue || full || testing} onclick={() => keep(true)}>Save and apply</button>
+                <button type="button" disabled={busy || testing || isStock(draft)} onclick={() => test(clamp(draft, limits))}>Test</button>
+                <button type="button" class="ghost" disabled={busy} onclick={() => ((draft = { ...STOCK }), (draftName = ''), (editing = null))}>Clear</button>
+              </div>
+              {#if !same(clamp(draft, limits), draft)}
+                <p class="note">Values outside the driver's range are brought within it.</p>
+              {/if}
+            </Card>
+          {:else if id === 'gpu-best'}
+            <Card title="Find my best" id="gpu-best">
+              <p class="small">
+                Raises the core clock step by step while the stability test passes, then the memory clock while it stays fast,
+                keeps a margin below the last step that passed, and tests the result for 5 minutes. About 20 to 40 minutes, at the
+                highest power limit. The result is saved as “Best for this card”.
+              </p>
+              <div class="actions">
+                <button type="button" class="primary" disabled={busy || testing} onclick={findBest}>Find my best</button>
+              </div>
+              <p class="note">It does not start while a game runs, a benchmark runs or Health shows a warning.</p>
+            </Card>
+          {:else if id === 'gpu-options'}
+            <Card title="Options" id="gpu-options">
+              <label class="check">
+                <input type="checkbox" checked={now.config.applyAtStart} disabled={busy} onchange={(e) => setApplyAtStart(e.currentTarget.checked)} />
+                <span>Apply at start <small>(only settings that passed the stability test)</small></span>
+              </label>
+              <h3>Per profile</h3>
+              <div class="profiles">
+                {#each profiles as pr (pr.id)}
+                  <label>
+                    <span>{pr.name}</span>
+                    <select value={now.config.profiles[pr.id] ?? ''} disabled={busy} onchange={(e) => setProfile(pr.id, e.currentTarget.value)}>
+                      <option value="">As chosen above</option>
+                      {#each now.presets as p (p.id)}
+                        <option value={p.id}>{p.name}</option>
+                      {/each}
+                    </select>
+                  </label>
+                {/each}
+              </div>
+              <p class="note">In use now: the {profileName(now.profile)} profile.</p>
+            </Card>
+          {:else if id === 'gpu-safety'}
+            <Card title="Safety" id="gpu-safety">
+              <ul class="safety">
+                <li>The card goes back to stock at 90 °C, or 105 °C at its hotspot, until you apply a preset again.</li>
+                <li>After a crash or a display driver reset while tuned, it starts at stock and “Apply at start” is turned off.</li>
+                <li>Stock before sleep, when the Vyro service stops and when Vyro is uninstalled.</li>
+                <li>Vyro reads the values back every 5 seconds; if another program keeps changing them, Vyro stops tuning.</li>
+                <li>From a phone, only Stock and tested presets can be applied.</li>
+              </ul>
+            </Card>
+          {:else if id === 'gpu-events'}
+            <Card title="Recent events" id="gpu-events" subtitle={events.length ? null : 'Nothing yet'}>
+              {#if events.length}
+                <ul class="events">
+                  {#each events as ev, i (i)}
+                    <li class:bad={ev.kind === 'fault' || ev.kind === 'hot' || ev.kind === 'crash' || ev.kind === 'failed'}>
+                      <time datetime={new Date(ev.ts * 1000).toISOString()}>{fmtDateTime(ev.ts)}</time>
+                      <span>{ev.message}</span>
+                    </li>
+                  {/each}
+                </ul>
+              {:else}
+                <p class="note">Presets applied, tests, guards and profile changes show here.</p>
+              {/if}
+            </Card>
           {/if}
-        </Card>
-      </div>
+        {/snippet}
+      </CardGrid>
     {/if}
 
     <dialog bind:this={confirm} aria-labelledby="gpu-confirm-title">
@@ -590,11 +606,6 @@
     width: 100%;
     height: 0.6rem;
     accent-color: var(--accent);
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
-    gap: 0.75rem;
   }
   .state {
     margin: 0 0 0.6rem;

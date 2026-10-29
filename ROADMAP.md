@@ -3738,6 +3738,48 @@ The owner's "continue" after 2.0.1 (2026-10-28): a review. On `claude/vyro-2.0`;
       and phone app with the end-to-end test, accessibility). Locally: fmt, clippy (Linux and
       windows-gnu), the push tests in the core and the relay.
 
+The owner's bug and two features (2026-10-29), with a screenshot of Settings about 2000 px wide:
+five columns of cards, Remote far past the window's foot and the room under the short ones
+empty. Planned and agreed: cards moved on every view that has them, by a grip always there; a
+tall card (Remote) two columns wide when there are three or more.
+
+- [x] **Typing in Ctrl K no longer lags.** The search itself was cheap; the dialog's backdrop
+      blurred the whole window, and the web view blurred it again on every frame of what moves
+      under it (Settings' overlay preview, a graph at 30 frames a second that drew even while
+      Settings was hidden; the Remote chip's pulse, a box-shadow repainted): why 1.1 took the
+      blurs out of the top bar and sidebar. Measured in the preview on a 4× slowed CPU, typing
+      "cpu temperature": a key took 240 ms to show (median; 336 at worst), now 24 (80); 95 % of
+      frames came within 134 ms, now 17. Also: the backdrop is a plain dim, the dialog keeps
+      one height, each result's text is lowercased once, the overlay preview draws only while
+      Settings shows, the chip's pulse is a ring that grows (composited), and Processes keeps
+      its rows while hidden instead of sorting every reading.
+- [x] **Cards without the gaps (masonry).** Every view with cards (Settings, Hardware, System,
+      Storage, Network, Displays, Devices, Cooling, GPU tuning, Gaming) packs them the way the
+      Dashboard packs its widgets (1.2's `pack`): as many columns as fit the window, each card
+      as tall as it is, and the next one up into the room a short one leaves; a later card also
+      fills the room a two-wide card leaves under a shorter one (`packing::dense`). Remote and
+      Overlay take two columns once there are three or more; Remote's parts then sit side by
+      side (a container query: its card's width, not the window's), so it is about half as tall.
+      A fan card showing its curve is two wide. In the preview at the screenshot's width,
+      Settings is 1,487 px tall.
+- [x] **Cards move.** A grip (⋮⋮) in each card's title row: drag it, and the card takes the
+      place of the one under the pointer, live, the others gliding aside (none of it with the
+      animation off or reduced motion); near the window's top or bottom the page scrolls;
+      Escape puts it back. Or focus the grip and use the arrow keys (Home, End), each move said
+      to a screen reader. The cards are moved in the page itself, so the order Tab and a screen
+      reader follow is the order shown. Pointer events, not HTML5 drag and drop (Tauri's file
+      drop handler can take that over on Windows). Each view keeps its own order, by card, in
+      this window's storage like the folded sidebar (`vyro.cards`): a drive or GPU added later
+      goes after the card it follows, and one unplugged keeps its place for when it comes back.
+      Settings' section list follows the order. Settings → Appearance → Cards (and Ctrl K) has
+      "Put cards back". The Dashboard keeps its own editor.
+- [x] **Checked:** the card order's sums and the packing (unit tests); the accessibility sweep
+      now also checks every card view for overlaps in every theme at three widths, and drags
+      Settings' cards (by the grip, by its keys, Escape, a reload, put back).
+- [ ] **Field check (the owner, on Windows):** Ctrl K typing on Settings while a phone watches;
+      cards dragged with the mouse, touch and the keys; the order kept after a restart; the
+      Settings view at the screenshot's size.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

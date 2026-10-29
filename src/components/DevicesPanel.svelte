@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import Card from './Card.svelte';
+  import CardGrid, { type CardItem } from './CardGrid.svelte';
   import LoadState from './LoadState.svelte';
   import {
     actions,
@@ -109,124 +110,129 @@
   function time(d: Date | null): string {
     return d ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
   }
+  // Two cards across the view (2.0.2: in the owner's order).
+  const CARDS: CardItem[] = [
+    { id: 'dev-devices', title: 'Devices', w: 'full' },
+    { id: 'dev-sound', title: 'Sound', w: 'full' },
+  ];
 </script>
 
 {#if error || !data}
   <LoadState what="devices" {error} loading={!data || loading} retry={load} />
 {:else}
-  <div class="grid">
-    <Card title="Devices" subtitle={summary(data)} wide>
-      <div class="toolbar">
-        <button type="button" onclick={load} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
-        <span class="hint">
-          Updates when a device connects or disconnects; battery every minute{readAt ? ` · read ${time(readAt)}` : ''}.
-        </span>
-      </div>
+  {@const info = data}
+  <CardGrid view="devices" items={CARDS}>
+    {#snippet card(id)}
+      {#if id === 'dev-devices'}
+        <Card title="Devices" id="dev-devices" subtitle={summary(info)}>
+          <div class="toolbar">
+            <button type="button" onclick={load} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
+            <span class="hint">
+              Updates when a device connects or disconnects; battery every minute{readAt ? ` · read ${time(readAt)}` : ''}.
+            </span>
+          </div>
 
-      {#if low.length > 0}
-        <p class="low" role="status">
-          <b>Low battery:</b>
-          {low.map((d) => `${d.name} ${batteryView(d).text}`).join(', ')}
-        </p>
-      {/if}
+          {#if low.length > 0}
+            <p class="low" role="status">
+              <b>Low battery:</b>
+              {low.map((d) => `${d.name} ${batteryView(d).text}`).join(', ')}
+            </p>
+          {/if}
 
-      {#if groups.length === 0}
-        <LoadState what="devices" error={null} empty="No peripherals found. Monitors are on the Displays tab." retry={load} />
-      {/if}
+          {#if groups.length === 0}
+            <LoadState what="devices" error={null} empty="No peripherals found. Monitors are on the Displays tab." retry={load} />
+          {/if}
 
-      {#each groups as g (g.id)}
-        <h3 id="devices-{g.id}">{g.title}</h3>
-        <ul class="devices" aria-labelledby="devices-{g.id}">
-          {#each g.devices as d (d.id)}
-            {@const b = batteryView(d)}
-            {@const state = stateText(d)}
-            {@const labels = actions(d)}
-            {@const p = pending[d.id]}
-            {@const result = p ? outcome(p, d) : null}
-            <li class:off={d.state === 'notConnected'}>
-              <div class="what">
-                <b>{d.name}</b>
-                <span>{[KIND_LABEL[d.kind], connectionText(d, data.devices), d.manufacturer].filter(Boolean).join(' · ')}</span>
-                {#if labels.length > 0}
-                  <span class="outcome" role="status">{p ? (result ?? (p.want ? 'Connecting…' : 'Disconnecting…')) : ''}</span>
+          {#each groups as g (g.id)}
+            <h3 id="devices-{g.id}">{g.title}</h3>
+            <ul class="devices" aria-labelledby="devices-{g.id}">
+              {#each g.devices as d (d.id)}
+                {@const b = batteryView(d)}
+                {@const state = stateText(d)}
+                {@const labels = actions(d)}
+                {@const p = pending[d.id]}
+                {@const result = p ? outcome(p, d) : null}
+                <li class:off={d.state === 'notConnected'}>
+                  <div class="what">
+                    <b>{d.name}</b>
+                    <span>{[KIND_LABEL[d.kind], connectionText(d, info.devices), d.manufacturer].filter(Boolean).join(' · ')}</span>
+                    {#if labels.length > 0}
+                      <span class="outcome" role="status">{p ? (result ?? (p.want ? 'Connecting…' : 'Disconnecting…')) : ''}</span>
+                    {/if}
+                  </div>
+                  <span
+                    class="state"
+                    class:ok={state === 'Connected'}
+                    class:bad={d.connected && state !== 'Connected'}
+                    title={d.state === 'unknown' ? "Paired: Windows doesn't say whether it is connected" : undefined}
+                  >
+                    {state}
+                  </span>
+                  <span
+                    class="battery {b.tone}"
+                    title={b.source ? `Battery ${b.text}${b.charging ? ', charging' : ''}, ${b.source}` : 'No battery reading'}
+                  >
+                    <span class="sr-only">Battery</span>
+                    {#if b.pct != null}
+                      <span class="bar" aria-hidden="true"><i style:width="{b.pct}%"></i></span>
+                    {/if}
+                    <span class="num">{b.text}</span>
+                    {#if b.charging}<span class="charging">charging</span>{/if}
+                    {#if b.source}<span class="sr-only">, {b.source}</span>{:else}<span class="sr-only">, not reported</span>{/if}
+                  </span>
+                  <span class="act">
+                    {#each labels as label (label)}
+                      <button
+                        type="button"
+                        onclick={() => void act(d, label === 'Connect')}
+                        disabled={p != null && result == null}
+                        aria-label="{label} {d.name}"
+                      >
+                        {label}
+                      </button>
+                    {/each}
+                  </span>
+                </li>
+              {/each}
+            </ul>
+          {/each}
+          <p class="note">
+            Battery shows where Windows, Bluetooth LE, XInput, a Logitech receiver or a PlayStation controller reports it;
+            other makers' 2.4 GHz receivers keep it to their own software. Monitors are on the Displays tab.
+          </p>
+        </Card>
+      {:else if id === 'dev-sound'}
+        <Card title="Sound" id="dev-sound" subtitle="Playback and recording">
+          <div class="sound">
+            {#each [{ id: 'out', title: 'Playback', list: outputs }, { id: 'in', title: 'Recording', list: inputs }] as s (s.id)}
+              <div>
+                <h3 id="sound-{s.id}">{s.title}</h3>
+                {#if s.list.length === 0}
+                  <p class="none">None</p>
+                {:else}
+                  <ul class="endpoints" aria-labelledby="sound-{s.id}">
+                    {#each s.list as a (a.id)}
+                      {@const owner = ownerName(info, a.device)}
+                      <li class:off={!a.plugged}>
+                        <div class="what">
+                          <b>{a.name}</b>
+                          <span>{owner ?? 'This PC'}{a.plugged ? '' : ' · nothing plugged in'}</span>
+                        </div>
+                        {#if a.default}<span class="state ok">Default</span>{/if}
+                      </li>
+                    {/each}
+                  </ul>
                 {/if}
               </div>
-              <span
-                class="state"
-                class:ok={state === 'Connected'}
-                class:bad={d.connected && state !== 'Connected'}
-                title={d.state === 'unknown' ? "Paired: Windows doesn't say whether it is connected" : undefined}
-              >
-                {state}
-              </span>
-              <span
-                class="battery {b.tone}"
-                title={b.source ? `Battery ${b.text}${b.charging ? ', charging' : ''}, ${b.source}` : 'No battery reading'}
-              >
-                <span class="sr-only">Battery</span>
-                {#if b.pct != null}
-                  <span class="bar" aria-hidden="true"><i style:width="{b.pct}%"></i></span>
-                {/if}
-                <span class="num">{b.text}</span>
-                {#if b.charging}<span class="charging">charging</span>{/if}
-                {#if b.source}<span class="sr-only">, {b.source}</span>{:else}<span class="sr-only">, not reported</span>{/if}
-              </span>
-              <span class="act">
-                {#each labels as label (label)}
-                  <button
-                    type="button"
-                    onclick={() => void act(d, label === 'Connect')}
-                    disabled={p != null && result == null}
-                    aria-label="{label} {d.name}"
-                  >
-                    {label}
-                  </button>
-                {/each}
-              </span>
-            </li>
-          {/each}
-        </ul>
-      {/each}
-      <p class="note">
-        Battery shows where Windows, Bluetooth LE, XInput, a Logitech receiver or a PlayStation controller reports it;
-        other makers' 2.4 GHz receivers keep it to their own software. Monitors are on the Displays tab.
-      </p>
-    </Card>
-
-    <Card title="Sound" subtitle="Playback and recording" wide>
-      <div class="sound">
-        {#each [{ id: 'out', title: 'Playback', list: outputs }, { id: 'in', title: 'Recording', list: inputs }] as s (s.id)}
-          <div>
-            <h3 id="sound-{s.id}">{s.title}</h3>
-            {#if s.list.length === 0}
-              <p class="none">None</p>
-            {:else}
-              <ul class="endpoints" aria-labelledby="sound-{s.id}">
-                {#each s.list as a (a.id)}
-                  {@const owner = ownerName(data, a.device)}
-                  <li class:off={!a.plugged}>
-                    <div class="what">
-                      <b>{a.name}</b>
-                      <span>{owner ?? 'This PC'}{a.plugged ? '' : ' · nothing plugged in'}</span>
-                    </div>
-                    {#if a.default}<span class="state ok">Default</span>{/if}
-                  </li>
-                {/each}
-              </ul>
-            {/if}
+            {/each}
           </div>
-        {/each}
-      </div>
-    </Card>
-  </div>
+        </Card>
+      {/if}
+    {/snippet}
+  </CardGrid>
 {/if}
 
 <style>
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
-    gap: 1rem;
-  }
   .toolbar {
     display: flex;
     flex-wrap: wrap;

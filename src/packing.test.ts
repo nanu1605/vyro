@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { balancedColumns, rowSpan, skyline } from './packing';
+import { balancedColumns, cardSpan, dense, rowSpan, skyline } from './packing';
 
 describe('Dashboard packing', () => {
   it('spans the rows a widget is tall, with its gap', () => {
@@ -79,5 +79,51 @@ describe('Dashboard packing', () => {
     // No room for two side by side: one column.
     expect(balancedColumns(5, 0, 50, 8)).toBe(1);
     expect(skyline([], 12)).toEqual([]);
+  });
+
+  it('gives a view’s card the columns it asks for, never more than the grid has', () => {
+    expect(cardSpan(undefined, 5)).toBe(1);
+    expect(cardSpan('1', 5)).toBe(1);
+    // Two once there are three columns: beside a single other card it would leave a gap.
+    expect(cardSpan('2', 5)).toBe(2);
+    expect(cardSpan('2', 3)).toBe(2);
+    expect(cardSpan('2', 2)).toBe(1);
+    expect(cardSpan('2', 1)).toBe(1);
+    expect(cardSpan('full', 4)).toBe(4);
+    expect(cardSpan('full', 1)).toBe(1);
+    expect(cardSpan('full', 0)).toBe(1);
+  });
+
+  it('packs Settings at five columns without a stretch under the short cards', () => {
+    // The owner's 2.0.1 screenshot: Appearance tall, Profile, General and Gaming short, Remote
+    // (two wide) very tall; then Units, Overlay (two wide), Hidden sensors, Service, Updates.
+    const rows = [190, 90, 30, 70, 160, 40, 120, 30, 45, 50];
+    const w = [1, 1, 1, 1, 2, 1, 2, 1, 1, 1];
+    const at = skyline(rows.map((r, i) => ({ w: w[i]!, rows: r })), 5, 4);
+    expect(at[4]).toEqual({ col: 2, row: 70 }); // Remote under General and Gaming
+    expect(at[5]).toEqual({ col: 4, row: 0 }); // Units up in the free column
+    expect(at[6]).toEqual({ col: 0, row: 190 }); // Overlay under Appearance
+    // Rows as tall as their tallest card took 190 + 160 + 120 (and more); packed, 310.
+    expect(Math.max(...at.map((p, i) => p.row + rows[i]!))).toBe(310);
+  });
+
+  it('fills the room a wide card leaves under a shorter one', () => {
+    // As above, packed the views' way: Hidden sensors goes up under General, where Remote (two
+    // wide, below Gaming) left room, instead of last in the fifth column.
+    const rows = [190, 90, 30, 70, 160, 40, 120, 30, 45, 50];
+    const w = [1, 1, 1, 1, 2, 1, 2, 1, 1, 1];
+    const at = dense(rows.map((r, i) => ({ w: w[i]!, rows: r })), 5, 4);
+    expect(at[7]).toEqual({ col: 2, row: 30 });
+    // Nothing on top of anything.
+    for (let i = 0; i < at.length; i++)
+      for (let j = i + 1; j < at.length; j++) {
+        const [a, b] = [at[i]!, at[j]!];
+        const across = a.col < b.col + w[j]! && b.col < a.col + w[i]!;
+        const down = a.row < b.row + rows[j]! && b.row < a.row + rows[i]!;
+        expect(across && down, `${i} and ${j}`).toBe(false);
+      }
+    // Without wide cards it places as skyline does.
+    const one = rows.map((r) => ({ w: 1, rows: r }));
+    expect(dense(one, 4, 4)).toEqual(skyline(one, 4, 4));
   });
 });

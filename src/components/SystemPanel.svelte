@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Card from './Card.svelte';
+  import CardGrid, { type CardItem } from './CardGrid.svelte';
   import KV from './KV.svelte';
   import LoadState from './LoadState.svelte';
   import Pill from './Pill.svelte';
@@ -51,107 +52,115 @@
     sleep: 'Sleep',
     wake: 'Wake',
   };
+
+  const CARDS: CardItem[] = [
+    { id: 'sys-os', title: 'Operating system' },
+    { id: 'sys-uptime', title: 'Uptime' },
+    { id: 'sys-security', title: 'Security' },
+    { id: 'sys-startup', title: 'Startup apps', w: 2 },
+    { id: 'sys-power', title: 'Power history', w: 2 },
+  ];
 </script>
 
 {#if error || !sys}
   <LoadState what="system information" {error} loading={!sys} retry={load} />
 {:else}
-  <div class="grid">
-    <Card title="Operating system" subtitle={sys.os.name}>
-      <KV
-        rows={[
-          ['Version', sys.os.displayVersion],
-          ['Build', sys.os.build],
-          ['Edition', sys.os.edition],
-          ['Architecture', sys.os.architecture],
-          ['Installed', fmtDate(sys.os.installDate)],
-        ]}
-      />
-    </Card>
-
-    <Card title="Uptime" subtitle={fmtDuration(uptime)}>
-      <KV
-        rows={[
-          ['Last boot', fmtDateTime(sys.bootTime)],
-          ['Processes', fmt(sys.processes.processes)],
-          ['Threads', fmt(sys.processes.threads)],
-          ['Handles', fmt(sys.processes.handles)],
-        ]}
-      />
-    </Card>
-
-    <Card title="Security">
-      <dl class="flags">
-        <dt>Firmware</dt>
-        <dd><Pill value={sec?.uefi} on="UEFI" off="Legacy BIOS" warnOff /></dd>
-        <dt>Secure Boot</dt>
-        <dd><Pill value={sec?.secureBoot} warnOff /></dd>
-        <dt>TPM</dt>
-        <dd><Pill value={sec?.tpmPresent} on={sec?.tpmVersion ? `TPM ${sec.tpmVersion}` : 'Present'} off="Not found" warnOff /></dd>
-        <dt>Virtualization</dt>
-        <dd><Pill value={sec?.virtualizationEnabled} /></dd>
-        <dt>Hypervisor</dt>
-        <dd><Pill value={sec?.hypervisorPresent} on="Running" off="None" /></dd>
-        <dt>BitLocker ({'C:'})</dt>
-        <dd>
-          <Pill value={sec?.bitlockerSystemDrive} on="Protected" off="Off" unknown={service === false ? 'Needs the service' : 'Unknown'} />
-        </dd>
-        {#if backend}
-          <dt>Sensor service</dt>
-          <dd><Pill value={service} on={backend.serviceVersion ? `Connected (${backend.serviceVersion})` : 'Connected'} off="Not running" warnOff /></dd>
-        {/if}
-      </dl>
-    </Card>
-
-    <Card title="Startup apps" subtitle={sys.startupApps.length ? `${sys.startupApps.filter((a) => a.enabled).length} enabled of ${sys.startupApps.length}` : null} wide>
-      {#if sys.startupApps.length === 0}
-        <p class="muted">No startup entries found.</p>
-      {:else}
-        <div class="table-wrap" use:scrollable role="region" aria-label="Startup apps">
-          <table>
-            <thead>
-              <tr><th>Name</th><th>Status</th><th>Source</th><th>Command</th></tr>
-            </thead>
-            <tbody>
-              {#each sys.startupApps as app, i (i)}
-                <tr class:disabled={!app.enabled}>
-                  <td>{app.name}</td>
-                  <td><Pill value={app.enabled} /></td>
-                  <td class="muted">{SOURCE[app.source]}</td>
-                  <td class="cmd" title={app.command}>{app.command || NA}</td>
-                </tr>
+  {@const info = sys}
+  <CardGrid view="system" items={CARDS} min="18rem">
+    {#snippet card(id)}
+      {#if id === 'sys-os'}
+        <Card title="Operating system" id="sys-os" subtitle={info.os.name}>
+          <KV
+            rows={[
+              ['Version', info.os.displayVersion],
+              ['Build', info.os.build],
+              ['Edition', info.os.edition],
+              ['Architecture', info.os.architecture],
+              ['Installed', fmtDate(info.os.installDate)],
+            ]}
+          />
+        </Card>
+      {:else if id === 'sys-uptime'}
+        <Card title="Uptime" id="sys-uptime" subtitle={fmtDuration(uptime)}>
+          <KV
+            rows={[
+              ['Last boot', fmtDateTime(info.bootTime)],
+              ['Processes', fmt(info.processes.processes)],
+              ['Threads', fmt(info.processes.threads)],
+              ['Handles', fmt(info.processes.handles)],
+            ]}
+          />
+        </Card>
+      {:else if id === 'sys-security'}
+        <Card title="Security" id="sys-security">
+          <dl class="flags">
+            <dt>Firmware</dt>
+            <dd><Pill value={sec?.uefi} on="UEFI" off="Legacy BIOS" warnOff /></dd>
+            <dt>Secure Boot</dt>
+            <dd><Pill value={sec?.secureBoot} warnOff /></dd>
+            <dt>TPM</dt>
+            <dd><Pill value={sec?.tpmPresent} on={sec?.tpmVersion ? `TPM ${sec.tpmVersion}` : 'Present'} off="Not found" warnOff /></dd>
+            <dt>Virtualization</dt>
+            <dd><Pill value={sec?.virtualizationEnabled} /></dd>
+            <dt>Hypervisor</dt>
+            <dd><Pill value={sec?.hypervisorPresent} on="Running" off="None" /></dd>
+            <dt>BitLocker ({'C:'})</dt>
+            <dd>
+              <Pill value={sec?.bitlockerSystemDrive} on="Protected" off="Off" unknown={service === false ? 'Needs the service' : 'Unknown'} />
+            </dd>
+            {#if backend}
+              <dt>Sensor service</dt>
+              <dd><Pill value={service} on={backend.serviceVersion ? `Connected (${backend.serviceVersion})` : 'Connected'} off="Not running" warnOff /></dd>
+            {/if}
+          </dl>
+        </Card>
+      {:else if id === 'sys-startup'}
+        <Card title="Startup apps" id="sys-startup" subtitle={info.startupApps.length ? `${info.startupApps.filter((a) => a.enabled).length} enabled of ${info.startupApps.length}` : null}>
+          {#if info.startupApps.length === 0}
+            <p class="muted">No startup entries found.</p>
+          {:else}
+            <div class="table-wrap" use:scrollable role="region" aria-label="Startup apps">
+              <table>
+                <thead>
+                  <tr><th>Name</th><th>Status</th><th>Source</th><th>Command</th></tr>
+                </thead>
+                <tbody>
+                  {#each info.startupApps as app, i (i)}
+                    <tr class:disabled={!app.enabled}>
+                      <td>{app.name}</td>
+                      <td><Pill value={app.enabled} /></td>
+                      <td class="muted">{SOURCE[app.source]}</td>
+                      <td class="cmd" title={app.command}>{app.command || NA}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+            <p class="muted note">Startup impact is not shown: Windows does not expose it publicly.</p>
+          {/if}
+        </Card>
+      {:else if id === 'sys-power'}
+        <Card title="Power history" id="sys-power" subtitle={info.powerEvents.length ? `last ${info.powerEvents.length} events` : null}>
+          {#if info.powerEvents.length === 0}
+            <p class="muted">No power events available.</p>
+          {:else}
+            <ol class="events">
+              {#each info.powerEvents as e, i (i)}
+                <li class={e.kind}>
+                  <time datetime={new Date(e.ts * 1000).toISOString()}>{fmtDateTime(e.ts)}</time>
+                  <span class="kind">{EVENT[e.kind]}</span>
+                  {#if e.detail}<span class="muted">{e.detail}</span>{/if}
+                </li>
               {/each}
-            </tbody>
-          </table>
-        </div>
-        <p class="muted note">Startup impact is not shown: Windows does not expose it publicly.</p>
+            </ol>
+          {/if}
+        </Card>
       {/if}
-    </Card>
-
-    <Card title="Power history" subtitle={sys.powerEvents.length ? `last ${sys.powerEvents.length} events` : null} wide>
-      {#if sys.powerEvents.length === 0}
-        <p class="muted">No power events available.</p>
-      {:else}
-        <ol class="events">
-          {#each sys.powerEvents as e, i (i)}
-            <li class={e.kind}>
-              <time datetime={new Date(e.ts * 1000).toISOString()}>{fmtDateTime(e.ts)}</time>
-              <span class="kind">{EVENT[e.kind]}</span>
-              {#if e.detail}<span class="muted">{e.detail}</span>{/if}
-            </li>
-          {/each}
-        </ol>
-      {/if}
-    </Card>
-  </div>
+    {/snippet}
+  </CardGrid>
 {/if}
 
 <style>
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
-    gap: 1rem;
-  }
   .flags {
     display: grid;
     grid-template-columns: minmax(7rem, max-content) 1fr;

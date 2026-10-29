@@ -1,11 +1,12 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import CardGrip from './CardGrip.svelte';
 
   interface Props {
     title: string;
     subtitle?: string | null;
     wide?: boolean;
-    /** To link to the card (the header's Remote chip). */
+    /** To link to the card (the header's Remote chip), and its place in a view's card grid. */
     id?: string;
     children: Snippet;
   }
@@ -14,8 +15,11 @@
 
 <section class="panel card" class:wide {id}>
   <header>
-    <h2>{title}</h2>
-    {#if subtitle}<p>{subtitle}</p>{/if}
+    <div class="titles">
+      <h2>{title}</h2>
+      {#if subtitle}<p>{subtitle}</p>{/if}
+    </div>
+    {#if id}<CardGrip {id} {title} />{/if}
   </header>
   {@render children()}
 </section>
@@ -28,7 +32,14 @@
     grid-column: 1 / -1;
   }
   header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
     margin-bottom: 0.75rem;
+  }
+  .titles {
+    flex: 1;
+    min-width: 0;
   }
   h2 {
     margin: 0;

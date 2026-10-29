@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import Card from './Card.svelte';
+  import CardGrid, { type CardItem } from './CardGrid.svelte';
   import CurveEditor from './CurveEditor.svelte';
   import { defaultCurve, PRESETS, PUMP_CURVE, PUMP_SPEEDS, type Preset } from '../curve';
   import { fmt, fmtDateTime } from '../format';
@@ -142,6 +143,19 @@
   }
 
   const labelOf = (c: FanConfig, h: HeaderStatus) => c.labels[h.index] ?? h.name;
+  // One card per fan header (two columns wide while it shows a curve), then Safety and the events:
+  // in Vyro's order or the owner's (2.0.2).
+  const cards = $derived<CardItem[]>([
+    ...(status?.headers ?? []).map(
+      (h): CardItem => ({
+        id: `fan:${h.index}`,
+        title: config ? labelOf(config, h) : h.name,
+        w: config && modeOf(config, h.index).mode === 'curve' ? 2 : 1,
+      }),
+    ),
+    { id: 'fan-safety', title: 'Safety' },
+    { id: 'fan-events', title: 'Recent events' },
+  ]);
 
   function startRename(h: HeaderStatus): void {
     if (!config) return;
@@ -346,282 +360,289 @@
       </p>
     </div>
 
-    <div class="grid">
-      {#each status.headers as h (h.index)}
-        {@const mode = modeOf(config, h.index)}
-        <Card
-          title={labelOf(config, h)}
-          subtitle={h.connected ? `${fmt(h.rpm)} RPM · ${fmt(h.dutyPct)} %` : `No speed reading · ${fmt(h.dutyPct)} %`}
-          wide={mode.mode === 'curve'}
-        >
-          <p class="state">
-            {#if h.software}
-              <span class="tag on">Vyro</span> target {fmt(h.targetPct)} %
-              {#if h.sourceC != null}at {t(h.sourceC)}{/if}
-            {:else}
-              <span class="tag">BIOS</span> following the BIOS curve
-            {/if}
-            {#if config.labels[h.index]}<span class="board-name">· {h.name}</span>{/if}
-          </p>
-          {#if !h.controllable}
-            <p class="note">Vyro cannot control this header on this motherboard.</p>
-          {:else if !confirmed(config, h)}
-            <p class="note">
-              This header is meant for a liquid cooler’s pump{#if h.connected && h.rpm}; something on it runs at
-                {fmt(h.rpm)} RPM{/if}. Before Vyro controls it, confirm that a pump is plugged in here. Vyro keeps a
-              pump at {status.pumpMinPct} % or more, and hands every fan back to the BIOS if the pump stops reporting a
-              speed.
-            </p>
-            <button type="button" class="confirm-pump" onclick={() => setPump(h, true)}>A pump is plugged in here</button>
-          {:else}
-            {#if isPump(config, h) && !h.connected}
-              <p class="note warn">
-                Vyro can’t see this pump’s speed, so it can’t tell if the pump stops. Leave it on BIOS unless you’re
-                sure the pump is on this header.
-              </p>
-            {:else if !h.connected}
-              <p class="note">
-                Either nothing is plugged in, or a hub or splitter whose speed wire isn’t connected. Fans on it still
-                follow this header’s setting.
-              </p>
-            {:else if isPump(config, h)}
-              <p class="note">
-                Never below {floorOf(config, h)} %. If the pump stops reporting a speed, every fan goes back to the
-                BIOS.
-              </p>
-            {/if}
-            <fieldset class="plain" disabled={!editable}>
-            <div class="modes" role="radiogroup" aria-label="{labelOf(config, h)} mode">
-              {#each [['bios', 'BIOS'], ['fixed', 'Fixed'], ['curve', 'Curve']] as const as [kind, text] (kind)}
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={mode.mode === kind}
-                  class:selected={mode.mode === kind}
-                  onclick={() => pick(h, kind)}>{text}</button
-                >
-              {/each}
-            </div>
-            {#if mode.mode === 'fixed'}
-              <label class="slider">
-                <span>Speed <strong>{mode.pct} %</strong></span>
+    {@const now = status}
+    {@const cfg = config}
+    <CardGrid view="cooling" items={cards} min="18rem">
+      {#snippet card(id)}
+        {#if id === 'fan-safety'}
+          <Card title="Safety" id="fan-safety" subtitle="Full speed above these temperatures">
+            <div class="smooth">
+              <label>
+                CPU
                 <input
-                  type="range"
-                  min={floorOf(config, h)}
-                  max="100"
+                  type="number"
+                  min="40"
+                  max="105"
                   step="1"
-                  value={mode.pct}
-                  oninput={(e) => setMode(h.index, { mode: 'fixed', pct: Number(e.currentTarget.value) })}
-                />
-                <small>Minimum {floorOf(config, h)} %</small>
+                  value={cfg.emergencyCpuC}
+                  onchange={(e) => edit((c) => (c.emergencyCpuC = Number(e.currentTarget.value)))}
+                /> °C
               </label>
-              {#if isPump(config, h)}
-                <span class="presets">
-                  {#each Object.entries(PUMP_SPEEDS) as [name, pct] (name)}
+              <label>
+                GPU
+                <input
+                  type="number"
+                  min="40"
+                  max="105"
+                  step="1"
+                  value={cfg.emergencyGpuC}
+                  onchange={(e) => edit((c) => (c.emergencyGpuC = Number(e.currentTarget.value)))}
+                /> °C
+              </label>
+            </div>
+            <p class="note">
+              Every fan Vyro drives goes to 100 % when either limit is reached, or when a curve’s temperature has no reading.
+              Vyro never sets a fan below 20 % or a pump below {now.pumpMinPct} %, and hands every fan back to the BIOS
+              when it stops, crashes, loses its sensors, the pump stops reporting a speed, or the PC goes to sleep. Closing
+              this window does not stop fan control; the Vyro service keeps running it.
+            </p>
+          </Card>
+        {:else if id === 'fan-events'}
+          <Card title="Recent events" id="fan-events" subtitle={events.length ? null : 'Nothing yet'}>
+            {#if events.length}
+              <ul class="events">
+                {#each events as ev, i (i)}
+                  <li class:bad={ev.kind === 'fault' || ev.kind === 'watchdog' || ev.kind === 'fullSpeed'}>
+                    <time datetime={new Date(ev.ts * 1000).toISOString()}>{fmtDateTime(ev.ts)}</time>
+                    <span>{ev.message}</span>
+                  </li>
+                {/each}
+              </ul>
+            {:else}
+              <p class="note">Turning control on or off, full-speed moments, faults, sleep and profile changes show here.</p>
+            {/if}
+          </Card>
+        {:else}
+          {@const h = now.headers.find((x) => `fan:${x.index}` === id)}
+          {#if h}
+            {@const mode = modeOf(cfg, h.index)}
+            <Card
+              title={labelOf(cfg, h)}
+              {id}
+              subtitle={h.connected ? `${fmt(h.rpm)} RPM · ${fmt(h.dutyPct)} %` : `No speed reading · ${fmt(h.dutyPct)} %`}
+            >
+              <p class="state">
+                {#if h.software}
+                  <span class="tag on">Vyro</span> target {fmt(h.targetPct)} %
+                  {#if h.sourceC != null}at {t(h.sourceC)}{/if}
+                {:else}
+                  <span class="tag">BIOS</span> following the BIOS curve
+                {/if}
+                {#if cfg.labels[h.index]}<span class="board-name">· {h.name}</span>{/if}
+              </p>
+              {#if !h.controllable}
+                <p class="note">Vyro cannot control this header on this motherboard.</p>
+              {:else if !confirmed(cfg, h)}
+                <p class="note">
+                  This header is meant for a liquid cooler’s pump{#if h.connected && h.rpm}; something on it runs at
+                    {fmt(h.rpm)} RPM{/if}. Before Vyro controls it, confirm that a pump is plugged in here. Vyro keeps a
+                  pump at {now.pumpMinPct} % or more, and hands every fan back to the BIOS if the pump stops reporting a
+                  speed.
+                </p>
+                <button type="button" class="confirm-pump" onclick={() => setPump(h, true)}>A pump is plugged in here</button>
+              {:else}
+                {#if isPump(cfg, h) && !h.connected}
+                  <p class="note warn">
+                    Vyro can’t see this pump’s speed, so it can’t tell if the pump stops. Leave it on BIOS unless you’re
+                    sure the pump is on this header.
+                  </p>
+                {:else if !h.connected}
+                  <p class="note">
+                    Either nothing is plugged in, or a hub or splitter whose speed wire isn’t connected. Fans on it still
+                    follow this header’s setting.
+                  </p>
+                {:else if isPump(cfg, h)}
+                  <p class="note">
+                    Never below {floorOf(cfg, h)} %. If the pump stops reporting a speed, every fan goes back to the
+                    BIOS.
+                  </p>
+                {/if}
+                <fieldset class="plain" disabled={!editable}>
+                <div class="modes" role="radiogroup" aria-label="{labelOf(cfg, h)} mode">
+                  {#each [['bios', 'BIOS'], ['fixed', 'Fixed'], ['curve', 'Curve']] as const as [kind, text] (kind)}
                     <button
                       type="button"
-                      class:selected={mode.pct === pct}
-                      onclick={() => setMode(h.index, { mode: 'fixed', pct })}
-                      >{name[0]?.toUpperCase()}{name.slice(1)} {pct} %</button
+                      role="radio"
+                      aria-checked={mode.mode === kind}
+                      class:selected={mode.mode === kind}
+                      onclick={() => pick(h, kind)}>{text}</button
                     >
                   {/each}
-                </span>
-              {/if}
-            {:else if mode.mode === 'curve'}
-              {@const curve = mode.curve}
-              <div class="curve-bar">
-                <label>
-                  Follows
-                  <select
-                    value={curve.source}
-                    onchange={(e) =>
-                      setMode(h.index, { mode: 'curve', curve: { ...curve, source: e.currentTarget.value } })}
-                  >
-                    {#if !sources.some((s) => s.id === curve.source)}
-                      <option value={curve.source}>{sourceName(curve.source)}</option>
+                </div>
+                {#if mode.mode === 'fixed'}
+                  <label class="slider">
+                    <span>Speed <strong>{mode.pct} %</strong></span>
+                    <input
+                      type="range"
+                      min={floorOf(cfg, h)}
+                      max="100"
+                      step="1"
+                      value={mode.pct}
+                      oninput={(e) => setMode(h.index, { mode: 'fixed', pct: Number(e.currentTarget.value) })}
+                    />
+                    <small>Minimum {floorOf(cfg, h)} %</small>
+                  </label>
+                  {#if isPump(cfg, h)}
+                    <span class="presets">
+                      {#each Object.entries(PUMP_SPEEDS) as [name, pct] (name)}
+                        <button
+                          type="button"
+                          class:selected={mode.pct === pct}
+                          onclick={() => setMode(h.index, { mode: 'fixed', pct })}
+                          >{name[0]?.toUpperCase()}{name.slice(1)} {pct} %</button
+                        >
+                      {/each}
+                    </span>
+                  {/if}
+                {:else if mode.mode === 'curve'}
+                  {@const curve = mode.curve}
+                  <div class="curve-bar">
+                    <label>
+                      Follows
+                      <select
+                        value={curve.source}
+                        onchange={(e) =>
+                          setMode(h.index, { mode: 'curve', curve: { ...curve, source: e.currentTarget.value } })}
+                      >
+                        {#if !sources.some((s) => s.id === curve.source)}
+                          <option value={curve.source}>{sourceName(curve.source)}</option>
+                        {/if}
+                        {#each sources as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
+                      </select>
+                    </label>
+                    <span class="presets">
+                      {#each Object.keys(PRESETS) as p (p)}
+                        <button
+                          type="button"
+                          onclick={() =>
+                            setMode(h.index, {
+                              mode: 'curve',
+                              curve: { ...curve, points: PRESETS[p as Preset].map((x) => ({ ...x })) },
+                            })}>{p[0]?.toUpperCase()}{p.slice(1)}</button
+                        >
+                      {/each}
+                    </span>
+                    {#if others(h).length}
+                      <label>
+                        Copy to
+                        <select
+                          value=""
+                          onchange={(e) => {
+                            const to = Number(e.currentTarget.value);
+                            e.currentTarget.value = '';
+                            if (Number.isFinite(to)) copyCurve(h.index, to);
+                          }}
+                        >
+                          <option value="" disabled>header…</option>
+                          {#each others(h) as o (o.index)}<option value={o.index}>{labelOf(cfg, o)}</option>{/each}
+                        </select>
+                      </label>
                     {/if}
-                    {#each sources as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
-                  </select>
-                </label>
-                <span class="presets">
-                  {#each Object.keys(PRESETS) as p (p)}
-                    <button
-                      type="button"
-                      onclick={() =>
-                        setMode(h.index, {
-                          mode: 'curve',
-                          curve: { ...curve, points: PRESETS[p as Preset].map((x) => ({ ...x })) },
-                        })}>{p[0]?.toUpperCase()}{p.slice(1)}</button
-                    >
-                  {/each}
-                </span>
-                {#if others(h).length}
-                  <label>
-                    Copy to
-                    <select
-                      value=""
-                      onchange={(e) => {
-                        const to = Number(e.currentTarget.value);
-                        e.currentTarget.value = '';
-                        if (Number.isFinite(to)) copyCurve(h.index, to);
-                      }}
-                    >
-                      <option value="" disabled>header…</option>
-                      {#each others(h) as o (o.index)}<option value={o.index}>{labelOf(config, o)}</option>{/each}
-                    </select>
+                  </div>
+                  <CurveEditor
+                    label="{h.name} curve"
+                    points={curve.points}
+                    minPct={floorOf(cfg, h)}
+                    live={h.software && h.sourceC != null && h.targetPct != null ? { temp: h.sourceC, pct: h.targetPct } : null}
+                    onchange={(points) => setMode(h.index, { mode: 'curve', curve: { ...curve, points } })}
+                  />
+                  <details>
+                    <summary>Smoothing</summary>
+                    <div class="smooth">
+                      <label>
+                        Hysteresis
+                        <input
+                          type="number"
+                          min="0"
+                          max="15"
+                          step="1"
+                          value={curve.hysteresisC}
+                          onchange={(e) =>
+                            setMode(h.index, {
+                              mode: 'curve',
+                              curve: { ...curve, hysteresisC: Number(e.currentTarget.value) },
+                            })}
+                        /> °C
+                      </label>
+                      <label>
+                        Speed up
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          step="1"
+                          value={curve.rampUpPctS}
+                          onchange={(e) =>
+                            setMode(h.index, {
+                              mode: 'curve',
+                              curve: { ...curve, rampUpPctS: Number(e.currentTarget.value) },
+                            })}
+                        /> %/s
+                      </label>
+                      <label>
+                        Slow down
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          step="1"
+                          value={curve.rampDownPctS}
+                          onchange={(e) =>
+                            setMode(h.index, {
+                              mode: 'curve',
+                              curve: { ...curve, rampDownPctS: Number(e.currentTarget.value) },
+                            })}
+                        /> %/s
+                      </label>
+                    </div>
+                    <p class="note">
+                      Hysteresis keeps the fan from hunting: it only slows once the temperature has fallen this far. The
+                      speed changes by at most the rates above each second.
+                    </p>
+                  </details>
+                {/if}
+                </fieldset>
+                {#if h.kind === 'pump'}
+                  <button type="button" class="link" onclick={() => setPump(h, false)}>No pump on this header?</button>
+                {:else}
+                  <label class="pump-mark">
+                    <input
+                      type="checkbox"
+                      checked={cfg.pumps.includes(h.index)}
+                      onchange={(e) => setPump(h, e.currentTarget.checked)}
+                    />
+                    A pump is plugged in here (never below {now.pumpMinPct} %)
                   </label>
                 {/if}
-              </div>
-              <CurveEditor
-                label="{h.name} curve"
-                points={curve.points}
-                minPct={floorOf(config, h)}
-                live={h.software && h.sourceC != null && h.targetPct != null ? { temp: h.sourceC, pct: h.targetPct } : null}
-                onchange={(points) => setMode(h.index, { mode: 'curve', curve: { ...curve, points } })}
-              />
-              <details>
-                <summary>Smoothing</summary>
-                <div class="smooth">
-                  <label>
-                    Hysteresis
-                    <input
-                      type="number"
-                      min="0"
-                      max="15"
-                      step="1"
-                      value={curve.hysteresisC}
-                      onchange={(e) =>
-                        setMode(h.index, {
-                          mode: 'curve',
-                          curve: { ...curve, hysteresisC: Number(e.currentTarget.value) },
-                        })}
-                    /> °C
-                  </label>
-                  <label>
-                    Speed up
-                    <input
-                      type="number"
-                      min="1"
-                      max="100"
-                      step="1"
-                      value={curve.rampUpPctS}
-                      onchange={(e) =>
-                        setMode(h.index, {
-                          mode: 'curve',
-                          curve: { ...curve, rampUpPctS: Number(e.currentTarget.value) },
-                        })}
-                    /> %/s
-                  </label>
-                  <label>
-                    Slow down
-                    <input
-                      type="number"
-                      min="1"
-                      max="100"
-                      step="1"
-                      value={curve.rampDownPctS}
-                      onchange={(e) =>
-                        setMode(h.index, {
-                          mode: 'curve',
-                          curve: { ...curve, rampDownPctS: Number(e.currentTarget.value) },
-                        })}
-                    /> %/s
-                  </label>
-                </div>
-                <p class="note">
-                  Hysteresis keeps the fan from hunting: it only slows once the temperature has fallen this far. The
-                  speed changes by at most the rates above each second.
-                </p>
-              </details>
-            {/if}
-            </fieldset>
-            {#if h.kind === 'pump'}
-              <button type="button" class="link" onclick={() => setPump(h, false)}>No pump on this header?</button>
-            {:else}
-              <label class="pump-mark">
-                <input
-                  type="checkbox"
-                  checked={config.pumps.includes(h.index)}
-                  onchange={(e) => setPump(h, e.currentTarget.checked)}
-                />
-                A pump is plugged in here (never below {status.pumpMinPct} %)
-              </label>
-            {/if}
+              {/if}
+              {#if renaming === h.index}
+                <form
+                  class="rename"
+                  onsubmit={(e) => {
+                    e.preventDefault();
+                    saveName(h);
+                  }}
+                >
+                  <input
+                    type="text"
+                    maxlength="32"
+                    placeholder={h.name}
+                    aria-label="Name for {h.name}"
+                    bind:value={nameDraft}
+                  />
+                  <button type="submit">Save</button>
+                  <button type="button" onclick={() => (renaming = null)}>Cancel</button>
+                </form>
+              {:else}
+                <button type="button" class="link" onclick={() => startRename(h)}>
+                  {cfg.labels[h.index] ? 'Rename' : `Name this header (e.g. “Case fans”)`}
+                </button>
+              {/if}
+            </Card>
           {/if}
-          {#if renaming === h.index}
-            <form
-              class="rename"
-              onsubmit={(e) => {
-                e.preventDefault();
-                saveName(h);
-              }}
-            >
-              <input
-                type="text"
-                maxlength="32"
-                placeholder={h.name}
-                aria-label="Name for {h.name}"
-                bind:value={nameDraft}
-              />
-              <button type="submit">Save</button>
-              <button type="button" onclick={() => (renaming = null)}>Cancel</button>
-            </form>
-          {:else}
-            <button type="button" class="link" onclick={() => startRename(h)}>
-              {config.labels[h.index] ? 'Rename' : `Name this header (e.g. “Case fans”)`}
-            </button>
-          {/if}
-        </Card>
-      {/each}
-
-      <Card title="Safety" subtitle="Full speed above these temperatures">
-        <div class="smooth">
-          <label>
-            CPU
-            <input
-              type="number"
-              min="40"
-              max="105"
-              step="1"
-              value={config.emergencyCpuC}
-              onchange={(e) => edit((c) => (c.emergencyCpuC = Number(e.currentTarget.value)))}
-            /> °C
-          </label>
-          <label>
-            GPU
-            <input
-              type="number"
-              min="40"
-              max="105"
-              step="1"
-              value={config.emergencyGpuC}
-              onchange={(e) => edit((c) => (c.emergencyGpuC = Number(e.currentTarget.value)))}
-            /> °C
-          </label>
-        </div>
-        <p class="note">
-          Every fan Vyro drives goes to 100 % when either limit is reached, or when a curve’s temperature has no reading.
-          Vyro never sets a fan below 20 % or a pump below {status.pumpMinPct} %, and hands every fan back to the BIOS
-          when it stops, crashes, loses its sensors, the pump stops reporting a speed, or the PC goes to sleep. Closing
-          this window does not stop fan control; the Vyro service keeps running it.
-        </p>
-      </Card>
-
-      <Card title="Recent events" subtitle={events.length ? null : 'Nothing yet'}>
-        {#if events.length}
-          <ul class="events">
-            {#each events as ev, i (i)}
-              <li class:bad={ev.kind === 'fault' || ev.kind === 'watchdog' || ev.kind === 'fullSpeed'}>
-                <time datetime={new Date(ev.ts * 1000).toISOString()}>{fmtDateTime(ev.ts)}</time>
-                <span>{ev.message}</span>
-              </li>
-            {/each}
-          </ul>
-        {:else}
-          <p class="note">Turning control on or off, full-speed moments, faults, sleep and profile changes show here.</p>
         {/if}
-      </Card>
-    </div>
+      {/snippet}
+    </CardGrid>
 
     <dialog bind:this={confirm} aria-labelledby="fan-confirm-title">
       <h2 id="fan-confirm-title">Turn on fan control?</h2>
@@ -723,11 +744,6 @@
     border-radius: 10px;
     background: color-mix(in srgb, var(--warn) 8%, var(--panel));
     font-size: 0.85rem;
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
-    gap: 0.75rem;
   }
   .state {
     margin: 0 0 0.6rem;

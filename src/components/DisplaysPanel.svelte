@@ -1,5 +1,6 @@
 <script lang="ts">
   import Card from './Card.svelte';
+  import CardGrid, { type CardItem } from './CardGrid.svelte';
   import KV from './KV.svelte';
   import LoadState from './LoadState.svelte';
   import Pill from './Pill.svelte';
@@ -90,156 +91,163 @@
     selected = id;
     document.getElementById(`display-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
+  // The arrangement across the top, then one card per display, in Vyro's order or the owner's (2.0.2).
+  const cards = $derived<CardItem[]>([
+    { id: 'disp-arrangement', title: 'Arrangement', w: 'full' },
+    ...(displays ?? []).map((d, i) => ({ id: `disp:${d.id}`, title: `Display ${i + 1}: ${d.name}` })),
+  ]);
 </script>
 
 {#if error || !displays || displays.length === 0}
   <LoadState what="displays" {error} loading={!displays || loading} empty="No active displays found." retry={load} />
 {:else}
-  <div class="grid">
-    <Card title="Arrangement" subtitle="{displays.length} display{displays.length === 1 ? '' : 's'}" wide>
-      <div class="toolbar">
-        <button type="button" onclick={load} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
-        <span class="hint">Updates automatically when monitors change.</span>
-      </div>
-      {#if layout}
-        <svg
-          class="arrangement"
-          viewBox="{layout.minX - layout.pad} {layout.minY - layout.pad} {layout.w + 2 * layout.pad} {layout.h +
-            2 * layout.pad}"
-          role="group"
-          aria-label="Desktop arrangement"
-        >
-          {#each layout.rects as d, i (d.id)}
-            {@const [x, y, w, h] = d.rect!}
-            {@const fs = Math.min(w, h) * 0.09}
-            <g
-              class="screen"
-              class:sel={selected === d.id}
-              role="button"
-              tabindex="0"
-              aria-label="{d.name}, {res(d.width, d.height)}"
-              onclick={() => select(d.id)}
-              onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && select(d.id)}
+  {@const shown = displays}
+  <CardGrid view="displays" items={cards} min="20rem">
+    {#snippet card(id)}
+      {#if id === 'disp-arrangement'}
+        <Card title="Arrangement" id="disp-arrangement" subtitle="{shown.length} display{shown.length === 1 ? '' : 's'}">
+          <div class="toolbar">
+            <button type="button" onclick={load} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
+            <span class="hint">Updates automatically when monitors change.</span>
+          </div>
+          {#if layout}
+            <svg
+              class="arrangement"
+              viewBox="{layout.minX - layout.pad} {layout.minY - layout.pad} {layout.w + 2 * layout.pad} {layout.h +
+                2 * layout.pad}"
+              role="group"
+              aria-label="Desktop arrangement"
             >
-              <rect x={x + w * 0.01} y={y + h * 0.01} width={w * 0.98} height={h * 0.98} rx={Math.min(w, h) * 0.03} />
-              <text x={x + w / 2} y={y + h / 2 - fs * 0.4} font-size={fs * 1.6} class="num">{i + 1}</text>
-              <text x={x + w / 2} y={y + h / 2 + fs * 1.1} font-size={fs * 0.7}>{d.name}</text>
-              <text x={x + w / 2} y={y + h / 2 + fs * 2} font-size={fs * 0.6} class="dim">
-                {res(d.width, d.height)} · {hz(d.refreshHz) ?? NA}
-              </text>
-            </g>
-          {/each}
-        </svg>
-      {/if}
-    </Card>
-
-    {#each displays as d, i (d.id)}
-      <div id="display-{d.id}" class="display" class:sel={selected === d.id}>
-        <Card title="Display {i + 1}{d.internal ? ' · built-in' : ''}" subtitle={d.name}>
-          <p class="meta">{subtitle(d)}</p>
-          <div class="pills">
-            <span>HDR</span>
-            <Pill value={d.hdr.enabled} on="On" off={d.hdr.supported ? 'Off' : 'Not supported'} unknown={d.hdr.supported ? 'Supported' : 'Unknown'} />
-            <span>VRR</span>
-            <Pill
-              value={d.vrr.supported === false ? false : d.vrr.enabled}
-              on="On"
-              off={d.vrr.supported === false ? 'Not supported' : 'Off'}
-              unknown={d.vrr.supported ? 'Supported' : 'Unknown'}
-            />
-          </div>
-
-          <h3>Signal</h3>
-          <KV
-            rows={[
-              ['Resolution', res(d.width, d.height)],
-              ['Native', res(d.nativeWidth, d.nativeHeight)],
-              ['Refresh', hz(d.refreshHz)],
-              ['Max refresh', hz(d.maxRefreshHz)],
-              ['Connection', d.connection],
-              ['Color depth', d.bitsPerColor != null ? `${d.bitsPerColor}-bit` : null],
-              ['Encoding', d.colorEncoding],
-              ['Color space', d.colorSpace],
-              ['Scaling', d.scalePct != null ? `${d.scalePct}% (${d.dpi} DPI)` : null],
-              ['Orientation', d.orientation != null ? `${d.orientation}°` : null],
-              ['Brightness', d.brightnessPct != null ? `${d.brightnessPct}%` : null],
-              ['GPU', d.adapter],
-            ]}
-          />
-
-          <h3>HDR</h3>
-          <KV
-            rows={[
-              ['SDR white', nits(d.hdr.sdrWhiteNits)],
-              ['Peak', nits(d.hdr.maxNits)],
-              ['Full frame', nits(d.hdr.maxFullFrameNits)],
-              ['Black level', nits(d.hdr.minNits, 4)],
-              ['Transfer', d.hdr.eotfs.join(', ') || null],
-              ['Wide gamut', d.hdr.gamuts.join(', ') || null],
-            ]}
-          />
-
-          <h3>Variable refresh</h3>
-          <KV
-            rows={[
-              ['Technology', d.vrr.technology],
-              ['Range', vrrRange(d)],
-              ['Varying now', d.vrr.active == null ? null : d.vrr.active ? 'Yes (game or video)' : 'No (desktop idle)'],
-              ['Source', d.vrr.source],
-            ]}
-          />
-
-          <h3>Panel</h3>
-          <KV
-            rows={[
-              ['Model', d.model],
-              ['Manufacturer', d.manufacturerId != null && d.manufacturer !== d.manufacturerId ? `${d.manufacturer} (${d.manufacturerId})` : d.manufacturer],
-              ['Product code', d.productCode],
-              ['Made', d.manufactured],
-              ['Size', d.widthMM != null ? `${d.widthMM} × ${d.heightMM} mm` : null],
-              ['Diagonal', d.diagonalIn != null ? `${fmt(d.diagonalIn, 1)}″` : null],
-              ['Windows name', d.gdiName],
-            ]}
-          />
-          <div class="serial">
-            <span>Serial</span>
-            {#if d.serial}
-              <code>{revealed[d.id] ? d.serial : '•'.repeat(Math.min(d.serial.length, 12))}</code>
-              <button type="button" onclick={() => (revealed[d.id] = !revealed[d.id])} aria-pressed={!!revealed[d.id]}>
-                {revealed[d.id] ? 'Hide' : 'Show'}
-              </button>
-            {:else}
-              <code class="na">{NA}</code>
-            {/if}
-          </div>
-
-          {#if d.edid}
-            <details>
-              <summary>EDID {d.edid.version}{d.edid.checksumOk ? '' : ' · checksum error'}</summary>
-              <KV
-                rows={[
-                  ['Interface', d.edid.interface],
-                  ['Bits / color', d.edid.bitsPerColor],
-                  ['Gamma', d.edid.gamma != null ? fmt(d.edid.gamma, 2) : null],
-                  ['Extensions', d.edid.extensions.join(', ') || 'None'],
-                  ['Range limits', d.edid.rangeHz ? `${d.edid.rangeHz[0]}–${d.edid.rangeHz[1]} Hz` : null],
-                ]}
-              />
-              <pre aria-label="EDID bytes (serial removed)">{hexLines(d.edid.hex)}</pre>
-            </details>
+              {#each layout.rects as d, i (d.id)}
+                {@const [x, y, w, h] = d.rect!}
+                {@const fs = Math.min(w, h) * 0.09}
+                <g
+                  class="screen"
+                  class:sel={selected === d.id}
+                  role="button"
+                  tabindex="0"
+                  aria-label="{d.name}, {res(d.width, d.height)}"
+                  onclick={() => select(d.id)}
+                  onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && select(d.id)}
+                >
+                  <rect x={x + w * 0.01} y={y + h * 0.01} width={w * 0.98} height={h * 0.98} rx={Math.min(w, h) * 0.03} />
+                  <text x={x + w / 2} y={y + h / 2 - fs * 0.4} font-size={fs * 1.6} class="num">{i + 1}</text>
+                  <text x={x + w / 2} y={y + h / 2 + fs * 1.1} font-size={fs * 0.7}>{d.name}</text>
+                  <text x={x + w / 2} y={y + h / 2 + fs * 2} font-size={fs * 0.6} class="dim">
+                    {res(d.width, d.height)} · {hz(d.refreshHz) ?? NA}
+                  </text>
+                </g>
+              {/each}
+            </svg>
           {/if}
         </Card>
-      </div>
-    {/each}
-  </div>
+      {:else}
+        {@const i = shown.findIndex((x) => `disp:${x.id}` === id)}
+        {@const d = shown[i]}
+        {#if d}
+          <div id="display-{d.id}" class="display" class:sel={selected === d.id}>
+            <Card title="Display {i + 1}{d.internal ? ' · built-in' : ''}" {id} subtitle={d.name}>
+              <p class="meta">{subtitle(d)}</p>
+              <div class="pills">
+                <span>HDR</span>
+                <Pill value={d.hdr.enabled} on="On" off={d.hdr.supported ? 'Off' : 'Not supported'} unknown={d.hdr.supported ? 'Supported' : 'Unknown'} />
+                <span>VRR</span>
+                <Pill
+                  value={d.vrr.supported === false ? false : d.vrr.enabled}
+                  on="On"
+                  off={d.vrr.supported === false ? 'Not supported' : 'Off'}
+                  unknown={d.vrr.supported ? 'Supported' : 'Unknown'}
+                />
+              </div>
+
+              <h3>Signal</h3>
+              <KV
+                rows={[
+                  ['Resolution', res(d.width, d.height)],
+                  ['Native', res(d.nativeWidth, d.nativeHeight)],
+                  ['Refresh', hz(d.refreshHz)],
+                  ['Max refresh', hz(d.maxRefreshHz)],
+                  ['Connection', d.connection],
+                  ['Color depth', d.bitsPerColor != null ? `${d.bitsPerColor}-bit` : null],
+                  ['Encoding', d.colorEncoding],
+                  ['Color space', d.colorSpace],
+                  ['Scaling', d.scalePct != null ? `${d.scalePct}% (${d.dpi} DPI)` : null],
+                  ['Orientation', d.orientation != null ? `${d.orientation}°` : null],
+                  ['Brightness', d.brightnessPct != null ? `${d.brightnessPct}%` : null],
+                  ['GPU', d.adapter],
+                ]}
+              />
+
+              <h3>HDR</h3>
+              <KV
+                rows={[
+                  ['SDR white', nits(d.hdr.sdrWhiteNits)],
+                  ['Peak', nits(d.hdr.maxNits)],
+                  ['Full frame', nits(d.hdr.maxFullFrameNits)],
+                  ['Black level', nits(d.hdr.minNits, 4)],
+                  ['Transfer', d.hdr.eotfs.join(', ') || null],
+                  ['Wide gamut', d.hdr.gamuts.join(', ') || null],
+                ]}
+              />
+
+              <h3>Variable refresh</h3>
+              <KV
+                rows={[
+                  ['Technology', d.vrr.technology],
+                  ['Range', vrrRange(d)],
+                  ['Varying now', d.vrr.active == null ? null : d.vrr.active ? 'Yes (game or video)' : 'No (desktop idle)'],
+                  ['Source', d.vrr.source],
+                ]}
+              />
+
+              <h3>Panel</h3>
+              <KV
+                rows={[
+                  ['Model', d.model],
+                  ['Manufacturer', d.manufacturerId != null && d.manufacturer !== d.manufacturerId ? `${d.manufacturer} (${d.manufacturerId})` : d.manufacturer],
+                  ['Product code', d.productCode],
+                  ['Made', d.manufactured],
+                  ['Size', d.widthMM != null ? `${d.widthMM} × ${d.heightMM} mm` : null],
+                  ['Diagonal', d.diagonalIn != null ? `${fmt(d.diagonalIn, 1)}″` : null],
+                  ['Windows name', d.gdiName],
+                ]}
+              />
+              <div class="serial">
+                <span>Serial</span>
+                {#if d.serial}
+                  <code>{revealed[d.id] ? d.serial : '•'.repeat(Math.min(d.serial.length, 12))}</code>
+                  <button type="button" onclick={() => (revealed[d.id] = !revealed[d.id])} aria-pressed={!!revealed[d.id]}>
+                    {revealed[d.id] ? 'Hide' : 'Show'}
+                  </button>
+                {:else}
+                  <code class="na">{NA}</code>
+                {/if}
+              </div>
+
+              {#if d.edid}
+                <details>
+                  <summary>EDID {d.edid.version}{d.edid.checksumOk ? '' : ' · checksum error'}</summary>
+                  <KV
+                    rows={[
+                      ['Interface', d.edid.interface],
+                      ['Bits / color', d.edid.bitsPerColor],
+                      ['Gamma', d.edid.gamma != null ? fmt(d.edid.gamma, 2) : null],
+                      ['Extensions', d.edid.extensions.join(', ') || 'None'],
+                      ['Range limits', d.edid.rangeHz ? `${d.edid.rangeHz[0]}–${d.edid.rangeHz[1]} Hz` : null],
+                    ]}
+                  />
+                  <pre aria-label="EDID bytes (serial removed)">{hexLines(d.edid.hex)}</pre>
+                </details>
+              {/if}
+            </Card>
+          </div>
+        {/if}
+      {/if}
+    {/snippet}
+  </CardGrid>
 {/if}
 
 <style>
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
-    gap: 1rem;
-  }
   .toolbar {
     display: flex;
     flex-wrap: wrap;

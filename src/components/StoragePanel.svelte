@@ -1,5 +1,6 @@
 <script lang="ts">
   import Card from './Card.svelte';
+  import CardGrid, { type CardItem } from './CardGrid.svelte';
   import KV from './KV.svelte';
   import LoadState from './LoadState.svelte';
   import Meter from './Meter.svelte';
@@ -45,6 +46,8 @@
   });
 
   const byId = $derived(new Map(live.map((s) => [s.id, s])));
+  // One card per drive, in Vyro's order or the owner's (2.0.2); a drive plugged in again goes back to its place.
+  const cards = $derived<CardItem[]>((drives ?? []).map((d) => ({ id: `drive:${d.id}`, title: `Disk ${d.index}: ${d.model}` })));
   const needsAdmin = $derived(drives?.some((d) => d.smartError?.startsWith('SMART / health data needs')) ?? false);
 
   const HEALTH: Record<Status, string> = { ok: 'Good', warn: 'Caution', fail: 'Bad', unknown: 'Unknown' };
@@ -98,140 +101,139 @@
     </p>
   {/if}
 
-  <div class="grid">
-    {#each drives as d (d.id)}
-      {@const s = byId.get(d.id)}
-      {@const t = s?.tempC ?? d.tempC}
-      <Card title="Disk {d.index}{d.system ? ' · System' : ''}{d.removable ? ' · Removable' : ''}" subtitle={d.model}>
-        <p class="meta">{[d.vendor, fmtStorage(d.capacityMB), kind(d), d.interface ?? d.bus].filter((x) => x && x !== NA).join(' · ')}</p>
+  {@const all = drives}
+  <CardGrid view="storage" items={cards} min="20rem">
+    {#snippet card(id)}
+      {@const d = all.find((x) => `drive:${x.id}` === id)}
+      {#if d}
+        {@const s = byId.get(d.id)}
+        {@const t = s?.tempC ?? d.tempC}
+        <Card title="Disk {d.index}{d.system ? ' · System' : ''}{d.removable ? ' · Removable' : ''}" {id} subtitle={d.model}>
+          <p class="meta">{[d.vendor, fmtStorage(d.capacityMB), kind(d), d.interface ?? d.bus].filter((x) => x && x !== NA).join(' · ')}</p>
 
-        <div class="badges">
-          <span class="health {s?.health ?? d.health}">{HEALTH[s?.health ?? d.health]}{d.healthPct != null ? ` · ${fmt(d.healthPct)}% life` : ''}</span>
-          {#if t != null}
-            <span class="temp" class:hot={d.tempWarnC != null && t >= d.tempWarnC}>{fmtTemp(t)}</span>
+          <div class="badges">
+            <span class="health {s?.health ?? d.health}">{HEALTH[s?.health ?? d.health]}{d.healthPct != null ? ` · ${fmt(d.healthPct)}% life` : ''}</span>
+            {#if t != null}
+              <span class="temp" class:hot={d.tempWarnC != null && t >= d.tempWarnC}>{fmtTemp(t)}</span>
+            {/if}
+          </div>
+          {#if d.healthNotes.length > 0}
+            <ul class="notes">
+              {#each d.healthNotes as n, i (i)}<li>{n}</li>{/each}
+            </ul>
           {/if}
-        </div>
-        {#if d.healthNotes.length > 0}
-          <ul class="notes">
-            {#each d.healthNotes as n, i (i)}<li>{n}</li>{/each}
-          </ul>
-        {/if}
-        {#if d.smartError && !needsAdmin}
-          <p class="muted small">{d.smartError}</p>
-        {/if}
+          {#if d.smartError && !needsAdmin}
+            <p class="muted small">{d.smartError}</p>
+          {/if}
 
-        <h3>Activity</h3>
-        <div class="rates">
-          <div><span class="muted">Read</span><b>{fmtRate(s?.readMBs)}</b><small>{s?.readIops != null ? `${fmt(s.readIops)} IOPS` : ''}</small></div>
-          <div><span class="muted">Write</span><b>{fmtRate(s?.writeMBs)}</b><small>{s?.writeIops != null ? `${fmt(s.writeIops)} IOPS` : ''}</small></div>
-        </div>
-        <Meter label="Active time" value={s?.activityPct} />
+          <h3>Activity</h3>
+          <div class="rates">
+            <div><span class="muted">Read</span><b>{fmtRate(s?.readMBs)}</b><small>{s?.readIops != null ? `${fmt(s.readIops)} IOPS` : ''}</small></div>
+            <div><span class="muted">Write</span><b>{fmtRate(s?.writeMBs)}</b><small>{s?.writeIops != null ? `${fmt(s.writeIops)} IOPS` : ''}</small></div>
+          </div>
+          <Meter label="Active time" value={s?.activityPct} />
 
-        <h3>Space</h3>
-        {#if d.volumes.length > 0}
-          <Meter label="Used" value={usedPct(d.usedMB, (d.usedMB ?? 0) + (d.freeMB ?? 0))} />
-          <ul class="volumes">
-            {#each d.volumes as v (v.letter)}
-              <li>
-                <b>{v.letter}</b>
-                <span class="muted">{[v.label, v.fileSystem].filter(Boolean).join(' · ')}</span>
-                <span class="num">{fmtStorage(v.freeMB)} free of {fmtStorage(v.totalMB)}</span>
-              </li>
-            {/each}
-          </ul>
-        {:else}
-          <p class="muted small">No mounted volumes.</p>
-        {/if}
+          <h3>Space</h3>
+          {#if d.volumes.length > 0}
+            <Meter label="Used" value={usedPct(d.usedMB, (d.usedMB ?? 0) + (d.freeMB ?? 0))} />
+            <ul class="volumes">
+              {#each d.volumes as v (v.letter)}
+                <li>
+                  <b>{v.letter}</b>
+                  <span class="muted">{[v.label, v.fileSystem].filter(Boolean).join(' · ')}</span>
+                  <span class="num">{fmtStorage(v.freeMB)} free of {fmtStorage(v.totalMB)}</span>
+                </li>
+              {/each}
+            </ul>
+          {:else}
+            <p class="muted small">No mounted volumes.</p>
+          {/if}
 
-        <h3>Health</h3>
-        <KV
-          rows={[
-            ['Temperature', temp(t)],
-            ['Limits', limits(d)],
-            ['Power-on time', hours(d.powerOnHours)],
-            ['Power cycles', d.powerCycles != null ? fmt(d.powerCycles) : null],
-            ['Total read', d.totalReadGB != null ? fmtGBTotal(d.totalReadGB) : null],
-            ['Total written', d.totalWriteGB != null ? fmtGBTotal(d.totalWriteGB) : null],
-          ]}
-        />
-
-        {#if d.nvme}
-          {@const n = d.nvme}
-          <h3>NVMe health log</h3>
+          <h3>Health</h3>
           <KV
             rows={[
-              ['Life used', `${n.percentageUsed}%`],
-              ['Available spare', `${n.availableSparePct}% (threshold ${n.spareThresholdPct}%)`],
-              ['Critical warnings', n.criticalWarnings.join('; ') || 'None'],
-              ['Unsafe shutdowns', fmt(n.unsafeShutdowns)],
-              ['Media errors', fmt(n.mediaErrors)],
-              ['Error log entries', fmt(n.errorLogEntries)],
-              ['Busy time', minutes(n.busyMinutes)],
-              ['Above warning temp', minutes(n.warningTempMinutes)],
-              ['Above critical temp', minutes(n.criticalTempMinutes)],
-              ['Thermal throttling', n.throttleEvents.some((x) => x > 0) ? `${n.throttleEvents.join(' / ')} events, ${n.throttleSecs.join(' / ')} s` : 'None'],
-              ['Sensors', n.sensorsC.map((c, i) => (c == null ? null : `#${i + 1} ${fmtTemp(c)}`)).filter(Boolean).join(' · ') || null],
+              ['Temperature', temp(t)],
+              ['Limits', limits(d)],
+              ['Power-on time', hours(d.powerOnHours)],
+              ['Power cycles', d.powerCycles != null ? fmt(d.powerCycles) : null],
+              ['Total read', d.totalReadGB != null ? fmtGBTotal(d.totalReadGB) : null],
+              ['Total written', d.totalWriteGB != null ? fmtGBTotal(d.totalWriteGB) : null],
             ]}
           />
-        {/if}
 
-        <h3>Device</h3>
-        <KV
-          rows={[
-            ['Firmware', d.firmware],
-            ['Bus', d.bus],
-            ['TRIM', d.trim == null ? null : d.trim ? 'Supported' : 'Not supported'],
-            ['Windows disk', `\\\\.\\PhysicalDrive${d.index}`],
-          ]}
-        />
-        <div class="serial">
-          <span>Serial</span>
-          {#if d.serial}
-            <code>{revealed[d.id] ? d.serial : '•'.repeat(Math.min(d.serial.length, 12))}</code>
-            <button type="button" onclick={() => (revealed[d.id] = !revealed[d.id])} aria-pressed={!!revealed[d.id]}>
-              {revealed[d.id] ? 'Hide' : 'Show'}
-            </button>
-          {:else}
-            <code class="muted">{NA}</code>
+          {#if d.nvme}
+            {@const n = d.nvme}
+            <h3>NVMe health log</h3>
+            <KV
+              rows={[
+                ['Life used', `${n.percentageUsed}%`],
+                ['Available spare', `${n.availableSparePct}% (threshold ${n.spareThresholdPct}%)`],
+                ['Critical warnings', n.criticalWarnings.join('; ') || 'None'],
+                ['Unsafe shutdowns', fmt(n.unsafeShutdowns)],
+                ['Media errors', fmt(n.mediaErrors)],
+                ['Error log entries', fmt(n.errorLogEntries)],
+                ['Busy time', minutes(n.busyMinutes)],
+                ['Above warning temp', minutes(n.warningTempMinutes)],
+                ['Above critical temp', minutes(n.criticalTempMinutes)],
+                ['Thermal throttling', n.throttleEvents.some((x) => x > 0) ? `${n.throttleEvents.join(' / ')} events, ${n.throttleSecs.join(' / ')} s` : 'None'],
+                ['Sensors', n.sensorsC.map((c, i) => (c == null ? null : `#${i + 1} ${fmtTemp(c)}`)).filter(Boolean).join(' · ') || null],
+              ]}
+            />
           {/if}
-        </div>
 
-        {#if d.smart.length > 0}
-          <details>
-            <summary>SMART attributes ({d.smart.length})</summary>
-            <div class="table-wrap" use:scrollable role="region" aria-label="SMART attributes">
-              <table>
-                <thead>
-                  <tr><th>ID</th><th class="name">Attribute</th><th>Cur</th><th>Worst</th><th>Thr</th><th>Raw</th></tr>
-                </thead>
-                <tbody>
-                  {#each d.smart as a (a.id)}
-                    <tr class:failing={a.failing}>
-                      <td>{a.id.toString(16).toUpperCase().padStart(2, '0')}</td>
-                      <td class="name">{a.name}{a.prefail ? ' *' : ''}</td>
-                      <td>{a.current}</td>
-                      <td>{a.worst}</td>
-                      <td>{a.threshold ?? NA}</td>
-                      <td title="0x{a.rawHex}">{rawValue(d, a.id, a.raw)}</td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
-            <p class="muted small">* pre-failure attribute. Raw meaning and units are vendor-specific.</p>
-          </details>
-        {/if}
-      </Card>
-    {/each}
-  </div>
+          <h3>Device</h3>
+          <KV
+            rows={[
+              ['Firmware', d.firmware],
+              ['Bus', d.bus],
+              ['TRIM', d.trim == null ? null : d.trim ? 'Supported' : 'Not supported'],
+              ['Windows disk', `\\\\.\\PhysicalDrive${d.index}`],
+            ]}
+          />
+          <div class="serial">
+            <span>Serial</span>
+            {#if d.serial}
+              <code>{revealed[d.id] ? d.serial : '•'.repeat(Math.min(d.serial.length, 12))}</code>
+              <button type="button" onclick={() => (revealed[d.id] = !revealed[d.id])} aria-pressed={!!revealed[d.id]}>
+                {revealed[d.id] ? 'Hide' : 'Show'}
+              </button>
+            {:else}
+              <code class="muted">{NA}</code>
+            {/if}
+          </div>
+
+          {#if d.smart.length > 0}
+            <details>
+              <summary>SMART attributes ({d.smart.length})</summary>
+              <div class="table-wrap" use:scrollable role="region" aria-label="SMART attributes">
+                <table>
+                  <thead>
+                    <tr><th>ID</th><th class="name">Attribute</th><th>Cur</th><th>Worst</th><th>Thr</th><th>Raw</th></tr>
+                  </thead>
+                  <tbody>
+                    {#each d.smart as a (a.id)}
+                      <tr class:failing={a.failing}>
+                        <td>{a.id.toString(16).toUpperCase().padStart(2, '0')}</td>
+                        <td class="name">{a.name}{a.prefail ? ' *' : ''}</td>
+                        <td>{a.current}</td>
+                        <td>{a.worst}</td>
+                        <td>{a.threshold ?? NA}</td>
+                        <td title="0x{a.rawHex}">{rawValue(d, a.id, a.raw)}</td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+              <p class="muted small">* pre-failure attribute. Raw meaning and units are vendor-specific.</p>
+            </details>
+          {/if}
+        </Card>
+      {/if}
+    {/snippet}
+  </CardGrid>
 {/if}
 
 <style>
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
-    gap: 1rem;
-  }
   .toolbar {
     display: flex;
     flex-wrap: wrap;

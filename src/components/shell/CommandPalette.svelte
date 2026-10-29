@@ -4,6 +4,7 @@
   // list of options, each tagged with what it is.
   import CornerDownLeft from '@lucide/svelte/icons/corner-down-left';
   import Search from '@lucide/svelte/icons/search';
+  import { cards, resetOrder } from '../../card-order.svelte';
   import { getSensorTree } from '../../ipc';
   import { VIEWS, type Tab } from '../../nav';
   import { prefs, savePrefs } from '../../prefs.svelte';
@@ -82,6 +83,9 @@
       ...VIEWS.map((v) => ({ key: `tab:${v.id}`, label: v.label, hint: v.blurb, kind: 'Go to', run: () => onselect(v.id) })),
       ...(fansActive ? [{ key: 'bios', label: 'Return fans to BIOS', hint: 'Hand every fan back', kind: 'Action', run: onbios }] : []),
       { key: 'whatsnew', label: 'What’s new', hint: 'This version’s notes', kind: 'Action', run: onwhatsnew },
+      ...(Object.keys(cards.views).length
+        ? [{ key: 'cards', label: 'Put cards back', hint: 'Every view’s cards in Vyro’s order', kind: 'Action', run: resetOrder }]
+        : []),
       ...SECTIONS.map(([t, id, label, hint]) => ({ key: `sec:${id}`, label, hint, kind: t === 'settings' ? 'Settings' : 'Health', run: () => onsection(t, id) })),
       ...THEMES.map((t) => ({
         key: `theme:${t.id}`,

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick, untrack } from 'svelte';
   import Card from './Card.svelte';
+  import CardGrid, { type CardItem } from './CardGrid.svelte';
   import KV from './KV.svelte';
   import Meter from './Meter.svelte';
   import FrameTimeGraph from './FrameTimeGraph.svelte';
@@ -94,6 +95,12 @@
     const rule = ruleFor(prefs.games, exe) ?? newRule(exe, game?.app ?? exe);
     return savePrefs({ games: withRule(prefs.games, { ...rule, ignore: true }) });
   }
+  // The game's cards, in Vyro's order or the owner's (2.0.2).
+  const CARDS: CardItem[] = [
+    { id: 'game-frames', title: 'Frame times', w: 2 },
+    { id: 'game-limits', title: 'What limits the frame rate' },
+    { id: 'game-session', title: 'This session' },
+  ];
 </script>
 
 {#if replay != null}
@@ -208,37 +215,44 @@
       </div>
     </div>
 
-    <div class="grid">
-      <Card title="Frame times" wide>
-        <FrameTimeGraph points={game.timeline} span={100} height={140} />
-        <p class="note">
-          Last 10 seconds: the line is the average frame time per 0.1 s, the shaded band reaches the slowest frame, so
-          stutters show as spikes.
-        </p>
-      </Card>
-
-      <Card title="What limits the frame rate" subtitle={live ? boundLabel(game.bound) : null}>
-        <div class="meters">
-          <Meter label="CPU busy" value={share(game.cpuBusyMs, game.frameMs)} />
-          <Meter label="GPU busy" value={share(game.gpuBusyMs, game.frameMs)} />
-        </div>
-        <p class="note">
-          {game.bound && live ? BOUND[game.bound].text : 'Shares of each frame the processor and graphics card spend working.'}
-        </p>
-      </Card>
-
-      <Card title="This session">
-        <KV
-          rows={[
-            ['Average FPS', fmt(game.sessionFps, 1)],
-            ['1% low', fmt(game.sessionLow1Fps, 1)],
-            ['Frames', fmt(game.frames)],
-            ['Displayed', game.displayedFps != null ? `${fmt(game.displayedFps)} FPS` : null],
-            ['CPU busy', game.cpuBusyMs != null ? `${fmt(game.cpuBusyMs, 1)} ms` : null],
-            ['GPU busy', game.gpuBusyMs != null ? `${fmt(game.gpuBusyMs, 1)} ms` : null],
-          ]}
-        />
-      </Card>
+    {@const run = game}
+    <div class="cards">
+      <CardGrid view="gaming" items={CARDS}>
+        {#snippet card(id)}
+          {#if id === 'game-frames'}
+            <Card title="Frame times" id="game-frames">
+              <FrameTimeGraph points={run.timeline} span={100} height={140} />
+              <p class="note">
+                Last 10 seconds: the line is the average frame time per 0.1 s, the shaded band reaches the slowest frame, so
+                stutters show as spikes.
+              </p>
+            </Card>
+          {:else if id === 'game-limits'}
+            <Card title="What limits the frame rate" id="game-limits" subtitle={live ? boundLabel(run.bound) : null}>
+              <div class="meters">
+                <Meter label="CPU busy" value={share(run.cpuBusyMs, run.frameMs)} />
+                <Meter label="GPU busy" value={share(run.gpuBusyMs, run.frameMs)} />
+              </div>
+              <p class="note">
+                {run.bound && live ? BOUND[run.bound].text : 'Shares of each frame the processor and graphics card spend working.'}
+              </p>
+            </Card>
+          {:else if id === 'game-session'}
+            <Card title="This session" id="game-session">
+              <KV
+                rows={[
+                  ['Average FPS', fmt(run.sessionFps, 1)],
+                  ['1% low', fmt(run.sessionLow1Fps, 1)],
+                  ['Frames', fmt(run.frames)],
+                  ['Displayed', run.displayedFps != null ? `${fmt(run.displayedFps)} FPS` : null],
+                  ['CPU busy', run.cpuBusyMs != null ? `${fmt(run.cpuBusyMs, 1)} ms` : null],
+                  ['GPU busy', run.gpuBusyMs != null ? `${fmt(run.gpuBusyMs, 1)} ms` : null],
+                ]}
+              />
+            </Card>
+          {/if}
+        {/snippet}
+      </CardGrid>
     </div>
   {/if}
 
@@ -418,10 +432,7 @@
     color: var(--muted);
     font-size: 0.72rem;
   }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
-    gap: 0.75rem;
+  .cards {
     margin-top: 1rem;
   }
   .meters {

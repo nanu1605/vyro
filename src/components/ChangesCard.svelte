@@ -54,7 +54,7 @@
   const label = (id: ChangeCategory) => CATEGORIES.find((g) => g.id === id)?.label;
 </script>
 
-<Card title="PC changes" subtitle={since != null ? `Tracking since ${fmtDate(since)}` : null} wide>
+<Card title="PC changes" id="hw-changes" subtitle={since != null ? `Tracking since ${fmtDate(since)}` : null}>
   {#if error}
     <p class="note" role="alert">Could not read the change history: {error}</p>
   {:else if !list}

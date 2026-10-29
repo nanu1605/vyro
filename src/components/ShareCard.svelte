@@ -171,7 +171,7 @@
 
 <style>
   .share {
-    grid-column: 1 / -1;
+    margin-bottom: 1rem;
   }
   .head {
     display: flex;

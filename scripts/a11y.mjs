@@ -7,7 +7,9 @@
 // wheel open. Since 1.4 also: Settings → Remote's reach from anywhere (the relay's confirmation,
 // a phone's pairing code, the options). Since 1.5 also: What's new after an update. Since 1.6 also: GPU
 // tuning's confirmation, and the view with tuning on and a stability test running. Since 1.7 also: the
-// screen-shared banner. The phone app itself is swept by scripts/relay-e2e.mjs.
+// screen-shared banner. Since 2.0.2 also: the views' cards pack without overlaps, and move by
+// dragging their grip, by its arrow keys, back on Escape, and stay moved after a reload. The phone
+// app itself is swept by scripts/relay-e2e.mjs.
 // Runs against the browser preview
 // (sample data, two GPUs as on the owner's PC) of a finished build:
 //
@@ -209,6 +211,28 @@ async function open(browser, url, { width, theme, motion = 'no-preference', init
   return { ctx, page };
 }
 
+/** A view's card grid (2.0.2): no card on another, none past the grid's sides. */
+async function cardsPacked(page, where) {
+  const found = await page.evaluate(() => {
+    const bad = [];
+    for (const g of document.querySelectorAll('[role="tabpanel"]:not([hidden]) .card-grid')) {
+      const gr = g.getBoundingClientRect();
+      const boxes = [...g.querySelectorAll(':scope > .card-cell')].map((c) => ({ id: c.dataset.card, r: c.getBoundingClientRect() }));
+      for (let i = 0; i < boxes.length; i++) {
+        const a = boxes[i].r;
+        if (a.left < gr.left - 1 || a.right > gr.right + 1) bad.push(`"${boxes[i].id}" past the grid's side`);
+        for (let j = i + 1; j < boxes.length; j++) {
+          const b = boxes[j].r;
+          if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) bad.push(`"${boxes[i].id}" and "${boxes[j].id}" overlap`);
+        }
+      }
+    }
+    return bad;
+  });
+  checks++;
+  for (const f of found) problem(where, f);
+}
+
 async function tab(page, name) {
   await page.getByRole('tab', { name: new RegExp(`^${name}`) }).click();
   await page.waitForTimeout(600);
@@ -230,6 +254,7 @@ async function sweepApp(browser, theme, width) {
     const where = `${t} · ${theme} ${width}px`;
     await axe(page, where);
     await noSidewaysScroll(page, where);
+    await cardsPacked(page, where);
   }
   await ctx.close();
 }
@@ -646,6 +671,70 @@ async function sweepKeyboard(browser) {
   }
 }
 
+// --- Moving cards (2.0.2): by the grip, by its keys, back on Escape, kept after a reload. --------
+
+async function sweepCards(browser) {
+  const { ctx, page } = await open(browser, BASE, { width: 1440, theme: 'midnight' });
+  await page.goto(`${BASE}/`);
+  await page.waitForTimeout(1200);
+  await tab(page, 'Settings');
+  const order = () => page.evaluate(() => [...document.querySelectorAll('#panel-settings .card-cell')].map((c) => c.dataset.card));
+  const said = () => page.locator('#panel-settings [aria-live]').last().textContent();
+  const drag = async (name, onto, { drop = true } = {}) => {
+    await page.locator(`#${onto}`).scrollIntoViewIfNeeded();
+    await page.getByRole('button', { name: `Move ${name}` }).scrollIntoViewIfNeeded();
+    const g = await page.getByRole('button', { name: `Move ${name}` }).boundingBox();
+    const t = await page.locator(`#${onto}`).boundingBox();
+    if (!g || !t || t.y < 0 || t.y > 900) return problem('Cards', `"${onto}" and ${name}'s grip not both on screen`);
+    await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+    await page.mouse.down();
+    for (let i = 1; i <= 12; i++) {
+      await page.mouse.move(g.x + ((t.x + 40 - g.x) * i) / 12, g.y + ((t.y + 40 - g.y) * i) / 12);
+      await page.waitForTimeout(30);
+    }
+    await page.waitForTimeout(300);
+    if (drop) await page.mouse.up();
+  };
+  const first = await order();
+  checks++;
+  // Dragged by its grip onto the first card, it takes its place.
+  await drag('General', 'appearance');
+  await page.waitForTimeout(400);
+  let now = await order();
+  if (now[0] !== 'general') problem('Cards', `dragged onto Appearance, General is at ${now.indexOf('general') + 1}: ${now.join(', ')}`);
+  if (!/General: 1 of/.test((await said()) ?? '')) problem('Cards', `after the drag the screen reader hears "${await said()}"`);
+  // Its arrow keys move it, and it keeps the focus.
+  await page.getByRole('button', { name: 'Move General' }).focus();
+  await page.keyboard.press('ArrowDown');
+  await page.waitForTimeout(400);
+  now = await order();
+  if (now[1] !== 'general') problem('Cards', `ArrowDown on its grip left General at ${now.indexOf('general') + 1}`);
+  const focused = await page.evaluate(() => document.activeElement?.getAttribute('aria-label'));
+  if (focused !== 'Move General') problem('Cards', `after ArrowDown the focus is on ${focused ?? 'nothing'}`);
+  // Escape while dragging puts it back.
+  const before = await order();
+  await drag('Profile', 'appearance', { drop: false });
+  const mid = await order();
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  if (mid.join() === before.join()) problem('Cards', 'dragging Profile over Appearance moved nothing');
+  if ((await order()).join() !== before.join()) problem('Cards', `Escape left ${(await order()).join(', ')}`);
+  if (await page.locator('.card-ghost').count()) problem('Cards', 'the dragged card stayed on screen after Escape');
+  // Kept after a reload, in the section list too; and put back.
+  await page.reload();
+  await page.waitForTimeout(1200);
+  await tab(page, 'Settings');
+  now = await order();
+  if (now.join() !== before.join()) problem('Cards', `after a reload: ${now.join(', ')}`);
+  const toc = await page.locator('#panel-settings nav a').first().textContent();
+  if (toc !== 'Appearance') problem('Cards', `the section list starts with ${toc}, not Appearance`);
+  await page.getByRole('button', { name: 'Put cards back' }).click();
+  await page.waitForTimeout(400);
+  if ((await order()).join() !== first.join()) problem('Cards', `put back: ${(await order()).join(', ')}`);
+  await ctx.close();
+}
+
 // --- Reduced motion: no CSS animation runs. ----------------------------------------------------
 
 async function sweepMotion(browser) {
@@ -710,6 +799,7 @@ try {
       ]),
     );
     await sweepKeyboard(browser);
+    await sweepCards(browser);
     await sweepMotion(browser);
   } finally {
     await browser.close();
