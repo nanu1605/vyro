@@ -274,10 +274,10 @@
             <th scope="col">Played</th>
             <th scope="col" class="num">Avg FPS</th>
             <th scope="col" class="num">1% low</th>
-            <th scope="col" class="num">0.1% low</th>
-            <th scope="col">Limited by</th>
-            <th scope="col" class="num">CPU max</th>
-            <th scope="col" class="num">GPU max</th>
+            <th scope="col" class="num extra">0.1% low</th>
+            <th scope="col" class="extra">Limited by</th>
+            <th scope="col" class="num temps">CPU max</th>
+            <th scope="col" class="num temps">GPU max</th>
             <th scope="col"><span class="sr-only">Replay</span></th>
           </tr>
         </thead>
@@ -288,10 +288,10 @@
               <td>{fmtDateTime(s.started)}<small>{fmtDuration(s.secs)}</small></td>
               <td class="num">{fmt(s.avgFps)}</td>
               <td class="num">{fmt(s.low1Fps)}</td>
-              <td class="num">{fmt(s.low01Fps)}</td>
-              <td>{s.bound ? BOUND[s.bound].title : NA}</td>
-              <td class="num">{fmtTemp(s.cpuTempMax) ?? NA}</td>
-              <td class="num">{fmtTemp(s.gpuTempMax) ?? NA}</td>
+              <td class="num extra">{fmt(s.low01Fps)}</td>
+              <td class="extra">{s.bound ? BOUND[s.bound].title : NA}</td>
+              <td class="num temps">{fmtTemp(s.cpuTempMax) ?? NA}</td>
+              <td class="num temps">{fmtTemp(s.gpuTempMax) ?? NA}</td>
               <td>
                 {#if s.hasTimeline}
                   <button
@@ -455,6 +455,7 @@
     position: relative;
     overflow-x: auto;
     padding: 0.4rem 0.6rem;
+    container-type: inline-size;
   }
   .replay {
     padding: 0.2rem 0.6rem;
@@ -478,7 +479,6 @@
     font-size: 0.72rem;
     font-weight: 500;
     text-align: left;
-    white-space: nowrap;
   }
   td {
     padding: 0.45rem 0.5rem;
@@ -493,6 +493,18 @@
   .num {
     font-variant-numeric: tabular-nums;
     text-align: right;
+  }
+  /* Never wider than the window (2.0.2): as the table narrows, the temperatures step out first,
+     then the 0.1 % low and what held the frame rate back, as the Sensors table does. */
+  @container (max-width: 56rem) {
+    .temps {
+      display: none;
+    }
+  }
+  @container (max-width: 42rem) {
+    .extra {
+      display: none;
+    }
   }
   .link {
     padding: 0;

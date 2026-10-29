@@ -75,7 +75,7 @@
                   <button type="button" onclick={() => void change(row, { ignore: false })}>It's a game</button>
                 </td>
               {:else}
-                <td>
+                <td data-label="Profile">
                   <select
                     aria-label="Profile for {row.name}"
                     value={profileValue(row.rule)}
@@ -86,7 +86,7 @@
                     <option value="keep">Don't switch</option>
                   </select>
                 </td>
-                <td>
+                <td data-label="Fans">
                   <select
                     aria-label="Fan settings for {row.name}"
                     value={row.rule.fans ?? 'follow'}
@@ -99,7 +99,7 @@
                     {#each profiles.list as p (p.id)}<option value={p.id}>{p.name}'s</option>{/each}
                   </select>
                 </td>
-                <td>
+                <td data-label="Overlay">
                   <select
                     aria-label="Overlay for {row.name}"
                     value={overlayValue(row.rule)}
@@ -111,7 +111,7 @@
                     <option value="off">Off</option>
                   </select>
                 </td>
-                <td>
+                <td data-label="Update rate">
                   <select
                     aria-label="Update rate for {row.name}"
                     value={row.rule.pollMs == null ? 'profile' : String(row.rule.pollMs)}
@@ -151,6 +151,7 @@
     /* Positioned, so the visually hidden header stays inside the scroll box. */
     position: relative;
     overflow-x: auto;
+    container-type: inline-size;
   }
   table {
     width: 100%;
@@ -175,7 +176,7 @@
   }
   tbody th {
     font-weight: 600;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
   }
   .tag {
     margin-left: 0.4rem;
@@ -213,6 +214,46 @@
   }
   button + button {
     margin-left: 0.35rem;
+  }
+  /* Narrower than the table needs (2.0.2): each game a block, its choices labelled two to a line,
+     so the table never scrolls sideways. */
+  @container (max-width: 58rem) {
+    thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    tbody tr {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.45rem 0.75rem;
+      padding: 0.6rem 0;
+      border-top: 1px solid var(--line);
+    }
+    tbody th,
+    tbody td {
+      padding: 0;
+      border: 0;
+    }
+    tbody th,
+    td[colspan],
+    .actions {
+      grid-column: 1 / -1;
+    }
+    td[data-label]::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: 0.15rem;
+      color: var(--muted);
+      font-size: 0.7rem;
+    }
+    select {
+      width: 100%;
+      max-width: none;
+    }
   }
   .note {
     margin: 0.6rem 0 0;

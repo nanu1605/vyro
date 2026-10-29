@@ -623,6 +623,11 @@
 {/if}
 
 <style>
+  /* The window's width doesn't change as a view grows past it (2.0.2): the views' cards are fitted
+     to the width, and a scroll bar coming and going would fit them again. */
+  :global(html) {
+    scrollbar-gutter: stable;
+  }
   .shell {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
@@ -634,6 +639,9 @@
     flex-direction: column;
     min-width: 0;
     padding: 0 var(--gutter) 0.8rem;
+    /* The window never scrolls sideways (2.0.2), whatever a view does: clipped, not hidden,
+       so nothing can scroll it there from code either, and the top bar still sticks. */
+    overflow-x: clip;
   }
   main {
     flex: 1;

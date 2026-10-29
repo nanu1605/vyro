@@ -122,14 +122,14 @@
             <div class="table-wrap" use:scrollable role="region" aria-label="Startup apps">
               <table>
                 <thead>
-                  <tr><th>Name</th><th>Status</th><th>Source</th><th>Command</th></tr>
+                  <tr><th>Name</th><th class="status">Status</th><th class="source">Source</th><th>Command</th></tr>
                 </thead>
                 <tbody>
                   {#each info.startupApps as app, i (i)}
                     <tr class:disabled={!app.enabled}>
-                      <td>{app.name}</td>
+                      <td>{app.name}<small class="from">{SOURCE[app.source]}</small></td>
                       <td><Pill value={app.enabled} /></td>
-                      <td class="muted">{SOURCE[app.source]}</td>
+                      <td class="muted source">{SOURCE[app.source]}</td>
                       <td class="cmd" title={app.command}>{app.command || NA}</td>
                     </tr>
                   {/each}
@@ -180,6 +180,9 @@
   }
   table {
     width: 100%;
+    /* Never wider than its card (2.0.2): the columns share its width, names and sources wrap, and
+       the command keeps one line, cut short (all of it on hover). */
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 0.8rem;
   }
@@ -192,15 +195,36 @@
   td {
     padding: 0.4rem 0.75rem 0.4rem 0;
     border-bottom: 1px solid var(--line);
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    vertical-align: top;
+  }
+  .status {
+    width: 6rem;
+  }
+  .source {
+    width: 24%;
   }
   .cmd {
-    max-width: 28rem;
     overflow: hidden;
     color: var(--muted);
     font-family: var(--font-num);
     font-size: 0.75rem;
+    white-space: nowrap;
     text-overflow: ellipsis;
+  }
+  /* A narrow card: the source under the name, the room to the command. */
+  .from {
+    display: none;
+  }
+  @container (max-width: 30rem) {
+    .source {
+      display: none;
+    }
+    .from {
+      display: block;
+      color: var(--muted);
+      font-size: 0.72rem;
+    }
   }
   tr.disabled td:first-child {
     color: var(--muted);

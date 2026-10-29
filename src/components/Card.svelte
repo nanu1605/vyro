@@ -8,12 +8,14 @@
     wide?: boolean;
     /** To link to the card (the header's Remote chip), and its place in a view's card grid. */
     id?: string;
+    /** More classes for the card itself (the display picked in the arrangement). */
+    class?: string;
     children: Snippet;
   }
-  let { title, subtitle = null, wide = false, id, children }: Props = $props();
+  let { title, subtitle = null, wide = false, id, class: also = '', children }: Props = $props();
 </script>
 
-<section class="panel card" class:wide {id}>
+<section class="panel card {also}" class:wide {id}>
   <header>
     <div class="titles">
       <h2>{title}</h2>
@@ -30,6 +32,12 @@
   }
   .wide {
     grid-column: 1 / -1;
+  }
+  /* In a view's card grid (2.0.2): as tall as its room (`--fill`, card-layout.ts), down to the
+     next card or the last line, while its cell keeps the card's own height to measure. */
+  :global(.card-cell) > .card {
+    padding-bottom: calc(1rem + var(--fill, 0px));
+    margin-bottom: calc(-1 * var(--fill, 0px));
   }
   header {
     display: flex;

@@ -203,8 +203,10 @@ body {
    Cells set --w (of 12), --wn (of 6) and --h (rows of 5rem, the least the widget takes).
    Since 1.2 the rows are fine (a quarter rem): `pack` (packing.ts) gives each cell as many as it
    is tall and puts it, in order, where it sits highest (--span0 until it has measured). A short
-   card no longer stretches to the tallest beside it, and the next one moves up into its room. */
+   card no longer stretches to the tallest beside it, and the next one moves up into its room.
+   --cols is the column count `pack` places by (2.0.2). */
 .dash-grid {
+  --cols: 12;
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   grid-auto-rows: 0.25rem;
@@ -226,6 +228,7 @@ body {
 }
 @media (max-width: 900px) {
   .dash-grid {
+    --cols: 6;
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
   .dash-cell {
@@ -234,6 +237,7 @@ body {
 }
 @media (max-width: 560px) {
   .dash-grid {
+    --cols: 1;
     grid-template-columns: minmax(0, 1fr);
   }
   .dash-cell {

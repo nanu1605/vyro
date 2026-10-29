@@ -89,7 +89,7 @@
 
   function select(id: string): void {
     selected = id;
-    document.getElementById(`display-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    document.getElementById(`disp:${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
   // The arrangement across the top, then one card per display, in Vyro's order or the owner's (2.0.2).
   const cards = $derived<CardItem[]>([
@@ -145,102 +145,100 @@
         {@const i = shown.findIndex((x) => `disp:${x.id}` === id)}
         {@const d = shown[i]}
         {#if d}
-          <div id="display-{d.id}" class="display" class:sel={selected === d.id}>
-            <Card title="Display {i + 1}{d.internal ? ' · built-in' : ''}" {id} subtitle={d.name}>
-              <p class="meta">{subtitle(d)}</p>
-              <div class="pills">
-                <span>HDR</span>
-                <Pill value={d.hdr.enabled} on="On" off={d.hdr.supported ? 'Off' : 'Not supported'} unknown={d.hdr.supported ? 'Supported' : 'Unknown'} />
-                <span>VRR</span>
-                <Pill
-                  value={d.vrr.supported === false ? false : d.vrr.enabled}
-                  on="On"
-                  off={d.vrr.supported === false ? 'Not supported' : 'Off'}
-                  unknown={d.vrr.supported ? 'Supported' : 'Unknown'}
-                />
-              </div>
-
-              <h3>Signal</h3>
-              <KV
-                rows={[
-                  ['Resolution', res(d.width, d.height)],
-                  ['Native', res(d.nativeWidth, d.nativeHeight)],
-                  ['Refresh', hz(d.refreshHz)],
-                  ['Max refresh', hz(d.maxRefreshHz)],
-                  ['Connection', d.connection],
-                  ['Color depth', d.bitsPerColor != null ? `${d.bitsPerColor}-bit` : null],
-                  ['Encoding', d.colorEncoding],
-                  ['Color space', d.colorSpace],
-                  ['Scaling', d.scalePct != null ? `${d.scalePct}% (${d.dpi} DPI)` : null],
-                  ['Orientation', d.orientation != null ? `${d.orientation}°` : null],
-                  ['Brightness', d.brightnessPct != null ? `${d.brightnessPct}%` : null],
-                  ['GPU', d.adapter],
-                ]}
+          <Card title="Display {i + 1}{d.internal ? ' · built-in' : ''}" {id} subtitle={d.name} class={selected === d.id ? 'picked' : undefined}>
+            <p class="meta">{subtitle(d)}</p>
+            <div class="pills">
+              <span>HDR</span>
+              <Pill value={d.hdr.enabled} on="On" off={d.hdr.supported ? 'Off' : 'Not supported'} unknown={d.hdr.supported ? 'Supported' : 'Unknown'} />
+              <span>VRR</span>
+              <Pill
+                value={d.vrr.supported === false ? false : d.vrr.enabled}
+                on="On"
+                off={d.vrr.supported === false ? 'Not supported' : 'Off'}
+                unknown={d.vrr.supported ? 'Supported' : 'Unknown'}
               />
+            </div>
 
-              <h3>HDR</h3>
-              <KV
-                rows={[
-                  ['SDR white', nits(d.hdr.sdrWhiteNits)],
-                  ['Peak', nits(d.hdr.maxNits)],
-                  ['Full frame', nits(d.hdr.maxFullFrameNits)],
-                  ['Black level', nits(d.hdr.minNits, 4)],
-                  ['Transfer', d.hdr.eotfs.join(', ') || null],
-                  ['Wide gamut', d.hdr.gamuts.join(', ') || null],
-                ]}
-              />
+            <h3>Signal</h3>
+            <KV
+              rows={[
+                ['Resolution', res(d.width, d.height)],
+                ['Native', res(d.nativeWidth, d.nativeHeight)],
+                ['Refresh', hz(d.refreshHz)],
+                ['Max refresh', hz(d.maxRefreshHz)],
+                ['Connection', d.connection],
+                ['Color depth', d.bitsPerColor != null ? `${d.bitsPerColor}-bit` : null],
+                ['Encoding', d.colorEncoding],
+                ['Color space', d.colorSpace],
+                ['Scaling', d.scalePct != null ? `${d.scalePct}% (${d.dpi} DPI)` : null],
+                ['Orientation', d.orientation != null ? `${d.orientation}°` : null],
+                ['Brightness', d.brightnessPct != null ? `${d.brightnessPct}%` : null],
+                ['GPU', d.adapter],
+              ]}
+            />
 
-              <h3>Variable refresh</h3>
-              <KV
-                rows={[
-                  ['Technology', d.vrr.technology],
-                  ['Range', vrrRange(d)],
-                  ['Varying now', d.vrr.active == null ? null : d.vrr.active ? 'Yes (game or video)' : 'No (desktop idle)'],
-                  ['Source', d.vrr.source],
-                ]}
-              />
+            <h3>HDR</h3>
+            <KV
+              rows={[
+                ['SDR white', nits(d.hdr.sdrWhiteNits)],
+                ['Peak', nits(d.hdr.maxNits)],
+                ['Full frame', nits(d.hdr.maxFullFrameNits)],
+                ['Black level', nits(d.hdr.minNits, 4)],
+                ['Transfer', d.hdr.eotfs.join(', ') || null],
+                ['Wide gamut', d.hdr.gamuts.join(', ') || null],
+              ]}
+            />
 
-              <h3>Panel</h3>
-              <KV
-                rows={[
-                  ['Model', d.model],
-                  ['Manufacturer', d.manufacturerId != null && d.manufacturer !== d.manufacturerId ? `${d.manufacturer} (${d.manufacturerId})` : d.manufacturer],
-                  ['Product code', d.productCode],
-                  ['Made', d.manufactured],
-                  ['Size', d.widthMM != null ? `${d.widthMM} × ${d.heightMM} mm` : null],
-                  ['Diagonal', d.diagonalIn != null ? `${fmt(d.diagonalIn, 1)}″` : null],
-                  ['Windows name', d.gdiName],
-                ]}
-              />
-              <div class="serial">
-                <span>Serial</span>
-                {#if d.serial}
-                  <code>{revealed[d.id] ? d.serial : '•'.repeat(Math.min(d.serial.length, 12))}</code>
-                  <button type="button" onclick={() => (revealed[d.id] = !revealed[d.id])} aria-pressed={!!revealed[d.id]}>
-                    {revealed[d.id] ? 'Hide' : 'Show'}
-                  </button>
-                {:else}
-                  <code class="na">{NA}</code>
-                {/if}
-              </div>
+            <h3>Variable refresh</h3>
+            <KV
+              rows={[
+                ['Technology', d.vrr.technology],
+                ['Range', vrrRange(d)],
+                ['Varying now', d.vrr.active == null ? null : d.vrr.active ? 'Yes (game or video)' : 'No (desktop idle)'],
+                ['Source', d.vrr.source],
+              ]}
+            />
 
-              {#if d.edid}
-                <details>
-                  <summary>EDID {d.edid.version}{d.edid.checksumOk ? '' : ' · checksum error'}</summary>
-                  <KV
-                    rows={[
-                      ['Interface', d.edid.interface],
-                      ['Bits / color', d.edid.bitsPerColor],
-                      ['Gamma', d.edid.gamma != null ? fmt(d.edid.gamma, 2) : null],
-                      ['Extensions', d.edid.extensions.join(', ') || 'None'],
-                      ['Range limits', d.edid.rangeHz ? `${d.edid.rangeHz[0]}–${d.edid.rangeHz[1]} Hz` : null],
-                    ]}
-                  />
-                  <pre aria-label="EDID bytes (serial removed)">{hexLines(d.edid.hex)}</pre>
-                </details>
+            <h3>Panel</h3>
+            <KV
+              rows={[
+                ['Model', d.model],
+                ['Manufacturer', d.manufacturerId != null && d.manufacturer !== d.manufacturerId ? `${d.manufacturer} (${d.manufacturerId})` : d.manufacturer],
+                ['Product code', d.productCode],
+                ['Made', d.manufactured],
+                ['Size', d.widthMM != null ? `${d.widthMM} × ${d.heightMM} mm` : null],
+                ['Diagonal', d.diagonalIn != null ? `${fmt(d.diagonalIn, 1)}″` : null],
+                ['Windows name', d.gdiName],
+              ]}
+            />
+            <div class="serial">
+              <span>Serial</span>
+              {#if d.serial}
+                <code>{revealed[d.id] ? d.serial : '•'.repeat(Math.min(d.serial.length, 12))}</code>
+                <button type="button" onclick={() => (revealed[d.id] = !revealed[d.id])} aria-pressed={!!revealed[d.id]}>
+                  {revealed[d.id] ? 'Hide' : 'Show'}
+                </button>
+              {:else}
+                <code class="na">{NA}</code>
               {/if}
-            </Card>
-          </div>
+            </div>
+
+            {#if d.edid}
+              <details>
+                <summary>EDID {d.edid.version}{d.edid.checksumOk ? '' : ' · checksum error'}</summary>
+                <KV
+                  rows={[
+                    ['Interface', d.edid.interface],
+                    ['Bits / color', d.edid.bitsPerColor],
+                    ['Gamma', d.edid.gamma != null ? fmt(d.edid.gamma, 2) : null],
+                    ['Extensions', d.edid.extensions.join(', ') || 'None'],
+                    ['Range limits', d.edid.rangeHz ? `${d.edid.rangeHz[0]}–${d.edid.rangeHz[1]} Hz` : null],
+                  ]}
+                />
+                <pre aria-label="EDID bytes (serial removed)">{hexLines(d.edid.hex)}</pre>
+              </details>
+            {/if}
+          </Card>
         {/if}
       {/if}
     {/snippet}
@@ -311,10 +309,7 @@
   text.dim {
     fill: var(--muted);
   }
-  .display {
-    display: contents;
-  }
-  .display.sel :global(.card) {
+  :global(.card.picked) {
     border-color: color-mix(in srgb, var(--accent-cpu) 50%, var(--line));
   }
   .meta {
@@ -368,11 +363,13 @@
   pre {
     margin: 0.75rem 0 0;
     padding: 0.6rem;
-    overflow-x: auto;
     border: 1px solid var(--line);
     border-radius: 8px;
     font-family: var(--font-num);
     font-size: 0.68rem;
     line-height: 1.45;
+    /* A narrow card wraps the lines rather than scrolling sideways (2.0.2). */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 </style>

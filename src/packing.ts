@@ -67,9 +67,9 @@ export function balancedColumns(n: number, width: number, min: number, gap: numb
 }
 
 /**
- * Columns a view's card takes (2.0.2), from its `data-w`: `full` every one; `2` two once the grid
- * has three or more (beside one other card, a wide one would leave a gap the height of that one);
- * else one.
+ * Columns a view's card takes (2.0.2, card-layout.ts), from its `data-w`: `full` every one; `2` two
+ * once the grid has three or more (beside one other card, a wide one would leave a gap the height
+ * of that one); else one.
  */
 export function cardSpan(w: string | undefined, cols: number): number {
   if (w === 'full') return Math.max(1, cols);
@@ -77,33 +77,34 @@ export function cardSpan(w: string | undefined, cols: number): number {
 }
 
 /**
- * On the Dashboard's grid, and the views' card grids (2.0.2, `cell: 'card-cell'`, `dense`): places
- * its cells by `skyline` (or `dense`) whenever one changes size or the cells change. A cell sits at
- * the top of its area (`align-self: start`), so its height is its widget's (or the least its h asks
- * for) and never the area's: placing can't change what it measured. A cell with `data-w` (a card)
- * has its span set here too, so it never asks for more columns than the grid has.
+ * The Dashboard grid's columns (2.0.2): its own `--cols` (12, 6 or 1, beside its templates), not
+ * the tracks the browser lists. Those also count any it adds for a widget still placed past the
+ * last column after the window narrowed, and counting them kept the widget there, off the side.
  */
-export const pack: Action<HTMLElement, { cell?: string; dense?: boolean } | undefined> = (grid, opts) => {
-  const cls = opts?.cell ?? 'dash-cell';
-  const placer = opts?.dense ? dense : skyline;
-  const cells = () => [...grid.children].filter((c): c is HTMLElement => c instanceof HTMLElement && c.classList.contains(cls));
+export function gridColumns(style: CSSStyleDeclaration): number {
+  return Math.max(1, parseInt(style.getPropertyValue('--cols'), 10) || 12);
+}
+
+/**
+ * On the Dashboard's grid: places its cells by `skyline` whenever one changes size or the cells
+ * change. A cell sits at the top of its area (`align-self: start`), so its height is its widget's
+ * (or the least its h asks for) and never the area's: placing can't change what it measured.
+ */
+export const pack: Action<HTMLElement> = (grid) => {
+  const cells = () => [...grid.children].filter((c): c is HTMLElement => c instanceof HTMLElement && c.classList.contains('dash-cell'));
   const place = () => {
     const all = cells();
     // Hidden (another view shows): nothing to measure. Showing it again resizes every cell.
     if (!all.length || !grid.clientWidth) return;
     const style = getComputedStyle(grid);
-    const cols = style.gridTemplateColumns.split(' ').filter(Boolean).length;
+    const cols = gridColumns(style);
     const unit = parseFloat(style.gridAutoRows) || 4;
     const gap = parseFloat(style.columnGap) || 12;
     // offsetHeight: the layout height, not the rise animation's scaled box.
-    const items = all.map((c) => ({
-      w: c.dataset.w === undefined ? Number(/span (\d+)/.exec(getComputedStyle(c).gridColumnEnd)?.[1] ?? 1) : cardSpan(c.dataset.w, cols),
-      rows: rowSpan(c.offsetHeight, unit, gap),
-    }));
-    const at = placer(items, cols, Math.ceil(gap / unit));
+    const items = all.map((c) => ({ w: Number(/span (\d+)/.exec(getComputedStyle(c).gridColumnEnd)?.[1] ?? 1), rows: rowSpan(c.offsetHeight, unit, gap) }));
+    const at = skyline(items, cols, Math.ceil(gap / unit));
     all.forEach((c, i) => {
       const set = (k: string, v: string) => c.style.getPropertyValue(k) !== v && c.style.setProperty(k, v);
-      if (c.dataset.w !== undefined) set('grid-column-end', `span ${items[i]!.w}`);
       set('grid-column-start', String(at[i]!.col + 1));
       set('grid-row-start', String(at[i]!.row + 1));
       set('--span', String(items[i]!.rows));
@@ -115,19 +116,15 @@ export const pack: Action<HTMLElement, { cell?: string; dense?: boolean } | unde
   const list = new MutationObserver((records) => {
     for (const r of records) {
       r.removedNodes.forEach((n) => n instanceof Element && sizes.unobserve(n));
-      r.addedNodes.forEach((n) => n instanceof HTMLElement && n.classList.contains(cls) && sizes.observe(n));
+      r.addedNodes.forEach((n) => n instanceof HTMLElement && n.classList.contains('dash-cell') && sizes.observe(n));
     }
     place();
   });
   list.observe(grid, { childList: true });
-  // A card that takes more or fewer columns (a fan header showing its curve) places again.
-  const widths = new MutationObserver(place);
-  widths.observe(grid, { subtree: true, attributeFilter: ['data-w'] });
   return {
     destroy() {
       sizes.disconnect();
       list.disconnect();
-      widths.disconnect();
     },
   };
 };

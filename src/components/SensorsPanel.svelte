@@ -253,6 +253,7 @@
   }
   .scroll {
     overflow-x: auto;
+    container-type: inline-size;
   }
   table {
     width: 100%;
@@ -361,10 +362,14 @@
     color: var(--muted);
     font-size: 0.85rem;
   }
-  @media (max-width: 560px) {
+  /* By the table's own width (2.0.2), not the window's: Min, Avg and Source step out before the
+     names would be squeezed, so the table never scrolls sideways. */
+  @container (max-width: 50rem) {
     .opt {
       display: none;
     }
+  }
+  @container (max-width: 30rem) {
     th,
     td {
       padding-inline: 0.45rem;

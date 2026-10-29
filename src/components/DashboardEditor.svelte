@@ -25,7 +25,7 @@
   } from '../dashboard-edit';
   import type { WidgetKind } from '../dashboard';
   import { getSensorTree } from '../ipc';
-  import { pack } from '../packing';
+  import { gridColumns, pack } from '../packing';
   import type { Dashboard, Layout, SensorSnapshot, SensorTree, Widget } from '../types';
 
   interface Props {
@@ -136,7 +136,7 @@
     const handle = e.currentTarget as HTMLElement;
     const grid = handle.closest('.dash-grid') as HTMLElement;
     const style = getComputedStyle(grid);
-    const cols = style.gridTemplateColumns.split(' ').length;
+    const cols = gridColumns(style);
     const gap = parseFloat(style.columnGap) || 12;
     const colPx = (grid.clientWidth - gap * (cols - 1)) / cols + gap;
     const rowPx = 5 * parseFloat(getComputedStyle(document.documentElement).fontSize) + gap;

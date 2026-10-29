@@ -394,7 +394,8 @@
     padding: 0.25rem 0.4rem;
     border-bottom: 1px solid var(--line);
     text-align: right;
-    white-space: nowrap;
+    /* Never wider than its card (2.0.2): a long raw value or name wraps. */
+    overflow-wrap: anywhere;
   }
   th {
     color: var(--muted);
@@ -402,7 +403,6 @@
   }
   .name {
     text-align: left;
-    white-space: normal;
   }
   tr.failing td {
     color: var(--hot);

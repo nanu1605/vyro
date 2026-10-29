@@ -118,9 +118,12 @@
     { id: 'service', title: 'Sensor service' },
     { id: 'updates', title: 'Updates' },
   ];
-  // The section list beside the cards (P28), in the cards' order: a click scrolls to the card; the
-  // card in view is marked as you scroll (the one nearest the top, then the left).
-  const sections = $derived(ordered('settings', CARDS.map((c) => c.id)).map((id) => CARDS.find((c) => c.id === id)!));
+  // The section list beside the cards (P28), in the order they show in: a click scrolls to the
+  // card; the card in view is marked as you scroll (the one nearest the top, then the left).
+  let arranged = $state<string[]>([]);
+  const sections = $derived(
+    (arranged.length ? arranged : ordered('settings', CARDS.map((c) => c.id))).flatMap((id) => CARDS.filter((c) => c.id === id)),
+  );
   const rearranged = $derived(Object.keys(cards.views).length > 0);
   let at = $state('appearance');
   let page = $state<HTMLElement | undefined>();
@@ -164,7 +167,7 @@
       <a href="#{id}" class:on={at === id} aria-current={at === id ? 'true' : undefined} onclick={(e) => go(e, id)}>{title}</a>
     {/each}
   </nav>
-  <CardGrid view="settings" items={CARDS}>
+  <CardGrid view="settings" items={CARDS} bind:arranged>
     {#snippet card(id)}
       {#if id === 'appearance'}
         <Card title="Appearance" id="appearance" subtitle={look.name}>
@@ -223,7 +226,7 @@
             <legend>Cards</legend>
             <p class="note">
               Drag a card by its grip to move it, or focus the grip and use the arrow keys. Every view keeps its own
-              order.
+              order; at another window size Vyro moves cards to close gaps, starting from yours.
             </p>
             <div class="actions">
               <button type="button" disabled={!rearranged} onclick={resetOrder}>Put cards back</button>

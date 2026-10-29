@@ -7,9 +7,11 @@
 // wheel open. Since 1.4 also: Settings → Remote's reach from anywhere (the relay's confirmation,
 // a phone's pairing code, the options). Since 1.5 also: What's new after an update. Since 1.6 also: GPU
 // tuning's confirmation, and the view with tuning on and a stability test running. Since 1.7 also: the
-// screen-shared banner. Since 2.0.2 also: the views' cards pack without overlaps, and move by
-// dragging their grip, by its arrow keys, back on Escape, and stay moved after a reload. The phone
-// app itself is swept by scripts/relay-e2e.mjs.
+// screen-shared banner. Since 2.0.2 also: the views' cards pack without overlaps or gaps, also as
+// the window narrows and widens again (and the Dashboard's widgets stay inside their grid); they
+// move by dragging their grip, by its arrow keys, back on Escape, and stay moved after a reload and
+// at the window size they were moved at; and nothing scrolls sideways, not even an area inside a
+// view, from the narrowest window up. The phone app itself is swept by scripts/relay-e2e.mjs.
 // Runs against the browser preview
 // (sample data, two GPUs as on the owner's PC) of a finished build:
 //
@@ -182,11 +184,30 @@ async function axe(page, where) {
   for (const v of found) if (v.nodes.length) problem(where, `${v.id} (${v.impact}): ${v.nodes.slice(0, 3).join(' | ')}`);
 }
 
-async function noSidewaysScroll(page, where) {
-  const extra = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
-  if (extra > 1) problem(where, `scrolls sideways by ${extra} px`);
+/**
+ * Nothing scrolls sideways (2.0.2: "no horizontal scrolling throughout vyro"): not the window,
+ * measured with the frame's clip lifted so what it hides still counts, and no area in it (a table
+ * in a card, a dialog's list) from 480 px, the narrowest the window gets (tauri.conf.json), or at
+ * any width with `inner`.
+ */
+async function noSidewaysScroll(page, where, inner = (page.viewportSize()?.width ?? 0) >= 480) {
+  const found = await page.evaluate((inner) => {
+    const main = document.querySelector('.main');
+    const clip = main?.style.overflowX ?? '';
+    if (main) main.style.overflowX = 'visible';
+    const extra = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+    if (main) main.style.overflowX = clip;
+    const out = extra > 1 ? [`scrolls sideways by ${extra} px`] : [];
+    if (inner)
+      for (const el of document.querySelectorAll('body *')) {
+        if (!el.clientWidth || el.scrollWidth - el.clientWidth <= 1 || !/auto|scroll/.test(getComputedStyle(el).overflowX)) continue;
+        const name = el.getAttribute('aria-label') ?? [...el.classList].filter((c) => !c.startsWith('svelte-')).join('.');
+        out.push(`${el.tagName.toLowerCase()} "${name}" scrolls sideways by ${el.scrollWidth - el.clientWidth} px`);
+      }
+    return out;
+  }, inner);
+  checks++;
+  for (const f of found) problem(where, f);
 }
 
 async function open(browser, url, { width, theme, motion = 'no-preference', init, accent = 'theme' } = {}) {
@@ -211,19 +232,58 @@ async function open(browser, url, { width, theme, motion = 'no-preference', init
   return { ctx, page };
 }
 
-/** A view's card grid (2.0.2): no card on another, none past the grid's sides. */
+/**
+ * A view's card grid (2.0.2): no card on another, none past the grid's sides, no column empty, and
+ * no gap: down each column a card reaches to the gutter above the next, the last to the grid's last
+ * line (the owner's report: "lot of empty spaces in between").
+ */
 async function cardsPacked(page, where) {
   const found = await page.evaluate(() => {
     const bad = [];
     for (const g of document.querySelectorAll('[role="tabpanel"]:not([hidden]) .card-grid')) {
       const gr = g.getBoundingClientRect();
-      const boxes = [...g.querySelectorAll(':scope > .card-cell')].map((c) => ({ id: c.dataset.card, r: c.getBoundingClientRect() }));
+      // The card itself, as far as it reaches down; its cell keeps its own height.
+      const boxes = [...g.querySelectorAll(':scope > .card-cell')].map((c) => ({ id: c.dataset.card, r: (c.querySelector(':scope > .card') ?? c).getBoundingClientRect() }));
+      if (!boxes.length) continue;
+      const gap = parseFloat(getComputedStyle(g).columnGap) || 16;
+      const last = Math.max(...boxes.map((b) => b.r.bottom));
       for (let i = 0; i < boxes.length; i++) {
         const a = boxes[i].r;
         if (a.left < gr.left - 1 || a.right > gr.right + 1) bad.push(`"${boxes[i].id}" past the grid's side`);
         for (let j = i + 1; j < boxes.length; j++) {
           const b = boxes[j].r;
           if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) bad.push(`"${boxes[i].id}" and "${boxes[j].id}" overlap`);
+        }
+        const below = boxes.filter((b) => b.r.left < a.right - 1 && a.left < b.r.right - 1 && b.r.top >= a.bottom - 1).map((b) => b.r.top);
+        const room = below.length ? Math.min(...below) - a.bottom - gap : last - a.bottom;
+        if (Math.abs(room) > 2) bad.push(`${Math.round(room)} px of room under "${boxes[i].id}"`);
+      }
+      const cols = getComputedStyle(g).gridTemplateColumns.split(' ').filter(Boolean).length;
+      const colW = (gr.width - (cols - 1) * gap) / cols;
+      for (let c = 0; c < cols; c++) {
+        const x = gr.left + c * (colW + gap) + colW / 2;
+        if (!boxes.some((b) => b.r.left <= x && x <= b.r.right)) bad.push(`column ${c + 1} of ${cols} has no card`);
+      }
+    }
+    return bad;
+  });
+  checks++;
+  for (const f of found) problem(where, f);
+}
+
+/** The Dashboard's widgets: inside their grid, none on another (2.0.2: after the window resized). */
+async function widgetsPacked(page, where) {
+  const found = await page.evaluate(() => {
+    const bad = [];
+    for (const g of document.querySelectorAll('[role="tabpanel"]:not([hidden]) .dash-grid')) {
+      const gr = g.getBoundingClientRect();
+      const boxes = [...g.querySelectorAll(':scope > .dash-cell')].map((c) => ({ name: c.querySelector('h2')?.textContent ?? '?', r: c.getBoundingClientRect() }));
+      for (let i = 0; i < boxes.length; i++) {
+        const a = boxes[i].r;
+        if (a.left < gr.left - 1 || a.right > gr.right + 1 || a.width < 40) bad.push(`"${boxes[i].name}" ${a.width < 40 ? `squeezed to ${Math.round(a.width)} px` : "past the grid's side"}`);
+        for (let j = i + 1; j < boxes.length; j++) {
+          const b = boxes[j].r;
+          if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) bad.push(`"${boxes[i].name}" and "${boxes[j].name}" overlap`);
         }
       }
     }
@@ -633,7 +693,8 @@ async function sweepCompanion(browser, theme, width, paired) {
   await page.waitForTimeout(800);
   const where = `Companion ${paired ? 'live' : 'pairing'} · ${theme} ${width}px`;
   await axe(page, where);
-  await noSidewaysScroll(page, where);
+  // A phone's page: nothing in it scrolls sideways at a phone's width either.
+  await noSidewaysScroll(page, where, true);
   await ctx.close();
 }
 
@@ -721,17 +782,63 @@ async function sweepCards(browser) {
   if (mid.join() === before.join()) problem('Cards', 'dragging Profile over Appearance moved nothing');
   if ((await order()).join() !== before.join()) problem('Cards', `Escape left ${(await order()).join(', ')}`);
   if (await page.locator('.card-ghost').count()) problem('Cards', 'the dragged card stayed on screen after Escape');
-  // Kept after a reload, in the section list too; and put back.
+  // Kept after a reload, in the section list too, each card where it was.
+  const places = () => page.evaluate(() => [...document.querySelectorAll('#panel-settings .card-cell')].map((c) => `${c.dataset.card} ${c.style.gridColumn} ${c.style.gridRowStart}`).join('; '));
+  const left = await places();
   await page.reload();
   await page.waitForTimeout(1200);
   await tab(page, 'Settings');
   now = await order();
   if (now.join() !== before.join()) problem('Cards', `after a reload: ${now.join(', ')}`);
+  if ((await places()) !== left) problem('Cards', `after a reload the cards moved: ${await places()}`);
   const toc = await page.locator('#panel-settings nav a').first().textContent();
   if (toc !== 'Appearance') problem('Cards', `the section list starts with ${toc}, not Appearance`);
+  // A wider window fits them anew from the owner's order; back at this size they are as left.
+  await page.setViewportSize({ width: 2560, height: 900 });
+  await page.waitForTimeout(600);
+  await cardsPacked(page, 'Cards at 2560 px');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(600);
+  if ((await places()) !== left) problem('Cards', `back at 1440 px the cards moved: ${await places()}`);
   await page.getByRole('button', { name: 'Put cards back' }).click();
   await page.waitForTimeout(400);
   if ((await order()).join() !== first.join()) problem('Cards', `put back: ${(await order()).join(', ')}`);
+  await ctx.close();
+}
+
+// --- Resizing (2.0.2): the window narrowed and widened again. -----------------------------------
+// A view planned for a wide window kept a card on a column a narrower one no longer had, and the
+// window scrolled sideways (the owner's report, on a 2000 px screen); the Dashboard's widgets kept
+// twelve columns past 900 px. Each view with cards, from 2560 px down to the narrowest window and
+// back: nothing scrolls sideways, the cards pack without a gap, the widgets stay inside their grid.
+// And the sidebar folded and unfolded, which changes the width without the window.
+
+async function sweepResize(browser) {
+  const { ctx, page } = await open(browser, BASE, { width: 2560, theme: 'midnight', init: SEED_WIDGETS });
+  await page.goto(`${BASE}/`);
+  await page.waitForTimeout(1200);
+  for (const t of ['Dashboard', 'Settings', 'Hardware', 'System', 'Storage', 'Network', 'Displays', 'Devices', 'Cooling', 'Gaming']) {
+    await page.setViewportSize({ width: 2560, height: 900 });
+    await tab(page, t);
+    for (const w of [1920, 1600, 1280, 1000, 760, 480, 1100, 1920, 2560]) {
+      await page.setViewportSize({ width: w, height: 900 });
+      // 150 ms for the plan once the window stops, 180 ms for the cards to glide.
+      await page.waitForTimeout(500);
+      const where = `Resized · ${t} ${w}px`;
+      await noSidewaysScroll(page, where);
+      await cardsPacked(page, where);
+      await widgetsPacked(page, where);
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await tab(page, 'Settings');
+  for (const name of ['Collapse the sidebar', 'Expand the sidebar']) {
+    await page.getByRole('button', { name }).click();
+    await page.waitForTimeout(700);
+    const where = `Resized · Settings, ${name.toLowerCase()}`;
+    await noSidewaysScroll(page, where);
+    await cardsPacked(page, where);
+  }
   await ctx.close();
 }
 
@@ -800,6 +907,7 @@ try {
     );
     await sweepKeyboard(browser);
     await sweepCards(browser);
+    await sweepResize(browser);
     await sweepMotion(browser);
   } finally {
     await browser.close();
