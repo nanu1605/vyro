@@ -3783,6 +3783,62 @@ tall card (Remote) two columns wide when there are three or more.
       cards dragged with the mouse, touch and the keys; the order kept after a restart; the
       Settings view at the screenshot's size.
 
+The owner's second report (2026-10-29), with a screenshot of Settings on the big screen: a
+sideways scroll bar, Overlay squeezed into a sliver at the window's right edge, its words one
+letter a line: "there should be no horizontal scrolling throughout vyro", and "there is lot of
+empty spaces in between, when the screen is changes vyro should smartly rearrange the cards to
+fill blank spaces". Planned and agreed: the cause fixed and nothing able to scroll sideways
+again; columns and order chosen to fill; each card down to the next.
+
+- [x] **No sideways scroll.** `pack` counted a grid's columns from its computed track list,
+      which also lists the columns the browser adds for a card still placed past the last one
+      after the window narrows; counting them kept the card there, squeezed (Overlay, two wide,
+      on the old fourth and fifth columns). Every card view after shrinking (Settings from 2000
+      to 1800 px: 249 px sideways; the views 20 to 342 px), and the Dashboard past 900 px (12
+      tracks, six of them 0 px wide). The sweeps loaded each width fresh and never resized. Now a
+      card view's columns are set by its layout, never more than fit; the Dashboard places by
+      its own `--cols`, beside its templates (its editor's corner sizing too); and the frame
+      clips whatever would still reach past the window (`overflow-x: clip`: not a scroll box, so
+      nothing can scroll it sideways, even from code, and the top bar still sticks). Nothing
+      inside a view scrolls sideways either, from 480 px, the narrowest window: System's startup
+      apps (fixed columns, the command one line cut short, the source under the name in a
+      narrow card; 29 px over even at 1440), Storage's SMART table (wraps), the game sessions
+      (the temperatures step out as the table narrows, then the 0.1 % low and what held the
+      frame rate back), Game profiles (each game a block, its choices labelled, below 58rem;
+      295 px over at 480), Sensors (Min, Avg and Source step out by the table's width, not the
+      window's), an EDID dump (wraps). A stable scroll-bar gutter keeps the width the cards are
+      fitted to from changing as a view grows past the window.
+- [x] **Cards that fill the window** (`card-layout.ts`). For each view, of the column counts its
+      cards fill (never a column left empty: Storage's two drives in two wide columns, not two of
+      six), the one they cover best, the cards measured in each; their order tightened where that
+      closes a gap (each place a card moves from the owner's order costs, so they stay close);
+      fewer columns only when they clearly fill better (more show more at once). Then each card
+      reaches down to the card below it, or the last line: no gap anywhere, an even gutter, and
+      one straight last line. Planned when a view shows, 150 ms after the window stops resizing
+      with room for more or fewer columns, when a card comes or goes and when one's data
+      arrives; never because a card someone is using grew. At the window size where the owner
+      last moved a card, the cards are exactly as left (`vyro.cards.at`); at other sizes Vyro
+      starts from that order. In the preview at 2000 px (the screenshot's width), the share of
+      the grid the cards' content covers, before with gaps and now without any: Settings 4
+      columns, 89 → 99 % (1,355 → 1,244 px tall); Storage 5 → 2 columns, 35 → 88 %; Network
+      5 → 2, 44 → 92 % (Wi-Fi beside Ping over Ethernet); Cooling 5 → 3, 68 → 92 %; Hardware,
+      System and Gaming as many columns, the rest room in cards that reach down. At 2560 px
+      Settings is 4 columns, 79 → 98 %. A drag starts from the order shown (no card moves as it
+      starts), and a drop or an arrow key is saved with the window's size. Displays' cards lost
+      a wrapper that kept them from reaching down.
+- [x] **Checked:** the layout's sums on the views as the preview measured them (unit tests:
+      no column more than fit, no hole, the counts chosen, the same cards the same way). The
+      accessibility sweep now resizes every view with cards and the Dashboard from 2560 px to
+      480 and back (and folds the sidebar), checks that nothing scrolls sideways, the frame's
+      clip lifted, nor any area in a view or dialog from 480 px, that no card leaves room under
+      it, and that cards moved at 1440 px are where they were left after 2560 px and a reload.
+      On a 4× slowed CPU, the first switch to Settings takes about what it did (its longest task
+      250–290 ms), and coming back to it unchanged one task of 69 ms (128 before): a view shown
+      again as it was is not planned again.
+- [ ] **Field check (the owner, on Windows):** from full screen to small and back on Settings,
+      Network and Cooling, no sideways bar and no gaps; a card moved at one size where it was
+      left when the window is that size again.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on
