@@ -3838,6 +3838,10 @@ again; columns and order chosen to fill; each card down to the next.
       On a 4× slowed CPU, the first switch to Settings takes about what it did (its longest task
       250–290 ms), and coming back to it unchanged one task of 69 ms (128 before): a view shown
       again as it was is not planned again.
+- [x] **CI green on f578ad9** (run 40868712433, all four jobs). 8888758 (run 40864313839) had
+      failed the accessibility sweep only: the game sessions table 15 px over its box at 480 px
+      on the runner, whose fonts are a little wider than the preview's here; measuring every
+      table's room to spare then found Processes at 520 px too.
 - [ ] **Field check (the owner, on Windows):** from full screen to small and back on Settings,
       Network and Cooling, no sideways bar and no gaps; a card moved at one size where it was
       left when the window is that size again.
