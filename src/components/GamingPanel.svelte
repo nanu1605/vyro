@@ -506,6 +506,16 @@
       display: none;
     }
   }
+  /* The narrowest window: closer cells, a size smaller. */
+  @container (max-width: 30rem) {
+    table {
+      font-size: 0.76rem;
+    }
+    th,
+    td {
+      padding-inline: 0.3rem;
+    }
+  }
   .link {
     padding: 0;
     border: 0;

@@ -806,6 +806,22 @@ async function sweepCards(browser) {
   await ctx.close();
 }
 
+// --- The narrowest windows (2.0.2): every view, nothing in it scrolls sideways. -----------------
+// Processes' table did at 481 to 540 px, its PID column hidden only from 480 down.
+
+async function sweepNarrow(browser) {
+  for (const width of [480, 540]) {
+    const { ctx, page } = await open(browser, BASE, { width, theme: 'midnight', init: SEED_WIDGETS });
+    await page.goto(`${BASE}/`);
+    await page.waitForTimeout(1200);
+    for (const t of TABS) {
+      await tab(page, t);
+      await noSidewaysScroll(page, `${t} · narrow ${width}px`);
+    }
+    await ctx.close();
+  }
+}
+
 // --- Resizing (2.0.2): the window narrowed and widened again. -----------------------------------
 // A view planned for a wide window kept a card on a column a narrower one no longer had, and the
 // window scrolled sideways (the owner's report, on a 2000 px screen); the Dashboard's widgets kept
@@ -907,6 +923,7 @@ try {
     );
     await sweepKeyboard(browser);
     await sweepCards(browser);
+    await sweepNarrow(browser);
     await sweepResize(browser);
     await sweepMotion(browser);
   } finally {

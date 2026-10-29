@@ -3806,8 +3806,10 @@ again; columns and order chosen to fill; each card down to the next.
       (the temperatures step out as the table narrows, then the 0.1 % low and what held the
       frame rate back), Game profiles (each game a block, its choices labelled, below 58rem;
       295 px over at 480), Sensors (Min, Avg and Source step out by the table's width, not the
-      window's), an EDID dump (wraps). A stable scroll-bar gutter keeps the width the cards are
-      fitted to from changing as a view grows past the window.
+      window's), Processes (a name takes the room the numbers leave and is cut short; PID steps
+      out by the table's width: 39 px over at 520), an EDID dump (wraps). Each table now has at
+      least 32 px to spare at every width from 480 px. A stable scroll-bar gutter keeps the
+      width the cards are fitted to from changing as a view grows past the window.
 - [x] **Cards that fill the window** (`card-layout.ts`). For each view, of the column counts its
       cards fill (never a column left empty: Storage's two drives in two wide columns, not two of
       six), the one they cover best, the cards measured in each; their order tightened where that
@@ -3829,9 +3831,10 @@ again; columns and order chosen to fill; each card down to the next.
 - [x] **Checked:** the layout's sums on the views as the preview measured them (unit tests:
       no column more than fit, no hole, the counts chosen, the same cards the same way). The
       accessibility sweep now resizes every view with cards and the Dashboard from 2560 px to
-      480 and back (and folds the sidebar), checks that nothing scrolls sideways, the frame's
-      clip lifted, nor any area in a view or dialog from 480 px, that no card leaves room under
-      it, and that cards moved at 1440 px are where they were left after 2560 px and a reload.
+      480 and back (and folds the sidebar), visits every view at 480 and 540 px, checks that
+      nothing scrolls sideways, the frame's clip lifted, nor any area in a view or dialog from
+      480 px, that no card leaves room under it, and that cards moved at 1440 px are where they
+      were left after 2560 px and a reload.
       On a 4× slowed CPU, the first switch to Settings takes about what it did (its longest task
       250–290 ms), and coming back to it unchanged one task of 69 ms (128 before): a view shown
       again as it was is not planned again.

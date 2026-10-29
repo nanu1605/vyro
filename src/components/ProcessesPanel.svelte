@@ -172,6 +172,7 @@
   .scroll {
     max-height: 70vh;
     overflow: auto;
+    container-type: inline-size;
   }
   table {
     width: 100%;
@@ -206,8 +207,11 @@
     text-align: right;
     white-space: nowrap;
   }
+  /* All the room the numbers leave, a long name cut short (2.0.2): the table never scrolls
+     sideways. */
   .name {
-    max-width: 18rem;
+    width: 100%;
+    max-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -216,7 +220,8 @@
     color: var(--muted);
     text-align: center;
   }
-  @media (max-width: 480px) {
+  /* By the table's own width, not the window's. */
+  @container (max-width: 30rem) {
     th:nth-child(2),
     td:nth-child(2):not(.empty) {
       display: none;
