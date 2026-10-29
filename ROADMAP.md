@@ -3776,6 +3776,9 @@ tall card (Remote) two columns wide when there are three or more.
 - [x] **Checked:** the card order's sums and the packing (unit tests); the accessibility sweep
       now also checks every card view for overlaps in every theme at three widths, and drags
       Settings' cards (by the grip, by its keys, Escape, a reload, put back).
+- [x] **CI green on fa6fe62** (run 40840568585, all four jobs). 72f1cbb had failed the bundle
+      budget: the card grid's styles were in the theme, which the phone pages load too (each
+      0.1 kB over); they are the grid's own now (33.8 and 43.8 kB of 34 and 44).
 - [ ] **Field check (the owner, on Windows):** Ctrl K typing on Settings while a phone watches;
       cards dragged with the mouse, touch and the keys; the order kept after a restart; the
       Settings view at the screenshot's size.
