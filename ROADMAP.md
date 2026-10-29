@@ -3720,7 +3720,8 @@ any time constraint?". On `claude/vyro-2.0`; 2.0.1 and the relay deploy on the o
 
 ### 2.0.2 — after 2.0.1
 
-The owner's "continue" after 2.0.1 (2026-10-28): a review. On `claude/vyro-2.0`; not released.
+The owner's "continue" after 2.0.1 (2026-10-28): a review. On `claude/vyro-2.0`; 2.0.2 on the
+owner's go (2026-10-29: "release 2.0.2").
 
 - [x] **A low battery told once.** A phone that wanted battery notifications heard again at
       every change of a device's level, a higher one too: a mouse on its charger going from
@@ -3845,6 +3846,10 @@ again; columns and order chosen to fill; each card down to the next.
 - [ ] **Field check (the owner, on Windows):** from full screen to small and back on Settings,
       Network and Cooling, no sideways bar and no gaps; a card moved at one size where it was
       left when the window is that size again.
+- [x] **Version 2.0.2** (the owner, 2026-10-29: "release 2.0.2"): `scripts/set-version.py
+      2.0.2`; What's new in 2.0.2: cards that fill the window, cards you can move, no sideways
+      scrolling, search that keeps up, fewer battery notifications. All five are this PC's, so
+      none is marked for the phone app.
 
 ## Risks
 

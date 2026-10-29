@@ -21,6 +21,36 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '2.0.2',
+    items: [
+      {
+        icon: 'sparkles',
+        title: 'Cards that fill the window',
+        text: 'Each view picks the columns its cards fill best, moves a card a few places where that closes a gap, and lets each card reach down to the next: no gaps, and one straight last line. Cards rearrange when the window changes size, not when one you’re using grows.',
+      },
+      {
+        icon: 'sparkles',
+        title: 'Cards you can move',
+        text: 'Drag a card by the grip in its title row, or focus the grip and use the arrow keys. Each view keeps its own order, exactly as you left it at that window size; Settings → Appearance → Put cards back undoes it.',
+      },
+      {
+        icon: 'screen',
+        title: 'No sideways scrolling',
+        text: 'Narrowing the window could leave a card squeezed at its right edge and the window scrolling sideways. Nothing in Vyro scrolls sideways now, and tables fit, down to the narrowest window.',
+      },
+      {
+        icon: 'gauge',
+        title: 'Search that keeps up',
+        text: 'Typing in Ctrl K’s search no longer lags behind your keys, even over Settings: the window behind it is dimmed now, not blurred.',
+      },
+      {
+        icon: 'phone',
+        title: 'Fewer battery notifications',
+        text: 'A device’s low battery now reaches your phone when it runs low and again when it runs lower, not at every change of its level, and not again until it has been charged.',
+      },
+    ],
+  },
+  {
     version: '2.0.1',
     items: [
       {
