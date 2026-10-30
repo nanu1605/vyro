@@ -3910,6 +3910,13 @@ The owner's "continue" after 2.0.2 (2026-10-30): a review. On `claude/vyro-2.0`.
 - [x] **Locally:** types, 285 frontend tests, 807 core tests, the accessibility sweep (1,845
       checks), formatting, clippy for Windows, the size budget. The app's own tests, the
       updater's new one among them, run on Windows in CI.
+- [x] **CI green on 860ab08** (run 41069297602; Linux, Windows with the smoke test, the relay
+      and phone app with the end-to-end test, accessibility: 1,845 checks, the six new ones
+      among them). On Windows, 59 tests of the app's own, `checks_are_due_daily_by_the_clock`
+      among them. 47c8a9a's run was cancelled by the push of 860ab08.
+- [ ] **Field check (the owner, on Windows):** just after Vyro starts, Ctrl K → Units, and the
+      top bar's Remote chip: the card at the top of the window; Ctrl K → Alerts: Health at its
+      alerts. Settings → Updates' last check never more than a day old, after nights asleep too.
 
 ## Risks
 
