@@ -3914,9 +3914,11 @@ The owner's "continue" after 2.0.2 (2026-10-30): a review. On `claude/vyro-2.0`.
       and phone app with the end-to-end test, accessibility: 1,845 checks, the six new ones
       among them). On Windows, 59 tests of the app's own, `checks_are_due_daily_by_the_clock`
       among them. 47c8a9a's run was cancelled by the push of 860ab08.
-- [ ] **Field check (the owner, on Windows):** just after Vyro starts, Ctrl K → Units, and the
-      top bar's Remote chip: the card at the top of the window; Ctrl K → Alerts: Health at its
-      alerts. Settings → Updates' last check never more than a day old, after nights asleep too.
+- [x] **Field check (the owner, on Windows), passed** (2026-10-30: "everything is working"): just
+      after Vyro starts, Ctrl K → Units, and the top bar's Remote chip: the card at the top of
+      the window; Ctrl K → Alerts: Health at its alerts.
+- [ ] Over the next days: Settings → Updates' last check never more than a day old, after nights
+      asleep too (no night had passed with the build at the field check).
 
 ## Risks
 
