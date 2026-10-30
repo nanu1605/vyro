@@ -21,6 +21,21 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '2.0.3',
+    items: [
+      {
+        icon: 'sparkles',
+        title: 'Ctrl K lands on the card',
+        text: 'Going to a part of Settings with Ctrl K, or to Remote by its chip in the top bar, now lands on that card, even just after Vyro starts while the cards are still being placed. Ctrl K’s Alerts and Diagnostics go to their part of Health.',
+      },
+      {
+        icon: 'wake',
+        title: 'Updates looked for every day',
+        text: 'Vyro now looks for updates once a day by the clock, so a PC that sleeps at night no longer goes days without looking. A look that fails, or gets no answer, is tried again within the hour.',
+      },
+    ],
+  },
+  {
     version: '2.0.2',
     items: [
       {

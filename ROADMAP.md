@@ -3866,7 +3866,8 @@ again; columns and order chosen to fill; each card down to the next.
 
 ### 2.0.3 — after 2.0.2
 
-The owner's "continue" after 2.0.2 (2026-10-30): a review. On `claude/vyro-2.0`.
+The owner's "continue" after 2.0.2 (2026-10-30): a review. On `claude/vyro-2.0`; 2.0.3 on the
+owner's go (2026-10-30: "release 2.0.3").
 
 - [x] **Ctrl K lands on the card.** Ctrl K to a section of Settings (and the top bar's Remote
       chip) scrolled to its card once, 150 ms after Settings opened. On Settings' first showing
@@ -3919,6 +3920,11 @@ The owner's "continue" after 2.0.2 (2026-10-30): a review. On `claude/vyro-2.0`.
       the window; Ctrl K → Alerts: Health at its alerts.
 - [ ] Over the next days: Settings → Updates' last check never more than a day old, after nights
       asleep too (no night had passed with the build at the field check).
+- [x] **Version 2.0.3** (the owner, 2026-10-30: "release 2.0.3"): `scripts/set-version.py
+      2.0.3`; What's new in 2.0.3: Ctrl K lands on the card, updates looked for every day. Both
+      are this PC's, so neither is marked for the phone app.
+- [ ] Found while releasing, left for after 2.0.3: the top bar's "Vyro … is available" chip, whose
+      title says "Open Settings → Updates", opens Settings without going to Updates.
 
 ## Risks
 
