@@ -3864,6 +3864,51 @@ again; columns and order chosen to fill; each card down to the next.
       commit's differ only in 2.0.2's notes (none for the phone), the Dashboard's `--cols` in the
       shared theme and the service worker's file list; the relay only in its burst test.
 
+### 2.0.3 — after 2.0.2
+
+The owner's "continue" after 2.0.2 (2026-10-30): a review. On `claude/vyro-2.0`.
+
+- [x] **Ctrl K lands on the card.** Ctrl K to a section of Settings (and the top bar's Remote
+      chip) scrolled to its card once, 150 ms after Settings opened. On Settings' first showing
+      its cards are placed again as Remote's and Updates' data arrive (2.0.2's layout), so a
+      moment later the card was elsewhere: in the preview at 1440 × 900, from a fresh start,
+      Units' top ended 555 px down the window instead of under the top bar, Hidden sensors' 743,
+      Remote's 630, and Updates' once 959: below the window, out of sight (each run a little
+      different with the timing). The card is now followed while its view settles (`reveal`,
+      three seconds, by where it is laid out rather than where it glides from): scrolled to as
+      soon as it shows, and again if it moves or the page grows; scrolling, a click or a key ends
+      it. Settings' section list does the same.
+- [x] **Ctrl K's Alerts and Diagnostics** opened Health and stayed at its top: neither section
+      had the id the palette scrolls to. Each has one now, and lands below the top bar.
+- [x] **Checked:** a new step of the accessibility sweep, from a fresh start for each: Ctrl K to
+      Units, Updates, Hidden sensors, Remote, Alerts and Diagnostics, and the card's top is under
+      the top bar, or the page is at its end with the card on screen. Against 2.0.2's build it
+      found 13 problems in three runs (Updates below the window among them, and nothing to
+      scroll to for Alerts and Diagnostics); none now. Also at 1280 × 720, 1920 × 1080 and
+      2560 × 1440, and on a CPU slowed four times.
+- [x] **Updates looked for daily by the clock.** Installed copies waited 24 hours between checks
+      in one wait, and since Windows 8 a wait does not count the time the PC sleeps (Microsoft's
+      documentation of waitable timers, which Rust's sleep uses there): a PC asleep at night
+      looked every few days, not daily as the README says. A check that failed (the network not
+      up yet after sign-in) also waited a whole day for the next. The checker now looks at the
+      clock every hour, and checks a day after the last check that succeeded
+      (`updates::due`; test: due daily by the clock, again after a failure, and after the clock
+      went back).
+- [x] **Wording:** the README said "Alerts are not sent to phones yet" (they are, since 2.0) and
+      nothing of 2.0.2's cards (now a paragraph in Looks, layouts and your PC); Ctrl K described
+      Remote as "Phone companion on the LAN" (the phone app reaches the PC from anywhere since
+      1.4), and finds the cards' setting under Appearance.
+- Reviewed, nothing to change: the card layout's sums on 3,000 random sets of cards (no overlap,
+  no gap left, never more columns than fit, the same cards always the same way; the slowest plan
+  48 ms); in the preview, cards moved by the mouse, by touch, by the keys and put back, a drop
+  where it started (nothing saved), Escape, a fan turned to a curve (two columns wide, the others
+  around it), and every view with cards watched at 1280, 1440 and 1920 px for cards moving on
+  their own (none: no card's height changed in 15 s); a low battery told once until charged;
+  TURN on the relay and the phone; Intel's tuning; the push service worker.
+- [x] **Locally:** types, 285 frontend tests, 807 core tests, the accessibility sweep (1,845
+      checks), formatting, clippy for Windows, the size budget. The app's own tests, the
+      updater's new one among them, run on Windows in CI.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

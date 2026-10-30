@@ -400,7 +400,7 @@
   </form>
 {/snippet}
 
-<section class="alerts">
+<section class="alerts" id="alerts">
   <div class="head">
     <h2>Alerts</h2>
     <div class="tools">
@@ -495,6 +495,8 @@
 <style>
   .alerts {
     margin-top: 1.4rem;
+    /* Ctrl K's Alerts lands here, below the sticky header. */
+    scroll-margin-top: calc(var(--topbar-h) + 1rem);
   }
   .head {
     display: flex;

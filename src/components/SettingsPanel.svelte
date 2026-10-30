@@ -3,6 +3,7 @@
   import Card from './Card.svelte';
   import CardGrid, { type CardItem } from './CardGrid.svelte';
   import { cards, ordered, resetOrder } from '../card-order.svelte';
+  import { reveal } from '../reveal';
   import { getAutostart, getSensorTree, pickProfile, setAutostart, type OverlayCorner, type OverlaySettings } from '../ipc';
   import { activeProfile, game, prefs, profiles, savePrefs } from '../prefs.svelte';
   import OverlayPlate from './OverlayPlate.svelte';
@@ -130,7 +131,8 @@
   function go(e: MouseEvent, id: string): void {
     e.preventDefault();
     at = id;
-    document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    // Followed while the cards settle: just after Settings opens, Remote's arriving moves them.
+    reveal(id);
   }
   $effect(() => {
     if (!active || !page) return;

@@ -18,6 +18,7 @@
   import GamingPanel from './components/GamingPanel.svelte';
   import CoolingPanel from './components/CoolingPanel.svelte';
   import { animator } from './anim';
+  import { reveal } from './reveal';
   import { loadUpdates, update } from './updates.svelte';
   import { cancelPowerAction, getBackendStatus, getScreenStatus, onScreenShare, stopScreenShare, getHardwareChanges, getLowBatteries, getPawnIoStatus, getPowerState, getRemoteBrief, inTauri, onBackendStatus, onHardwareChanged, onLowBattery, onOpenView, onPowerPending, onRemote, onSensors, onWindowOpened, restoreFans, restoreGpu, setUiVisible, getWhatsNew, whatsNewSeen } from './ipc';
   import { lowNotice } from './devices';
@@ -193,10 +194,11 @@
   function openRemote(): void {
     openSection('settings', 'remote');
   }
-  /** A view, scrolled to one of its cards (the card loads with the panel). */
+  /** A view, scrolled to one of its cards: once the card shows, and after it while the view's
+   * cards settle (2.0.3, `reveal`). */
   function openSection(t: Tab, id: string): void {
     select(t);
-    setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 150);
+    reveal(id);
   }
 
   // What's new (1.5): after an update, the new versions' notes once; from Settings or the

@@ -92,7 +92,7 @@
   const attention = $derived(report ? count(report, 'attention') : 0);
 </script>
 
-<section class="diag" aria-labelledby="diag-title">
+<section class="diag" id="diagnostics" aria-labelledby="diag-title">
   <div class="head">
     <div>
       <h2 id="diag-title">Diagnostics</h2>
@@ -196,6 +196,8 @@
   .diag {
     margin-top: 1.2rem;
     padding: 0.85rem 1rem;
+    /* Ctrl K's Diagnostics lands here, below the sticky header. */
+    scroll-margin-top: calc(var(--topbar-h) + 1rem);
     border: 1px solid var(--line);
     border-radius: 10px;
     background: var(--panel);

@@ -246,6 +246,13 @@ or actions, 0.3 moves `alerts.json` aside (to `alerts.json.bad`) and uses its de
   Streaming, Benchmark, Monitoring and Minimal. A layout can be locked, and a preset reset.
   Each widget is as tall as it needs (at least the size you gave it), and the next one moves up
   into the room a short card leaves, so no card stretches into blank space (1.2).
+- **Cards in every view (2.0.2).** Settings, Hardware, System, Storage, Network, Displays,
+  Devices, Cooling, GPU tuning and Gaming fit their cards to the window: as many columns as they
+  fill, each card reaching down to the next, so there is no gap and the last line is straight.
+  They are fitted again when the window changes size, never because a card you are using grew.
+  Drag a card by the grip in its title row, or focus the grip and use the arrow keys: each view
+  keeps its own order, exactly as you left it at that window size, and Settings → Appearance →
+  **Put cards back** undoes it. Nothing in Vyro scrolls sideways, down to the narrowest window.
 - **My PC.** Your PC in 3-D, with three views:
   - your PC: a tower with glass, lit fans, your cooler, RAM sticks, GPU, drives and cables;
     or, on a laptop, the laptop with its lid open, heat pipes and blower fans (1.1);
@@ -388,7 +395,7 @@ the PC (1.5).
   a Wake-on-LAN page, or a smart plug with the BIOS set to power on after power loss, also work.
 - **Limits.** Networks that block `workers.dev` or allow the web only through a proxy cannot
   reach the relay. The relay runs on Cloudflare's free plan, shared by everyone: past its
-  daily limit it pauses until midnight UTC. Alerts are not sent to phones yet.
+  daily limit it pauses until midnight UTC.
 
 ### Notifications (2.0)
 

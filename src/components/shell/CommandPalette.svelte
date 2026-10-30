@@ -40,12 +40,12 @@
   const found = (i: Item): Found => ({ ...i, hay: `${i.label} ${i.hint} ${i.kind}`.toLowerCase(), low: i.label.toLowerCase() });
 
   const SECTIONS: Array<[Tab, string, string, string]> = [
-    ['settings', 'appearance', 'Appearance', 'Theme, accent, open on'],
+    ['settings', 'appearance', 'Appearance', 'Theme, accent, open on, cards'],
     ['settings', 'profile', 'Profile', 'Poll rate, notifications, animation'],
     ['settings', 'general', 'General', 'Tray, start with Windows'],
     ['settings', 'gaming', 'Gaming', 'Frame rates, game profiles'],
     ['settings', 'overlay', 'Overlay', 'In-game readings and graph'],
-    ['settings', 'remote', 'Remote', 'Phone companion on the LAN'],
+    ['settings', 'remote', 'Remote', 'Phone app, pairing, screen and wake'],
     ['settings', 'units', 'Units', '°C or °F'],
     ['settings', 'hidden-sensors', 'Hidden sensors', 'Sensors left out of views'],
     ['settings', 'service', 'Sensor service', 'Privileged sensors'],

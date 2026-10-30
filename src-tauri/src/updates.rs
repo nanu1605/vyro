@@ -20,8 +20,18 @@ use crate::tray::SettingsStore;
 pub const EVENT: &str = "update-status";
 /// First automatic check after start (the network may still be coming up after sign-in).
 const FIRST_CHECK: Duration = Duration::from_secs(60);
-/// Between automatic checks.
-const EVERY: Duration = Duration::from_secs(24 * 3600);
+/// Between automatic checks, in seconds by the clock.
+const DAY: i64 = 24 * 3600;
+/// How often the checker looks at the clock (2.0.3). It waited 24 hours at a time, and Windows
+/// does not count the time it sleeps in a wait: a PC asleep at night looked every few days. A
+/// check that failed (no network yet) waited a day too.
+const TICK: Duration = Duration::from_secs(3600);
+
+/// Whether an automatic check is due: none has succeeded yet, the last one was a day ago, or the
+/// clock has gone back past it.
+fn due(last_check: Option<i64>, now: i64) -> bool {
+    last_check.is_none_or(|t| !(0..DAY).contains(&(now - t)))
+}
 
 /// Whether this build has an updater: the release workflow adds `plugins.updater` with the
 /// public key to the configuration.
@@ -189,7 +199,7 @@ fn notify(app: &AppHandle, state: &Updates, version: &str) {
     }
 }
 
-/// Checks after start and then daily, while the setting allows it.
+/// Checks after start and then daily by the clock, while the setting allows it.
 pub fn watch(app: &AppHandle) {
     if !app.state::<Updates>().status().configured {
         return;
@@ -203,10 +213,11 @@ pub fn watch(app: &AppHandle) {
                 let enabled = app
                     .try_state::<SettingsStore>()
                     .is_some_and(|s| s.get().check_updates);
-                if enabled {
+                let last = app.state::<Updates>().status().last_check;
+                if enabled && due(last, unix_now()) {
                     tauri::async_runtime::block_on(check(&app, true));
                 }
-                std::thread::sleep(EVERY);
+                std::thread::sleep(TICK);
             }
         });
     if let Err(e) = spawned {
@@ -263,6 +274,20 @@ mod tests {
         .unwrap();
         c.plugins = serde_json::from_value(plugins).unwrap();
         c
+    }
+
+    /// Daily by the clock however long Windows slept, and a failed check (none succeeded since)
+    /// again within the hour.
+    #[test]
+    fn checks_are_due_daily_by_the_clock() {
+        let now = 1_800_000_000;
+        assert!(due(None, now));
+        assert!(!due(Some(now - 3600), now));
+        assert!(!due(Some(now - DAY + 1), now));
+        assert!(due(Some(now - DAY), now));
+        assert!(due(Some(now - 3 * DAY), now));
+        // The clock set back since the last check: not waited out.
+        assert!(due(Some(now + 3600), now));
     }
 
     #[test]

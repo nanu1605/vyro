@@ -11,7 +11,8 @@
 // the window narrows and widens again (and the Dashboard's widgets stay inside their grid); they
 // move by dragging their grip, by its arrow keys, back on Escape, and stay moved after a reload and
 // at the window size they were moved at; and nothing scrolls sideways, not even an area inside a
-// view, from the narrowest window up. The phone app itself is swept by scripts/relay-e2e.mjs.
+// view, from the narrowest window up. Since 2.0.3 also: Ctrl K to a Settings or Health section
+// lands on it from a fresh start. The phone app itself is swept by scripts/relay-e2e.mjs.
 // Runs against the browser preview
 // (sample data, two GPUs as on the owner's PC) of a finished build:
 //
@@ -858,6 +859,57 @@ async function sweepResize(browser) {
   await ctx.close();
 }
 
+// --- Ctrl K to a card (2.0.3): the card in view once its view has settled. ----------------------
+// On a view's first showing its cards are placed again as their data arrives (Remote's, Updates'),
+// and the card scrolled to once, 150 ms after the view opened, was elsewhere a moment later: Units
+// 555 px down the window rather than under the top bar, Updates below it. Health's Alerts and
+// Diagnostics had no id to scroll to at all. Each from a fresh start: the card's top under the top
+// bar, or the page at its end with the card on screen.
+
+async function sweepSections(browser) {
+  const SECTIONS = [
+    ['Units', 'units', 'Settings'],
+    ['Updates', 'updates', 'Settings'],
+    ['Hidden sensors', 'hidden-sensors', 'Settings'],
+    ['Remote', 'remote', 'Settings'],
+    ['Alerts', 'alerts', 'Health'],
+    ['Diagnostics', 'diagnostics', 'Health'],
+  ];
+  for (const [label, id, kind] of SECTIONS) {
+    const { ctx, page } = await open(browser, BASE, { width: 1440, theme: 'midnight' });
+    await page.goto(`${BASE}/`);
+    await page.waitForTimeout(1200);
+    const where = `Ctrl K · ${label}`;
+    await page.keyboard.press('Control+k');
+    // The palette loads on first use, and takes the focus once open.
+    await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'combobox');
+    await page.keyboard.type(label);
+    await page.waitForTimeout(200);
+    const first = await page.locator('#cmdk-0').innerText();
+    if (!first.startsWith(label) || !first.includes(kind)) {
+      problem(where, `the first result is "${first.replace(/\n/g, ' · ')}"`);
+      await ctx.close();
+      continue;
+    }
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(2500);
+    checks++;
+    const at = await page.evaluate((id) => {
+      const el = document.getElementById(id);
+      if (!el) return null;
+      const end = document.documentElement.scrollHeight - innerHeight;
+      const margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
+      return { top: el.getBoundingClientRect().top, margin, end: scrollY >= end - 1 };
+    }, id);
+    if (!at) problem(where, `no element #${id} to scroll to`);
+    else if (Math.abs(at.top - at.margin) > 2 && !(at.end && at.top > at.margin && at.top < 900 - 40)) {
+      const more = at.end ? '' : ', and the page could scroll further';
+      problem(where, `its top is ${Math.round(at.top)} px down the window, not ${Math.round(at.margin)}${more}`);
+    }
+    await ctx.close();
+  }
+}
+
 // --- Reduced motion: no CSS animation runs. ----------------------------------------------------
 
 async function sweepMotion(browser) {
@@ -925,6 +977,7 @@ try {
     await sweepCards(browser);
     await sweepNarrow(browser);
     await sweepResize(browser);
+    await sweepSections(browser);
     await sweepMotion(browser);
   } finally {
     await browser.close();
