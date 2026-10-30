@@ -3893,7 +3893,9 @@ The owner's "continue" after 2.0.2 (2026-10-30): a review. On `claude/vyro-2.0`.
       up yet after sign-in) also waited a whole day for the next. The checker now looks at the
       clock every hour, and checks a day after the last check that succeeded
       (`updates::due`; test: due daily by the clock, again after a failure, and after the clock
-      went back).
+      went back). And a check's request has 30 s to be answered (the installer's download is not
+      limited): one left hanging, as one under way when the PC goes to sleep can be, would have
+      held every later check, and "Check now", until Vyro restarted.
 - [x] **Wording:** the README said "Alerts are not sent to phones yet" (they are, since 2.0) and
       nothing of 2.0.2's cards (now a paragraph in Looks, layouts and your PC); Ctrl K described
       Remote as "Phone companion on the LAN" (the phone app reaches the PC from anywhere since

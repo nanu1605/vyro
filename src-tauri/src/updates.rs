@@ -26,6 +26,10 @@ const DAY: i64 = 24 * 3600;
 /// does not count the time it sleeps in a wait: a PC asleep at night looked every few days. A
 /// check that failed (no network yet) waited a day too.
 const TICK: Duration = Duration::from_secs(3600);
+/// How long the update server has to answer a check (2.0.3; not the download, which the plugin
+/// does not time out). A request left hanging (one under way as the PC goes to sleep can) would
+/// hold every later check until Vyro restarted, and "Check now" with it.
+const CHECK_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Whether an automatic check is due: none has succeeded yet, the last one was a day ago, or the
 /// clock has gone back past it.
@@ -120,6 +124,7 @@ pub(crate) async fn check(app: &AppHandle, auto: bool) -> UpdateStatus {
     let handle = app.clone();
     let updater = app
         .updater_builder()
+        .timeout(CHECK_TIMEOUT)
         .on_before_exit(move || {
             crate::wind_down(&handle, "Vyro is installing an update");
             handle.cleanup_before_exit();
