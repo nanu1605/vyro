@@ -3923,6 +3923,20 @@ owner's go (2026-10-30: "release 2.0.3").
 - [x] **Version 2.0.3** (the owner, 2026-10-30: "release 2.0.3"): `scripts/set-version.py
       2.0.3`; What's new in 2.0.3: Ctrl K lands on the card, updates looked for every day. Both
       are this PC's, so neither is marked for the phone app.
+- [x] **2.0.3 released** (2026-10-30, on the owner's go: "release 2.0.3"). CI passed on 4cbd125
+      (run 41102630192; Linux, Windows with the smoke test, the relay and phone app with the
+      end-to-end test, accessibility). `main` fast-forwarded to it from 2.0.2's records, and
+      Release run 41105871001 tagged `v2.0.3`, found the relay's address in `vyro.exe` and
+      published the 14.1 MB MSI, `latest.json` and checksums here and to
+      `nanu1605/vyro-releases`; GitHub's own digests of the files published here match the
+      checksums the run printed (MSI `57858631…`, `latest.json` `951386c5…`), and the
+      `latest.json` installed copies read (`nanu1605/vyro-releases`' latest) is that file,
+      offering 2.0.3 from there. Installed copies on 1.4.1 to 2.0.2 are offered it. Unsigned, as
+      before ([`docs/signing.md`](docs/signing.md)). The relay was not deployed again: it serves
+      8c53592's phone app and relay (run 40764531668). Built here, 8c53592's phone app and this
+      commit's differ only in 2.0.2's and 2.0.3's notes (none for the phone), the Dashboard's
+      `--cols` in the shared theme and the service worker's file list; the relay only in its
+      burst test.
 - [ ] Found while releasing, left for after 2.0.3: the top bar's "Vyro … is available" chip, whose
       title says "Open Settings → Updates", opens Settings without going to Updates.
 
