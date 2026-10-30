@@ -3780,9 +3780,9 @@ tall card (Remote) two columns wide when there are three or more.
 - [x] **CI green on fa6fe62** (run 40840568585, all four jobs). 72f1cbb had failed the bundle
       budget: the card grid's styles were in the theme, which the phone pages load too (each
       0.1 kB over); they are the grid's own now (33.8 and 43.8 kB of 34 and 44).
-- [ ] **Field check (the owner, on Windows):** Ctrl K typing on Settings while a phone watches;
-      cards dragged with the mouse, touch and the keys; the order kept after a restart; the
-      Settings view at the screenshot's size.
+- [x] **Field check (the owner, on Windows), passed** (2026-10-30: "everything works in 2.0.2"):
+      Ctrl K typing on Settings while a phone watches; cards dragged with the mouse, touch and
+      the keys; the order kept after a restart; the Settings view at the screenshot's size.
 
 The owner's second report (2026-10-29), with a screenshot of Settings on the big screen: a
 sideways scroll bar, Overlay squeezed into a sliver at the window's right edge, its words one
@@ -3843,9 +3843,9 @@ again; columns and order chosen to fill; each card down to the next.
       failed the accessibility sweep only: the game sessions table 15 px over its box at 480 px
       on the runner, whose fonts are a little wider than the preview's here; measuring every
       table's room to spare then found Processes at 520 px too.
-- [ ] **Field check (the owner, on Windows):** from full screen to small and back on Settings,
-      Network and Cooling, no sideways bar and no gaps; a card moved at one size where it was
-      left when the window is that size again.
+- [x] **Field check (the owner, on Windows), passed** (2026-10-30: "everything works in 2.0.2"):
+      from full screen to small and back on Settings, Network and Cooling, no sideways bar and
+      no gaps; a card moved at one size where it was left when the window is that size again.
 - [x] **Version 2.0.2** (the owner, 2026-10-29: "release 2.0.2"): `scripts/set-version.py
       2.0.2`; What's new in 2.0.2: cards that fill the window, cards you can move, no sideways
       scrolling, search that keeps up, fewer battery notifications. All five are this PC's, so
