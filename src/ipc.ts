@@ -799,7 +799,7 @@ export async function setPingHost(host: string): Promise<void> {
 
 /** PawnIO driver state; the browser preview behaves as if it were installed. */
 export async function getPawnIoStatus(): Promise<PawnIoStatus> {
-  if (!inTauri) return { state: 'ready', version: '2.0.0 (simulated)', detail: null };
+  if (!inTauri) return { state: 'ready', version: '2.0.0 (simulated)', detail: null, cpuUnread: false };
   return invoke<PawnIoStatus>('get_pawnio_status');
 }
 

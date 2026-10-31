@@ -33,6 +33,18 @@ pub fn supported(vendor: &str, family: u32) -> bool {
     vendor == "AuthenticAMD" && (0x17..=0x1A).contains(&family)
 }
 
+/// Whether Vyro reads the temperature and power of the CPU it runs on: other CPUs (Intel's)
+/// show them as not read on this CPU, not as needing PawnIO (2.0.4).
+pub fn reads_this_cpu() -> bool {
+    #[cfg(target_arch = "x86_64")]
+    {
+        let id = crate::hwid::cpuid::read_live();
+        supported(&id.vendor, id.family)
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    false
+}
+
 /// Tctl in °C from `THM_TCON_CUR_TMP`: bits 31:21 in 1/8 °C, 49 °C lower when the range
 /// select bit (or, on newer parts, both TJ_SEL bits) is set.
 pub fn tctl(raw: u32) -> f64 {

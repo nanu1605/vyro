@@ -5,7 +5,7 @@
   // Widgets page; the window adds dragging and its menu.
   import { onMount } from 'svelte';
   import Spark from './Spark.svelte';
-  import { readingDef, readingView } from '../dashboard';
+  import { NOT_REPORTED, readingDef, readingView } from '../dashboard';
   import { fmt, fmtMB } from '../format';
   import { prefs } from '../prefs.svelte';
   import { PROC_SORTS, kindOf, sortOf, topProcesses, type DesktopWidget } from '../widgets';
@@ -17,11 +17,14 @@
   }
   let { w, snap }: Props = $props();
 
+  /** A widget's window does not ask PawnIO: a missing reading is just not reported. */
+  const QUIET = { cpu: NOT_REPORTED, board: NOT_REPORTED };
+
   const rows = $derived(
     w.sources.flatMap((id) => {
       const r = readingDef(id, snap);
       if (!r) return [];
-      const v = readingView(r, snap, 'not reported', prefs.temperatureUnit);
+      const v = readingView(r, snap, QUIET, prefs.temperatureUnit);
       return [{ id, label: r.label, digits: r.digits, ...v }];
     }),
   );

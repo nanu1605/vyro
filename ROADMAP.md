@@ -3990,6 +3990,37 @@ The owner's "continue" after 2.0.3 (2026-10-31): a review. On `claude/vyro-2.0`;
       top, and each view is where it was left on coming back to it; with the Gaming profile, the
       Dashboard's "Change profile" lands on Settings → Profile.
 
+The owner's "continue" (2026-10-31), after asking what was left: the wrong reasons found while
+answering, and others like them.
+
+- [x] **A CPU Vyro does not read says so.** Vyro reads a CPU's temperature and power on AMD
+      Ryzen only, through PawnIO. On any other (an Intel one), with PawnIO installed, as the MSI
+      installs it: the Dashboard's CPU sensors and Power cards said "needs PawnIO", and the
+      Power card where to get it; Health said "CPU temperature not available (needs PawnIO)";
+      Diagnostics' sensor check said "Install or repair PawnIO". Now they say "not read on this
+      CPU", and the check is information, with nothing to do (`PawnIoStatus::cpu_unread`, the
+      CPU reader's own test; an older service answers without it, as before). Without PawnIO,
+      its banner names only the board's sensors there. With PawnIO installed, a CPU reading
+      still missing is "not reported" on those cards, as on the tiles, and Health's board notes
+      say "Vyro does not read this board's sensor chip", not "needs PawnIO and a supported
+      sensor chip".
+- [x] **Drives without health data.** Health said "Some drives do not report health (run as
+      administrator)", but the service reads drive health with every right it takes. Such a
+      drive sits behind a USB adapter or a RAID controller, which Storage names for each. Now
+      "(Storage says why)".
+- [x] **System power without a value** read "— estimated" on its tile: its own line hid the
+      reason. "Estimated" now shows only under a value.
+- [x] **Checked:** unit tests for Health's notes in each case, Diagnostics' check on a CPU Vyro
+      does not read, and the Dashboard's reasons. The preview's PawnIO and CPU are simulated
+      and read, so it shows none of these lines.
+- [x] **Locally:** types, 286 frontend tests, 806 core tests and the service's, the
+      accessibility sweep (1,854 checks), formatting, clippy (Linux and for Windows), the
+      size budget.
+- [ ] **CI green.**
+- [ ] **Field check (the owner, on Windows):** nothing changes on the reference PC, whose CPU
+      and board are read. On an Intel PC, if one is at hand: "not read on this CPU" on the CPU
+      sensors and Power cards and in Health, and Diagnostics' sensor check as information.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

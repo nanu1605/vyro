@@ -242,7 +242,8 @@ impl LocalEngine {
             .with_alerts(Arc::clone(&alerts))
             .with_fans(Arc::clone(&fans))
             .with_tune(Arc::clone(&tune))
-            .with_intel(Arc::clone(&intel));
+            .with_intel(Arc::clone(&intel))
+            .with_reach(Self::reach());
         if let Some(history) = &history {
             poller = poller.with_history(Arc::clone(history));
         }
@@ -260,6 +261,22 @@ impl LocalEngine {
             intel,
             bluetooth: crate::devices::Throttle::default(),
         })
+    }
+
+    /// What this engine reads, for Health's notes on missing readings: PawnIO as the providers
+    /// find it (they start with the engine, and only once), and whether this is a CPU Vyro
+    /// reads. Simulation reads everything, as the preview's PawnIO is installed.
+    fn reach() -> health::Reach {
+        if Self::simulated() {
+            return health::Reach {
+                pawnio: true,
+                cpu_unread: false,
+            };
+        }
+        health::Reach {
+            pawnio: crate::pawnio::status().state == crate::info::PawnIoState::Ready,
+            cpu_unread: !crate::amd::reads_this_cpu(),
+        }
     }
 
     /// GPU tuning: the simulated card in simulation, the real one only in the service and only
@@ -508,7 +525,10 @@ impl EngineApi for LocalEngine {
     }
 
     fn pawnio_status(&self) -> Result<PawnIoStatus, String> {
-        Ok(crate::pawnio::status())
+        Ok(PawnIoStatus {
+            cpu_unread: !Self::simulated() && !crate::amd::reads_this_cpu(),
+            ..crate::pawnio::status()
+        })
     }
 
     fn set_ping_host(&self, host: &str) -> Result<(), String> {

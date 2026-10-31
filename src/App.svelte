@@ -21,6 +21,7 @@
   import { reveal } from './reveal';
   import { loadUpdates, update } from './updates.svelte';
   import { cancelPowerAction, getBackendStatus, getScreenStatus, onScreenShare, stopScreenShare, getHardwareChanges, getLowBatteries, getPawnIoStatus, getPowerState, getRemoteBrief, inTauri, onBackendStatus, onHardwareChanged, onLowBattery, onOpenView, onPowerPending, onRemote, onSensors, onWindowOpened, restoreFans, restoreGpu, setUiVisible, getWhatsNew, whatsNewSeen } from './ipc';
+  import { needsFor } from './dashboard';
   import { lowNotice } from './devices';
   import { loadSeen, newestId, saveSeen } from './changes';
   import { loadSeenKeys, markSeen, unseen } from './insights';
@@ -162,7 +163,8 @@
     getPawnIoStatus()
       .then((s) => (pawnio = s))
       .catch(() => {});
-  const NEEDS_DRIVER = $derived(pawnio?.state === 'ready' ? 'not reported' : 'needs PawnIO');
+  // Why a CPU or board reading is missing (2.0.4: an Intel CPU's said "needs PawnIO", installed).
+  const needs = $derived(needsFor(pawnio));
 
   // Fan control (P12): the header shows whenever Vyro drives fans, from any tab. Each snapshot
   // says so; nothing is polled.
@@ -480,7 +482,7 @@
             <DashboardGrid
               {snap}
               active={tab === 'dashboard'}
-              needs={NEEDS_DRIVER}
+              {needs}
               {uiFps}
               {compact}
               profileName={spec.name}

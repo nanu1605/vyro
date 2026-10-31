@@ -1,24 +1,26 @@
 <script lang="ts">
   import Card from './Card.svelte';
   import KV from './KV.svelte';
+  import { NEEDS_PAWNIO, NOT_REPORTED } from '../dashboard';
   import { fmt } from '../format';
   import type { GpuSnapshot, PowerSnapshot } from '../types';
 
   interface Props {
     power: PowerSnapshot | null;
     gpus: GpuSnapshot[];
+    /** Why the CPU's power is missing ("needs PawnIO", "not read on this CPU"). */
+    needs: string;
   }
-  let { power, gpus }: Props = $props();
+  let { power, gpus, needs }: Props = $props();
 
-  const PENDING = 'needs PawnIO';
   const watts = (w: number | null | undefined) => (w == null ? null : `${fmt(w, 1)} W`);
 </script>
 
 <Card title="Power" subtitle={power?.estTotalW != null ? `${fmt(power.estTotalW)} W estimated` : power?.cpuW != null ? 'CPU + GPU' : 'Partial: GPU only'}>
   <KV
     rows={[
-      ['System total', power?.estTotalW != null ? `${fmt(power.estTotalW)} W` : PENDING],
-      ['CPU package', power?.cpuW != null ? watts(power.cpuW) : PENDING],
+      ['System total', power?.estTotalW != null ? `${fmt(power.estTotalW)} W` : power?.cpuW != null ? NOT_REPORTED : needs],
+      ['CPU package', power?.cpuW != null ? watts(power.cpuW) : needs],
       ['GPU (all)', watts(power?.gpuW)],
       ...gpus.map((g): [string, string | null] => [
         g.name,
@@ -26,7 +28,7 @@
       ]),
     ]}
   />
-  {#if power?.cpuW == null}
+  {#if power?.cpuW == null && needs === NEEDS_PAWNIO}
     <p class="note">CPU power and the system total need PawnIO (free, signed driver from pawnio.eu).</p>
   {/if}
 </Card>

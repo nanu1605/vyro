@@ -8,8 +8,10 @@
 
   interface Props {
     cpu: CpuSnapshot | null;
+    /** Why its sensors are missing ("needs PawnIO", "not read on this CPU"). */
+    needs: string;
   }
-  let { cpu }: Props = $props();
+  let { cpu, needs }: Props = $props();
 
   const unit = (v: number | null | undefined, u: string, d = 1) => (v == null ? null : `${fmt(v, d)} ${u}`);
   const rows = $derived<Array<[string, string | null]>>([
@@ -27,7 +29,7 @@
   const cols = $derived(width ? balancedColumns(perCore.length, width, 4.5 * rem(), 0.75 * rem()) : 4);
 </script>
 
-<Card title="CPU sensors" subtitle={cpu?.tempPackage == null ? 'needs PawnIO' : null}>
+<Card title="CPU sensors" subtitle={cpu?.tempPackage == null ? needs : null}>
   <KV {rows} />
   {#if perCore.length}
     <ul class="cores" aria-label="Power per core" bind:clientWidth={width} style:--cols={cols}>

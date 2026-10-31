@@ -101,8 +101,7 @@ fn drive(health: Status, life: f64, temp: f64) -> DriveInfo {
 fn pawnio(state: PawnIoState) -> PawnIoStatus {
     PawnIoStatus {
         state,
-        version: None,
-        detail: None,
+        ..PawnIoStatus::default()
     }
 }
 
@@ -345,6 +344,29 @@ fn the_owners_choice_does_not_count_and_missing_data_says_why() {
     let s = c.iter().find(|c| c.id == CheckId::Service).unwrap();
     assert_eq!(s.status, CheckStatus::Attention);
     assert_eq!(checks::engine_label(&alone.app), "the app's own engine");
+}
+
+/// A CPU Vyro does not read (an Intel one) is no PawnIO problem: PawnIO is there (2.0.4).
+#[test]
+fn a_cpu_vyro_does_not_read_is_not_sent_to_pawnio() {
+    let mut f = Fixture::healthy();
+    f.snapshot.cpu.temp_package = None;
+    let c = f.run();
+    let s = c.iter().find(|c| c.id == CheckId::Sensors).unwrap();
+    assert_eq!(s.status, CheckStatus::Attention);
+    assert!(s.advice.as_deref().unwrap().contains("PawnIO"));
+
+    f.pawnio.cpu_unread = true;
+    let c = f.run();
+    let s = c.iter().find(|c| c.id == CheckId::Sensors).unwrap();
+    assert_eq!(s.status, CheckStatus::Info);
+    assert_eq!(s.advice, None);
+    assert!(
+        s.summary.contains("Vyro reads AMD Ryzen CPUs"),
+        "{}",
+        s.summary
+    );
+    assert!(!s.citations.is_empty());
 }
 
 #[test]

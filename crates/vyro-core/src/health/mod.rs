@@ -133,6 +133,17 @@ fn rail(name: &str) -> Option<f64> {
     }
 }
 
+/// What the engine reads, so a missing reading's note gives the real reason (2.0.4): "needs
+/// PawnIO" was said of an Intel CPU's temperature, and of a board whose chip Vyro does not
+/// read, with PawnIO installed. The default is that old guess, PawnIO missing.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Reach {
+    /// PawnIO is installed and opens.
+    pub pawnio: bool,
+    /// This CPU is not one Vyro reads (only AMD Ryzen is), with PawnIO or without.
+    pub cpu_unread: bool,
+}
+
 #[derive(Debug, Default)]
 pub struct HealthMonitor {
     active: HashMap<String, (Status, String, Subsystem)>,
@@ -140,6 +151,7 @@ pub struct HealthMonitor {
     events: VecDeque<HealthEvent>,
     /// Events logged by the latest `update` (fed to alert rules).
     fresh: Vec<HealthEvent>,
+    reach: Reach,
 }
 
 struct Ctx<'a> {
@@ -186,6 +198,11 @@ impl Ctx<'_> {
 impl HealthMonitor {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// What the engine reads, for the notes on missing readings.
+    pub fn set_reach(&mut self, reach: Reach) {
+        self.reach = reach;
     }
 
     /// Recent changes, oldest first.
@@ -414,7 +431,7 @@ impl HealthMonitor {
             self.log(ts, sub, Status::Ok, format!("Cleared: {msg}"));
         }
         self.active = next;
-        report(snap, &findings)
+        report(snap, &findings, self.reach)
     }
 
     fn log(&mut self, ts: i64, sub: Subsystem, status: Status, message: String) {
@@ -457,22 +474,32 @@ fn monitored(s: &SensorSnapshot, sub: Subsystem) -> bool {
 }
 
 /// Plain-language gaps worth stating even when nothing is wrong.
-fn coverage(s: &SensorSnapshot, sub: Subsystem) -> Option<&'static str> {
+fn coverage(s: &SensorSnapshot, sub: Subsystem, reach: Reach) -> Option<&'static str> {
     match sub {
-        Subsystem::Cpu if s.cpu.temp_package.is_none() => {
-            Some("CPU temperature not available (needs PawnIO)")
-        }
+        Subsystem::Cpu if s.cpu.temp_package.is_none() => Some(if reach.cpu_unread {
+            "CPU temperature not read on this CPU (Vyro reads AMD Ryzen CPUs)"
+        } else if reach.pawnio {
+            "CPU temperature not reported"
+        } else {
+            "CPU temperature not available (needs PawnIO)"
+        }),
+        // Not "run as administrator" (2.0.4): the service reads health with every right it
+        // takes, and Storage gives each drive's reason (a USB adapter, a RAID controller).
         Subsystem::Storage if s.storage.iter().any(|d| d.health == Status::Unknown) => {
-            Some("Some drives do not report health (run as administrator)")
+            Some("Some drives do not report health (Storage says why)")
         }
         Subsystem::Thermals | Subsystem::Fans | Subsystem::Voltages if !monitored(s, sub) => {
-            Some("Not reported: needs PawnIO and a supported sensor chip")
+            Some(if reach.pawnio {
+                "Not reported: Vyro does not read this board's sensor chip"
+            } else {
+                "Not reported: needs PawnIO and a supported sensor chip"
+            })
         }
         _ => None,
     }
 }
 
-fn report(s: &SensorSnapshot, findings: &[Finding]) -> HealthReport {
+fn report(s: &SensorSnapshot, findings: &[Finding], reach: Reach) -> HealthReport {
     let subsystems: Vec<SubsystemHealth> = Subsystem::ALL
         .iter()
         .map(|&sub| {
@@ -491,7 +518,10 @@ fn report(s: &SensorSnapshot, findings: &[Finding]) -> HealthReport {
                 name: sub.name().to_owned(),
                 status,
                 messages: mine.iter().map(|f| f.message.clone()).collect(),
-                notes: coverage(s, sub).map(str::to_owned).into_iter().collect(),
+                notes: coverage(s, sub, reach)
+                    .map(str::to_owned)
+                    .into_iter()
+                    .collect(),
             }
         })
         .collect();
@@ -704,5 +734,64 @@ mod tests {
             h.update(&s);
         }
         assert_eq!(h.events().len(), MAX_EVENTS);
+    }
+
+    /// A missing reading's note gives the real reason: with PawnIO installed, not "needs
+    /// PawnIO"; and never "run as administrator" for a drive's health (2.0.4).
+    #[test]
+    fn notes_say_why_a_reading_is_missing() {
+        fn notes(s: &SensorSnapshot, reach: Reach, name: &str) -> Vec<String> {
+            let mut h = HealthMonitor::new();
+            h.set_reach(reach);
+            sub(&h.update(s), name).notes.clone()
+        }
+        let mut s = snap(0);
+        s.cpu.temp_package = None;
+        s.storage.push(crate::snapshot::StorageSnapshot {
+            health: Status::Unknown,
+            ..Default::default()
+        });
+        let missing = Reach::default();
+        let ready = Reach {
+            pawnio: true,
+            cpu_unread: false,
+        };
+        let intel = Reach {
+            pawnio: true,
+            cpu_unread: true,
+        };
+        assert_eq!(
+            notes(&s, missing, "CPU"),
+            ["CPU temperature not available (needs PawnIO)"]
+        );
+        assert_eq!(notes(&s, ready, "CPU"), ["CPU temperature not reported"]);
+        for reach in [
+            intel,
+            Reach {
+                pawnio: false,
+                ..intel
+            },
+        ] {
+            assert_eq!(
+                notes(&s, reach, "CPU"),
+                ["CPU temperature not read on this CPU (Vyro reads AMD Ryzen CPUs)"]
+            );
+        }
+        assert_eq!(
+            notes(&s, missing, "Fans"),
+            ["Not reported: needs PawnIO and a supported sensor chip"]
+        );
+        assert_eq!(
+            notes(&s, ready, "Fans"),
+            ["Not reported: Vyro does not read this board's sensor chip"]
+        );
+        for reach in [missing, ready, intel] {
+            assert_eq!(
+                notes(&s, reach, "Storage"),
+                ["Some drives do not report health (Storage says why)"]
+            );
+        }
+        s.cpu.temp_package = Some(50.0);
+        assert!(notes(&s, intel, "CPU").is_empty());
     }
 }

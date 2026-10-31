@@ -10,7 +10,7 @@
   import PowerCard from './PowerCard.svelte';
   import BoardCard from './BoardCard.svelte';
   import SelfCard from './SelfCard.svelte';
-  import { gameShown, isKind, readingDef, readingView } from '../dashboard';
+  import { gameShown, isKind, readingDef, readingView, type Needs } from '../dashboard';
   import { fmt } from '../format';
   import { prefs } from '../prefs.svelte';
   import type { SensorSnapshot, Widget } from '../types';
@@ -20,8 +20,8 @@
     snap: SensorSnapshot | null;
     /** The Dashboard shows: History and Events read only then. */
     active: boolean;
-    /** Why a driver reading is missing ("needs PawnIO", "not reported"). */
-    needs: string;
+    /** Why a driver reading is missing ("needs PawnIO", "not reported"), the CPU's and the board's. */
+    needs: Needs;
     uiFps: number;
     /** In the editor: placeholders instead of nothing, no links. */
     editing?: boolean;
@@ -84,7 +84,7 @@
   {#if widget.source === 'cores'}
     <CoresCard cpu={snap?.cpu ?? null} />
   {:else if widget.source === 'cpuSensors'}
-    <CpuSensorsCard cpu={snap?.cpu ?? null} />
+    <CpuSensorsCard cpu={snap?.cpu ?? null} needs={needs.cpu} />
   {:else if widget.source === 'gpus'}
     <div class="stack">
       {#each snap?.gpu ?? [] as g, i (i)}<GpuCard gpu={g} />{:else}<div class="panel box muted">No GPU detected.</div>{/each}
@@ -92,9 +92,9 @@
   {:else if widget.source === 'memory'}
     <MemoryCard mem={snap?.memory ?? null} />
   {:else if widget.source === 'power'}
-    <PowerCard power={snap?.power ?? null} gpus={snap?.gpu ?? []} />
+    <PowerCard power={snap?.power ?? null} gpus={snap?.gpu ?? []} needs={needs.cpu} />
   {:else if widget.source === 'board'}
-    <BoardCard board={snap?.board ?? null} fans={snap?.fans ?? []} voltages={snap?.voltages ?? []} pending={needs} />
+    <BoardCard board={snap?.board ?? null} fans={snap?.fans ?? []} voltages={snap?.voltages ?? []} pending={needs.board} />
   {:else if widget.source === 'self'}
     <SelfCard app={snap?.app ?? null} {uiFps} />
   {:else}

@@ -2,7 +2,7 @@
 // The editor's part is in `dashboard-edit.ts`. Pure, so it is unit-tested; `dashboard.json` (app
 // config folder) keeps the layouts.
 
-import type { Dashboard, Layout, SensorSnapshot, TempUnit, Widget } from './types';
+import type { Dashboard, Layout, PawnIoStatus, SensorSnapshot, TempUnit, Widget } from './types';
 import { tempSymbol, toUnit } from './units';
 
 export type WidgetKind = 'gauge' | 'reading' | 'graph' | 'history' | 'game' | 'health' | 'events' | 'card';
@@ -18,8 +18,31 @@ export const NAME_MAX = 40;
 const KIND_IDS: ReadonlySet<string> = new Set<WidgetKind>(['gauge', 'reading', 'graph', 'history', 'game', 'health', 'events', 'card']);
 export const isKind = (k: string): k is WidgetKind => KIND_IDS.has(k);
 
-/** Readings that need PawnIO (or the service) to have a value. */
-export const needsDriver = (id: string): boolean => id === 'cpu.temp' || id === 'cpu.power' || id === 'power.system' || id.startsWith('fan.');
+/** Why a driver's reading is missing, by what reads it: the CPU (its temperature and power, and
+ * the system total made with them) or the board's sensor chip (fans). */
+export interface Needs {
+  cpu: string;
+  board: string;
+}
+export const NEEDS_PAWNIO = 'needs PawnIO';
+export const NOT_REPORTED = 'not reported';
+export const NOT_THIS_CPU = 'not read on this CPU';
+
+/** The reasons from PawnIO's state: "not reported" once it is installed, and a CPU Vyro does not
+ * read (an Intel one) says so whatever its state. Both said "needs PawnIO" until 2.0.4. */
+export function needsFor(pawnio: PawnIoStatus | null): Needs {
+  const board = pawnio?.state === 'ready' ? NOT_REPORTED : NEEDS_PAWNIO;
+  return { cpu: pawnio?.cpuUnread ? NOT_THIS_CPU : board, board };
+}
+
+/** Readings that need PawnIO (or the service) to have a value, and what reads them. */
+export const needsDriver = (id: string): keyof Needs | null =>
+  id === 'cpu.temp' || id === 'cpu.power' || id === 'power.system' ? 'cpu' : id.startsWith('fan.') ? 'board' : null;
+
+const reason = (needs: Needs, id: string): string | null => {
+  const from = needsDriver(id);
+  return from ? needs[from] : null;
+};
 
 /** Cards the compact profiles leave out, as the Dashboard always has. */
 export const DETAIL_CARDS: ReadonlySet<string> = new Set(['cores', 'memory', 'power', 'board', 'self']);
@@ -70,7 +93,7 @@ export const STATIC: Reading[] = [
     group: 'Memory',
     value: (s) => (s.memory.usedMB != null && s.memory.totalMB ? (s.memory.usedMB / s.memory.totalMB) * 100 : null),
   },
-  { id: 'power.system', label: 'System power', unit: 'W', digits: 0, group: 'Power', value: (s) => s.power.estTotalW, sub: () => 'estimated' },
+  { id: 'power.system', label: 'System power', unit: 'W', digits: 0, group: 'Power', value: (s) => s.power.estTotalW, sub: (s) => (s.power.estTotalW == null ? null : 'estimated') },
   { id: 'net.down', label: 'Download', unit: 'Mbps', digits: 1, group: 'Network', value: (s) => primaryNet(s)?.downMbps ?? null },
   { id: 'net.up', label: 'Upload', unit: 'Mbps', digits: 1, group: 'Network', value: (s) => primaryNet(s)?.upMbps ?? null },
   { id: 'net.ping', label: 'Ping', unit: 'ms', digits: 0, warn: 80, hot: 150, group: 'Network', value: (s) => s.ping.rttMs, sub: (s) => s.ping.host || null },
@@ -206,9 +229,9 @@ export function shown(w: Widget, snap: SensorSnapshot | null, compact: boolean):
   return true;
 }
 
-/** A reading as shown: temperatures in the chosen unit, limits likewise, and a "needs PawnIO"
- * line where a driver reading is missing. */
-export function readingView(r: Reading, snap: SensorSnapshot | null, needs: string, unit: TempUnit) {
+/** A reading as shown: temperatures in the chosen unit, limits likewise, and why a driver reading
+ * is missing ("needs PawnIO"). */
+export function readingView(r: Reading, snap: SensorSnapshot | null, needs: Needs, unit: TempUnit) {
   const raw = snap ? r.value(snap) : null;
   const isTemp = r.unit === '°';
   const conv = (c: number | undefined) => (c == null ? undefined : isTemp ? toUnit(c, unit) : c);
@@ -217,6 +240,6 @@ export function readingView(r: Reading, snap: SensorSnapshot | null, needs: stri
     unit: isTemp ? tempSymbol(unit) : r.unit,
     warn: conv(r.warn),
     hot: conv(r.hot),
-    sub: (snap && r.sub?.(snap)) ?? (raw == null && needsDriver(r.id) ? needs : null),
+    sub: (snap && r.sub?.(snap)) ?? (raw == null ? reason(needs, r.id) : null),
   };
 }

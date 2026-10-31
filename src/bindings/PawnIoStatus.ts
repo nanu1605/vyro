@@ -5,4 +5,9 @@ export type PawnIoStatus = { state: PawnIoState,
 /**
  * Installed version from the PawnIO uninstall entry.
  */
-version: string | null, detail: string | null, };
+version: string | null, detail: string | null, 
+/**
+ * This CPU is not one Vyro reads (it reads AMD Ryzen through PawnIO), so its temperature
+ * and power stay empty whatever PawnIO's state (2.0.4). False from an older service.
+ */
+cpuUnread: boolean, };

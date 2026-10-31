@@ -736,4 +736,8 @@ pub struct PawnIoStatus {
     /// Installed version from the PawnIO uninstall entry.
     pub version: Option<String>,
     pub detail: Option<String>,
+    /// This CPU is not one Vyro reads (it reads AMD Ryzen through PawnIO), so its temperature
+    /// and power stay empty whatever PawnIO's state (2.0.4). False from an older service.
+    #[serde(default)]
+    pub cpu_unread: bool,
 }

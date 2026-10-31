@@ -832,6 +832,16 @@ fn sensors(i: &DiagInputs) -> DiagCheck {
             cites,
         );
     }
+    // An Intel CPU's: PawnIO, which the advice below is about, was there all along (2.0.4).
+    if i.pawnio.is_some_and(|p| p.cpu_unread) {
+        return check(
+            id,
+            CheckStatus::Info,
+            "This CPU's temperature is not read (Vyro reads AMD Ryzen CPUs), so the checks that need it lack data.",
+            None,
+            cites,
+        );
+    }
     check(
         id,
         CheckStatus::Attention,

@@ -141,6 +141,7 @@ pub fn classify(version: Option<&str>, open: Result<(), PawnIoError>) -> PawnIoS
         state,
         version: version_s,
         detail,
+        ..PawnIoStatus::default()
     }
 }
 

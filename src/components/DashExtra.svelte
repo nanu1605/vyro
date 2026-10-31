@@ -5,7 +5,7 @@
   import Spark from './Spark.svelte';
   import FrameTimeGraph from './FrameTimeGraph.svelte';
   import HistoryChart from './HistoryChart.svelte';
-  import { gameShown, readingDef, readingView } from '../dashboard';
+  import { gameShown, readingDef, readingView, type Needs } from '../dashboard';
   import { fmt } from '../format';
   import { getHealthEvents, getSensorTree, queryHistory } from '../ipc';
   import { displayUnit, prefs, temp, tempText } from '../prefs.svelte';
@@ -16,7 +16,7 @@
     snap: SensorSnapshot | null;
     /** The Dashboard shows: History and Events read only then. */
     active: boolean;
-    needs: string;
+    needs: Needs;
     editing: boolean;
     onselect?: (tab: 'gaming' | 'health') => void;
   }

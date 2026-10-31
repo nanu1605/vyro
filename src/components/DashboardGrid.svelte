@@ -3,7 +3,7 @@
   // first "Edit layout".
   import { onMount } from 'svelte';
   import DashWidget from './DashWidget.svelte';
-  import { activeLayout, DETAIL_CARDS, initial, narrowSpan, replaceLayout, shown } from '../dashboard';
+  import { activeLayout, DETAIL_CARDS, initial, narrowSpan, replaceLayout, shown, type Needs } from '../dashboard';
   import { getDashboard, setDashboard } from '../ipc';
   import { pack } from '../packing';
   import type { Dashboard, SensorSnapshot } from '../types';
@@ -12,7 +12,7 @@
     snap: SensorSnapshot | null;
     /** The Dashboard tab shows. */
     active: boolean;
-    needs: string;
+    needs: Needs;
     uiFps: number;
     /** A compact profile is in force: the detail cards stay hidden. */
     compact: boolean;

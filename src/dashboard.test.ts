@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeLayout, defaultLayout, initial, isKind, MAX_LAYOUTS, MAX_WIDGETS, narrowSpan, readingDef, WIDTHS } from './dashboard';
+import { activeLayout, defaultLayout, initial, isKind, MAX_LAYOUTS, MAX_WIDGETS, narrowSpan, needsFor, readingDef, readingView, WIDTHS } from './dashboard';
 import { PRESET_IDS, PRESETS, presetLayout, seed } from './dashboard-presets';
 import {
   add,
@@ -95,6 +95,28 @@ describe('readings', () => {
     for (const id of ids) expect(readingDef(id, snap), id).not.toBeNull();
     expect(ids.length).toBeGreaterThan(25);
     expect(readingIds(null)).toContain('gpu.0.temp');
+  });
+
+  it('say why a driver reading is missing: an Intel CPU’s is not read, with PawnIO or without (2.0.4)', () => {
+    const ready = { state: 'ready', version: '2.2.0', detail: null, cpuUnread: false } as const;
+    expect(needsFor(null)).toEqual({ cpu: 'needs PawnIO', board: 'needs PawnIO' });
+    expect(needsFor({ ...ready, state: 'notInstalled' })).toEqual({ cpu: 'needs PawnIO', board: 'needs PawnIO' });
+    expect(needsFor(ready)).toEqual({ cpu: 'not reported', board: 'not reported' });
+    expect(needsFor({ ...ready, cpuUnread: true })).toEqual({ cpu: 'not read on this CPU', board: 'not reported' });
+    expect(needsFor({ ...ready, state: 'notInstalled', cpuUnread: true })).toEqual({ cpu: 'not read on this CPU', board: 'needs PawnIO' });
+
+    const needs = needsFor({ ...ready, cpuUnread: true });
+    const bare = { ...snap, cpu: { ...snap.cpu, tempPackage: null, powerPkgW: null }, power: { ...snap.power, cpuW: null, estTotalW: null } };
+    const sub = (id: string, s = bare) => readingView(readingDef(id, s)!, s, needs, 'c').sub;
+    expect(sub('cpu.temp')).toBe('not read on this CPU');
+    expect(sub('cpu.power')).toBe('not read on this CPU');
+    expect(sub('power.system')).toBe('not read on this CPU');
+    expect(sub('cpu.temp', snap)).toBeNull();
+    // "estimated" only under a value: a missing one said "— estimated".
+    expect(sub('power.system', snap)).toBe('estimated');
+    const noFans = { ...bare, fans: bare.fans.map((f) => ({ ...f, rpm: null })) };
+    expect(sub('fan.cpu', noFans)).toBe('not reported');
+    expect(sub('mem.load')).toBeNull();
   });
 });
 

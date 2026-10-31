@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 use crate::alerts::{AlertEngine, Reading, TickInputs};
 use crate::fan::{self, controller::FanControl};
 use crate::gpu_tune::controller::TuneControl;
-use crate::health::{HealthEvent, HealthMonitor};
+use crate::health::{HealthEvent, HealthMonitor, Reach};
 use crate::history::History;
 use crate::intel::Intel;
 use crate::provider::Provider;
@@ -156,6 +156,12 @@ impl Poller {
     /// snapshot.
     pub fn with_intel(mut self, intel: Arc<Intel>) -> Self {
         self.intel = Some(intel);
+        self
+    }
+
+    /// What the engine reads, so Health's notes say why a reading is missing.
+    pub fn with_reach(self, reach: Reach) -> Self {
+        lock(&self.health).set_reach(reach);
         self
     }
 

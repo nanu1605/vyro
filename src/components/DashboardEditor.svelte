@@ -4,7 +4,7 @@
   // until "Done".
   import { untrack } from 'svelte';
   import DashWidget from './DashWidget.svelte';
-  import { activeLayout, DETAIL_CARDS, isKind, MAX_ROWS, MAX_WIDGETS, NAME_MAX, narrowSpan, readingDef, replaceLayout } from '../dashboard';
+  import { activeLayout, DETAIL_CARDS, isKind, MAX_ROWS, MAX_WIDGETS, NAME_MAX, narrowSpan, readingDef, replaceLayout, type Needs } from '../dashboard';
   import { isPreset, PRESETS } from '../dashboard-presets';
   import {
     add,
@@ -31,7 +31,7 @@
   interface Props {
     dash: Dashboard;
     snap: SensorSnapshot | null;
-    needs: string;
+    needs: Needs;
     uiFps: number;
     /** A compact profile is in force: the detail cards are marked as hidden for now. */
     compact: boolean;
