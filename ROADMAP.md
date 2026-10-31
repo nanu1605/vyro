@@ -4098,7 +4098,8 @@ tested with register values made up from the documentation, and `vyro-live` dump
       CPU that is neither AMD Zen nor Intel family 6. The AMD and Intel readers share
       `cpu_msr` (counter rates, the RAPL unit both encode alike, which CPUs are read).
 - [x] **Nuvoton NCT6791D to NCT6799D** (`sio::nct679x`), the chip of most ASUS boards (NCT6798D on
-      their 600- and 700-series Intel ones) and many ASRock ones: banked access, the register
+      their 600- and 700-series Intel ones) and many ASRock ones, and the NCT6701D of ASUS's
+      X870 and B850 boards, read as a NCT6799D as Linux reads it: banked access, the register
       tables and voltage scales of Linux `nct6775`, and temperatures by source as it reads them
       (each temperature register and fan-control input reports the source its select register
       names; virtual ones are left out). ASUS boards get the names every ASUS mapping in

@@ -61,6 +61,8 @@ pub enum Chip {
     Nct6797,
     Nct6798,
     Nct6799,
+    /// ASUS's newest (X870, B850): read as a NCT6799D, as Linux `nct6775` reads it.
+    Nct6701,
 }
 
 impl Chip {
@@ -75,6 +77,7 @@ impl Chip {
             Self::Nct6797 => "Nuvoton NCT6797D",
             Self::Nct6798 => "Nuvoton NCT6798D",
             Self::Nct6799 => "Nuvoton NCT6799D",
+            Self::Nct6701 => "Nuvoton NCT6701D",
         }
     }
 
@@ -109,8 +112,13 @@ pub const fn identify(id: u8, rev: u8) -> Option<Chip> {
         // D and DR share the monitor registers Vyro reads; they differ in fan control.
         return Some(Chip::Nct6687);
     }
+    let full = u16::from_be_bytes([id, rev]);
+    if full == 0xD806 {
+        // Masked it is a NCT6799D's ID; LibreHardwareMonitor tells the NCT6701D by the whole one.
+        return Some(Chip::Nct6701);
+    }
     // The NCT679x IDs, with the revision's low three bits masked as Linux `nct6775` does.
-    match u16::from_be_bytes([id, rev]) & 0xFFF8 {
+    match full & 0xFFF8 {
         0xC800 => Some(Chip::Nct6791),
         0xC910 => Some(Chip::Nct6792),
         0xD120 => Some(Chip::Nct6793),
@@ -371,6 +379,8 @@ mod tests {
         // NCT6796D differs from the 6798 in bit 3 of the revision byte only.
         assert_eq!(identify(0xD4, 0x23), Some(Chip::Nct6796));
         assert_eq!(identify(0xD8, 0x02), Some(Chip::Nct6799));
+        assert_eq!(identify(0xD8, 0x06), Some(Chip::Nct6701));
+        assert_eq!(Chip::Nct6701.name(), "Nuvoton NCT6701D");
         assert_eq!(identify(0xC8, 0x03), Some(Chip::Nct6791));
         assert_eq!(identify(0xD4, 0x52), Some(Chip::Nct6797));
         assert_eq!(identify(0xC5, 0x62), None, "NCT6779D: not read yet");

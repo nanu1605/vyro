@@ -1,5 +1,5 @@
-//! Nuvoton NCT6791D to NCT6799D (2.1): the hardware monitor of most ASUS boards and many
-//! ASRock ones. Unlike the NCT6687's EC space its registers are banked: the bank goes to register
+//! Nuvoton NCT6791D to NCT6799D, and the NCT6701D read as a NCT6799D (2.1): the hardware
+//! monitor of most ASUS boards and many ASRock ones. Unlike the NCT6687's EC space its registers are banked: the bank goes to register
 //! 0x4E, then the register's address to the monitor base + 5 and its value comes back at + 6.
 //! The register tables and scales are the Linux `nct6775` driver's. Pure: the port I/O is behind
 //! [`PortIo`], so the access sequence is tested without hardware.
@@ -200,7 +200,7 @@ pub const fn tables(chip: Chip) -> Option<&'static Tables> {
         Chip::Nct6796 => Some(&NCT6796),
         Chip::Nct6797 => Some(&NCT6797),
         Chip::Nct6798 => Some(&NCT6798),
-        Chip::Nct6799 => Some(&NCT6799),
+        Chip::Nct6799 | Chip::Nct6701 => Some(&NCT6799),
         Chip::Nct6687 => None,
     }
 }

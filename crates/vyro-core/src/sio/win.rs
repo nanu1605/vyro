@@ -70,6 +70,9 @@ pub fn detect(io: &Handle) -> Result<Option<Found>, PawnIoError> {
             io.exec("ioctl_find_bars", &[], 0)?;
             sio_out(io, REG_LDN, LDN_HWM)?;
             let base = u16::from_be_bytes([sio_in(io, REG_BASE)?, sio_in(io, REG_BASE + 1)?]);
+            // A NCT679x may report its address port (base + 5); Linux `nct6775` masks the low
+            // bits off, as PawnIO's `LpcIO` does when it lets the range through.
+            let base = if chip.banked() { base & !7 } else { base };
             let (active, io_locked) = if chip.banked() {
                 (
                     sio_in(io, CR_ENABLE)? & 1 != 0,
@@ -101,13 +104,16 @@ pub fn detect(io: &Handle) -> Result<Option<Found>, PawnIoError> {
 /// Clears a NCT679x's monitor I/O lock (Super-I/O register 0x28, bit 4) and nothing else, as
 /// Linux `nct6775` and LibreHardwareMonitor do on these chips: with it set the monitor's ports
 /// answer nothing. Call with the ISA-bus mutex held, after [`detect`] on the same handle.
+/// Selecting the slot clears the module's list of ports it lets through, so the chip's ranges are
+/// found again before configuration mode ends, as [`detect`] finds them.
 pub fn unlock_monitor(io: &Handle, found: &Found) -> Result<(), PawnIoError> {
     let slot = u64::from(found.config_port != CONFIG_PORTS[0]);
     io.exec("ioctl_select_slot", &[slot], 0)?;
     outb(io, found.config_port, ENTER_KEY)?;
     outb(io, found.config_port, ENTER_KEY)?;
-    let write =
-        sio_in(io, CR_GLOBAL_OPTION).and_then(|v| sio_out(io, CR_GLOBAL_OPTION, v & !HM_IO_LOCK));
+    let write = sio_in(io, CR_GLOBAL_OPTION)
+        .and_then(|v| sio_out(io, CR_GLOBAL_OPTION, v & !HM_IO_LOCK))
+        .and_then(|()| io.exec("ioctl_find_bars", &[], 0).map(drop));
     let exit = outb(io, found.config_port, EXIT_KEY);
     write?;
     exit
