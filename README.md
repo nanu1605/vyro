@@ -64,6 +64,11 @@ in the tray at sign-in. Builds are not code-signed yet, so SmartScreen will warn
 release signs itself once SignPath Foundation has taken the project on
 ([`docs/signing.md`](docs/signing.md)).
 
+Through PawnIO, Vyro reads the CPU's temperature and power on AMD Ryzen CPUs (Zen 1 to 5), the
+fans, voltages and board temperatures of the Nuvoton NCT6687 that many MSI boards carry, and the
+DDR5 modules' temperatures and timings on AM5 (Ryzen 7000 and later). Elsewhere Vyro says those
+readings are not read, rather than asking for PawnIO (2.0.4).
+
 ## Fan and pump control
 
 The **Cooling** tab sets each fan header to the BIOS curve, a fixed speed or Vyro's own curve

@@ -4003,7 +4003,7 @@ answering, and others like them.
       its banner names only the board's sensors there. With PawnIO installed, a CPU reading
       still missing is "not reported" on those cards, as on the tiles, and Health's board notes
       say "Vyro does not read this board's sensor chip", not "needs PawnIO and a supported
-      sensor chip".
+      sensor chip". The README's Install now says which CPUs, boards and memory PawnIO serves.
 - [x] **Drives without health data.** Health said "Some drives do not report health (run as
       administrator)", but the service reads drive health with every right it takes. Such a
       drive sits behind a USB adapter or a RAID controller, which Storage names for each. Now
