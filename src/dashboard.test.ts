@@ -21,6 +21,7 @@ import {
   widgetTitle,
 } from './dashboard-edit';
 import { initialSimState, nextSnapshot } from './sim';
+import type { SensorSnapshot } from './types';
 
 const snap = nextSnapshot(initialSimState(), 1_700_000_000, 1, () => 0.5);
 
@@ -107,7 +108,7 @@ describe('readings', () => {
 
     const needs = needsFor({ ...ready, cpuUnread: true });
     const bare = { ...snap, cpu: { ...snap.cpu, tempPackage: null, powerPkgW: null }, power: { ...snap.power, cpuW: null, estTotalW: null } };
-    const sub = (id: string, s = bare) => readingView(readingDef(id, s)!, s, needs, 'c').sub;
+    const sub = (id: string, s: SensorSnapshot = bare) => readingView(readingDef(id, s)!, s, needs, 'c').sub;
     expect(sub('cpu.temp')).toBe('not read on this CPU');
     expect(sub('cpu.power')).toBe('not read on this CPU');
     expect(sub('power.system')).toBe('not read on this CPU');

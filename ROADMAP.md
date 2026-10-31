@@ -4010,13 +4010,21 @@ answering, and others like them.
       "(Storage says why)".
 - [x] **System power without a value** read "— estimated" on its tile: its own line hid the
       reason. "Estimated" now shows only under a value.
+- [x] **GPU tuning's marker, gone when the card is at stock.** CI on Windows failed
+      `a_write_refused_part_way_leaves_the_card_at_stock`: it saw the card at stock with the
+      marker still there. The worker published "stock", let go of its state, and only then
+      removed the marker, and the test looked in between. The marker now goes first, so whoever
+      sees stock finds it gone. With a pause put in that gap here, the old order failed the
+      test and the new one passed.
 - [x] **Checked:** unit tests for Health's notes in each case, Diagnostics' check on a CPU Vyro
       does not read, and the Dashboard's reasons. The preview's PawnIO and CPU are simulated
       and read, so it shows none of these lines.
 - [x] **Locally:** types, 286 frontend tests, 806 core tests and the service's, the
       accessibility sweep (1,854 checks), formatting, clippy (Linux and for Windows), the
       size budget.
-- [ ] **CI green.**
+- [ ] **CI green.** f2cc142 (run 41195149701) failed: the new Dashboard test's types (`pnpm
+      check`, run here before that test was written) and, on Windows, the GPU tuning test above.
+      a7dca8d's run was cancelled by f2cc142's push.
 - [ ] **Field check (the owner, on Windows):** nothing changes on the reference PC, whose CPU
       and board are read. On an Intel PC, if one is at hand: "not read on this CPU" on the CPU
       sensors and Power cards and in Health, and Diagnostics' sensor check as information.

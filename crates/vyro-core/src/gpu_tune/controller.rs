@@ -901,18 +901,19 @@ impl Worker {
             }
         }
         // A write that failed may have left tuned values on the card: the marker stays until
-        // stock is on.
+        // stock is on. Then it goes before the lock does, so whoever sees the card at stock
+        // finds it gone too (2.0.4: a test on Windows saw stock and still the marker).
         let tuned = failed
             || inner
                 .written
                 .as_ref()
                 .is_some_and(|w| !w.settings.is_stock());
-        drop(inner);
-        let marker = marker.filter(|_| tuned);
-        self.since = marker.as_ref().map(|m| m.since);
         if !tuned {
             self.mark(None);
         }
+        drop(inner);
+        let marker = marker.filter(|_| tuned);
+        self.since = marker.as_ref().map(|m| m.since);
     }
 
     /// Writes the marker, or removes it.
