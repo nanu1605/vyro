@@ -3983,6 +3983,9 @@ The owner's "continue" after 2.0.3 (2026-10-31): a review. On `claude/vyro-2.0`;
   at its top, and tapping the open one scrolls up, by design).
 - [x] **Locally:** types, 285 frontend tests, the accessibility sweep (1,854 checks), formatting,
       clippy for Windows, the size budget. The app's own tests run on Windows in CI.
+- [x] **CI green on 2869093** (run 41187884387; Linux, Windows with the smoke test, the relay
+      and phone app with the end-to-end test, accessibility: 1,854 checks, the nine new ones
+      among them). On Windows, clippy and the app's own tests with the updater's change.
 - [ ] **Field check (the owner, on Windows):** scrolled down on the Dashboard, Settings opens at its
       top, and each view is where it was left on coming back to it; with the Gaming profile, the
       Dashboard's "Change profile" lands on Settings → Profile.
