@@ -1,4 +1,4 @@
-import { describe as group, expect, it } from 'vitest';
+import { describe as group, expect, it, vi } from 'vitest';
 import { describe, groupByDay, merge, newestId } from './changes';
 import { SAMPLE_CHANGES } from './sim-changes';
 import type { HardwareChange } from './types';
@@ -57,6 +57,18 @@ group('PC change history', () => {
       ['Yesterday', [2]],
       [expect.stringMatching(/10/), [1]],
     ]);
+  });
+
+  it('yesterday is the calendar day before, also after clocks go forward (2.0.4)', () => {
+    vi.stubEnv('TZ', 'America/New_York');
+    try {
+      // 00:30 on 15 March 2027, the night after the 23-hour day; a change at 20:00 on the 14th.
+      const now = new Date(2027, 2, 15, 0, 30).getTime() / 1000;
+      const then = new Date(2027, 2, 14, 20).getTime() / 1000;
+      expect(groupByDay([c({ id: 1, ts: then })], now).map((d) => d.label)).toEqual(['Yesterday']);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('the dot counts changes, not the start of tracking', () => {

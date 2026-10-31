@@ -130,7 +130,11 @@ function dayKey(ts: number): string {
 /** Changes by local day, newest first: "Today", "Yesterday", then dates. */
 export function groupByDay<T extends HardwareChange>(list: T[], now = Date.now() / 1000): { key: string; label: string; items: T[] }[] {
   const today = dayKey(now);
-  const yesterday = dayKey(now - 86_400);
+  // The calendar day before, not 24 hours before: after a 23-hour day (clocks forward), that
+  // was two days back for the first hour (2.0.4).
+  const d = new Date(now * 1000);
+  d.setDate(d.getDate() - 1);
+  const yesterday = dayKey(d.getTime() / 1000);
   const out: { key: string; label: string; items: T[] }[] = [];
   for (const c of list) {
     const key = dayKey(c.ts);

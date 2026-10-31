@@ -4032,6 +4032,29 @@ answering, and others like them.
       and board are read. On an Intel PC, if one is at hand: "not read on this CPU" on the CPU
       sensors and Power cards and in Health, and Diagnostics' sensor check as information.
 
+The owner's next "continue" (2026-10-31): another look, at what labels say and at time.
+
+- [x] **Power's subtitle says what it has.** The system total needs the CPU's power and the
+      GPUs'. With the CPU's only (a PC whose graphics report no power), the Power card said "CPU
+      + GPU", and with neither "Partial: GPU only". Now "Partial: CPU only", and nothing when
+      neither is read.
+- [x] **History's time axis past a change of daylight saving time.** Ticks were aligned to the
+      clock's offset at the chart's start. On a chart across the change (the 24 h one tonight in
+      America, the 7 days one this week in Europe), ticks of two hours or more then read 23:00
+      or 01:00 for midnight, 05:00 for 06:00. Each now follows the clock, and one at an hour the
+      change skips is left out. Shorter steps stayed round already.
+- [x] **"Yesterday" in Hardware's changes** was 24 hours back. In the first hour after a 23-hour
+      day (clocks forward) that was the day before yesterday, and yesterday's changes showed
+      under a date. Now it is the calendar day before.
+- [x] **Checked:** unit tests in New York's time zone across both changes, which fail on the old
+      code (a 6-hour tick at 05:00; "Mar 14, 2027" for yesterday) and pass now.
+- [x] **Locally:** types, 288 frontend tests, the accessibility sweep (1,854 checks), the size
+      budget. No Rust changed.
+- [ ] **CI green.**
+- [ ] **Field check (the owner, on Windows):** none on the reference PC, unless a change of
+      daylight saving time falls in its time zone: then History's ticks across it on round
+      hours, and midnight as the day's name.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

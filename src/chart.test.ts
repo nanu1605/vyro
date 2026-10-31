@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { bandPath, linePath, nearest, niceScale, niceStep, runs, timeTicks } from './chart';
 import type { HistoryPoint } from './types';
 
@@ -56,6 +56,30 @@ describe('time axis', () => {
     expect(t.length).toBeGreaterThanOrEqual(3);
     expect(t.every((v) => v >= 0 && v <= 3600)).toBe(true);
     expect(t[1]! - t[0]!).toBe(900);
+  });
+  it('keeps hours of the clock past a change of daylight saving time (2.0.4)', () => {
+    vi.stubEnv('TZ', 'America/New_York');
+    try {
+      const local = (t: number) => {
+        const d = new Date(t * 1000);
+        return d.getHours() * 60 + d.getMinutes();
+      };
+      // Clocks go back at 02:00 on 1 November 2026 (06:00 UTC), and forward on 14 March 2027.
+      for (const at of [Date.UTC(2026, 10, 1, 6), Date.UTC(2027, 2, 14, 7)].map((ms) => ms / 1000)) {
+        // A day each side: ticks every 6 hours, a week: every day or two, always at midnight.
+        for (const [span, count, every] of [[86_400, 6, 360], [7 * 86_400, 6, 1440], [2 * 86_400, 8, 360]] as const) {
+          const t = timeTicks(at - span / 2, at + span / 2, count);
+          expect(t.length, `${span}`).toBeGreaterThan(1);
+          for (const v of t) expect(local(v) % every, new Date(v * 1000).toString()).toBe(0);
+          for (let i = 1; i < t.length; i++) expect(t[i]!).toBeGreaterThan(t[i - 1]!);
+        }
+        // Steps of an hour or less stay round as they were.
+        const hourly = timeTicks(at - 6 * 3600, at + 6 * 3600, 12);
+        for (const v of hourly) expect(local(v) % 60).toBe(0);
+      }
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
   it('finds the nearest point', () => {
     const p = [pt(0, 1), pt(10, 2), pt(20, 3)];

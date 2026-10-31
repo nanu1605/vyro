@@ -16,7 +16,17 @@
   const watts = (w: number | null | undefined) => (w == null ? null : `${fmt(w, 1)} W`);
 </script>
 
-<Card title="Power" subtitle={power?.estTotalW != null ? `${fmt(power.estTotalW)} W estimated` : power?.cpuW != null ? 'CPU + GPU' : 'Partial: GPU only'}>
+<!-- The total needs both: CPU power without the GPU's said "CPU + GPU" (2.0.4). -->
+<Card
+  title="Power"
+  subtitle={power?.estTotalW != null
+    ? `${fmt(power.estTotalW)} W estimated`
+    : power?.cpuW != null
+      ? 'Partial: CPU only'
+      : power?.gpuW != null
+        ? 'Partial: GPU only'
+        : null}
+>
   <KV
     rows={[
       ['System total', power?.estTotalW != null ? `${fmt(power.estTotalW)} W` : power?.cpuW != null ? NOT_REPORTED : needs],

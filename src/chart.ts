@@ -83,10 +83,17 @@ export function timeTicks(start: number, end: number, count: number): number[] {
   const want = span / Math.max(1, count);
   const step = TICK_STEPS.find((s) => s >= want) ?? 86400 * Math.ceil(want / 86400);
   // Align to local midnight-based boundaries so labels read 12:00, 12:30, …
-  const offset = new Date(start * 1000).getTimezoneOffset() * 60;
+  const offsetAt = (t: number) => new Date(t * 1000).getTimezoneOffset() * 60;
+  const offset = offsetAt(start);
   const first = Math.ceil((start - offset) / step) * step + offset;
   const out: number[] = [];
-  for (let t = first; t <= end; t += step) out.push(t);
+  for (let t = first; t <= end; t += step) {
+    // Past a change of daylight saving time, steps of hours follow the clock: aligned to the
+    // offset at `start` only, midnight read 01:00 or 23:00 (2.0.4). An hour's shift keeps the
+    // shorter steps round; a tick whose hour the change skips is left out.
+    const at = step > 3600 ? t + offsetAt(t) - offset : t;
+    if (offsetAt(at) === offsetAt(t) && at >= start && at <= end) out.push(at);
+  }
   return out;
 }
 
