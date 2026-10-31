@@ -4050,7 +4050,10 @@ The owner's next "continue" (2026-10-31): another look, at what labels say and a
       code (a 6-hour tick at 05:00; "Mar 14, 2027" for yesterday) and pass now.
 - [x] **Locally:** types, 288 frontend tests, the accessibility sweep (1,854 checks), the size
       budget. No Rust changed.
-- [ ] **CI green.**
+- [x] **CI green on cb29243** (run 41214319915; Linux, Windows with the smoke test, the relay
+      and phone app with the end-to-end test, accessibility: 1,854 checks). Its relay job hung
+      37 minutes installing the end-to-end run's browser, before any test; cancelled and run
+      again once, it passed.
 - [ ] **Field check (the owner, on Windows):** none on the reference PC, unless a change of
       daylight saving time falls in its time zone: then History's ticks across it on round
       hours, and midnight as the day's name.
