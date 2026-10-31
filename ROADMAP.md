@@ -4075,6 +4075,60 @@ The owner's next "continue" (2026-10-31): another look, at what labels say and a
       8c53592's phone app and relay (run 40764531668). Of what the phone app is built from, only
       the notes changed since (2.0.3's and 2.0.4's, none for the phone); the relay not at all.
 
+### 2.1.0 — Intel CPUs, ASUS boards, DDR4 on Intel
+
+The owner's "i can test on the hardware" (2026-10-31), answering the list of what was left, whose
+hardware support each needed a PC with the part. Built for the owner's test PC, from their answers
+that day: a 12th to 14th gen Intel Core, an ASUS board, DDR4 on Intel; and 2.0.4 released first.
+On `claude/vyro-2.0`; not released. None of it has run on that hardware yet: the decoders are
+tested with register values made up from the documentation, and `vyro-live` dumps the real ones.
+
+- [x] **PawnIO modules.** `IntelMSR.bin`, `SmbusI801.bin` and `IntelMCHBAR.bin`, unmodified, from
+      the PawnIO.Modules 0.2.11 release archive, whose other files match the five already
+      vendored byte for byte; pinned in `SHA256SUMS` (the unit test checks all eight) and listed
+      in the third-party notices. 0.2.11's `IntelMSR` allows every register read below.
+- [x] **Intel CPU sensors** (`intel_cpu`, Intel's SDM and Linux `coretemp`): package and per-core
+      temperatures, TjMax (`MSR_TEMPERATURE_TARGET`, never guessed) less each digital readout,
+      only when its valid bit is set, and the hottest core when the package's own sensor reads
+      nothing valid; package, cores and graphics power from RAPL; the core voltage from
+      `PERF_STATUS` bits 47:32; the effective clock from APERF; and heat or power limiting from
+      the thermal status flags, which Health ("CPU is thermal throttling"), Insights and game
+      sessions' markers already read. On a hybrid CPU the cores are "P-core #n" and "E-core #n",
+      numbered across the CPU as Windows numbers them. "Not read on this CPU" (2.0.4) now means a
+      CPU that is neither AMD Zen nor Intel family 6. The AMD and Intel readers share
+      `cpu_msr` (counter rates, the RAPL unit both encode alike, which CPUs are read).
+- [x] **Nuvoton NCT6791D to NCT6799D** (`sio::nct679x`), the chip of most ASUS boards (NCT6798D on
+      their 600- and 700-series Intel ones) and many ASRock ones: banked access, the register
+      tables and voltage scales of Linux `nct6775`, and temperatures by source as it reads them
+      (each temperature register and fan-control input reports the source its select register
+      names; virtual ones are left out). ASUS boards get the names every ASUS mapping in
+      LibreHardwareMonitor shares: Motherboard (SYSTIN), CPU Socket (CPUTIN), CPU (PECI),
+      Chipset (the PCH source), CPU Fan and Chassis Fan 1, +5V and +12V through their dividers;
+      the rest, which differs between boards, keeps the chip's names, as on other makers'
+      boards. Read-only: fan control stays the MS-7E24's (decision 24), and an ASUS board's
+      Cooling tab says why. One write, in `docs/control-safety.md`: where the firmware locked
+      the monitor's I/O ports (register 0x28, bit 4) and the monitor does not answer, that bit is
+      cleared, as Linux `nct6775` and LibreHardwareMonitor do; a monitor the firmware left off
+      stays off.
+- [x] **Memory on Intel** (`ram`): the SMBus through `SmbusI801`; DDR4 modules' own sensors
+      (TSE2004av at 0x18 to 0x1F, identified as Linux `jc42` does), looked for where no DDR5 hub
+      answers, so on AM4 too; and the running timings of the Alder Lake and Raptor Lake memory
+      controller from MCHBAR (memtest86+'s offsets): the data rate, CL, tRCD, tRP and tRAS. The
+      Memory card leaves out the timings a controller does not give, rather than showing 0.
+- [x] **Wording:** the CPU sensors card's "Package (Tdie)" (AMD's word) is "Package", with
+      "Hottest core" where per-core temperatures are read; Health and Diagnostics name AMD Ryzen
+      and Intel Core as the CPUs read; the README lists what is read and what is not field-checked.
+- [x] **`vyro-live`** dumps Intel's MSRs per processor, a NCT679x's registers with its lock,
+      monitor and vendor ID (read only: it never unlocks), the DDR4 sensors' registers and the
+      Intel controller's MCHBAR registers.
+- [x] **Locally:** types, 288 frontend tests, 826 core tests and the service's, formatting,
+      clippy (Linux, and for Windows with the app), the accessibility sweep (1,854 checks), the
+      size budget.
+- [ ] **CI.**
+- [ ] **Field check (the owner, on the Intel PC):**
+      [`docs/field-check-2.1.md`](docs/field-check-2.1.md), with HWiNFO beside Vyro, and
+      `vyro-live.json` kept.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

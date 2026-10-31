@@ -837,7 +837,7 @@ fn sensors(i: &DiagInputs) -> DiagCheck {
         return check(
             id,
             CheckStatus::Info,
-            "This CPU's temperature is not read (Vyro reads AMD Ryzen CPUs), so the checks that need it lack data.",
+            "This CPU's temperature is not read (Vyro reads AMD Ryzen and Intel Core CPUs), so the checks that need it lack data.",
             None,
             cites,
         );

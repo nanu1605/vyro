@@ -275,7 +275,7 @@ impl LocalEngine {
         }
         health::Reach {
             pawnio: crate::pawnio::status().state == crate::info::PawnIoState::Ready,
-            cpu_unread: !crate::amd::reads_this_cpu(),
+            cpu_unread: !crate::cpu_msr::reads_this_cpu(),
         }
     }
 
@@ -526,7 +526,7 @@ impl EngineApi for LocalEngine {
 
     fn pawnio_status(&self) -> Result<PawnIoStatus, String> {
         Ok(PawnIoStatus {
-            cpu_unread: !Self::simulated() && !crate::amd::reads_this_cpu(),
+            cpu_unread: !Self::simulated() && !crate::cpu_msr::reads_this_cpu(),
             ..crate::pawnio::status()
         })
     }

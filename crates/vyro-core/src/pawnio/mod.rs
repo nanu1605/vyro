@@ -31,17 +31,26 @@ pub const MUTEX_SMBUS: &str = r"Global\Access_SMBUS.HTP.Method";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Module {
     AmdFamily17,
+    /// Intel Core MSRs (2.1).
+    IntelMsr,
     LpcIo,
     SmbusPiix4,
+    /// Intel PCH SMBus (2.1).
+    SmbusI801,
+    /// Intel memory controller registers, read only (2.1).
+    IntelMchbar,
     RyzenSmu,
     Nvidia,
 }
 
 impl Module {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 8] = [
         Self::AmdFamily17,
+        Self::IntelMsr,
         Self::LpcIo,
         Self::SmbusPiix4,
+        Self::SmbusI801,
+        Self::IntelMchbar,
         Self::RyzenSmu,
         Self::Nvidia,
     ];
@@ -49,8 +58,11 @@ impl Module {
     pub const fn file(self) -> &'static str {
         match self {
             Self::AmdFamily17 => "AMDFamily17.bin",
+            Self::IntelMsr => "IntelMSR.bin",
             Self::LpcIo => "LpcIO.bin",
             Self::SmbusPiix4 => "SmbusPIIX4.bin",
+            Self::SmbusI801 => "SmbusI801.bin",
+            Self::IntelMchbar => "IntelMCHBAR.bin",
             Self::RyzenSmu => "RyzenSMU.bin",
             Self::Nvidia => "Nvidia.bin",
         }
@@ -61,8 +73,11 @@ impl Module {
     pub const fn blob(self) -> &'static [u8] {
         match self {
             Self::AmdFamily17 => include_bytes!("../../pawnio/AMDFamily17.bin"),
+            Self::IntelMsr => include_bytes!("../../pawnio/IntelMSR.bin"),
             Self::LpcIo => include_bytes!("../../pawnio/LpcIO.bin"),
             Self::SmbusPiix4 => include_bytes!("../../pawnio/SmbusPIIX4.bin"),
+            Self::SmbusI801 => include_bytes!("../../pawnio/SmbusI801.bin"),
+            Self::IntelMchbar => include_bytes!("../../pawnio/IntelMCHBAR.bin"),
             Self::RyzenSmu => include_bytes!("../../pawnio/RyzenSMU.bin"),
             Self::Nvidia => include_bytes!("../../pawnio/Nvidia.bin"),
         }

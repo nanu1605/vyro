@@ -14,8 +14,11 @@
   let { cpu, needs }: Props = $props();
 
   const unit = (v: number | null | undefined, u: string, d = 1) => (v == null ? null : `${fmt(v, d)} ${u}`);
+  // Per-core temperatures (Intel's, 2.1): the hottest one, beside the package's own sensor.
+  const cores = $derived(cpu?.tempPerCore ?? []);
   const rows = $derived<Array<[string, string | null]>>([
-    ['Package (Tdie)', fmtTemp(cpu?.tempPackage, 1)],
+    ['Package', fmtTemp(cpu?.tempPackage, 1)],
+    ...(cores.length ? [['Hottest core', fmtTemp(Math.max(...cores), 1)] as [string, string | null]] : []),
     ...(cpu?.tempCcd ?? []).map((t, i): [string, string | null] => [`CCD${i + 1}`, fmtTemp(t, 1)]),
     ['Package power', unit(cpu?.powerPkgW, 'W')],
     ['Cores power', unit(cpu?.powerCoreW, 'W')],

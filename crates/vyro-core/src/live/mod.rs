@@ -30,11 +30,13 @@ pub type GpuShare = Arc<Mutex<HashMap<u32, f64>>>;
 /// Task Manager also shows (memory, CPU and processes) are read last, just before it does: the
 /// hardware reads before them (the sensor chips, the SMBus, the drives) no longer make them a
 /// tick-length late (1.5 field check: the gauges lagged Task Manager). GPU before power (its
-/// watts) and processes (per-process GPU); the AMD CPU before power.
+/// watts) and processes (per-process GPU); the CPU's own sensors (AMD or Intel, whichever this
+/// is: the other fails its start) before power.
 pub fn providers(clients: crate::engine::ClientPids) -> Vec<Box<dyn Provider>> {
     let share = GpuShare::default();
     vec![
         Box::new(crate::amd::AmdCpuProvider::new()),
+        Box::new(crate::intel_cpu::IntelCpuProvider::new()),
         Box::new(crate::sio::SioProvider::new()),
         Box::new(crate::ram::RamProvider::new()),
         Box::new(crate::storage::StorageProvider::new()),

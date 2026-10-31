@@ -3,10 +3,11 @@
 
 use std::time::Duration;
 
+use super::nct679x::{self, CR_ENABLE, CR_GLOBAL_OPTION, HM_IO_LOCK, NUVOTON};
 use super::{
-    decode, identify, layout, plausible, read_ec, valid_base, voltage_channel, BoardTemp, Chip,
-    Decoded, Layout, PortIo, BLOCK_LEN, BLOCK_START, CONFIG_PORTS, ENTER_KEY, EXIT_KEY, LDN_HWM,
-    REG_BASE, REG_CHIP_ID, REG_CHIP_REV, REG_LDN,
+    decode, identify, layout, plausible, read_ec, valid_base, BoardTemp, Chip, Decoded, Layout,
+    PortIo, BLOCK_LEN, BLOCK_START, CONFIG_PORTS, ENTER_KEY, EXIT_KEY, LDN_HWM, REG_BASE,
+    REG_CHIP_ID, REG_CHIP_REV, REG_LDN,
 };
 use crate::hwid::smbios;
 use crate::pawnio::{BusLock, Handle, Module, PawnIoError, MUTEX_ISABUS};
@@ -27,6 +28,10 @@ pub struct Found {
     pub rev: u8,
     pub config_port: u16,
     pub base: u16,
+    /// The monitor's logical device is on (a NCT679x's enable bit; the NCT6687 is not checked).
+    pub active: bool,
+    /// The firmware locked the monitor's I/O ports (NCT679x only).
+    pub io_locked: bool,
 }
 
 fn outb(io: &Handle, port: u16, value: u8) -> Result<(), PawnIoError> {
@@ -65,12 +70,22 @@ pub fn detect(io: &Handle) -> Result<Option<Found>, PawnIoError> {
             io.exec("ioctl_find_bars", &[], 0)?;
             sio_out(io, REG_LDN, LDN_HWM)?;
             let base = u16::from_be_bytes([sio_in(io, REG_BASE)?, sio_in(io, REG_BASE + 1)?]);
+            let (active, io_locked) = if chip.banked() {
+                (
+                    sio_in(io, CR_ENABLE)? & 1 != 0,
+                    sio_in(io, CR_GLOBAL_OPTION)? & HM_IO_LOCK != 0,
+                )
+            } else {
+                (true, false)
+            };
             Ok(valid_base(base).then_some(Found {
                 chip,
                 id,
                 rev,
                 config_port: port,
                 base,
+                active,
+                io_locked,
             }))
         })();
         // Always leave configuration mode, whatever the probe found.
@@ -81,6 +96,21 @@ pub fn detect(io: &Handle) -> Result<Option<Found>, PawnIoError> {
         }
     }
     Ok(None)
+}
+
+/// Clears a NCT679x's monitor I/O lock (Super-I/O register 0x28, bit 4) and nothing else, as
+/// Linux `nct6775` and LibreHardwareMonitor do on these chips: with it set the monitor's ports
+/// answer nothing. Call with the ISA-bus mutex held, after [`detect`] on the same handle.
+pub fn unlock_monitor(io: &Handle, found: &Found) -> Result<(), PawnIoError> {
+    let slot = u64::from(found.config_port != CONFIG_PORTS[0]);
+    io.exec("ioctl_select_slot", &[slot], 0)?;
+    outb(io, found.config_port, ENTER_KEY)?;
+    outb(io, found.config_port, ENTER_KEY)?;
+    let write =
+        sio_in(io, CR_GLOBAL_OPTION).and_then(|v| sio_out(io, CR_GLOBAL_OPTION, v & !HM_IO_LOCK));
+    let exit = outb(io, found.config_port, EXIT_KEY);
+    write?;
+    exit
 }
 
 /// Port I/O through PawnIO, for [`super::control`]. Use with the ISA-bus mutex held, after
@@ -167,6 +197,9 @@ impl SioProvider {
 
     fn named(&mut self, reg: &mut Registry, d: &Decoded) -> Readings {
         let layout = self.layout;
+        let Some(chip) = self.found.map(|f| f.chip) else {
+            return Readings::default();
+        };
         let mut out = Readings::default();
         for &(n, t) in &d.temps {
             let named = layout.and_then(|l| l.temps.iter().find(|c| c.0 == n));
@@ -175,7 +208,7 @@ impl SioProvider {
                 continue;
             }
             let (name, target) = named.map_or_else(
-                || (format!("TMPIN{n}"), BoardTemp::None),
+                || (chip.temp_name(n), BoardTemp::None),
                 |c| (c.1.to_owned(), c.2),
             );
             let k = key(&mut self.keys.temps, n, reg, || {
@@ -201,12 +234,10 @@ impl SioProvider {
             }
         }
         for &(n, v) in &d.volts {
-            let listed = layout.filter(|l| !l.volts.is_empty());
-            let (name, v) = match listed {
-                Some(l) => match l.volts.iter().find(|c| c.0 == n) {
-                    Some(c) => (c.1.to_owned(), v * c.2),
-                    None => continue,
-                },
+            let named = layout.and_then(|l| l.volts.iter().find(|c| c.0 == n));
+            let (name, v) = match named {
+                Some(c) => (c.1.to_owned(), v * c.2),
+                None if layout.is_some_and(|l| l.volts_only) => continue,
                 None => {
                     let known = self
                         .keys
@@ -216,7 +247,7 @@ impl SioProvider {
                     if v <= 0.0 && !known {
                         continue;
                     }
-                    (voltage_channel(n).0, v)
+                    (chip.voltage_name(n), v)
                 }
             };
             let k = key(&mut self.keys.volts, n, reg, || {
@@ -289,6 +320,42 @@ impl Provider for SioProvider {
             .hold(500, || detect(&io))
             .ok_or("ISA bus busy")??
             .ok_or("no supported Super-I/O chip")?;
+        if found.chip.banked() {
+            if !found.active {
+                return Err(format!(
+                    "{}: the firmware left its hardware monitor off",
+                    found.chip.name()
+                )
+                .into());
+            }
+            let answers = || {
+                self.isa
+                    .hold(500, || nct679x::vendor(&mut Ports(&io), found.base))
+                    .and_then(Result::ok)
+                    == Some(NUVOTON)
+            };
+            if !answers() {
+                if !found.io_locked {
+                    return Err(
+                        format!("{}: its monitor does not answer", found.chip.name()).into(),
+                    );
+                }
+                log::info!(
+                    "sio: {} monitor I/O locked by the firmware; unlocking",
+                    found.chip.name()
+                );
+                self.isa
+                    .hold(500, || unlock_monitor(&io, &found))
+                    .ok_or("ISA bus busy")??;
+                if !answers() {
+                    return Err(format!(
+                        "{}: its monitor does not answer after unlocking",
+                        found.chip.name()
+                    )
+                    .into());
+                }
+            }
+        }
         let board = crate::hwid::win::smbios_raw()
             .as_deref()
             .and_then(smbios::Smbios::from_raw)
@@ -300,12 +367,17 @@ impl Provider for SioProvider {
             found.chip,
         );
         log::info!(
-            "sio: {} (id {:#04x} rev {:#04x}) at {:#x}, monitor base {:#06x}, board layout {}",
+            "sio: {} (id {:#04x} rev {:#04x}) at {:#x}, monitor base {:#06x}{}, board layout {}",
             found.chip.name(),
             found.id,
             found.rev,
             found.config_port,
             found.base,
+            if found.io_locked {
+                " (I/O lock bit set by the firmware)"
+            } else {
+                ""
+            },
             if self.layout.is_some() {
                 "known"
             } else {
@@ -321,16 +393,31 @@ impl Provider for SioProvider {
         let (Some(io), Some(found)) = (&self.io, self.found) else {
             return Err("poll before init".into());
         };
-        let block = self
-            .isa
-            .hold(LOCK_MS, || {
-                read_block(io, found.base, BLOCK_START, BLOCK_LEN)
-            })
-            .transpose()?
-            .flatten()
-            .filter(|b| plausible(b));
-        if let Some(block) = block {
-            self.last = self.named(reg, &decode(&block));
+        let decoded = if let Some(t) = nct679x::tables(found.chip) {
+            let regs = nct679x::registers(t);
+            self.isa
+                .hold(LOCK_MS, || nct679x::read(&mut Ports(io), found.base, &regs))
+                .transpose()?
+                .filter(|dump| plausible(&dump.iter().map(|r| r.1).collect::<Vec<_>>()))
+                .map(|dump| {
+                    nct679x::decode(t, |a| {
+                        dump.binary_search_by_key(&a, |r| r.0)
+                            .ok()
+                            .map(|i| dump[i].1)
+                    })
+                })
+        } else {
+            self.isa
+                .hold(LOCK_MS, || {
+                    read_block(io, found.base, BLOCK_START, BLOCK_LEN)
+                })
+                .transpose()?
+                .flatten()
+                .filter(|b| plausible(b))
+                .map(|b| decode(&b))
+        };
+        if let Some(d) = decoded {
+            self.last = self.named(reg, &d);
             self.stale = 0;
         } else if self.stale < MAX_STALE {
             // Another monitor holds the bus or the EC this tick: keep the last reading.

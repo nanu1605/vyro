@@ -1,18 +1,23 @@
 //! Motherboard Super-I/O hardware monitor through PawnIO's `LpcIO` module (Phase 6c): fans,
-//! board temperatures and voltages. Starts with the Nuvoton NCT6687D(-R) that MSI uses on AM5
-//! and LGA1700/1851 boards. Decoders and board layouts here are pure; `win` does the port I/O.
-//! Register layout follows LibreHardwareMonitor's `Nct677X` and the Linux `nct6687d` driver.
+//! board temperatures and voltages. Started with the Nuvoton NCT6687D(-R) that MSI uses on AM5
+//! and LGA1700/1851 boards; from 2.1 also the Nuvoton NCT6791D to NCT6799D of most ASUS boards
+//! and many ASRock ones ([`nct679x`]). Decoders and board layouts here are pure; `win` does the
+//! port I/O. The NCT6687's layout follows LibreHardwareMonitor's `Nct677X` and the Linux
+//! `nct6687d` driver.
 //!
 //! Monitoring only reads: Vyro never writes the chip's monitor-enable registers, so a board whose
-//! firmware left monitoring off simply reports nothing. Fan control (`control`, Phase 12) writes
-//! only the fan registers, only on allow-listed boards.
+//! firmware left monitoring off simply reports nothing. One exception (2.1): on a NCT679x whose
+//! firmware locked the monitor's I/O ports, so that nothing can be read, the lock bit is cleared,
+//! as Linux `nct6775` and LibreHardwareMonitor do; nothing else about the chip changes. Fan
+//! control (`control`, Phase 12) writes only the fan registers, only on allow-listed boards.
 
 pub mod control;
+pub mod nct679x;
 #[cfg(windows)]
 mod win;
 
 #[cfg(windows)]
-pub use win::{detect, read_block, Found, Ports, SioProvider};
+pub use win::{detect, read_block, unlock_monitor, Found, Ports, SioProvider};
 
 use crate::snapshot::FanKind;
 
@@ -48,21 +53,72 @@ pub const FAN_COUNT: u16 = 16;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Chip {
     Nct6687,
+    Nct6791,
+    Nct6792,
+    Nct6793,
+    Nct6795,
+    Nct6796,
+    Nct6797,
+    Nct6798,
+    Nct6799,
 }
 
 impl Chip {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Nct6687 => "Nuvoton NCT6687",
+            Self::Nct6791 => "Nuvoton NCT6791D",
+            Self::Nct6792 => "Nuvoton NCT6792D",
+            Self::Nct6793 => "Nuvoton NCT6793D",
+            Self::Nct6795 => "Nuvoton NCT6795D",
+            Self::Nct6796 => "Nuvoton NCT6796D",
+            Self::Nct6797 => "Nuvoton NCT6797D",
+            Self::Nct6798 => "Nuvoton NCT6798D",
+            Self::Nct6799 => "Nuvoton NCT6799D",
+        }
+    }
+
+    /// A banked NCT679x rather than the NCT6687's EC space.
+    pub const fn banked(self) -> bool {
+        !matches!(self, Self::Nct6687)
+    }
+
+    /// Name of a temperature channel (the NCT6687's) or source (a NCT679x's) no board layout
+    /// names.
+    pub fn temp_name(self, n: u16) -> String {
+        if self.banked() {
+            nct679x::source_name(n)
+        } else {
+            format!("TMPIN{n}")
+        }
+    }
+
+    /// Name of a voltage input no board layout names.
+    pub fn voltage_name(self, n: u16) -> String {
+        if self.banked() {
+            nct679x::input_name(n)
+        } else {
+            voltage_channel(n).0
         }
     }
 }
 
 /// Chips Vyro can read, from the configuration-space ID and revision.
-pub const fn identify(id: u8, _rev: u8) -> Option<Chip> {
-    match id {
+pub const fn identify(id: u8, rev: u8) -> Option<Chip> {
+    if id == 0xD5 {
         // D and DR share the monitor registers Vyro reads; they differ in fan control.
-        0xD5 => Some(Chip::Nct6687),
+        return Some(Chip::Nct6687);
+    }
+    // The NCT679x IDs, with the revision's low three bits masked as Linux `nct6775` does.
+    match u16::from_be_bytes([id, rev]) & 0xFFF8 {
+        0xC800 => Some(Chip::Nct6791),
+        0xC910 => Some(Chip::Nct6792),
+        0xD120 => Some(Chip::Nct6793),
+        0xD350 => Some(Chip::Nct6795),
+        0xD420 => Some(Chip::Nct6796),
+        0xD450 => Some(Chip::Nct6797),
+        0xD428 => Some(Chip::Nct6798),
+        0xD800 => Some(Chip::Nct6799),
         _ => None,
     }
 }
@@ -108,12 +164,16 @@ pub enum BoardTemp {
 /// name when they read something.
 #[derive(Debug, Clone, Copy)]
 pub struct Layout {
+    /// Temperatures by channel (NCT6687) or source (NCT679x): name and where it goes.
     pub temps: &'static [(u16, &'static str, BoardTemp)],
     pub fans: &'static [(u16, &'static str, FanKind)],
-    /// Voltage channels checked on this board: channel (register 0x120 + 2n), name and the
-    /// board's divider (+12V/+5V scaling is universal and already applied). A board with a
-    /// list shows only these; others show every channel that reads something.
+    /// Voltage channels named on this board: channel (the NCT6687's register 0x120 + 2n, the
+    /// NCT679x's input n), name and the board's divider (the NCT6687's +12V/+5V scaling is
+    /// universal and already applied).
     pub volts: &'static [(u16, &'static str, f64)],
+    /// The list is every voltage checked on this board: show only these. Otherwise the others
+    /// show under the chip's names when they read something.
+    pub volts_only: bool,
 }
 
 /// NCT6687 defaults, used on MSI boards (LibreHardwareMonitor's MSI mappings and the
@@ -134,6 +194,7 @@ pub const MSI_NCT6687: Layout = Layout {
         (4, "System Fan 3", FanKind::Fan),
     ],
     volts: &[],
+    volts_only: false,
 };
 
 /// MSI B650M GAMING PLUS WIFI (MS-7E24), as in LibreHardwareMonitor and checked against a
@@ -154,17 +215,41 @@ pub const MSI_B650M_GAMING_PLUS_WIFI: Layout = Layout {
         (13, "VTT", 1.0),
         (14, "CMOS Battery", 1.0),
     ],
+    volts_only: true,
     ..MSI_NCT6687
+};
+
+/// ASUS boards with a NCT679x (2.1). What every ASUS mapping in LibreHardwareMonitor shares:
+/// SYSTIN is the motherboard sensor, CPUTIN the CPU socket's, PECI agent 0 the CPU as the board
+/// reads it, the PCH source the chipset; fan 0 the first chassis header, fan 1 the CPU's; +5V on
+/// VIN1 through a divider of 5 and +12V on VIN0 through 12. The rest, which differs from board
+/// to board, keeps the chip's names.
+pub const ASUS_NCT679X: Layout = Layout {
+    temps: &[
+        (1, "Motherboard", BoardTemp::System),
+        (2, "CPU Socket", BoardTemp::None),
+        (16, "CPU (PECI)", BoardTemp::None),
+        (19, "Chipset", BoardTemp::Chipset),
+    ],
+    fans: &[
+        (0, "Chassis Fan 1", FanKind::Fan),
+        (1, "CPU Fan", FanKind::Fan),
+    ],
+    volts: &[(1, "+5V", 5.0), (4, "+12V", 12.0)],
+    volts_only: false,
 };
 
 /// Layout for a board, from the SMBIOS board manufacturer and product.
 pub fn layout(manufacturer: Option<&str>, product: Option<&str>, chip: Chip) -> Option<Layout> {
     let msi = manufacturer.is_some_and(|m| m.contains("Micro-Star") || m.contains("MSI"));
+    let asus = manufacturer.is_some_and(|m| m.to_ascii_uppercase().contains("ASUSTEK"));
     let product = product.unwrap_or("");
     match chip {
         Chip::Nct6687 if msi && product.contains("MS-7E24") => Some(MSI_B650M_GAMING_PLUS_WIFI),
         Chip::Nct6687 if msi => Some(MSI_NCT6687),
         Chip::Nct6687 => None,
+        _ if asus => Some(ASUS_NCT679X),
+        _ => None,
     }
 }
 
@@ -278,10 +363,39 @@ mod tests {
     }
 
     #[test]
-    fn identifies_nct6687_only() {
+    fn identifies_nct6687_and_the_nct679x() {
         assert_eq!(identify(0xD5, 0x92), Some(Chip::Nct6687));
-        assert_eq!(identify(0xD4, 0x28), None);
+        // NCT6798D rev 0x2B (ASUS Z690 and B760): the revision's low bits are masked.
+        assert_eq!(identify(0xD4, 0x2B), Some(Chip::Nct6798));
+        assert_eq!(identify(0xD4, 0x28), Some(Chip::Nct6798));
+        // NCT6796D differs from the 6798 in bit 3 of the revision byte only.
+        assert_eq!(identify(0xD4, 0x23), Some(Chip::Nct6796));
+        assert_eq!(identify(0xD8, 0x02), Some(Chip::Nct6799));
+        assert_eq!(identify(0xC8, 0x03), Some(Chip::Nct6791));
+        assert_eq!(identify(0xD4, 0x52), Some(Chip::Nct6797));
+        assert_eq!(identify(0xC5, 0x62), None, "NCT6779D: not read yet");
         assert_eq!(identify(0xFF, 0xFF), None);
+        assert!(Chip::Nct6798.banked());
+        assert!(!Chip::Nct6687.banked());
+        assert_eq!(Chip::Nct6798.name(), "Nuvoton NCT6798D");
+    }
+
+    #[test]
+    fn asus_boards_with_a_nct679x_get_the_asus_layout() {
+        let asus = Some("ASUSTeK COMPUTER INC.");
+        let l = layout(asus, Some("TUF GAMING B760M-PLUS WIFI D4"), Chip::Nct6798).expect("asus");
+        assert_eq!(l.temps[0], (1, "Motherboard", BoardTemp::System));
+        assert_eq!(l.fans[1], (1, "CPU Fan", FanKind::Fan));
+        assert!(!l.volts_only);
+        assert!(layout(Some("ASRock"), None, Chip::Nct6798).is_none());
+        assert!(
+            layout(asus, None, Chip::Nct6687).is_none(),
+            "an EC chip on ASUS: not mapped"
+        );
+        assert_eq!(Chip::Nct6798.temp_name(4), "AUXTIN1");
+        assert_eq!(Chip::Nct6687.temp_name(4), "TMPIN4");
+        assert_eq!(Chip::Nct6798.voltage_name(4), "VIN0");
+        assert_eq!(Chip::Nct6687.voltage_name(4), "VIN4");
     }
 
     #[test]

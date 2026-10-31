@@ -64,10 +64,18 @@ in the tray at sign-in. Builds are not code-signed yet, so SmartScreen will warn
 release signs itself once SignPath Foundation has taken the project on
 ([`docs/signing.md`](docs/signing.md)).
 
-Through PawnIO, Vyro reads the CPU's temperature and power on AMD Ryzen CPUs (Zen 1 to 5), the
-fans, voltages and board temperatures of the Nuvoton NCT6687 that many MSI boards carry, and the
-DDR5 modules' temperatures and timings on AM5 (Ryzen 7000 and later). Elsewhere Vyro says those
-readings are not read, rather than asking for PawnIO (2.0.4).
+Through PawnIO, Vyro reads:
+- the CPU's temperatures and power on AMD Ryzen (Zen 1 to 5) and, from 2.1, Intel Core CPUs;
+- the fans, voltages and board temperatures of the Nuvoton NCT6687 that many MSI boards carry
+  and, from 2.1, of the Nuvoton NCT6791D to NCT6799D that most ASUS boards and many ASRock ones
+  carry (named for ASUS boards; others show the chip's own names);
+- the memory modules' temperatures (DDR5, and DDR4 modules that have a sensor) and the running
+  timings on AM5 (Ryzen 7000 and later) and, from 2.1, on Intel 12th to 14th gen (there CL,
+  tRCD, tRP and tRAS).
+
+Elsewhere Vyro says those readings are not read, rather than asking for PawnIO (2.0.4). The
+Intel CPUs, the NCT679x and DDR4 on Intel have not been checked on real hardware yet
+([`docs/field-check-2.1.md`](docs/field-check-2.1.md)).
 
 ## Fan and pump control
 
@@ -483,6 +491,7 @@ Nothing on it changes the PC.
 | [`docs/field-check-1.4.1.md`](docs/field-check-1.4.1.md) | The field check of 1.4.1: Bluetooth Connect and Disconnect, connected or not, low batteries |
 | [`docs/field-check-1.5.md`](docs/field-check-1.5.md) | The field check of 1.5: the phone's new tabs, letting a phone change the PC, End task, power, waking a PC |
 | [`docs/field-check-2.0.md`](docs/field-check-2.0.md) | The field check of 2.0: notifications on Android and iPhone, the PC going quiet, AMD and Intel tuning |
+| [`docs/field-check-2.1.md`](docs/field-check-2.1.md) | The field check of 2.1: Intel CPU sensors, an ASUS board's Nuvoton chip, DDR4 on Intel |
 | [`docs/signing.md`](docs/signing.md) | Code signing (2.0): what the release does once SignPath is set up, and what only the owner can do |
 
 `vyro-remote.exe` in the same artifact checks the service from the outside (state, connection,

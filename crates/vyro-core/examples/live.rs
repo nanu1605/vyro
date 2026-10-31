@@ -82,6 +82,63 @@ fn amd_raw() -> serde_json::Value {
     })
 }
 
+/// Raw Intel registers, to check TjMax, the thermal readouts, RAPL and the core voltage against
+/// HWiNFO (2.1).
+#[cfg(windows)]
+fn intel_raw() -> serde_json::Value {
+    use vyro_core::intel_cpu::{
+        self, MSR_IA32_PACKAGE_THERM_STATUS, MSR_IA32_PERF_STATUS, MSR_IA32_THERM_STATUS,
+        MSR_PKG_ENERGY_STATUS, MSR_PP0_ENERGY_STATUS, MSR_PP1_ENERGY_STATUS, MSR_RAPL_POWER_UNIT,
+        MSR_TEMPERATURE_TARGET,
+    };
+    use vyro_core::pawnio::{on_cpu, Handle, Module};
+    let id = vyro_core::hwid::cpuid::read_live();
+    if !intel_cpu::supported(&id.vendor, id.family) {
+        return serde_json::Value::Null;
+    }
+    let io = match Handle::open(Module::IntelMsr) {
+        Ok(io) => io,
+        Err(e) => return serde_json::json!({ "error": e.to_string() }),
+    };
+    let msr = |i: u32| io.exec1("ioctl_read_msr", &[u64::from(i)]).ok();
+    let hex = |v: Option<u64>| v.map(|v| format!("{v:#018x}"));
+    let cpus: Vec<_> = (0..vyro_core::live::logical_processors())
+        .map(|cpu| {
+            let (therm, perf, target) = on_cpu(cpu, || {
+                (
+                    msr(MSR_IA32_THERM_STATUS),
+                    msr(MSR_IA32_PERF_STATUS),
+                    msr(MSR_TEMPERATURE_TARGET),
+                )
+            })
+            .unwrap_or_default();
+            serde_json::json!({
+                "cpu": cpu,
+                "thermStatus": hex(therm),
+                "perfStatus": hex(perf),
+                "temperatureTarget": hex(target),
+                "volts": perf.and_then(intel_cpu::perf_status_volts),
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "family": format!("{:#x}", id.family),
+        "model": format!("{:#x}", id.model),
+        "temperatureTarget": hex(msr(MSR_TEMPERATURE_TARGET)),
+        "packageThermStatus": hex(msr(MSR_IA32_PACKAGE_THERM_STATUS)),
+        "raplUnit": hex(msr(MSR_RAPL_POWER_UNIT)),
+        "pkgEnergy": hex(msr(MSR_PKG_ENERGY_STATUS)),
+        "pp0Energy": hex(msr(MSR_PP0_ENERGY_STATUS)),
+        "pp1Energy": hex(msr(MSR_PP1_ENERGY_STATUS)),
+        "cpus": cpus,
+    })
+}
+
+#[cfg(not(windows))]
+fn intel_raw() -> serde_json::Value {
+    serde_json::Value::Null
+}
+
 /// Where the AMD provider's poll time goes under load: PCI-mutex wait, SMN temperature reads,
 /// and the per-core MSR sweep (slowest single-core hop too), each at normal and time-critical
 /// priority. Run it with a benchmark going.
@@ -159,24 +216,45 @@ fn sio_raw() -> serde_json::Value {
     let lock = BusLock::new(MUTEX_ISABUS);
     let Some(result) = lock.hold(500, || {
         let found = sio::detect(&io)?;
-        let block = match found {
-            Some(f) => sio::read_block(&io, f.base, BLOCK_START, BLOCK_LEN)?,
-            None => None,
+        let (block, banked, vendor) = match found {
+            // A NCT679x: its vendor ID and every register Vyro decodes, by address (only read:
+            // a locked monitor shows as a wrong vendor ID here, it is not unlocked).
+            Some(f) => match sio::nct679x::tables(f.chip) {
+                Some(t) => {
+                    let regs = sio::nct679x::registers(t);
+                    let vendor = sio::nct679x::vendor(&mut sio::Ports(&io), f.base)?;
+                    (
+                        None,
+                        Some(sio::nct679x::read(&mut sio::Ports(&io), f.base, &regs)?),
+                        Some(vendor),
+                    )
+                }
+                None => (
+                    sio::read_block(&io, f.base, BLOCK_START, BLOCK_LEN)?,
+                    None,
+                    None,
+                ),
+            },
+            None => (None, None, None),
         };
-        Ok::<_, vyro_core::pawnio::PawnIoError>((found, block))
+        Ok::<_, vyro_core::pawnio::PawnIoError>((found, block, banked, vendor))
     }) else {
         return serde_json::json!({ "error": "ISA bus busy" });
     };
     match result {
-        Ok((None, _)) => serde_json::json!({ "chip": null }),
-        Ok((Some(f), block)) => serde_json::json!({
+        Ok((None, ..)) => serde_json::json!({ "chip": null }),
+        Ok((Some(f), block, banked, vendor)) => serde_json::json!({
             "chip": f.chip.name(),
             "id": format!("{:#04x}", f.id),
             "rev": format!("{:#04x}", f.rev),
             "configPort": format!("{:#x}", f.config_port),
             "base": format!("{:#06x}", f.base),
+            "monitorOn": f.active,
+            "ioLocked": f.io_locked,
+            "vendor": vendor.map(|v| format!("{v:#06x}")),
             "start": format!("{BLOCK_START:#05x}"),
             "block": block.map(|b| b.chunks(16).map(|row| row.iter().map(|x| format!("{x:02X}")).collect::<Vec<_>>().join(" ")).collect::<Vec<_>>()),
+            "registers": banked.map(|r| r.iter().map(|(a, v)| (format!("{a:#05x}"), serde_json::Value::from(format!("{v:#04x}")))).collect::<serde_json::Map<_, _>>()),
         }),
         Err(e) => serde_json::json!({ "error": e.to_string() }),
     }
@@ -187,51 +265,85 @@ fn sio_raw() -> serde_json::Value {
     serde_json::Value::Null
 }
 
-/// Raw SPD hub registers (no NVM, so no serial numbers) and UMC timing registers, to check the
-/// DIMM temperatures and timings against HWiNFO or ZenTimings.
+/// Raw SPD hub registers (no NVM, so no serial numbers), DDR4 module sensor registers, and the
+/// memory controller's timing registers (AMD UMC or Intel MCHBAR), to check the DIMM
+/// temperatures and timings against HWiNFO, ZenTimings or memtest86+.
 #[cfg(windows)]
 fn ram_raw() -> serde_json::Value {
     use vyro_core::pawnio::{BusLock, Handle, Module, MUTEX_PCI, MUTEX_SMBUS};
     use vyro_core::ram;
     let hex8 = |v: Option<u8>| v.map(|v| format!("{v:#04x}"));
-    let spd = match Handle::open(Module::SmbusPiix4) {
-        Ok(io) => match BusLock::new(MUTEX_SMBUS).hold(500, || ram::probe_spd(&io)) {
-            Some(Some(found)) => serde_json::json!(found
-                .iter()
-                .map(|s| serde_json::json!({
-                    "addr": format!("{:#04x}", s.addr),
-                    "mr0": format!("{:#04x}", s.mr0),
-                    "mr1": format!("{:#04x}", s.mr1),
-                    "mr5": hex8(s.mr5),
-                    "mr26": hex8(s.mr26),
-                    "temp": s.temp.map(|t| format!("{t:#06x}")),
-                    "tempC": s.temp.and_then(ram::spd5_temp),
-                }))
-                .collect::<Vec<_>>()),
-            Some(None) => serde_json::json!({ "error": "SMBus mux not on the SPD port" }),
-            None => serde_json::json!({ "error": "SMBus busy" }),
-        },
-        Err(e) => serde_json::json!({ "error": e.to_string() }),
-    };
+    let hex16 = |v: u16| format!("{v:#06x}");
     let id = vyro_core::hwid::cpuid::read_live();
-    let umc = if vyro_core::amd::supported(&id.vendor, id.family) {
+    let spd = match ram::Bus::of(&id.vendor) {
+        None => serde_json::Value::Null,
+        Some(bus) => match Handle::open(bus.module()) {
+            Ok(io) => match BusLock::new(MUTEX_SMBUS).hold(500, || ram::probe_spd(&io, bus)) {
+                Some(Some(found)) => serde_json::json!({
+                    "bus": format!("{bus:?}"),
+                    "hubs": found.spd.iter().map(|s| serde_json::json!({
+                        "addr": format!("{:#04x}", s.addr),
+                        "mr0": format!("{:#04x}", s.mr0),
+                        "mr1": format!("{:#04x}", s.mr1),
+                        "mr5": hex8(s.mr5),
+                        "mr26": hex8(s.mr26),
+                        "temp": s.temp.map(|t| format!("{t:#06x}")),
+                        "tempC": s.temp.and_then(ram::spd5_temp),
+                    })).collect::<Vec<_>>(),
+                    "ddr4Sensors": found.tsod.iter().map(|t| serde_json::json!({
+                        "addr": format!("{:#04x}", t.addr),
+                        "capability": hex16(t.capability),
+                        "config": hex16(t.config),
+                        "maker": hex16(t.maker),
+                        "device": hex16(t.device),
+                        "recognised": t.is_sensor(),
+                        "temp": t.temp.map(hex16),
+                        "tempC": t.temp.and_then(ram::tsod_temp),
+                    })).collect::<Vec<_>>(),
+                }),
+                Some(None) => serde_json::json!({ "error": "SMBus mux not on the SPD port" }),
+                None => serde_json::json!({ "error": "SMBus busy" }),
+            },
+            Err(e) => serde_json::json!({ "error": e.to_string() }),
+        },
+    };
+    let regs = |r: &[(u32, u32)]| {
+        r.iter()
+            .map(|(a, v)| {
+                (
+                    format!("{a:#07x}"),
+                    serde_json::Value::from(format!("{v:#010x}")),
+                )
+            })
+            .collect::<serde_json::Map<_, _>>()
+    };
+    let imc = if vyro_core::amd::supported(&id.vendor, id.family) {
         match Handle::open(Module::AmdFamily17) {
             Ok(io) => match BusLock::new(MUTEX_PCI).hold(500, || ram::read_umc(&io)) {
                 Some(channels) => serde_json::json!(channels
                     .iter()
-                    .map(|c| serde_json::json!({
-                        "channel": c.channel,
-                        "regs": c.regs.iter().map(|(a, v)| (format!("{a:#07x}"), serde_json::Value::from(format!("{v:#010x}")))).collect::<serde_json::Map<_, _>>(),
-                    }))
+                    .map(|c| serde_json::json!({ "channel": c.channel, "regs": regs(&c.regs) }))
                     .collect::<Vec<_>>()),
                 None => serde_json::json!({ "error": "PCI bus busy" }),
             },
             Err(e) => serde_json::json!({ "error": e.to_string() }),
         }
+    } else if id.vendor == "GenuineIntel" {
+        match Handle::open(Module::IntelMchbar) {
+            Ok(io) => {
+                let r = ram::read_imc(&io);
+                serde_json::json!({
+                    "model": format!("{:#x}", id.model),
+                    "decoded": ram::intel_imc(id.family, id.model),
+                    "regs": regs(&r),
+                })
+            }
+            Err(e) => serde_json::json!({ "error": e.to_string() }),
+        }
     } else {
         serde_json::Value::Null
     };
-    serde_json::json!({ "spd": spd, "umc": umc })
+    serde_json::json!({ "spd": spd, "imc": imc })
 }
 
 #[cfg(not(windows))]
@@ -316,7 +428,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             snap.gpu.len()
         );
         println!(
-            "     CPU Tdie {} CCD {:?} | package {} cores {} | VID {} | effective {}",
+            "     CPU temp {} CCD {:?} | package {} cores {} | VID {} | effective {}",
             fmt(c.temp_package, " °C"),
             c.temp_ccd,
             fmt(c.power_pkg_w, " W"),
@@ -426,6 +538,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let json = serde_json::to_string_pretty(&serde_json::json!({
         "pawnio": pawnio,
         "amdRaw": amd_raw(),
+        "intelRaw": intel_raw(),
         "amdTiming": amd_timing(),
         "sioRaw": sio_raw(),
         "ramRaw": ram_raw(),

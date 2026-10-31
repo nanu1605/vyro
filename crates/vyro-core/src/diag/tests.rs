@@ -362,7 +362,8 @@ fn a_cpu_vyro_does_not_read_is_not_sent_to_pawnio() {
     assert_eq!(s.status, CheckStatus::Info);
     assert_eq!(s.advice, None);
     assert!(
-        s.summary.contains("Vyro reads AMD Ryzen CPUs"),
+        s.summary
+            .contains("Vyro reads AMD Ryzen and Intel Core CPUs"),
         "{}",
         s.summary
     );

@@ -16,6 +16,25 @@
 
   const dimms = $derived((mem?.dimms ?? []).filter((d) => d.tempC != null));
   const t = $derived(mem?.timings ?? null);
+  // A controller that reports only some timings leaves the others 0 (Intel's gives CL, tRCD,
+  // tRP and tRAS): those rows are left out rather than shown as 0.
+  const one = (v: number) => (v ? `${v}` : null);
+  const two = (a: number, b: number) => (a || b ? `${a || NA} / ${b || NA}` : null);
+  const secondary = $derived.by(() => {
+    if (!t) return [];
+    const rows: Array<[string, string | null]> = [
+      ['tRC', one(t.rc)],
+      ['tRCDWR', one(t.rcdWr)],
+      ['tRRD S / L', two(t.rrdS, t.rrdL)],
+      ['tFAW', one(t.faw)],
+      ['tWTR S / L', two(t.wtrS, t.wtrL)],
+      ['tWR / tRTP', two(t.wr, t.rtp)],
+      ['tCWL', one(t.cwl)],
+      ['tRFC / tRFCsb', two(t.rfc, t.rfcSb)],
+      ['tREFI', one(t.refi)],
+    ];
+    return rows.filter(([, v]) => v != null);
+  });
 
   // Task Manager's composition bar: in use (without modified) | modified | standby | free.
   const parts = $derived.by(() => {
@@ -64,21 +83,13 @@
   {#if t}
     <h3>Timings</h3>
     <p class="primary" title="CL-tRCD-tRP-tRAS">
-      <b>{t.cl}-{t.rcdRd}-{t.rp}-{t.ras}</b> @ {fmt(t.mts)} MT/s · {t.commandRate}T{t.gearDown ? ' · GDM' : ''}
+      <b>{t.cl}-{t.rcdRd}-{t.rp}-{t.ras}</b> @ {fmt(t.mts)} MT/s{t.commandRate ? ` · ${t.commandRate}T` : ''}{t.gearDown
+        ? ' · GDM'
+        : ''}
     </p>
-    <KV
-      rows={[
-        ['tRC', `${t.rc}`],
-        ['tRCDWR', `${t.rcdWr}`],
-        ['tRRD S / L', `${t.rrdS} / ${t.rrdL}`],
-        ['tFAW', `${t.faw}`],
-        ['tWTR S / L', `${t.wtrS} / ${t.wtrL}`],
-        ['tWR / tRTP', `${t.wr} / ${t.rtp}`],
-        ['tCWL', `${t.cwl}`],
-        ['tRFC / tRFCsb', `${t.rfc} / ${t.rfcSb}`],
-        ['tREFI', `${t.refi}`],
-      ]}
-    />
+    {#if secondary.length}
+      <KV rows={secondary} />
+    {/if}
   {/if}
 </Card>
 

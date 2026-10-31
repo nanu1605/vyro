@@ -65,6 +65,7 @@ section.
 |---|---|---|
 | MSI B650M GAMING PLUS WIFI (MS-7E24) | NCT6687D rev 0x92 | **Writable.** Field-checked in P12, plus the pending P18 and P27 checks above |
 | Any other board, or another revision of the chip | — | **Read-only**, with the reason shown in the Cooling tab |
+| ASUS and other boards with a Nuvoton NCT6791D–NCT6799D (2.1) | NCT679x | **Read-only.** The one write Vyro makes to such a chip: when the firmware locked the monitor's I/O ports (Super-I/O register 0x28, bit 4) so that nothing reads, that bit is cleared, as Linux `nct6775` and LibreHardwareMonitor do (`sio::win::unlock_monitor`); never a fan register |
 
 To add a board:
 1. Make a read-only dump with `vyro-fans` and get a supervised `--try` on each header.

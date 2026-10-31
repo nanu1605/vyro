@@ -7,7 +7,8 @@ export type PawnIoStatus = { state: PawnIoState,
  */
 version: string | null, detail: string | null, 
 /**
- * This CPU is not one Vyro reads (it reads AMD Ryzen through PawnIO), so its temperature
- * and power stay empty whatever PawnIO's state (2.0.4). False from an older service.
+ * This CPU is not one Vyro reads (it reads AMD Ryzen and, from 2.1, Intel Core through
+ * PawnIO), so its temperature and power stay empty whatever PawnIO's state (2.0.4). False
+ * from an older service.
  */
 cpuUnread: boolean, };

@@ -140,7 +140,7 @@ fn rail(name: &str) -> Option<f64> {
 pub struct Reach {
     /// PawnIO is installed and opens.
     pub pawnio: bool,
-    /// This CPU is not one Vyro reads (only AMD Ryzen is), with PawnIO or without.
+    /// This CPU is not one Vyro reads (AMD Ryzen and Intel Core are), with PawnIO or without.
     pub cpu_unread: bool,
 }
 
@@ -477,7 +477,7 @@ fn monitored(s: &SensorSnapshot, sub: Subsystem) -> bool {
 fn coverage(s: &SensorSnapshot, sub: Subsystem, reach: Reach) -> Option<&'static str> {
     match sub {
         Subsystem::Cpu if s.cpu.temp_package.is_none() => Some(if reach.cpu_unread {
-            "CPU temperature not read on this CPU (Vyro reads AMD Ryzen CPUs)"
+            "CPU temperature not read on this CPU (Vyro reads AMD Ryzen and Intel Core CPUs)"
         } else if reach.pawnio {
             "CPU temperature not reported"
         } else {
@@ -774,7 +774,7 @@ mod tests {
         ] {
             assert_eq!(
                 notes(&s, reach, "CPU"),
-                ["CPU temperature not read on this CPU (Vyro reads AMD Ryzen CPUs)"]
+                ["CPU temperature not read on this CPU (Vyro reads AMD Ryzen and Intel Core CPUs)"]
             );
         }
         assert_eq!(

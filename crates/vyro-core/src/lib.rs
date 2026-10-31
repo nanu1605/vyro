@@ -8,6 +8,7 @@ pub mod amd;
 pub mod autostart;
 pub mod bench;
 pub mod changes;
+pub mod cpu_msr;
 pub mod dashboard;
 pub mod devices;
 pub mod diag;
@@ -22,6 +23,7 @@ pub mod history;
 pub mod hwid;
 pub mod info;
 pub mod intel;
+pub mod intel_cpu;
 pub mod inventory;
 pub mod ipc;
 #[cfg(windows)]

@@ -168,7 +168,8 @@ pub struct MemorySnapshot {
     pub timings: Option<MemTimings>,
 }
 
-/// Running DRAM timings as programmed in the memory controller, in memory clocks.
+/// Running DRAM timings as programmed in the memory controller, in memory clocks; 0 for one the
+/// controller's registers do not give (Intel's give CL, tRCD, tRP and tRAS, and the data rate).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
