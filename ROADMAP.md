@@ -4125,7 +4125,19 @@ tested with register values made up from the documentation, and `vyro-live` dump
 - [x] **Locally:** types, 288 frontend tests, 826 core tests and the service's, formatting,
       clippy (Linux, and for Windows with the app), the accessibility sweep (1,854 checks), the
       size budget.
-- [ ] **CI.**
+- [x] **Found on reading it all again before CI's result** (each fixed and pushed): selecting a
+      slot clears `LpcIO`'s list of ports it lets through, so after clearing the lock every read
+      of the monitor would have been refused (the ranges are now found again before
+      configuration mode ends); a NCT679x reporting its base + 5 would have been rejected (the low
+      bits are masked, as Linux does); the NCT6701D (0xD806) was named a NCT6799D; a core whose
+      temperature stopped reading kept its last value; bit 0 of the thermal status is PROCHOT,
+      the throttle point (TjMax less any offset), not "at TjMax".
+- [x] **CI green on cacf0fd** (run 41250245121; Linux, Windows with the smoke test, the relay and
+      phone app with the end-to-end test, accessibility). On Windows, clippy and the core tests
+      (the eight modules' hashes among them), and a clean install with PawnIO on the runner: the
+      service answered and read 34 sensors, and the app's smoke test passed. Test build
+      `vyro-windows-cacf0fd`, with `vyro-live.exe`. ead63e5's and 109b57d's runs were cancelled
+      by the pushes of those fixes.
 - [ ] **Field check (the owner, on the Intel PC):**
       [`docs/field-check-2.1.md`](docs/field-check-2.1.md), with HWiNFO beside Vyro, and
       `vyro-live.json` kept.

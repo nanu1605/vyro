@@ -15,10 +15,10 @@ About 20 minutes.
 ## 0. What the PC is, and its raw registers
 
 1. Note the CPU, the board (Hardware → Motherboard) and the memory kit.
-2. Close Vyro (tray → Quit), then right-click `vyro-live.exe` → **Run as administrator**. It
-   prints a few samples and saves `vyro-live.json` beside itself: keep it. It holds the raw
-   registers (`intelRaw`, `sioRaw`, `ramRaw`) to set a decoding right against HWiNFO. Start
-   Vyro again.
+2. Right-click `vyro-live.exe` → **Run as administrator** (Vyro may stay open: they share the
+   buses' locks). It prints a few samples and saves `vyro-live.json` beside itself: keep it. It
+   holds the raw registers (`intelRaw`, `sioRaw`, `ramRaw`) to set a decoding right against
+   HWiNFO.
 
 ## 1. The CPU
 
