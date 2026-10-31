@@ -16,8 +16,9 @@ use crate::info::CoreKind;
 pub const MSR_IA32_APERF: u32 = 0xE8;
 /// Bits 47:32: the core's current voltage in 1/8192 V.
 pub const MSR_IA32_PERF_STATUS: u32 = 0x198;
-/// Per core: bit 31 reading valid, bits 22:16 degrees below TjMax, bit 0 at TjMax now, bit 10
-/// held below the requested clock by a power limit.
+/// Per core: bit 31 reading valid, bits 22:16 degrees below TjMax, bit 0 PROCHOT (at the throttle
+/// point now), bit 10 held below the requested clock by a power limit (Linux's
+/// `THERM_STATUS_PROCHOT` and `THERM_STATUS_POWER_LIMIT`).
 pub const MSR_IA32_THERM_STATUS: u32 = 0x19C;
 /// Bits 23:16: TjMax, the temperature the digital readouts count down from.
 pub const MSR_TEMPERATURE_TARGET: u32 = 0x1A2;
@@ -31,7 +32,7 @@ pub const MSR_PP0_ENERGY_STATUS: u32 = 0x639;
 pub const MSR_PP1_ENERGY_STATUS: u32 = 0x641;
 
 const READING_VALID: u64 = 1 << 31;
-const AT_TJMAX: u64 = 1;
+const PROCHOT: u64 = 1;
 const POWER_LIMITED: u64 = 1 << 10;
 
 /// Intel CPUs the `IntelMSR` module's registers mean the same on: family 6, every Core from
@@ -58,9 +59,10 @@ pub fn dts_temp(status: u64, tjmax: f64) -> Option<f64> {
     Some(tjmax - below)
 }
 
-/// Whether a thermal status register says the sensor is at TjMax now (the CPU slows to cool).
-pub const fn at_tjmax(status: u64) -> bool {
-    status & AT_TJMAX != 0
+/// Whether a thermal status register says PROCHOT is active: the sensor is at the throttle point
+/// (TjMax, less any offset the firmware set) and the CPU slows to cool.
+pub const fn prochot(status: u64) -> bool {
+    status & PROCHOT != 0
 }
 
 /// Whether a thermal status register says a power limit holds the clock below what Windows
@@ -125,11 +127,11 @@ mod tests {
         // Valid, 58 °C below a TjMax of 100: 42 °C.
         let status = READING_VALID | (58 << 16);
         assert_eq!(dts_temp(status, 100.0), Some(42.0));
-        // At TjMax, throttling: readout 0 and bit 0.
-        let hot = READING_VALID | AT_TJMAX;
+        // At TjMax, throttling: readout 0 and PROCHOT.
+        let hot = READING_VALID | PROCHOT;
         assert_eq!(dts_temp(hot, 100.0), Some(100.0));
-        assert!(at_tjmax(hot));
-        assert!(!at_tjmax(status));
+        assert!(prochot(hot));
+        assert!(!prochot(status));
         // Not valid: nothing, rather than TjMax.
         assert_eq!(dts_temp(58 << 16, 100.0), None);
         // Upper bits and the log bits around the readout do not leak into it.

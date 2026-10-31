@@ -5,7 +5,7 @@
 use std::time::Instant;
 
 use super::{
-    at_tjmax, core_names, dts_temp, package_temp, perf_status_volts, power_limited, supported,
+    core_names, dts_temp, package_temp, perf_status_volts, power_limited, prochot, supported,
     tjmax, MSR_IA32_APERF, MSR_IA32_PACKAGE_THERM_STATUS, MSR_IA32_PERF_STATUS,
     MSR_IA32_THERM_STATUS, MSR_PKG_ENERGY_STATUS, MSR_PP0_ENERGY_STATUS, MSR_PP1_ENERGY_STATUS,
     MSR_RAPL_POWER_UNIT, MSR_TEMPERATURE_TARGET,
@@ -225,7 +225,7 @@ impl Provider for IntelCpuProvider {
         let mut temps = Vec::with_capacity(self.cores.len());
         let mut vids = Vec::new();
         let mut effective = Vec::new();
-        let mut hot = pkg_status.map(at_tjmax);
+        let mut hot = pkg_status.map(prochot);
         for (n, (core, reads)) in self.cores.iter_mut().zip(reads).enumerate() {
             for (th, read) in core.threads.iter_mut().zip(reads) {
                 let Some(ThreadRead {
@@ -243,19 +243,27 @@ impl Provider for IntelCpuProvider {
                     continue;
                 };
                 if let Some(s) = status {
-                    hot = Some(hot.unwrap_or(false) || at_tjmax(s));
+                    hot = Some(hot.unwrap_or(false) || prochot(s));
                 }
-                if let Some(t) = status.zip(core.tjmax).and_then(|(s, tj)| dts_temp(s, tj)) {
-                    let key = *core.key.get_or_insert_with(|| {
-                        sensor(
-                            reg,
-                            format!("cpu.core{n}.temp"),
-                            core.name.clone(),
-                            Unit::Celsius,
-                            false,
-                        )
-                    });
-                    temps.push(reg.set(key, Some(t)).unwrap_or(t));
+                match status.zip(core.tjmax).and_then(|(s, tj)| dts_temp(s, tj)) {
+                    Some(t) => {
+                        let key = *core.key.get_or_insert_with(|| {
+                            sensor(
+                                reg,
+                                format!("cpu.core{n}.temp"),
+                                core.name.clone(),
+                                Unit::Celsius,
+                                false,
+                            )
+                        });
+                        temps.push(reg.set(key, Some(t)).unwrap_or(t));
+                    }
+                    // A core that read before and does not now shows nothing, not its last value.
+                    None => {
+                        if let Some(key) = core.key {
+                            reg.set(key, None);
+                        }
+                    }
                 }
                 if let Some(v) = perf.and_then(perf_status_volts) {
                     vids.push(v);
