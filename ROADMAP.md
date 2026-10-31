@@ -4062,6 +4062,18 @@ The owner's next "continue" (2026-10-31): another look, at what labels say and a
       2.0.4`; What's new in 2.0.4: links land on their card, each view where you left it, missing
       readings say why, an update that stalls ends, time across a clock change. All are this
       PC's, so none is marked for the phone app.
+- [x] **2.0.4 released** (2026-10-31, on the owner's go: "Release 2.0.4 first"). CI passed on
+      1e25e68 (run 41245678943; Linux, Windows with the smoke test, the relay and phone app with
+      the end-to-end test, accessibility). `main` fast-forwarded to it from 2.0.3's records, and
+      Release run 41247029962 tagged `v2.0.4`, found the relay's address in `vyro.exe` and
+      published the 14.1 MB MSI, `latest.json` and checksums here and to
+      `nanu1605/vyro-releases`; GitHub's own digests of the files published here match the
+      checksums the run printed (MSI `cd627df2…`, `latest.json` `5d47ed15…`), and the
+      `latest.json` installed copies read (`nanu1605/vyro-releases`' latest) is that file,
+      offering 2.0.4 from there. Installed copies on 1.4.1 to 2.0.3 are offered it. Unsigned, as
+      before ([`docs/signing.md`](docs/signing.md)). The relay was not deployed again: it serves
+      8c53592's phone app and relay (run 40764531668). Of what the phone app is built from, only
+      the notes changed since (2.0.3's and 2.0.4's, none for the phone); the relay not at all.
 
 ## Risks
 
