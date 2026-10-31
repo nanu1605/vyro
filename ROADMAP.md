@@ -4022,9 +4022,12 @@ answering, and others like them.
 - [x] **Locally:** types, 286 frontend tests, 806 core tests and the service's, the
       accessibility sweep (1,854 checks), formatting, clippy (Linux and for Windows), the
       size budget.
-- [ ] **CI green.** f2cc142 (run 41195149701) failed: the new Dashboard test's types (`pnpm
-      check`, run here before that test was written) and, on Windows, the GPU tuning test above.
-      a7dca8d's run was cancelled by f2cc142's push.
+- [x] **CI green on b56b4c2** (run 41196231720; Linux, Windows with the smoke test, the relay
+      and phone app with the end-to-end test, accessibility: 1,854 checks). On Windows, clippy,
+      the core tests (the GPU tuning one among them) and the app's own. f2cc142 (run
+      41195149701) had failed: the new Dashboard test's types (`pnpm check`, run here before
+      that test was written) and, on Windows, the GPU tuning test above. a7dca8d's run was
+      cancelled by f2cc142's push.
 - [ ] **Field check (the owner, on Windows):** nothing changes on the reference PC, whose CPU
       and board are read. On an Intel PC, if one is at hand: "not read on this CPU" on the CPU
       sensors and Power cards and in Health, and Diagnostics' sensor check as information.
