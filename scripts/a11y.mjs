@@ -12,7 +12,8 @@
 // move by dragging their grip, by its arrow keys, back on Escape, and stay moved after a reload and
 // at the window size they were moved at; and nothing scrolls sideways, not even an area inside a
 // view, from the narrowest window up. Since 2.0.3 also: Ctrl K to a Settings or Health section
-// lands on it from a fresh start. The phone app itself is swept by scripts/relay-e2e.mjs.
+// lands on it from a fresh start; since 2.0.4, so do the update chip and "Change profile", and a
+// view shows where it was left. The phone app itself is swept by scripts/relay-e2e.mjs.
 // Runs against the browser preview
 // (sample data, two GPUs as on the owner's PC) of a finished build:
 //
@@ -866,16 +867,37 @@ async function sweepResize(browser) {
 // Diagnostics had no id to scroll to at all. Each from a fresh start: the card's top under the top
 // bar, or the page at its end with the card on screen.
 
+/** After a jump to the card `id`: its top under the top bar, or the page at its end with it on screen. */
+async function landed(page, where, id) {
+  checks++;
+  const at = await page.evaluate((id) => {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    const end = document.documentElement.scrollHeight - innerHeight;
+    const margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
+    return { top: el.getBoundingClientRect().top, margin, end: scrollY >= end - 1 };
+  }, id);
+  if (!at) problem(where, `no element #${id} to scroll to`);
+  else if (Math.abs(at.top - at.margin) > 2 && !(at.end && at.top > at.margin && at.top < 900 - 40)) {
+    const more = at.end ? '' : ', and the page could scroll further';
+    problem(where, `its top is ${Math.round(at.top)} px down the window, not ${Math.round(at.margin)}${more}`);
+  }
+}
+
 async function sweepSections(browser) {
   const SECTIONS = [
     ['Units', 'units', 'Settings'],
     ['Updates', 'updates', 'Settings'],
     ['Hidden sensors', 'hidden-sensors', 'Settings'],
     ['Remote', 'remote', 'Settings'],
+    // Where Gaming's "Turn it on in Settings" and the Dashboard's "Change profile" go (2.0.4); the
+    // Gaming view comes first for "gaming" alone.
+    ['Gaming', 'gaming', 'Settings', 'gaming settings'],
+    ['Profile', 'profile', 'Settings'],
     ['Alerts', 'alerts', 'Health'],
     ['Diagnostics', 'diagnostics', 'Health'],
   ];
-  for (const [label, id, kind] of SECTIONS) {
+  for (const [label, id, kind, query = label] of SECTIONS) {
     const { ctx, page } = await open(browser, BASE, { width: 1440, theme: 'midnight' });
     await page.goto(`${BASE}/`);
     await page.waitForTimeout(1200);
@@ -883,7 +905,7 @@ async function sweepSections(browser) {
     await page.keyboard.press('Control+k');
     // The palette loads on first use, and takes the focus once open.
     await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'combobox');
-    await page.keyboard.type(label);
+    await page.keyboard.type(query);
     await page.waitForTimeout(200);
     const first = await page.locator('#cmdk-0').innerText();
     if (!first.startsWith(label) || !first.includes(kind)) {
@@ -893,21 +915,83 @@ async function sweepSections(browser) {
     }
     await page.keyboard.press('Enter');
     await page.waitForTimeout(2500);
+    await landed(page, where, id);
+    await ctx.close();
+  }
+}
+
+// --- Links to a card (2.0.4). ------------------------------------------------------------------
+// The top bar's "Vyro … is available" (titled "Open Settings → Updates") and the Dashboard's
+// "Change profile" opened Settings at its top, wherever the card was. Gaming's "Turn it on in
+// Settings" and an alert's toast, which do not show in the preview (its game never stops, and no
+// alert fires in it), go the same way to the Gaming and Alerts cards checked above.
+
+async function sweepLinks(browser) {
+  {
+    const { ctx, page } = await open(browser, BASE, { width: 1440, theme: 'midnight' });
+    await page.goto(`${BASE}/`);
+    await page.waitForTimeout(1200);
+    // The preview's check finds a version, and the chip shows from every view.
+    await tab(page, 'Settings');
+    await page.getByRole('button', { name: 'Check now' }).click();
+    const chip = page.getByRole('button', { name: /is available/ });
+    await chip.waitFor();
+    // Settings at its top again: the click scrolled it to the button, and it would show there.
+    await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
+    await tab(page, 'Dashboard');
+    await chip.click();
+    await page.waitForTimeout(2500);
+    await landed(page, 'Update chip', 'updates');
+    await ctx.close();
+  }
+  {
+    const { ctx, page } = await open(browser, BASE, { width: 1440, theme: 'midnight' });
+    await page.goto(`${BASE}/`);
+    await page.waitForTimeout(1200);
+    // Gaming's compact Dashboard leaves the detail cards out, and says so.
+    await tab(page, 'Settings');
+    await page.getByRole('radio', { name: /^Gaming/ }).check();
+    await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
+    await tab(page, 'Dashboard');
+    const link = page.getByRole('button', { name: 'Change profile' });
     checks++;
-    const at = await page.evaluate((id) => {
-      const el = document.getElementById(id);
-      if (!el) return null;
-      const end = document.documentElement.scrollHeight - innerHeight;
-      const margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
-      return { top: el.getBoundingClientRect().top, margin, end: scrollY >= end - 1 };
-    }, id);
-    if (!at) problem(where, `no element #${id} to scroll to`);
-    else if (Math.abs(at.top - at.margin) > 2 && !(at.end && at.top > at.margin && at.top < 900 - 40)) {
-      const more = at.end ? '' : ', and the page could scroll further';
-      problem(where, `its top is ${Math.round(at.top)} px down the window, not ${Math.round(at.margin)}${more}`);
+    if (!(await link.count())) problem('Change profile', 'not shown under the Gaming profile');
+    else {
+      await link.click();
+      await page.waitForTimeout(2500);
+      await landed(page, 'Change profile', 'profile');
     }
     await ctx.close();
   }
+}
+
+// --- A view shows where it was left (2.0.4). ----------------------------------------------------
+// The views share the window's scroll, and each opened as far down as the one before it was: with
+// the Dashboard scrolled to 800 px, Settings opened 800 px down; with Settings at 1,000, Health.
+
+async function sweepViewScroll(browser) {
+  const { ctx, page } = await open(browser, BASE, { width: 1440, theme: 'midnight' });
+  await page.goto(`${BASE}/`);
+  await page.waitForTimeout(1200);
+  const y = () => page.evaluate(() => Math.round(scrollY));
+  const scroll = (top) => page.evaluate((top) => scrollTo({ top, behavior: 'instant' }), top);
+  const at = async (where, want) => {
+    checks++;
+    const got = await y();
+    if (Math.abs(got - want) > 2) problem(`View scroll · ${where}`, `it shows ${got} px down, not ${want}`);
+  };
+  await scroll(800);
+  const dashboard = await y();
+  await tab(page, 'Settings');
+  await at('Settings, first shown, after the Dashboard was scrolled', 0);
+  await scroll(600);
+  await tab(page, 'Health');
+  await at('Health, first shown, after Settings was scrolled', 0);
+  await tab(page, 'Settings');
+  await at('Settings again', 600);
+  await tab(page, 'Dashboard');
+  await at('the Dashboard again', dashboard);
+  await ctx.close();
 }
 
 // --- Reduced motion: no CSS animation runs. ----------------------------------------------------
@@ -978,6 +1062,8 @@ try {
     await sweepNarrow(browser);
     await sweepResize(browser);
     await sweepSections(browser);
+    await sweepLinks(browser);
+    await sweepViewScroll(browser);
     await sweepMotion(browser);
   } finally {
     await browser.close();

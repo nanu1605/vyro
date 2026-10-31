@@ -14,11 +14,12 @@
     update: string | null;
     onselect: (t: Tab) => void;
     onremote: () => void;
+    onupdate: () => void;
     onbios: () => void;
     onstock: () => void;
     onsearch: () => void;
   }
-  let { tab, remote, fans, gpu, update, onselect, onremote, onbios, onstock, onsearch }: Props = $props();
+  let { tab, remote, fans, gpu, update, onselect, onremote, onupdate, onbios, onstock, onsearch }: Props = $props();
 
   const v = $derived(view(tab));
   const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
@@ -33,7 +34,7 @@
   </div>
   <div class="chips">
     {#if update}
-      <button type="button" class="chip update" onclick={() => onselect('settings')} title="Open Settings → Updates">
+      <button type="button" class="chip update" onclick={onupdate} title="Open Settings → Updates">
         <span class="led" aria-hidden="true"></span>
         Vyro {update} is available
       </button>

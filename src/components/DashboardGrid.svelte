@@ -17,11 +17,13 @@
     /** A compact profile is in force: the detail cards stay hidden. */
     compact: boolean;
     profileName: string;
-    onselect: (tab: 'gaming' | 'health' | 'settings') => void;
+    onselect: (tab: 'gaming' | 'health') => void;
+    /** Settings, at its Profile card ("Change profile"). */
+    onprofile: () => void;
     /** Shows the live rail again (a wide window with the rail folded away). */
     onrail?: () => void;
   }
-  let { snap, active, needs, uiFps, compact, profileName, onselect, onrail }: Props = $props();
+  let { snap, active, needs, uiFps, compact, profileName, onselect, onprofile, onrail }: Props = $props();
 
   let dash = $state.raw<Dashboard>(initial());
   let editing = $state(false);
@@ -106,7 +108,7 @@
   {#if hiddenCards > 0}
     <p class="note">
       {profileName} profile: {hiddenCards} detail card{hiddenCards === 1 ? '' : 's'} hidden.
-      <button type="button" class="link" onclick={() => onselect('settings')}>Change profile</button>
+      <button type="button" class="link" onclick={onprofile}>Change profile</button>
     </p>
   {/if}
 {/if}

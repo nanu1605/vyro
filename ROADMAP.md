@@ -3937,8 +3937,55 @@ owner's go (2026-10-30: "release 2.0.3").
       commit's differ only in 2.0.2's and 2.0.3's notes (none for the phone), the Dashboard's
       `--cols` in the shared theme and the service worker's file list; the relay only in its
       burst test.
-- [ ] Found while releasing, left for after 2.0.3: the top bar's "Vyro … is available" chip, whose
-      title says "Open Settings → Updates", opens Settings without going to Updates.
+- [x] Found while releasing, left for after 2.0.3: the top bar's "Vyro … is available" chip, whose
+      title says "Open Settings → Updates", opens Settings without going to Updates. Fixed in
+      2.0.4's review (below).
+
+### 2.0.4 — after 2.0.3
+
+The owner's "continue" after 2.0.3 (2026-10-31): a review. On `claude/vyro-2.0`; not released.
+
+- [x] **Links land on what they name.** The top bar's "Vyro … is available" (titled "Open
+      Settings → Updates"), the Dashboard's "Change profile" (under the Gaming and Silent
+      profiles, whose Dashboard leaves the detail cards out), Gaming's "Turn it on in Settings"
+      (frame rates not measured) and an alert's toast opened their view wherever the window was
+      scrolled. They now go to Settings' Updates, Profile and Gaming cards and to Health's alerts,
+      as Ctrl K does (`openSection`, followed while the view settles as in 2.0.3). In the preview
+      at 1440 × 900 on 2.0.3's build, the chip left Updates 1,714 px down the window, and "Change
+      profile" the Profile card above it.
+- [x] **A view shows where it was left.** The views share the window's scroll, so each opened as
+      far down as the one before it was: with the Dashboard scrolled to 800 px, Settings opened
+      800 px down (359 on its first showing, as far as it then reached); with Settings at 1,000,
+      Health. A sensor's History, opened from a view scrolled down, could have its chart, which
+      comes first, above the window. Now each view keeps its own place, at first its top, and a
+      link to a view from another shows it from its top: the Dashboard's Health and Low battery
+      strips, its cards' "Gaming →" and "Health →", the live rail, the top bar's fan and GPU
+      chips, Health's "Open Insights", My PC's displays, a sensor's History, a desktop widget's
+      "Edit…", and the window opened again from the tray. The sidebar and Ctrl K's "Go to" find a
+      view as it was left.
+- [x] **An update's download that stalls ends.** The installer's download has no overall limit,
+      and one that stalled (the network gone, the PC asleep mid-download) never ended: Settings →
+      Updates stayed installing, Install and "Check now" held, until Vyro restarted. Now it ends
+      after 60 s without a byte (`STALL_TIMEOUT`: the HTTP client's read timeout, which a slow
+      download keeps resetting), and Settings says "could not reach GitHub; check the internet
+      connection" rather than the client's own words.
+- [x] **Checked:** new steps in the accessibility sweep: Ctrl K to Settings' Gaming and Profile
+      cards (where Gaming's link and "Change profile" go); the update chip after Check now, and
+      "Change profile" under the Gaming profile, each with Settings left at its top; a view's
+      place (the Dashboard scrolled, Settings and Health first shown at their top, each again
+      where it was left). Against 2.0.3's build: 5 problems in 15 checks; none now. Gaming's link
+      and an alert's toast do not show in the preview (its game never stops, and no alert fires
+      in it).
+- Reviewed, nothing to change: unwrap and expect outside tests (one, building the app at start);
+  the app's waits (none of hours or days but the update checker's; devices every 5 minutes);
+  every view's busy flags (each cleared however its call ends, now the install's too); the card
+  layout's observers and listeners (all let go with their view); the phone app's tabs (each opens
+  at its top, and tapping the open one scrolls up, by design).
+- [x] **Locally:** types, 285 frontend tests, the accessibility sweep (1,854 checks), formatting,
+      clippy for Windows, the size budget. The app's own tests run on Windows in CI.
+- [ ] **Field check (the owner, on Windows):** scrolled down on the Dashboard, Settings opens at its
+      top, and each view is where it was left on coming back to it; with the Gaming profile, the
+      Dashboard's "Change profile" lands on Settings → Profile.
 
 ## Risks
 

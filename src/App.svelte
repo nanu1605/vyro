@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import AppStatus from './components/AppStatus.svelte';
   import HardwarePanel from './components/HardwarePanel.svelte';
   import SystemPanel from './components/SystemPanel.svelte';
@@ -80,10 +80,20 @@
   function openHistory(id: string, at: number | null = null): void {
     historyFocus = id;
     historyAt = at;
-    select('history');
+    openView('history');
   }
 
+  /** Where each view was left scrolled to. The views share the window's scroll, so each opened as
+   * far down as the one before it was (2.0.4); now one shows where it was left, at first its top. */
+  const scrolled: Partial<Record<Tab, number>> = {};
+
   function select(t: Tab): void {
+    if (t !== tab) {
+      scrolled[tab] = scrollY;
+      const top = scrolled[t] ?? 0;
+      // Once its panel shows.
+      void tick().then(() => scrollTo({ top, behavior: 'instant' }));
+    }
     navigated = true;
     tab = t;
     visited[t] = true;
@@ -92,6 +102,13 @@
     } catch {
       /* storage unavailable: tab just isn't remembered */
     }
+  }
+
+  /** A view at its top, wherever it was left: what a link to it from another view shows (a strip,
+   * a chip, a card's "Health →"). The sidebar and Ctrl K's "Go to" select it as it was. */
+  function openView(t: Tab): void {
+    if (t !== tab) scrolled[t] = 0;
+    select(t);
   }
 
   // Replaced wholesale every tick; no deep reactivity needed.
@@ -289,7 +306,7 @@
     let disposed = false;
     // Opened again from the tray: back to the Dashboard unless "Last tab" is chosen.
     void onWindowOpened(() => {
-      if (prefs.openOn === 'dashboard') select('dashboard');
+      if (prefs.openOn === 'dashboard') openView('dashboard');
     }).then((fn) => {
       if (disposed) fn();
       else stopOpened = fn;
@@ -303,7 +320,7 @@
     });
     // A desktop widget's "Edit…" opens its page.
     void onOpenView((v) => {
-      if (isTab(v)) select(v);
+      if (isTab(v)) openView(v);
     }).then((fn) => {
       if (disposed) fn();
       else stopView = fn;
@@ -401,8 +418,9 @@
       {fans}
       gpu={gpuTune}
       update={update.status?.available && !update.status.installing ? update.status.available.version : null}
-      onselect={select}
+      onselect={openView}
       onremote={openRemote}
+      onupdate={() => openSection('settings', 'updates')}
       onbios={fansToBios}
       onstock={gpuToStock}
       onsearch={openPalette}
@@ -446,14 +464,14 @@
             {/if}
             <PawnIoBanner status={pawnioShown} />
             {#if attention.length}
-              <button type="button" class="health-strip {overall}" onclick={() => select('health')}>
+              <button type="button" class="health-strip {overall}" onclick={() => openView('health')}>
                 <span class="alert-dot {overall}" aria-hidden="true"></span>
                 <span class="msg">{attention[0]}{attention.length > 1 ? ` (+${attention.length - 1} more)` : ''}</span>
                 <span class="go">Health →</span>
               </button>
             {/if}
             {#if low}
-              <button type="button" class="health-strip {low.tone}" onclick={() => select('devices')}>
+              <button type="button" class="health-strip {low.tone}" onclick={() => openView('devices')}>
                 <span class="alert-dot {low.tone}" aria-hidden="true"></span>
                 <span class="msg"><b>Low battery:</b> {low.text}</span>
                 <span class="go">Devices →</span>
@@ -466,12 +484,13 @@
               {uiFps}
               {compact}
               profileName={spec.name}
-              onselect={select}
+              onselect={openView}
+              onprofile={() => openSection('settings', 'profile')}
               onrail={wide && !railWanted ? () => setRail(true) : undefined}
             />
           </div>
           {#if railOn && snap}
-            <LiveRail {snap} {attention} onselect={select} onfold={() => setRail(false)} />
+            <LiveRail {snap} {attention} onselect={openView} onfold={() => setRail(false)} />
           {/if}
         </div>
       </div>
@@ -490,7 +509,7 @@
 
       {#if visited.health}
         <div id="panel-health" role="tabpanel" aria-labelledby="tab-health" hidden={tab !== 'health'}>
-          <HealthPanel {snap} active={tab === 'health'} oninsights={() => select('insights')} onhistory={openHistory} />
+          <HealthPanel {snap} active={tab === 'health'} oninsights={() => openView('insights')} onhistory={openHistory} />
         </div>
       {/if}
 
@@ -502,7 +521,7 @@
 
       {#if visited.gaming}
         <div id="panel-gaming" role="tabpanel" aria-labelledby="tab-gaming" hidden={tab !== 'gaming'}>
-          <GamingPanel {snap} {backend} active={tab === 'gaming'} onsettings={() => select('settings')} />
+          <GamingPanel {snap} {backend} active={tab === 'gaming'} onsettings={() => openSection('settings', 'gaming')} />
         </div>
       {/if}
 
@@ -538,7 +557,7 @@
         <div id="panel-mypc" role="tabpanel" aria-labelledby="tab-mypc" hidden={tab !== 'mypc'}>
           <!-- Loaded on first visit; its 3-D view (Three.js) exists only while the tab shows. -->
           {#await import('./components/MyPcPanel.svelte') then { default: MyPcPanel }}
-            <MyPcPanel {snap} active={tab === 'mypc' && !pageHidden} onselect={select} />
+            <MyPcPanel {snap} active={tab === 'mypc' && !pageHidden} onselect={openView} />
           {/await}
         </div>
       {/if}
@@ -595,7 +614,7 @@
 
   <div class="toasts" role="status" aria-live="polite">
     {#each toasts as t (t.key)}
-      <button type="button" class="toast" onclick={() => select('health')}>
+      <button type="button" class="toast" onclick={() => openSection('health', 'alerts')}>
         <b>{tempText(t.title)}</b>
         <span>{tempText(t.message)}</span>
       </button>
