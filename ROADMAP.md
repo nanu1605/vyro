@@ -3943,7 +3943,8 @@ owner's go (2026-10-30: "release 2.0.3").
 
 ### 2.0.4 — after 2.0.3
 
-The owner's "continue" after 2.0.3 (2026-10-31): a review. On `claude/vyro-2.0`; not released.
+The owner's "continue" after 2.0.3 (2026-10-31): a review. On `claude/vyro-2.0`; 2.0.4 on the
+owner's go (2026-10-31: "Release 2.0.4 first", asked before 2.1's hardware support began).
 
 - [x] **Links land on what they name.** The top bar's "Vyro … is available" (titled "Open
       Settings → Updates"), the Dashboard's "Change profile" (under the Gaming and Silent
@@ -4057,6 +4058,10 @@ The owner's next "continue" (2026-10-31): another look, at what labels say and a
 - [ ] **Field check (the owner, on Windows):** none on the reference PC, unless a change of
       daylight saving time falls in its time zone: then History's ticks across it on round
       hours, and midnight as the day's name.
+- [x] **Version 2.0.4** (the owner, 2026-10-31: "Release 2.0.4 first"): `scripts/set-version.py
+      2.0.4`; What's new in 2.0.4: links land on their card, each view where you left it, missing
+      readings say why, an update that stalls ends, time across a clock change. All are this
+      PC's, so none is marked for the phone app.
 
 ## Risks
 

@@ -21,6 +21,36 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '2.0.4',
+    items: [
+      {
+        icon: 'sparkles',
+        title: 'Links land on their card',
+        text: 'The top bar’s update chip, the Dashboard’s “Change profile”, Gaming’s “Turn it on in Settings” and an alert’s notice now open on the card they name, as Ctrl K does.',
+      },
+      {
+        icon: 'sparkles',
+        title: 'Each view where you left it',
+        text: 'Each view keeps its own place: it opens where you left it, at first at its top, not as far down as the view before. A link from another view shows it from its top.',
+      },
+      {
+        icon: 'gauge',
+        title: 'Missing readings say why',
+        text: 'On a CPU Vyro doesn’t read, which today is any Intel CPU, the CPU and Power cards, Health and Diagnostics say “not read on this CPU” instead of asking for PawnIO, which is already installed. Health’s notes on boards and drives give the real reason too.',
+      },
+      {
+        icon: 'end',
+        title: 'An update that stalls ends',
+        text: 'An update’s download that stops getting data now ends after a minute and says to check the internet connection, instead of holding Settings → Updates until Vyro restarts.',
+      },
+      {
+        icon: 'sparkles',
+        title: 'Time across a clock change',
+        text: 'History’s time labels stay on round hours across a change of daylight saving time, and Hardware’s changes call the right day “Yesterday” after one.',
+      },
+    ],
+  },
+  {
     version: '2.0.3',
     items: [
       {
