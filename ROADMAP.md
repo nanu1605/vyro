@@ -4248,7 +4248,13 @@ tighter X at 16 to 32 px. On `claude/vyro-2.0`.
       icon) carried over; the app's smoke test passing; and the uninstall after it removing both
       names' Run entries and registrations, keeping the data. The MSI is 13.95 MB. Test build
       `clokrix-windows-9ee4e2b`.
-- [ ] **Relay deployed** (on the owner's go), and `CLOKRIX_RELAY_URL` set by the owner.
+- [x] **Relay deployed** (2026-11-11, on the owner's go: "deploy the relay"). Relay run
+      43015537665 from `claude/vyro-2.0` (2990da0) checked and tested the relay, then deployed
+      `clokrix-relay` at `https://clokrix-relay.tanishqjain010.workers.dev` (version
+      `531fbe97`): the Worker with its rooms and its push key (a new one, made the first time a
+      phone asks), and the phone app's 39 files. Not opened from here: this session's network
+      does not reach workers.dev. `vyro-relay` was left as it was, for PCs still on Vyro.
+- [ ] **`CLOKRIX_RELAY_URL` set** (the owner's) to that address.
 - [ ] **Field check** ([`docs/field-check-2.2.md`](docs/field-check-2.2.md)).
 - [ ] **2.2.0 released** (on "release 2.2.0").
 
