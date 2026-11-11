@@ -497,6 +497,7 @@ Nothing on it changes the PC.
 | [`docs/field-check-1.5.md`](docs/field-check-1.5.md) | The field check of 1.5: the phone's new tabs, letting a phone change the PC, End task, power, waking a PC |
 | [`docs/field-check-2.0.md`](docs/field-check-2.0.md) | The field check of 2.0: notifications on Android and iPhone, the PC going quiet, AMD and Intel tuning |
 | [`docs/field-check-2.1.md`](docs/field-check-2.1.md) | The field check of 2.1: Intel CPU sensors, an ASUS board's Nuvoton chip, DDR4 on Intel |
+| [`docs/field-check-2.2.md`](docs/field-check-2.2.md) | The field check of 2.2: the update from Vyro to Clokrix, everything kept, the new name and logo, the phones paired again |
 | [`docs/signing.md`](docs/signing.md) | Code signing (2.0): what the release does once SignPath is set up, and what only the owner can do |
 
 `clokrix-remote.exe` in the same artifact checks the service from the outside (state, connection,

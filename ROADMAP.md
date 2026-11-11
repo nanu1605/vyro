@@ -3621,7 +3621,8 @@ branch `claude/vyro-2.0` from 1.7.8's records.
 - [ ] Field check 2.0 ([`docs/field-check-2.0.md`](docs/field-check-2.0.md)): notifications on
       Android and iPhone through the real push services, the PC going quiet, and an AMD and an
       Intel card. The relay is deployed from 2.0 (run 40588431507); the PC needs 2.0.0 (released
-      below) or a later build.
+      below) or a later build. The 2.2 field check (2026-11-11) had a test notification arrive
+      on the owner's phone through its push service; the rest stays open.
 - [x] **2.0.0 released** (2026-10-28, on the owner's go: "release 2.0.0"; asked first for the
       injected overlay and administrator prompts on the phone too, which were not built, and
       the release went ahead without them). CI passed on bc9cc06 (run 40588862822; Linux,
@@ -4256,7 +4257,13 @@ tighter X at 16 to 32 px. On `claude/vyro-2.0`.
       does not reach workers.dev. `vyro-relay` was left as it was, for PCs still on Vyro.
 - [x] **`CLOKRIX_RELAY_URL` set** (the owner's) to that address: Release run 43019341840 built
       with it and found it in `clokrix.exe`.
-- [ ] **Field check** ([`docs/field-check-2.2.md`](docs/field-check-2.2.md)).
+- [x] **Field check (the owner, on Windows), passed** (2026-11-11: "Everything is working, here
+      is the field check"): [`docs/field-check-2.2.md`](docs/field-check-2.2.md). Vyro 2.1.0
+      updated itself to 2.2.0 and opened again as Clokrix, with its icons and one Clokrix in
+      Apps; everything Vyro kept was there, with history from before the update and the share
+      cards and reports in the renamed folders; after a restart, the Clokrix Sensor Service and
+      the sensors as before; the logo in the themes, on notifications and on share cards; the
+      phones paired again at `clokrix-relay`, and a test notification arrived.
 - [x] **2.2.0 released** (2026-11-11, on the owner's go: "release 2.2.0"). CI passed on 30b9fb8
       (run 43015948992; Linux, Windows with the smoke test, the clean install and the upgrade from
       Vyro 2.1.0, the relay and phone app with the end-to-end test, accessibility). `main`
@@ -4270,6 +4277,8 @@ tighter X at 16 to 32 px. On `claude/vyro-2.0`.
       there. Installed copies on 1.4.1 to 2.1.0 are offered it. Unsigned, as before
       ([`docs/signing.md`](docs/signing.md)). The relay serves this release's phone app and relay:
       only these records changed after 2990da0, from which it was deployed.
+- [ ] **`vyro-relay` deleted** (the owner's, in Cloudflare) once every PC runs Clokrix
+      ([`docs/remote.md`](docs/remote.md#the-relays-new-address-22), step 3).
 
 ## Risks
 
