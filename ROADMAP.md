@@ -4333,7 +4333,13 @@ everything build" (2026-11-11), answering what was left to build. Built from tha
       left alone; the NCT6687's restore refuses a NCT679x's saved state and the other way round.
 - [x] **Locally:** types, 295 frontend tests, 866 core tests and the service's, formatting,
       clippy (Linux, and for Windows with the app).
-- [ ] **CI green** on the pushed commit.
+- [x] **CI green on df3c0a2** (run 43034751154; Linux, Windows with the smoke test, the relay and
+      phone app with the end-to-end test, accessibility: 1,854 checks in 596 s). The relay and
+      accessibility jobs failed twice in their browser install, before any test ran: GitHub's
+      runners could not reach Ubuntu's package mirror. Re-run after it came back, both passed.
+      On Windows, a clean install (the service answered and read 29 sensors, the app's
+      smoke test passed), then the upgrade from Vyro 2.1.0. The MSI is 13.98 MB. Test build
+      `clokrix-windows-df3c0a2`; 92ff816's run was cancelled by the push of df3c0a2.
 - [ ] **Field check (the owner)**: [`docs/field-check-2.3.md`](docs/field-check-2.3.md): the
       owner's PC as before, NVAPI's or NVML's offsets on its card, the ASUS board's tries on the
       Intel PC, and a Gigabyte board, AM4 or the newer Intel CPUs where one is at hand.
