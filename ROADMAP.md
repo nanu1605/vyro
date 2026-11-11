@@ -4239,6 +4239,15 @@ tighter X at 16 to 32 px. On `claude/vyro-2.0`.
       the notification registration's icon was a verbatim path (`\\?\C:\…`, as Tauri gives the
       app's folder), which Windows does not take for an icon; it is written plain now (1abaf5a,
       after run 43002142410).
+- [x] **CI green on 9ee4e2b** (run 43010036125; Linux, Windows with the smoke test, the relay and
+      phone app with the end-to-end test, accessibility: 1,854 checks in 503 s). On Windows, a
+      clean install (the service answered and read 31 sensors, the app's smoke test passed, and
+      the uninstall left nothing of Clokrix's but its data), then the upgrade from Vyro 2.1.0:
+      one program, Clokrix by Clokrix; Vyro's service, folder and shortcuts gone; the history,
+      both app folders (with WebView2's data), "Start with Windows" and notifications (with the
+      icon) carried over; the app's smoke test passing; and the uninstall after it removing both
+      names' Run entries and registrations, keeping the data. The MSI is 13.95 MB. Test build
+      `clokrix-windows-9ee4e2b`.
 - [ ] **Relay deployed** (on the owner's go), and `CLOKRIX_RELAY_URL` set by the owner.
 - [ ] **Field check** ([`docs/field-check-2.2.md`](docs/field-check-2.2.md)).
 - [ ] **2.2.0 released** (on "release 2.2.0").
