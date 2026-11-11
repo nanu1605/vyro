@@ -23,7 +23,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 6 | History tiers / cap | raw ≤ 30 min · 10 s avg ≤ 24 h · 1 min avg ≤ 7 d · ≤ 200 MB | default |
 | 7 | Frontend framework | **Svelte 5** + strict TS + Vite | decided |
 | 8 | Installer | **WiX (MSI)**; bundles `PawnIO_setup.exe` and runs `-install -silent` when PawnIO is missing or older | default |
-| 9 | Extra Super-I/O coverage | Nuvoton NCT6687D first (MSI AM5), then NCT67xx + ITE IT87xx | default |
+| 9 | Extra Super-I/O coverage | Nuvoton NCT6687D first (MSI AM5), then NCT67xx + ITE IT87xx: the NCT679x in 2.1, the ITE IT8620E–IT8698E in 2.3 | done |
 | 10 | Low-level hardware access | **PawnIO** (signed, free, HVCI-compatible) replaces our own KMDF driver | decided |
 | 11 | Code signing | **SignPath Foundation** or **Certum Open Source** (no EV certificate). From 2.0 a release signs itself through SignPath once its four settings are in the repository ([`docs/signing.md`](docs/signing.md)); making the repository public and applying are the owner's | decided |
 | 12 | Source availability | **Open source**; license MIT OR Apache-2.0 (LICENSE files added in P11; can still change before the repo goes public) | default |
@@ -4279,6 +4279,67 @@ tighter X at 16 to 32 px. On `claude/vyro-2.0`.
       only these records changed after 2990da0, from which it was deployed.
 - [ ] **`vyro-relay` deleted** (the owner's, in Cloudflare) once every PC runs Clokrix
       ([`docs/remote.md`](docs/remote.md#the-relays-new-address-22), step 3).
+
+### 2.3.0 — Gigabyte boards, more memory timings, ASUS fan control, NVAPI
+
+The owner's "complete all the new features and remaining build. I will do the field check once
+everything build" (2026-11-11), answering what was left to build. Built from that list on
+`claude/vyro-2.0`. The decoders' tests use register values made up from the documentation
+(each fixture says "constructed"): none of this has run on such hardware yet.
+
+- [x] **Gigabyte boards: the ITE IT8620E to IT8698E** (`sio::ite`), found at 0x2E after the
+      Nuvoton chips: ITE's key and exit, the environment controller (logical device 4) through
+      its address and data ports, the voltages (12 mV a count; +3.3V standby, the battery and
+      AVCC3 halved inside), the six temperatures (4 to 6 where register 0x77 makes them
+      temperatures) and the 16-bit fans the firmware enabled, as Linux `it87` and
+      LibreHardwareMonitor read them. On the chips with register banks, a bank another program
+      left selected is switched to bank 0 for the read and put back. Gigabyte boards get what
+      every Gigabyte mapping in LibreHardwareMonitor shares (System, Chipset, CPU, PCIe x16, VRM
+      MOS; CPU Fan and System Fan 1 to 3; Vcore, +3.3V, +12V and +5V through their dividers),
+      with X570's and B550's own arrangement; the rest keeps the chip's names. Not read: the
+      second ITE chip of many Gigabyte boards (an IT8792E or IT87952E at 0x4E), which sits
+      behind the board's embedded controller. Read-only: no ITE control is built.
+- [x] **Memory timings on AM4** (`ram::decode_ddr4`): Zen to Zen 3 with DDR4, the CPU's model
+      saying it (their controller has no type field, as Linux `amd64_edac` decides it), in the
+      ZenStates-Core field layout: the data rate in thirds of the reference clock (DDR4-3466 and
+      3733 shown as sold), 2T and gear-down, and tRFC, tRFC2 or tRFC4 by the refresh mode in
+      use. The Memory card shows DDR4's tRFC without a tRFCsb.
+- [x] **Memory timings on more Intel CPUs** (`ram::decode_intel` by `ImcLayout`), with memtest86+'s
+      readers: Comet Lake-S (10th gen desktop; Skylake's controller), Rocket Lake (11th gen;
+      Ice Lake's) and Meteor and Arrow Lake (Core Ultra 100 and 200S), beside Alder and Raptor
+      Lake: the data rate and CL-tRCD-tRP-tRAS. `IntelMCHBAR` maps each one's register window.
+- [x] **ASUS fan control: the write path and the first step of a board's check**
+      (`sio::control679x`): each PWM output's mode, duty and output registers (Linux
+      `nct6775`'s), taking an output by clearing its mode bits and keeping its tolerance,
+      every write read back, the BIOS state saved first with each output's mode, and only what
+      Clokrix took put back (outputs 6 and 7 report their curve's duty in their duty register).
+      Decision 24 stands: no ASUS board is on the allow-list, so the app drives none.
+      `clokrix-fans` dumps a NCT679x and `--try` sets one output of an ASUS board for 10 s, then
+      puts the BIOS state back: the first step of adding a board in
+      [`docs/control-safety.md`](docs/control-safety.md), which lists the new rules and tests.
+- [x] **NVAPI's offsets** (`gpu_tune::nvidia::Nvapi`): for a clock NVML gives no offset range,
+      and for one NVML refuses to set where NVAPI allows the same range, the P-state 2.0 calls
+      MSI Afterburner uses (`NvAPI_GPU_GetPstates20`'s structure from NVIDIA's MIT SDK, checked
+      field by field; `SetPstates20` by its id). The power limit stays NVML's; the service's
+      log names the interface each clock uses.
+- [x] **Extras from the rename:** the social preview (`assets/brand/clokrix-social.png`, 1280 ×
+      640, uploaded by hand: Settings → General → Social preview) and the README's note that the
+      name and logo are not covered by the code's licences. The relay's own domain stays open: it
+      needs a domain of the owner's.
+- [x] **`clokrix-live`** dumps an ITE chip's registers and names the memory controller layout
+      it read.
+- [x] **Found on reading it again before pushing:** Zen 2's Van Gogh and Mendocino run LPDDR5,
+      so they are not read as DDR4; a bank register that reads all ones (nothing answering) is
+      left alone; the NCT6687's restore refuses a NCT679x's saved state and the other way round.
+- [x] **Locally:** types, 295 frontend tests, 866 core tests and the service's, formatting,
+      clippy (Linux, and for Windows with the app).
+- [ ] **CI green** on the pushed commit.
+- [ ] **Field check (the owner)**: [`docs/field-check-2.3.md`](docs/field-check-2.3.md): the
+      owner's PC as before, NVAPI's or NVML's offsets on its card, the ASUS board's tries on the
+      Intel PC, and a Gigabyte board, AM4 or the newer Intel CPUs where one is at hand.
+- [ ] **The ASUS board on the allow-list**, from its tries, then the control field check on it
+      (decision 24).
+- [ ] **Version 2.3.0 and the release**, on the owner's go.
 
 ## Risks
 

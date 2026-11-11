@@ -71,16 +71,20 @@ release signs itself once SignPath Foundation has taken the project on
 
 Through PawnIO, Clokrix reads:
 - the CPU's temperatures and power on AMD Ryzen (Zen 1 to 5) and, from 2.1, Intel Core CPUs;
-- the fans, voltages and board temperatures of the Nuvoton NCT6687 that many MSI boards carry
-  and, from 2.1, of the Nuvoton NCT6791D to NCT6799D that most ASUS boards and many ASRock ones
-  carry (named for ASUS boards; others show the chip's own names);
+- the fans, voltages and board temperatures of the Nuvoton NCT6687 that many MSI boards carry;
+  from 2.1, of the Nuvoton NCT6791D to NCT6799D that most ASUS boards and many ASRock ones
+  carry (named for ASUS boards; others show the chip's own names); and from 2.3, of the ITE
+  IT8620E to IT8698E of Gigabyte boards (named for Gigabyte boards; the second ITE chip some of
+  them carry, with a few more fans, is not read);
 - the memory modules' temperatures (DDR5, and DDR4 modules that have a sensor) and the running
-  timings on AM5 (Ryzen 7000 and later) and, from 2.1, on Intel 12th to 14th gen (there CL,
-  tRCD, tRP and tRAS).
+  timings on AM5 (Ryzen 7000 and later); from 2.1 on Intel 12th to 14th gen; and from 2.3 on AM4
+  (Ryzen 1000 to 5000, DDR4) and on Intel's 10th gen desktop (Comet Lake), 11th gen (Rocket
+  Lake) and Core Ultra 200S (Arrow Lake). Intel's controllers give CL, tRCD, tRP and tRAS.
 
 Elsewhere Clokrix says those readings are not read, rather than asking for PawnIO (2.0.4). The
 Intel CPUs, the NCT679x and DDR4 on Intel have been checked on one PC so far
-([`docs/field-check-2.1.md`](docs/field-check-2.1.md)).
+([`docs/field-check-2.1.md`](docs/field-check-2.1.md)); 2.3's ITE chips and controllers have
+not run on such a PC yet ([`docs/field-check-2.3.md`](docs/field-check-2.3.md)).
 
 ## Fan and pump control
 
@@ -98,7 +102,9 @@ in the service, so it keeps going with the app closed. Safeguards:
   after a crash. If the control loop stalls for 10 s, the BIOS takes over until it recovers.
 
 Only boards that have been checked on real hardware can be controlled: today the MSI B650M
-GAMING PLUS WIFI (MS-7E24, Nuvoton NCT6687D). Every other board shows its fans read-only.
+GAMING PLUS WIFI (MS-7E24, Nuvoton NCT6687D). Every other board shows its fans read-only. From
+2.3 Clokrix can also drive the NCT679x of ASUS boards; each such board is added once it has had
+its own check, which starts with `clokrix-fans --try` (one header at a time, ten seconds each).
 [`docs/control-safety.md`](docs/control-safety.md) lists every safety rule with the code that
 enforces it, its tests and its result on that board.
 
@@ -107,8 +113,10 @@ enforces it, its tests and its result on that board.
 The **GPU tuning** view changes a card's core and memory clocks and its power limit: NVIDIA RTX
 20 to RTX 50 cards, and from 2.0 AMD Radeon RX 6000 to RX 9000 and Intel Arc A- and B-series
 cards, desktop and laptop. It is off until you turn it on and confirm, and it runs in the
-service through the maker's own driver interface, as the maker's tools do: NVML for NVIDIA,
-ADLX for AMD (as AMD Software), the Intel Graphics Control Library for Intel. Intel's driver
+service through the maker's own driver interface, as the maker's tools do: NVML for NVIDIA
+(from 2.3 NVAPI's P-state offsets, as MSI Afterburner sets them, for a clock NVML offers no
+range for or refuses to set), ADLX for AMD (as AMD Software), the Intel Graphics Control Library
+for Intel. Intel's driver
 offers no memory clock, and an Intel card's warranty waiver is set when you turn tuning on, as
 Intel asks of every tuning tool. The AMD and Intel parts have not yet run on a real card:
 [`docs/field-check-2.0.md`](docs/field-check-2.0.md).
@@ -498,6 +506,7 @@ Nothing on it changes the PC.
 | [`docs/field-check-2.0.md`](docs/field-check-2.0.md) | The field check of 2.0: notifications on Android and iPhone, the PC going quiet, AMD and Intel tuning |
 | [`docs/field-check-2.1.md`](docs/field-check-2.1.md) | The field check of 2.1: Intel CPU sensors, an ASUS board's Nuvoton chip, DDR4 on Intel |
 | [`docs/field-check-2.2.md`](docs/field-check-2.2.md) | The field check of 2.2: the update from Vyro to Clokrix, everything kept, the new name and logo, the phones paired again |
+| [`docs/field-check-2.3.md`](docs/field-check-2.3.md) | The field check of 2.3: Gigabyte boards' ITE chip, memory timings on AM4 and more Intel CPUs, an ASUS board's fan control tried, NVAPI's offsets |
 | [`docs/signing.md`](docs/signing.md) | Code signing (2.0): what the release does once SignPath is set up, and what only the owner can do |
 
 `clokrix-remote.exe` in the same artifact checks the service from the outside (state, connection,
@@ -510,6 +519,9 @@ option. Third-party components and their licenses, including PawnIO and PresentM
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md), with the full texts in
 [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) (regenerate both with
 `python3 scripts/third_party.py`; CI checks they are current).
+
+The name Clokrix and its logo and icon (`assets/brand/`) are the owner's and are not covered by
+these licences: a fork or copy of the code takes another name and another logo.
 
 ## Layout
 

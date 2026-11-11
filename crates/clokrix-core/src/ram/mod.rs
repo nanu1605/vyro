@@ -153,8 +153,9 @@ pub enum UmcLayout {
 /// The layout for an AMD CPU (family 0x17 to 0x1A).
 pub const fn umc_layout(family: u32, model: u32) -> UmcLayout {
     match (family, model) {
-        // Zen, Zen+ and Zen 2; Zen 3's Milan and Chagall, Vermeer and Cezanne.
-        (0x17, _) | (0x19, 0x00..=0x0F | 0x20..=0x2F | 0x50..=0x5F) => UmcLayout::Ddr4,
+        // Zen, Zen+ and Zen 2 up to Renoir and Matisse (Van Gogh and Mendocino, 0x90 and 0xA0,
+        // run LPDDR5); Zen 3's Milan and Chagall, Vermeer and Cezanne.
+        (0x17, 0x00..=0x8F) | (0x19, 0x00..=0x0F | 0x20..=0x2F | 0x50..=0x5F) => UmcLayout::Ddr4,
         _ => UmcLayout::Ddr5,
     }
 }
@@ -943,6 +944,11 @@ mod tests {
         assert_eq!(umc_layout(0x19, 0x21), UmcLayout::Ddr4, "Vermeer");
         assert_eq!(umc_layout(0x19, 0x50), UmcLayout::Ddr4, "Cezanne");
         assert_eq!(umc_layout(0x19, 0x44), UmcLayout::Ddr5, "Rembrandt");
+        assert_eq!(
+            umc_layout(0x17, 0xA0),
+            UmcLayout::Ddr5,
+            "Mendocino: LPDDR5, never read as DDR4"
+        );
         assert_eq!(umc_layout(0x19, 0x61), UmcLayout::Ddr5, "Raphael");
         assert_eq!(umc_layout(0x1A, 0x44), UmcLayout::Ddr5, "Granite Ridge");
     }

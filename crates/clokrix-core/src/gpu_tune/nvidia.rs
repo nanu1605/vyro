@@ -2,12 +2,126 @@
 //! vendor's tools do; NVML needs administrator rights to change them, so this runs only in the
 //! service. Ranges come from the driver: `nvmlDeviceGetClockOffsets` (P0) for the offsets and
 //! the power-limit constraints for the power limit. A setting without a range is left alone.
+//!
+//! From 2.3, NVAPI's P-state offsets ([`Nvapi`]) where NVML gives an offset no range, and where
+//! NVML refuses to set one that NVAPI allows over the same range (GeForce cards on some drivers):
+//! the interface MSI Afterburner uses. The power limit stays NVML's.
+
+use std::ffi::c_void;
 
 use nvml_wrapper::enum_wrappers::device::{Clock, PerformanceState};
+use nvml_wrapper::error::NvmlError;
 use nvml_wrapper::{Device, Nvml};
 
 use super::controller::TuneDevice;
+use super::ffi::nvapi as api;
 use super::{is_laptop, Clocks, Family, GpuInfo, Limits, Range, Settings, TuneCapability, Vendor};
+use crate::live::dll::Library;
+
+type QueryInterface = unsafe extern "C" fn(u32) -> *mut c_void;
+type Initialize = unsafe extern "C" fn() -> i32;
+type EnumPhysicalGpus = unsafe extern "C" fn(*mut [*mut c_void; 64], *mut u32) -> i32;
+type GetBusId = unsafe extern "C" fn(*mut c_void, *mut u32) -> i32;
+type Pstates20 = unsafe extern "C" fn(*mut c_void, *mut api::Pstates20) -> i32;
+
+/// One card's P-state offsets through NVAPI.
+struct Nvapi {
+    gpu: *mut c_void,
+    get: Pstates20,
+    set: Pstates20,
+    /// The structure version the driver took.
+    version: u32,
+}
+
+// SAFETY: the GPU handle is an opaque driver token valid for the life of the process, and the
+// card is used from one thread at a time (the tuning worker).
+unsafe impl Send for Nvapi {}
+
+impl Nvapi {
+    /// The card on PCI bus `bus`, if NVAPI loads, knows the P-state calls and reads its table.
+    fn open(bus: u32) -> Option<Self> {
+        let lib = Library::system32(api::DLL)?;
+        // SAFETY: the export's documented signature.
+        let qi: QueryInterface = unsafe { lib.get(c"nvapi_QueryInterface") }?;
+        let get = |id: u32| {
+            // SAFETY: a lookup by id; null when the driver does not know it.
+            let p = unsafe { qi(id) };
+            (!p.is_null()).then_some(p)
+        };
+        // SAFETY (the transmutes): each id is the function of the type it is given here.
+        let init: Initialize = unsafe { std::mem::transmute(get(api::ID_INITIALIZE)?) };
+        // SAFETY: no arguments; NVAPI counts its initializations.
+        if unsafe { init() } != api::OK {
+            return None;
+        }
+        let enum_gpus: EnumPhysicalGpus =
+            unsafe { std::mem::transmute(get(api::ID_ENUM_PHYSICAL_GPUS)?) };
+        let bus_id: GetBusId = unsafe { std::mem::transmute(get(api::ID_GET_BUS_ID)?) };
+        let read: Pstates20 = unsafe { std::mem::transmute(get(api::ID_GET_PSTATES20)?) };
+        let write: Pstates20 = unsafe { std::mem::transmute(get(api::ID_SET_PSTATES20)?) };
+        let mut gpus = [std::ptr::null_mut(); 64];
+        let mut count = 0u32;
+        // SAFETY: a 64-entry array and a count, as the call takes them.
+        if unsafe { enum_gpus(&mut gpus, &mut count) } != api::OK {
+            return None;
+        }
+        let gpu = gpus.into_iter().take(count.min(64) as usize).find(|&g| {
+            let mut b = 0u32;
+            // SAFETY: a handle from the enumeration and an out-pointer.
+            let status = unsafe { bus_id(g, &mut b) };
+            status == api::OK && b == bus
+        })?;
+        let version = api::VERSIONS.into_iter().find(|&version| {
+            let mut info = api::Pstates20 {
+                version,
+                ..api::Pstates20::default()
+            };
+            // SAFETY: a structure as large as every version the call takes.
+            let status = unsafe { read(gpu, &mut info) };
+            status == api::OK
+        })?;
+        Some(Self {
+            gpu,
+            get: read,
+            set: write,
+            version,
+        })
+    }
+
+    fn table(&self) -> Result<api::Pstates20, String> {
+        let mut info = api::Pstates20 {
+            version: self.version,
+            ..api::Pstates20::default()
+        };
+        // SAFETY: as in `open`.
+        match unsafe { (self.get)(self.gpu, &mut info) } {
+            api::OK => Ok(info),
+            e => Err(format!("NVAPI P-state read failed ({e})")),
+        }
+    }
+
+    /// The clock's P0 offset now and its range, MHz.
+    fn offset(&self, domain: u32) -> Option<(i32, Range)> {
+        let (now, min, max) = api::offset(&self.table().ok()?, domain)?;
+        Some((now, Range { min, max }))
+    }
+
+    fn set_offset(&self, domain: u32, mhz: i32) -> Result<(), String> {
+        let mut info = api::request(self.version, domain, mhz);
+        // SAFETY: a structure of the version the driver took for reading.
+        match unsafe { (self.set)(self.gpu, &mut info) } {
+            api::OK => Ok(()),
+            e => Err(format!("NVAPI offset failed ({e})")),
+        }
+    }
+}
+
+const fn domain(clock: Clock) -> u32 {
+    match clock {
+        Clock::Memory => api::CLOCK_MEMORY,
+        _ => api::CLOCK_GRAPHICS,
+    }
+}
 
 /// NVML from System32 (the DCH driver's copy) or NVIDIA's own folder, never the search path:
 /// the service runs as LocalSystem. The sensor readings load it the same way.
@@ -41,6 +155,9 @@ struct NvidiaCard {
     limits: Limits,
     /// The driver's default power limit, mW.
     default_mw: Option<u32>,
+    nvapi: Option<Nvapi>,
+    /// The core and memory offsets go through NVAPI rather than NVML.
+    via_nvapi: [bool; 2],
 }
 
 /// The first NVIDIA card Clokrix can tune (a laptop's or a desktop's discrete card).
@@ -71,12 +188,22 @@ pub fn open_device() -> Result<Box<dyn TuneDevice>, TuneCapability> {
             family,
             driver: nvml.sys_driver_version().unwrap_or_default(),
         };
-        // Offsets only through the per-P-state calls (R555 and later), which give their range.
-        let range = |clock| -> Option<Range> {
+        // Offsets through NVML's per-P-state calls (R555 and later), which give their range, or
+        // else through NVAPI's P-state table.
+        let nvml_range = |clock| -> Option<Range> {
             let o = device.clock_offset(clock, PerformanceState::Zero).ok()?;
             (o.max_clock_offset_mhz > o.min_clock_offset_mhz).then_some(Range {
                 min: o.min_clock_offset_mhz,
                 max: o.max_clock_offset_mhz,
+            })
+        };
+        let nvapi = device.pci_info().ok().and_then(|p| Nvapi::open(p.bus));
+        let mut via_nvapi = [false; 2];
+        let mut range = |clock: Clock| {
+            nvml_range(clock).or_else(|| {
+                let r = nvapi.as_ref()?.offset(domain(clock))?.1;
+                via_nvapi[usize::from(clock == Clock::Memory)] = true;
+                Some(r)
             })
         };
         let default_mw = device.power_management_limit_default().ok();
@@ -96,19 +223,33 @@ pub fn open_device() -> Result<Box<dyn TuneDevice>, TuneCapability> {
             power_default_w: default_mw.map(|mw| f64::from(mw) / 1000.0),
         };
         log::info!(
-            "gpu tuning: {} ({:?}, driver {}): core {:?}, memory {:?}, power {:?} %",
+            "gpu tuning: {} ({:?}, driver {}): core {:?}, memory {:?}, power {:?} %; offsets \
+             through {}{}",
             info.name,
             info.family,
             info.driver,
             limits.core,
             limits.mem,
-            limits.power
+            limits.power,
+            match via_nvapi {
+                [false, false] => "NVML",
+                [true, true] => "NVAPI",
+                [true, false] => "NVAPI (core) and NVML (memory)",
+                [false, true] => "NVML (core) and NVAPI (memory)",
+            },
+            if nvapi.is_some() {
+                ", NVAPI's at hand"
+            } else {
+                ""
+            },
         );
         return Ok(Box::new(NvidiaCard {
             device,
             info,
             limits,
             default_mw,
+            nvapi,
+            via_nvapi,
         }));
     }
     Err(match seen {
@@ -122,17 +263,66 @@ pub fn open_device() -> Result<Box<dyn TuneDevice>, TuneCapability> {
 }
 
 impl NvidiaCard {
+    fn slot(clock: Clock) -> usize {
+        usize::from(clock == Clock::Memory)
+    }
+
     fn offset(&self, clock: Clock) -> Result<i32, String> {
+        if self.via_nvapi[Self::slot(clock)] {
+            return self
+                .nvapi
+                .as_ref()
+                .and_then(|n| n.offset(domain(clock)))
+                .map(|(now, _)| now)
+                .ok_or_else(|| format!("{clock:?} offset: NVAPI read failed"));
+        }
         self.device
             .clock_offset(clock, PerformanceState::Zero)
             .map(|o| o.clock_offset_mhz)
             .map_err(|e| e.to_string())
     }
 
+    fn range(&self, clock: Clock) -> Option<Range> {
+        match clock {
+            Clock::Memory => self.limits.mem,
+            _ => self.limits.core,
+        }
+    }
+
     fn set_offset(&mut self, clock: Clock, mhz: i32) -> Result<(), String> {
-        self.device
+        let slot = Self::slot(clock);
+        if self.via_nvapi[slot] {
+            let n = self.nvapi.as_ref().ok_or("NVAPI is not loaded")?;
+            return n
+                .set_offset(domain(clock), mhz)
+                .map_err(|e| format!("{clock:?} offset: {e}"));
+        }
+        match self
+            .device
             .set_clock_offset(clock, PerformanceState::Zero, mhz)
-            .map_err(|e| format!("{clock:?} offset: {e}"))
+        {
+            Ok(()) => Ok(()),
+            // NVML refuses offsets on this card: NVAPI takes over the clock, but only where it
+            // allows the same range, so the presets made for this card still mean the same.
+            Err(e @ (NvmlError::NotSupported | NvmlError::NoPermission)) => {
+                let same = self
+                    .nvapi
+                    .as_ref()
+                    .and_then(|n| n.offset(domain(clock)))
+                    .is_some_and(|(_, r)| Some(r) == self.range(clock));
+                let n = self
+                    .nvapi
+                    .as_ref()
+                    .filter(|_| same)
+                    .ok_or_else(|| format!("{clock:?} offset: {e}"))?;
+                n.set_offset(domain(clock), mhz)
+                    .map_err(|e| format!("{clock:?} offset: {e}"))?;
+                self.via_nvapi[slot] = true;
+                log::info!("gpu tuning: NVML refused the {clock:?} offset ({e}); NVAPI sets it");
+                Ok(())
+            }
+            Err(e) => Err(format!("{clock:?} offset: {e}")),
+        }
     }
 
     fn set_power(&mut self, pct: i32) -> Result<(), String> {

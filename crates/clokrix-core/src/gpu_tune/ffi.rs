@@ -1,9 +1,11 @@
 //! The makers' C interfaces GPU tuning calls (2.0), as their headers lay them out: AMD's ADLX (each
 //! object a table of methods, called by their place in it) and Intel's control library (plain
-//! functions and structures). Apart from the calls ([`super::amd`], [`super::intel`]), so the
-//! layouts are checked on every platform. Every value comes from the makers' headers compiled for
-//! 64-bit Windows: ADLX SDK 2.0.0.125 (`ISystem.h`, `ISystem2.h`, `IGPUTuning.h`,
-//! `IGPUManual*Tuning.h`) and IGCL 1.1 (`igcl_api.h`), offsets read with `offsetof`.
+//! functions and structures), and from 2.3 NVIDIA's NVAPI P-state calls. Apart from the calls
+//! ([`super::amd`], [`super::intel`], `super::nvidia`), so the layouts are checked on every
+//! platform. Every value comes from the makers' headers compiled for 64-bit Windows: ADLX SDK
+//! 2.0.0.125 (`ISystem.h`, `ISystem2.h`, `IGPUTuning.h`, `IGPUManual*Tuning.h`), IGCL 1.1
+//! (`igcl_api.h`) and the NVAPI SDK (`nvapi.h`, `nvapi_interface.h`), offsets read with
+//! `offsetof`.
 
 /// AMD's ADLX.
 pub mod adlx {
@@ -291,6 +293,127 @@ pub mod igcl {
     }
 }
 
+/// NVIDIA's NVAPI (2.3): the P-state 2.0 calls MSI Afterburner and NVIDIA Inspector change clock
+/// offsets with, for a card whose NVML offers no offsets or refuses them. `NvAPI_GPU_GetPstates20`
+/// and its structure are in NVIDIA's public SDK (MIT); `NvAPI_GPU_SetPstates20` takes the same
+/// structure and is reached by its id, as those tools reach it.
+pub mod nvapi {
+    pub const DLL: &str = "nvapi64.dll";
+    pub const ID_INITIALIZE: u32 = 0x0150_E828;
+    pub const ID_ENUM_PHYSICAL_GPUS: u32 = 0xE5AC_921F;
+    pub const ID_GET_BUS_ID: u32 = 0x1BE0_B8E5;
+    pub const ID_GET_PSTATES20: u32 = 0x6FF8_1213;
+    pub const ID_SET_PSTATES20: u32 = 0x0F4D_AE6B;
+    pub const OK: i32 = 0;
+    pub const INCOMPATIBLE_STRUCT_VERSION: i32 = -9;
+    /// `NV_GPU_PUBLIC_CLOCK_ID`.
+    pub const CLOCK_GRAPHICS: u32 = 0;
+    pub const CLOCK_MEMORY: u32 = 4;
+    pub const PSTATE_P0: u32 = 0;
+    /// Bit 0 of an entry's flags word: `bIsEditable`.
+    const EDITABLE: u32 = 1;
+
+    /// `NV_GPU_PERF_PSTATES20_PARAM_DELTA`: the offset now and its range (kHz for a clock).
+    #[repr(C)]
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+    pub struct ParamDelta {
+        pub value: i32,
+        pub min: i32,
+        pub max: i32,
+    }
+
+    /// `NV_GPU_PSTATE20_CLOCK_ENTRY_V1`; `data` is its union (one frequency, or a range and its
+    /// voltages).
+    #[repr(C)]
+    #[derive(Debug, Default, Clone, Copy)]
+    pub struct ClockEntry {
+        pub domain_id: u32,
+        pub type_id: u32,
+        pub flags: u32,
+        pub freq_delta_khz: ParamDelta,
+        pub data: [u32; 5],
+    }
+
+    /// `NV_GPU_PSTATE20_BASE_VOLTAGE_ENTRY_V1`.
+    #[repr(C)]
+    #[derive(Debug, Default, Clone, Copy)]
+    pub struct VoltageEntry {
+        pub domain_id: u32,
+        pub flags: u32,
+        pub volt_uv: u32,
+        pub volt_delta_uv: ParamDelta,
+    }
+
+    /// One P-state of [`Pstates20`].
+    #[repr(C)]
+    #[derive(Debug, Default, Clone, Copy)]
+    pub struct Pstate {
+        pub pstate_id: u32,
+        pub flags: u32,
+        pub clocks: [ClockEntry; 8],
+        pub base_voltages: [VoltageEntry; 4],
+    }
+
+    /// `NV_GPU_PERF_PSTATES20_INFO_V2` (version 2 or 3; version 1 is it without the last two
+    /// fields).
+    #[repr(C)]
+    #[derive(Debug, Default, Clone, Copy)]
+    pub struct Pstates20 {
+        pub version: u32,
+        pub flags: u32,
+        pub num_pstates: u32,
+        pub num_clocks: u32,
+        pub num_base_voltages: u32,
+        pub pstates: [Pstate; 16],
+        pub ov_num_voltages: u32,
+        pub ov_voltages: [VoltageEntry; 4],
+    }
+
+    /// `MAKE_NVAPI_VERSION`: the structure's size, and the version in the high word.
+    pub const fn version(size: usize, n: u32) -> u32 {
+        size as u32 | n << 16
+    }
+    /// Versions 3 and 2 of the structure, then version 1 (7,316 bytes), newest first.
+    pub const VERSIONS: [u32; 3] = [
+        version(size_of::<Pstates20>(), 3),
+        version(size_of::<Pstates20>(), 2),
+        version(
+            size_of::<Pstates20>() - 4 - 4 * size_of::<VoltageEntry>(),
+            1,
+        ),
+    ];
+
+    /// A clock's P0 offset: now, and the range the driver allows, in MHz. `None` when P0 or its
+    /// entry for the clock is not editable, or the range is empty.
+    pub fn offset(info: &Pstates20, domain: u32) -> Option<(i32, i32, i32)> {
+        let states = &info.pstates[..(info.num_pstates as usize).min(16)];
+        let p0 = states
+            .iter()
+            .find(|p| p.pstate_id == PSTATE_P0 && p.flags & EDITABLE != 0)?;
+        let clocks = &p0.clocks[..(info.num_clocks as usize).min(8)];
+        let d = clocks
+            .iter()
+            .find(|c| c.domain_id == domain && c.flags & EDITABLE != 0)?
+            .freq_delta_khz;
+        (d.max > d.min).then_some((d.value / 1000, d.min / 1000, d.max / 1000))
+    }
+
+    /// The request that sets one clock's P0 offset to `mhz`, as those tools write it: one P-state,
+    /// one clock, every other field zero.
+    pub fn request(version: u32, domain: u32, mhz: i32) -> Pstates20 {
+        let mut info = Pstates20 {
+            version,
+            num_pstates: 1,
+            num_clocks: 1,
+            ..Pstates20::default()
+        };
+        info.pstates[0].pstate_id = PSTATE_P0;
+        info.pstates[0].clocks[0].domain_id = domain;
+        info.pstates[0].clocks[0].freq_delta_khz.value = mhz.saturating_mul(1000);
+        info
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::mem::offset_of;
@@ -381,6 +504,64 @@ mod tests {
         assert!(power_range(&p).is_none(), "no default, no percentage");
         p.power_limit = info(false, UNITS_WATTS, 95.0, 228.0, 190.0);
         assert!(power_range(&p).is_none());
+    }
+
+    /// The offsets `offsetof` gives for `nvapi.h`'s structures on 64-bit Windows, and the
+    /// version words tools use (0x11C94 is version 1's).
+    #[test]
+    fn nvapi_structures_are_laid_out_as_its_header() {
+        use nvapi::*;
+        assert_eq!(size_of::<ParamDelta>(), 12);
+        assert_eq!(size_of::<ClockEntry>(), 44);
+        assert_eq!(offset_of!(ClockEntry, freq_delta_khz), 12);
+        assert_eq!(size_of::<VoltageEntry>(), 24);
+        assert_eq!(size_of::<Pstate>(), 456);
+        assert_eq!(offset_of!(Pstate, base_voltages), 360);
+        assert_eq!(size_of::<Pstates20>(), 7416);
+        assert_eq!(offset_of!(Pstates20, pstates), 20);
+        assert_eq!(offset_of!(Pstates20, ov_num_voltages), 7316);
+        assert_eq!(VERSIONS, [0x3_1CF8, 0x2_1CF8, 0x1_1C94]);
+    }
+
+    /// A constructed P-state table as a GeForce driver reports it: P0 editable, the graphics
+    /// clock at +0 with -1,000 to +1,000 MHz allowed, the memory clock at +200 with -1,000 to
+    /// +3,000; P8 not editable.
+    #[test]
+    fn nvapi_offsets_from_the_p_state_table() {
+        use nvapi::*;
+        let mut info = Pstates20 {
+            num_pstates: 2,
+            num_clocks: 2,
+            ..Pstates20::default()
+        };
+        let clock = |domain, value, min, max| ClockEntry {
+            domain_id: domain,
+            flags: 1,
+            freq_delta_khz: ParamDelta { value, min, max },
+            ..ClockEntry::default()
+        };
+        info.pstates[0].pstate_id = 8;
+        info.pstates[1].pstate_id = PSTATE_P0;
+        info.pstates[1].flags = 1;
+        info.pstates[1].clocks[0] = clock(CLOCK_GRAPHICS, 0, -1_000_000, 1_000_000);
+        info.pstates[1].clocks[1] = clock(CLOCK_MEMORY, 200_000, -1_000_000, 3_000_000);
+        assert_eq!(offset(&info, CLOCK_GRAPHICS), Some((0, -1000, 1000)));
+        assert_eq!(offset(&info, CLOCK_MEMORY), Some((200, -1000, 3000)));
+        assert_eq!(offset(&info, 7), None, "no such clock");
+        info.pstates[1].clocks[1].flags = 0;
+        assert_eq!(offset(&info, CLOCK_MEMORY), None, "not editable");
+        info.pstates[1].flags = 0;
+        assert_eq!(offset(&info, CLOCK_GRAPHICS), None, "P0 not editable");
+        info.pstates[1].flags = 1;
+        info.num_clocks = 0;
+        assert_eq!(offset(&info, CLOCK_GRAPHICS), None, "no clocks reported");
+
+        let r = request(VERSIONS[2], CLOCK_MEMORY, -150);
+        assert_eq!((r.version, r.num_pstates, r.num_clocks), (0x1_1C94, 1, 1));
+        assert_eq!(r.pstates[0].pstate_id, PSTATE_P0);
+        assert_eq!(r.pstates[0].clocks[0].domain_id, CLOCK_MEMORY);
+        assert_eq!(r.pstates[0].clocks[0].freq_delta_khz.value, -150_000);
+        assert_eq!(r.num_base_voltages, 0);
     }
 
     #[test]
