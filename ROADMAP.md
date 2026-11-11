@@ -2297,7 +2297,7 @@ the phone app in 1.4), Connect and Disconnect for all Bluetooth devices, and an 
 auto-adjusts for text. Their devices: Bluetooth audio, a Logitech receiver, a game controller,
 another maker's dongle, and a USB condenser microphone.
 - [x] Built (2026-10-17):
-      - **Names** (the owner: "Settings shows the names, Clokrix says Unknown device").
+      - **Names** (the owner: "Settings shows the names, Vyro says Unknown device").
         - Cause, shown by a new Windows test on CI's runner before the fix: 45 of 58 present
           devices lost their name. The device query was asked for unlocalized properties, so
           descriptions came back as unresolved indirect strings (type 25), friendly names came
@@ -2382,7 +2382,7 @@ another maker's dongle, and a USB condenser microphone.
       1.3 is not released on its own: it shipped in 1.4.0 (2026-10-18, decision 35).
 
 ### 1.4.0 — the phone app, from anywhere
-The owner's request after 1.2.0 (2026-10-17): "a Clokrix app for the phone, Android and iOS, to
+The owner's request after 1.2.0 (2026-10-17): "a Vyro app for the phone, Android and iOS, to
 check the PC from anywhere, whatever network it is on". Their choices: an installable web app (no
 app stores), through a Clokrix relay on Cloudflare Workers in their free account, end to end
 encrypted (decision 34); built on its own branch, `claude/vyro-1.4`, while 1.3 waits for its

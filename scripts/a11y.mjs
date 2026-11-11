@@ -187,7 +187,7 @@ async function axe(page, where) {
 }
 
 /**
- * Nothing scrolls sideways (2.0.2: "no horizontal scrolling throughout clokrix"): not the window,
+ * Nothing scrolls sideways (2.0.2: the owner asked for no horizontal scrolling anywhere): not the window,
  * measured with the frame's clip lifted so what it hides still counts, and no area in it (a table
  * in a card, a dialog's list) from 480 px, the narrowest the window gets (tauri.conf.json), or at
  * any width with `inner`.
