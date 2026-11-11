@@ -4,11 +4,12 @@
 //! other; with neither `init` fails and the memory fields it owns stay empty.
 
 use super::{
-    channel_active, channel_offset, decode_ddr5, decode_intel, dram_type, has_sensor, intel_imc,
-    is_spd5_hub, is_tse2004, slot_name, spd5_temp, tsod_temp, DramType, DDR5_REGS, INTEL_REGS,
-    MAX_CHANNELS, MR_CAPABILITY, MR_DEVICE_TYPE_LSB, MR_DEVICE_TYPE_MSB, MR_TS_CONFIG, MR_TS_SENSE,
-    SPD_FIRST, SPD_LAST, TSOD_FIRST, TSOD_LAST, TS_CAPABILITY, TS_CONFIG, TS_DEVICE,
-    TS_MANUFACTURER, TS_TEMPERATURE, UMC_CONFIG, UMC_CTRL, UMC_DIMM_CS,
+    channel_active, channel_offset, decode_ddr4, decode_ddr5, decode_intel, dram_type, has_sensor,
+    intel_layout, intel_regs, is_spd5_hub, is_tse2004, slot_name, spd5_temp, tsod_temp, umc_layout,
+    DramType, ImcLayout, UmcLayout, DDR4_REGS, DDR5_REGS, MAX_CHANNELS, MR_CAPABILITY,
+    MR_DEVICE_TYPE_LSB, MR_DEVICE_TYPE_MSB, MR_TS_CONFIG, MR_TS_SENSE, SPD_FIRST, SPD_LAST,
+    TSOD_FIRST, TSOD_LAST, TS_CAPABILITY, TS_CONFIG, TS_DEVICE, TS_MANUFACTURER, TS_TEMPERATURE,
+    UMC_CONFIG, UMC_CTRL, UMC_DIMM_CS,
 };
 use crate::pawnio::{BusLock, Handle, Module, PawnIoError, MUTEX_PCI, MUTEX_SMBUS};
 use crate::provider::{BoxError, Provider};
@@ -184,25 +185,31 @@ fn smn(io: &Handle, addr: u32) -> Option<u32> {
         .and_then(|v| u32::try_from(v & 0xFFFF_FFFF).ok())
 }
 
-/// Registers of every populated DDR5 channel. Call with the PCI mutex held.
-pub fn read_umc(io: &Handle) -> Vec<UmcRaw> {
+/// Registers of every populated channel with the layout's memory: DDR4 on the controllers that
+/// only run DDR4, DDR5 where the type field says so. Call with the PCI mutex held.
+pub fn read_umc(io: &Handle, layout: UmcLayout) -> Vec<UmcRaw> {
     (0..MAX_CHANNELS)
         .filter_map(|ch| {
             let off = channel_offset(ch);
             let r = |a: u32| smn(io, off | a);
             let active = channel_active(r(UMC_CTRL)?, r(UMC_DIMM_CS[0])?, r(UMC_DIMM_CS[1])?);
-            (active && dram_type(r(UMC_CONFIG)?) == DramType::Ddr5).then(|| UmcRaw {
+            let regs: &[u32] = match layout {
+                UmcLayout::Ddr4 => &DDR4_REGS,
+                UmcLayout::Ddr5 if dram_type(r(UMC_CONFIG)?) == DramType::Ddr5 => &DDR5_REGS,
+                UmcLayout::Ddr5 => return None,
+            };
+            active.then(|| UmcRaw {
                 channel: ch,
-                regs: DDR5_REGS.iter().map(|&a| (a, r(a).unwrap_or(0))).collect(),
+                regs: regs.iter().map(|&a| (a, r(a).unwrap_or(0))).collect(),
             })
         })
         .collect()
 }
 
-/// The Intel memory controller's registers [`decode_intel`] reads (MCHBAR, memory-mapped: no
-/// shared port, so no mutex).
-pub fn read_imc(io: &Handle) -> Vec<(u32, u32)> {
-    INTEL_REGS
+/// The Intel memory controller's registers [`decode_intel`] reads for its layout (MCHBAR,
+/// memory-mapped: no shared port, so no mutex).
+pub fn read_imc(io: &Handle, layout: ImcLayout) -> Vec<(u32, u32)> {
+    intel_regs(layout)
         .iter()
         .filter_map(|&a| {
             let v = io.exec1("ioctl_read_dword", &[u64::from(a)]).ok()?;
@@ -214,19 +221,23 @@ pub fn read_imc(io: &Handle) -> Vec<(u32, u32)> {
 /// Which memory controller the timings come from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Imc {
-    Amd,
-    Intel,
+    Amd(UmcLayout),
+    Intel(ImcLayout),
 }
 
 /// Timings of the first populated channel (channels run the same profile).
 fn timings(io: &Handle, imc: Imc) -> Option<MemTimings> {
     match imc {
-        Imc::Amd => read_umc(io)
-            .iter()
-            .find_map(|c| decode_ddr5(|a| c.regs.iter().find(|r| r.0 == a).map_or(0, |r| r.1))),
-        Imc::Intel => {
-            let regs = read_imc(io);
-            decode_intel(|a| regs.iter().find(|r| r.0 == a).map(|r| r.1))
+        Imc::Amd(layout) => read_umc(io, layout).iter().find_map(|c| {
+            let read = |a| c.regs.iter().find(|r| r.0 == a).map_or(0, |r| r.1);
+            match layout {
+                UmcLayout::Ddr4 => decode_ddr4(read),
+                UmcLayout::Ddr5 => decode_ddr5(read),
+            }
+        }),
+        Imc::Intel(layout) => {
+            let regs = read_imc(io, layout);
+            decode_intel(layout, |a| regs.iter().find(|r| r.0 == a).map(|r| r.1))
         }
     }
 }
@@ -280,8 +291,8 @@ impl RamProvider {
             self.tries += 1;
             self.timings = match imc {
                 // SMN goes through a PCI index/data pair other tools share.
-                Imc::Amd => self.pci.hold(wait_ms, || timings(io, *imc)).flatten(),
-                Imc::Intel => timings(io, *imc),
+                Imc::Amd(_) => self.pci.hold(wait_ms, || timings(io, *imc)).flatten(),
+                Imc::Intel(_) => timings(io, *imc),
             };
         }
     }
@@ -360,11 +371,14 @@ impl Provider for RamProvider {
     fn init(&mut self, reg: &mut Registry) -> Result<(), BoxError> {
         let id = crate::hwid::cpuid::read_live();
         let imc = if crate::amd::supported(&id.vendor, id.family) {
-            Some((Module::AmdFamily17, Imc::Amd))
-        } else if intel_imc(id.family, id.model) && id.vendor == "GenuineIntel" {
-            Some((Module::IntelMchbar, Imc::Intel))
+            Some((
+                Module::AmdFamily17,
+                Imc::Amd(umc_layout(id.family, id.model)),
+            ))
         } else {
-            None
+            intel_layout(id.family, id.model)
+                .filter(|_| id.vendor == "GenuineIntel")
+                .map(|layout| (Module::IntelMchbar, Imc::Intel(layout)))
         };
         if let Some((module, imc)) = imc {
             match Handle::open(module) {

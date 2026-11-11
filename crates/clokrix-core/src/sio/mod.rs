@@ -1,17 +1,21 @@
 //! Motherboard Super-I/O hardware monitor through PawnIO's `LpcIO` module (Phase 6c): fans,
 //! board temperatures and voltages. Started with the Nuvoton NCT6687D(-R) that MSI uses on AM5
 //! and LGA1700/1851 boards; from 2.1 also the Nuvoton NCT6791D to NCT6799D of most ASUS boards
-//! and many ASRock ones ([`nct679x`]). Decoders and board layouts here are pure; `win` does the
-//! port I/O. The NCT6687's layout follows LibreHardwareMonitor's `Nct677X` and the Linux
-//! `nct6687d` driver.
+//! and many ASRock ones ([`nct679x`]); from 2.3 the ITE IT8620E to IT8698E of Gigabyte boards
+//! ([`ite`]). Decoders and board layouts here are pure; `win` does the port I/O. The NCT6687's
+//! layout follows LibreHardwareMonitor's `Nct677X` and the Linux `nct6687d` driver.
 //!
 //! Monitoring only reads: Clokrix never writes the chip's monitor-enable registers, so a board whose
 //! firmware left monitoring off simply reports nothing. One exception (2.1): on a NCT679x whose
 //! firmware locked the monitor's I/O ports, so that nothing can be read, the lock bit is cleared,
-//! as Linux `nct6775` and LibreHardwareMonitor do; nothing else about the chip changes. Fan
-//! control (`control`, Phase 12) writes only the fan registers, only on allow-listed boards.
+//! as Linux `nct6775` and LibreHardwareMonitor do; nothing else about the chip changes. Register
+//! banks are selected to read, and put back (an ITE chip's) or left at bank 0 (a NCT679x's). Fan
+//! control (`control`, Phase 12; `control679x` for the NCT679x, 2.3) writes only the fan
+//! registers, only on allow-listed boards.
 
 pub mod control;
+pub mod control679x;
+pub mod ite;
 pub mod nct679x;
 #[cfg(windows)]
 mod win;
@@ -63,6 +67,29 @@ pub enum Chip {
     Nct6799,
     /// ASUS's newest (X870, B850): read as a NCT6799D, as Linux `nct6775` reads it.
     Nct6701,
+    /// Gigabyte's (2.3): 9- and 100-series boards.
+    It8620,
+    It8628,
+    /// AM4 and Intel 300/400-series boards.
+    It8686,
+    /// X570, B550, Z390 and Z490 boards.
+    It8688,
+    /// AM5 (B650, X670) and LGA1700 (Z690 to B760) boards.
+    It8689,
+    /// X870, B850 and Z890 boards.
+    It8696,
+    It8698,
+}
+
+/// How a chip's monitor registers are reached.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Family {
+    /// The NCT6687's EC space: page, index, data.
+    Nct6687,
+    /// A NCT679x's banks: bank select, then address and data.
+    Nct679x,
+    /// An ITE environment controller: address and data, bank 0.
+    Ite,
 }
 
 impl Chip {
@@ -78,30 +105,51 @@ impl Chip {
             Self::Nct6798 => "Nuvoton NCT6798D",
             Self::Nct6799 => "Nuvoton NCT6799D",
             Self::Nct6701 => "Nuvoton NCT6701D",
+            Self::It8620 => "ITE IT8620E",
+            Self::It8628 => "ITE IT8628E",
+            Self::It8686 => "ITE IT8686E",
+            Self::It8688 => "ITE IT8688E",
+            Self::It8689 => "ITE IT8689E",
+            Self::It8696 => "ITE IT8696E",
+            Self::It8698 => "ITE IT8698E",
         }
     }
 
-    /// A banked NCT679x rather than the NCT6687's EC space.
-    pub const fn banked(self) -> bool {
-        !matches!(self, Self::Nct6687)
+    pub const fn family(self) -> Family {
+        match self {
+            Self::Nct6687 => Family::Nct6687,
+            Self::It8620
+            | Self::It8628
+            | Self::It8686
+            | Self::It8688
+            | Self::It8689
+            | Self::It8696
+            | Self::It8698 => Family::Ite,
+            _ => Family::Nct679x,
+        }
     }
 
-    /// Name of a temperature channel (the NCT6687's) or source (a NCT679x's) no board layout
-    /// names.
+    /// A banked NCT679x rather than the NCT6687's EC space or an ITE chip.
+    pub const fn banked(self) -> bool {
+        matches!(self.family(), Family::Nct679x)
+    }
+
+    /// Name of a temperature channel (the NCT6687's), source (a NCT679x's) or input (an ITE
+    /// chip's) no board layout names.
     pub fn temp_name(self, n: u16) -> String {
-        if self.banked() {
-            nct679x::source_name(n)
-        } else {
-            format!("TMPIN{n}")
+        match self.family() {
+            Family::Nct6687 => format!("TMPIN{n}"),
+            Family::Nct679x => nct679x::source_name(n),
+            Family::Ite => ite::temp_name(n),
         }
     }
 
     /// Name of a voltage input no board layout names.
     pub fn voltage_name(self, n: u16) -> String {
-        if self.banked() {
-            nct679x::input_name(n)
-        } else {
-            voltage_channel(n).0
+        match self.family() {
+            Family::Nct6687 => voltage_channel(n).0,
+            Family::Nct679x => nct679x::input_name(n),
+            Family::Ite => ite::input_name(n),
         }
     }
 }
@@ -172,12 +220,13 @@ pub enum BoardTemp {
 /// name when they read something.
 #[derive(Debug, Clone, Copy)]
 pub struct Layout {
-    /// Temperatures by channel (NCT6687) or source (NCT679x): name and where it goes.
+    /// Temperatures by channel (NCT6687), source (NCT679x) or input (ITE): name and where it
+    /// goes.
     pub temps: &'static [(u16, &'static str, BoardTemp)],
     pub fans: &'static [(u16, &'static str, FanKind)],
     /// Voltage channels named on this board: channel (the NCT6687's register 0x120 + 2n, the
-    /// NCT679x's input n), name and the board's divider (the NCT6687's +12V/+5V scaling is
-    /// universal and already applied).
+    /// NCT679x's or ITE chip's input n), name and the board's divider (the NCT6687's +12V/+5V
+    /// scaling is universal and already applied).
     pub volts: &'static [(u16, &'static str, f64)],
     /// The list is every voltage checked on this board: show only these. Otherwise the others
     /// show under the chip's names when they read something.
@@ -249,14 +298,16 @@ pub const ASUS_NCT679X: Layout = Layout {
 
 /// Layout for a board, from the SMBIOS board manufacturer and product.
 pub fn layout(manufacturer: Option<&str>, product: Option<&str>, chip: Chip) -> Option<Layout> {
-    let msi = manufacturer.is_some_and(|m| m.contains("Micro-Star") || m.contains("MSI"));
-    let asus = manufacturer.is_some_and(|m| m.to_ascii_uppercase().contains("ASUSTEK"));
+    let maker = manufacturer
+        .map(str::to_ascii_uppercase)
+        .unwrap_or_default();
+    let msi = maker.contains("MICRO-STAR") || maker.contains("MSI");
     let product = product.unwrap_or("");
-    match chip {
-        Chip::Nct6687 if msi && product.contains("MS-7E24") => Some(MSI_B650M_GAMING_PLUS_WIFI),
-        Chip::Nct6687 if msi => Some(MSI_NCT6687),
-        Chip::Nct6687 => None,
-        _ if asus => Some(ASUS_NCT679X),
+    match chip.family() {
+        Family::Nct6687 if msi && product.contains("MS-7E24") => Some(MSI_B650M_GAMING_PLUS_WIFI),
+        Family::Nct6687 if msi => Some(MSI_NCT6687),
+        Family::Nct679x if maker.contains("ASUSTEK") => Some(ASUS_NCT679X),
+        Family::Ite if maker.contains("GIGABYTE") => Some(ite::gigabyte(product)),
         _ => None,
     }
 }
@@ -387,6 +438,10 @@ mod tests {
         assert_eq!(identify(0xFF, 0xFF), None);
         assert!(Chip::Nct6798.banked());
         assert!(!Chip::Nct6687.banked());
+        assert!(!Chip::It8689.banked());
+        assert_eq!(Chip::It8689.family(), Family::Ite);
+        assert_eq!(Chip::Nct6701.family(), Family::Nct679x);
+        assert_eq!(Chip::Nct6687.family(), Family::Nct6687);
         assert_eq!(Chip::Nct6798.name(), "Nuvoton NCT6798D");
     }
 
@@ -406,6 +461,24 @@ mod tests {
         assert_eq!(Chip::Nct6687.temp_name(4), "TMPIN4");
         assert_eq!(Chip::Nct6798.voltage_name(4), "VIN0");
         assert_eq!(Chip::Nct6687.voltage_name(4), "VIN4");
+        assert_eq!(Chip::It8689.voltage_name(7), "+3.3V Standby");
+        assert_eq!(Chip::It8689.temp_name(0), "TMPIN1");
+    }
+
+    #[test]
+    fn gigabyte_boards_with_an_ite_chip_get_the_gigabyte_layout() {
+        let gb = Some("Gigabyte Technology Co., Ltd.");
+        let l = layout(gb, Some("B650 AORUS ELITE AX"), Chip::It8689).expect("gigabyte");
+        assert_eq!(l.temps[4], (4, "VRM MOS", BoardTemp::VrmMos));
+        assert_eq!(l.fans[0], (0, "CPU Fan", FanKind::Fan));
+        let x570 = layout(gb, Some("X570 AORUS ELITE"), Chip::It8688).expect("x570");
+        assert_eq!(x570.fans[3].1, "Chipset Fan");
+        assert!(layout(Some("ASRock"), None, Chip::It8689).is_none());
+        assert!(
+            layout(gb, None, Chip::Nct6798).is_none(),
+            "a Nuvoton chip on Gigabyte"
+        );
+        assert!(layout(None, None, Chip::It8686).is_none());
     }
 
     #[test]

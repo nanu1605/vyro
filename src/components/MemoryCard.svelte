@@ -30,7 +30,8 @@
       ['tWTR S / L', two(t.wtrS, t.wtrL)],
       ['tWR / tRTP', two(t.wr, t.rtp)],
       ['tCWL', one(t.cwl)],
-      ['tRFC / tRFCsb', two(t.rfc, t.rfcSb)],
+      // DDR4 has no same-bank refresh: its tRFC stands alone.
+      t.rfcSb ? ['tRFC / tRFCsb', two(t.rfc, t.rfcSb)] : ['tRFC', one(t.rfc)],
       ['tREFI', one(t.refi)],
     ];
     return rows.filter(([, v]) => v != null);

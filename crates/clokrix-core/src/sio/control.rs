@@ -42,10 +42,31 @@ pub struct Header {
     pub min_pct: u8,
 }
 
+/// A board maker, as SMBIOS names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Maker {
+    Msi,
+    Asus,
+}
+
+impl Maker {
+    /// The SMBIOS baseboard manufacturer is this maker.
+    pub fn matches(self, manufacturer: Option<&str>) -> bool {
+        let m = manufacturer
+            .map(str::to_ascii_uppercase)
+            .unwrap_or_default();
+        match self {
+            Self::Msi => m.contains("MICRO-STAR") || m.contains("MSI"),
+            Self::Asus => m.contains("ASUSTEK"),
+        }
+    }
+}
+
 /// A board whose fan control has been checked on real hardware.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Board {
     pub name: &'static str,
+    pub maker: Maker,
     /// SMBIOS baseboard product contains this.
     pub product: &'static str,
     pub chip: Chip,
@@ -69,6 +90,7 @@ const fn fan(index: u16, name: &'static str) -> Header {
 /// here only after its own field check.
 pub const ALLOW_LIST: &[Board] = &[Board {
     name: "MSI B650M GAMING PLUS WIFI",
+    maker: Maker::Msi,
     product: "MS-7E24",
     chip: Chip::Nct6687,
     chip_rev: 0x92,
@@ -111,16 +133,42 @@ pub fn capability(
     manufacturer: Option<&str>,
     product: Option<&str>,
 ) -> Result<&'static Board, ReadOnly> {
-    let msi = manufacturer.is_some_and(|m| m.contains("Micro-Star") || m.contains("MSI"));
     let product = product.unwrap_or("");
     let board = ALLOW_LIST
         .iter()
-        .find(|b| b.chip == chip && msi && product.contains(b.product))
+        .find(|b| b.chip == chip && b.maker.matches(manufacturer) && product.contains(b.product))
         .ok_or(ReadOnly::UnvalidatedBoard)?;
     if board.chip_rev != rev {
         return Err(ReadOnly::UnvalidatedRevision);
     }
     Ok(board)
+}
+
+/// Outputs a NCT679x board offers `clokrix-fans --try` before its field check, by PWM number.
+const TRY_679X: [Header; 7] = [
+    fan(0, "PWM 1"),
+    fan(1, "PWM 2"),
+    fan(2, "PWM 3"),
+    fan(3, "PWM 4"),
+    fan(4, "PWM 5"),
+    fan(5, "PWM 6"),
+    fan(6, "PWM 7"),
+];
+
+/// A board whose fan registers Clokrix knows but that has not had its field check: the first
+/// step of that check (`docs/control-safety.md`, "To add a board") is `clokrix-fans --try`, which
+/// writes one output at a time for ten seconds with the owner watching, then puts the firmware's
+/// settings back. Only that tool uses this: the service drives allow-listed boards only.
+pub fn candidate(chip: Chip, rev: u8, manufacturer: Option<&str>) -> Option<Board> {
+    let n = usize::from(super::control679x::outputs(chip));
+    (n > 0 && Maker::Asus.matches(manufacturer)).then(|| Board {
+        name: "a board not yet checked",
+        maker: Maker::Asus,
+        product: "",
+        chip,
+        chip_rev: rev,
+        headers: &TRY_679X[..n],
+    })
 }
 
 /// Register value for `pct`, raised to the header's floor and capped at full speed.
@@ -142,6 +190,8 @@ pub enum ControlError<E> {
     Io(E),
     /// Another program holds the EC; nothing was changed by this call after that point.
     Busy,
+    /// A saved state that is not this chip's (nothing was written).
+    WrongState,
     /// A register did not keep what was written.
     Mismatch {
         addr: u16,
@@ -163,6 +213,7 @@ impl<E: std::fmt::Display> std::fmt::Display for ControlError<E> {
         match self {
             Self::Io(e) => write!(f, "port I/O failed: {e}"),
             Self::Busy => f.write_str("another program is using the fan controller"),
+            Self::WrongState => f.write_str("the saved fan settings are not this chip's"),
             Self::Mismatch { addr, wrote, read } => {
                 write!(
                     f,
@@ -229,9 +280,14 @@ pub struct BiosState {
     pub chip_id: u8,
     pub chip_rev: u8,
     pub base: u16,
+    /// Bit n: header n under software control.
     pub mode: u8,
     /// Duty command of headers 0–7.
     pub commands: Vec<u8>,
+    /// A NCT679x's mode register of each output (2.3; empty on the NCT6687, whose modes are the
+    /// bits of `mode`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub modes: Vec<u8>,
     /// Unix seconds when captured.
     pub saved_at: u64,
 }
@@ -252,6 +308,7 @@ pub fn capture<P: PortIo>(
         base,
         mode,
         commands,
+        modes: Vec::new(),
         saved_at: now,
     })
 }
@@ -291,6 +348,9 @@ pub fn set_duty<P: PortIo>(
 /// header Clokrix took back to the BIOS curve. Headers another tool put under software control
 /// before Clokrix started stay as the BIOS state recorded them.
 pub fn restore<P: PortIo>(io: &mut P, base: u16, state: &BiosState) -> Res<(), P::Error> {
+    if !state.modes.is_empty() {
+        return Err(ControlError::WrongState);
+    }
     write_ec(io, base, CTRL_REQUEST, REQ_BEGIN)?;
     io.settle();
     let mut first_err = None;
@@ -499,6 +559,68 @@ mod tests {
     }
 
     #[test]
+    fn asus_boards_get_supervised_tries_only() {
+        let asus = Some("ASUSTeK COMPUTER INC.");
+        let tuf = Some("TUF GAMING B760M-PLUS WIFI D4");
+        assert_eq!(
+            capability(Chip::Nct6798, 0x2B, asus, tuf),
+            Err(ReadOnly::UnvalidatedBoard),
+            "decision 24: no ASUS board is allow-listed before its own field check"
+        );
+        let c = candidate(Chip::Nct6798, 0x2B, asus).expect("a candidate");
+        assert_eq!(c.headers.len(), 7);
+        assert_eq!(c.headers[1].name, "PWM 2");
+        assert!(c.headers.iter().all(|h| h.min_pct == FAN_MIN_PCT));
+        assert_eq!(
+            candidate(Chip::Nct6791, 0x03, asus).map(|c| c.headers.len()),
+            Some(6)
+        );
+        assert!(candidate(Chip::Nct6798, 0x2B, Some("ASRock")).is_none());
+        assert!(
+            candidate(Chip::Nct6687, 0x92, asus).is_none(),
+            "another write path"
+        );
+        assert!(
+            candidate(Chip::It8689, 0x89, asus).is_none(),
+            "no ITE control"
+        );
+        assert!(Maker::Msi.matches(Some("Micro-Star International Co., Ltd.")));
+        assert!(!Maker::Msi.matches(None));
+    }
+
+    #[test]
+    fn the_nct6687_refuses_a_nct679x_state() {
+        let mut ec = Ec::new();
+        let state = BiosState {
+            chip_id: 0xD4,
+            chip_rev: 0x2B,
+            base: 0x290,
+            mode: 0,
+            commands: vec![0x40; 7],
+            modes: vec![0x42; 7],
+            saved_at: 0,
+        };
+        assert_eq!(
+            restore(&mut ec, BASE, &state),
+            Err(ControlError::WrongState)
+        );
+        assert!(ec.writes.is_empty());
+    }
+
+    #[test]
+    fn saved_states_without_modes_still_load() {
+        let old =
+            r#"{"chipId":213,"chipRev":146,"base":2592,"mode":0,"commands":[1,2],"savedAt":5}"#;
+        let s: BiosState = serde_json::from_str(old).expect("a 2.2 file");
+        assert!(s.modes.is_empty());
+        let json = serde_json::to_string(&s).expect("json");
+        assert!(
+            !json.contains("modes"),
+            "the NCT6687's file keeps its shape"
+        );
+    }
+
+    #[test]
     fn duty_is_bounded_by_the_header_floor() {
         let b = board();
         let (cpu, pump) = (&b.headers[0], &b.headers[1]);
@@ -684,6 +806,7 @@ mod tests {
             base: 0xA20,
             mode: 0x02,
             commands: vec![1, 2, 3, 4, 5, 6, 7, 8],
+            modes: Vec::new(),
             saved_at: 42,
         };
         save(&path, &state).unwrap();

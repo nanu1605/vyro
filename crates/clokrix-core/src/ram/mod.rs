@@ -2,13 +2,15 @@
 //! thermal sensor and running timings from the AMD memory controller (UMC, `AMDFamily17` SMN
 //! reads). From 2.1 also on Intel: the SMBus through `SmbusI801` (AMD's is `SmbusPIIX4`), DDR4
 //! modules' own thermal sensors (JEDEC TSE2004av, on DDR4 modules that carry one), and the
-//! running timings of the Intel 12th to 14th gen memory controller (`IntelMCHBAR`). Decoders here
-//! are pure; `win` does the bus access.
+//! running timings of the Intel 12th to 14th gen memory controller (`IntelMCHBAR`). From 2.3 the
+//! DDR4 timings of AMD's controller from Zen to Zen 3 (AM4). Decoders here are pure; `win` does
+//! the bus access.
 //!
 //! Clokrix only reads. The hub's thermal registers sit in its register space, which does not depend
 //! on the NVM page (MR11), and a DDR4 module's sensor answers at its own address, so no SPD write
 //! is ever needed. The UMC register layout is the one documented by ZenTimings / ZenStates-Core
-//! for Zen 4 and Zen 5; the Intel one is memtest86+'s for Alder Lake and Raptor Lake.
+//! for DDR4 (Zen to Zen 3) and DDR5 (Zen 4 and Zen 5), with the DDR4 data rate as memtest86+
+//! reads it; the Intel one is memtest86+'s for Alder Lake and Raptor Lake.
 
 #[cfg(windows)]
 mod win;
@@ -138,6 +140,25 @@ pub const fn dram_type(config: u32) -> DramType {
     }
 }
 
+/// Which timing layout an AMD CPU's memory controller has.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UmcLayout {
+    /// Zen to Zen 3 with DDR4 (AM4, sTRX4, and the APUs up to Cezanne): no type field, so the
+    /// CPU's model says it, as Linux `amd64_edac` decides it.
+    Ddr4,
+    /// Zen 4 and later, and Rembrandt: [`UMC_CONFIG`]'s type field says DDR5.
+    Ddr5,
+}
+
+/// The layout for an AMD CPU (family 0x17 to 0x1A).
+pub const fn umc_layout(family: u32, model: u32) -> UmcLayout {
+    match (family, model) {
+        // Zen, Zen+ and Zen 2; Zen 3's Milan and Chagall, Vermeer and Cezanne.
+        (0x17, _) | (0x19, 0x00..=0x0F | 0x20..=0x2F | 0x50..=0x5F) => UmcLayout::Ddr4,
+        _ => UmcLayout::Ddr5,
+    }
+}
+
 /// Refresh control: bit 1 = per-bank refresh, bits 18:16 = fine-granularity mode, bit 28 =
 /// power-down enabled.
 pub const UMC_REFRESH: u32 = 0x5_012C;
@@ -149,6 +170,8 @@ pub const UMC_RFC: [u32; 4] = [0x5_0260, 0x5_0264, 0x5_0268, 0x5_026C];
 pub const UMC_RFC_SB: [u32; 4] = [0x5_02C0, 0x5_02C4, 0x5_02C8, 0x5_02CC];
 /// Firmware's placeholder in unused tRFC copies.
 const RFC_UNSET: u32 = 0x00C0_0138;
+/// The same on DDR4, where there are two copies (ZenStates-Core).
+const DDR4_RFC_UNSET: u32 = 0x2106_0138;
 
 /// Every register [`decode_ddr5`] reads (channel-relative), for dumps and fixtures.
 pub const DDR5_REGS: [u32; 20] = [
@@ -235,8 +258,83 @@ pub fn decode_ddr5(read: impl Fn(u32) -> u32) -> Option<MemTimings> {
     sane.then_some(t)
 }
 
+/// Every register [`decode_ddr4`] reads (channel-relative), for dumps and fixtures.
+pub const DDR4_REGS: [u32; 14] = [
+    UMC_REFRESH,
+    UMC_RATIO,
+    0x5_0204,
+    0x5_0208,
+    0x5_020C,
+    0x5_0210,
+    0x5_0214,
+    0x5_0218,
+    0x5_0230,
+    UMC_RFC[0],
+    UMC_RFC[1],
+    UMC_DIMM_CS[0],
+    UMC_DIMM_CS[1],
+    UMC_CTRL,
+];
+
+/// Decodes one DDR4 channel's timings from its registers (`read` takes a channel-relative
+/// address from [`DDR4_REGS`]): most fields where DDR5 has them, tFAW and tWR one bit narrower,
+/// the memory clock ratio in thirds of the reference clock, 2T and gear-down mode in the ratio
+/// register's bits 10 and 11, and tRFC, tRFC2 and tRFC4 side by side, the one for the refresh
+/// mode in use counting. Assumes the reference clock is 100 MHz. `None` when the registers do not
+/// look like a trained DDR4 controller.
+pub fn decode_ddr4(read: impl Fn(u32) -> u32) -> Option<MemTimings> {
+    let ratio = read(UMC_RATIO);
+    let refresh = read(UMC_REFRESH);
+    let (t5, t6, t7) = (read(0x5_0204), read(0x5_0208), read(0x5_020C));
+    let (t9, t10) = (read(0x5_0214), read(0x5_0218));
+    let (rfc0, rfc1) = (read(UMC_RFC[0]), read(UMC_RFC[1]));
+    let rfc_reg = if rfc0 != rfc1 && rfc0 == DDR4_RFC_UNSET {
+        rfc1
+    } else {
+        rfc0
+    };
+    // Fine-granularity refresh, coded as DDR4's MR3: 1 and 5 refresh at 2x, 2 and 6 at 4x.
+    let rfc = match bits(refresh, 18, 16) {
+        1 | 5 => bits(rfc_reg, 21, 11),
+        2 | 6 => bits(rfc_reg, 31, 22),
+        _ => bits(rfc_reg, 10, 0),
+    };
+    let t = MemTimings {
+        // 48 thirds of 100 MHz × 2 = 3200 MT/s; 52 and 56 give DDR4-3466 and -3733 (rounded down,
+        // as they are sold).
+        mts: (f64::from(bits(ratio, 6, 0)) * 200.0 / 3.0).floor(),
+        cl: bits(t5, 5, 0),
+        ras: bits(t5, 14, 8),
+        rcd_rd: bits(t5, 21, 16),
+        rcd_wr: bits(t5, 29, 24),
+        rc: bits(t6, 7, 0),
+        rp: bits(t6, 21, 16),
+        rrd_s: bits(t7, 4, 0),
+        rrd_l: bits(t7, 12, 8),
+        rtp: bits(t7, 28, 24),
+        faw: bits(read(0x5_0210), 6, 0),
+        cwl: bits(t9, 5, 0),
+        wtr_s: bits(t9, 12, 8),
+        wtr_l: bits(t9, 22, 16),
+        wr: bits(t10, 6, 0),
+        refi: bits(read(0x5_0230), 15, 0),
+        rfc,
+        rfc_sb: 0,
+        command_rate: if ratio & (1 << 10) != 0 { 2 } else { 1 },
+        gear_down: ratio & (1 << 11) != 0,
+        power_down: refresh & (1 << 28) != 0,
+    };
+    let sane = (1000.0..=6000.0).contains(&t.mts)
+        && (8..=60).contains(&t.cl)
+        && t.rcd_rd != 0
+        && t.rp != 0
+        && t.ras != 0;
+    sane.then_some(t)
+}
+
 /// Intel memory controller registers (MCHBAR offsets; the second controller at +0x10000), as
-/// memtest86+ reads them on Alder Lake and Raptor Lake.
+/// memtest86+ reads them on Alder Lake and Raptor Lake; Meteor Lake and Arrow Lake share most of
+/// them.
 pub const IMC_MC1: u32 = 0x1_0000;
 /// DDR type in bits 2:0 (0 DDR4, 1 DDR5, 2 LPDDR5, 3 LPDDR4).
 pub const IMC_DECODE: u32 = 0xD800;
@@ -254,8 +352,8 @@ pub const IMC_BIOS_DATA: u32 = 0x5E04;
 /// The base clock in kHz.
 pub const IMC_BCLK: u32 = 0x5F60;
 
-/// Every register [`decode_intel`] reads, for dumps and fixtures.
-pub const INTEL_REGS: [u32; 13] = [
+/// Every register the Alder Lake decoder reads, for dumps and fixtures.
+const ALDER_REGS: [u32; 13] = [
     IMC_DECODE,
     IMC_DIMM_CH0,
     IMC_TC_PRE,
@@ -271,16 +369,183 @@ pub const INTEL_REGS: [u32; 13] = [
     IMC_BCLK,
 ];
 
-/// Intel CPUs whose memory controller [`decode_intel`] reads: Alder Lake (12th gen) and Raptor
-/// Lake (13th and 14th).
-pub const fn intel_imc(family: u32, model: u32) -> bool {
-    family == 6 && matches!(model, 0x97 | 0x9A | 0xB7 | 0xBA | 0xBF)
+/// The older controllers (2.3): two channels in one controller, the second at +0x400, with each
+/// channel's DIMM sizes in its own register; tRP and tRCD share bits 5:0 of the timing register.
+/// Comet Lake keeps Skylake's layout, Rocket Lake Ice Lake's (memtest86+'s readers of both).
+pub const SKL_MAD_CH0: u32 = 0x500C;
+pub const SKL_MAD_CH1: u32 = 0x5010;
+pub const SKL_CH1: u32 = 0x400;
+/// tRP and tRCD in bits 5:0; tRAS in bits 14:8 (Skylake) or 15:9 (Ice Lake).
+pub const SKL_TC_PRE: u32 = 0x4000;
+/// Bits 1:0 zero on DDR4 (Skylake's controller also runs DDR3).
+pub const SKL_SCHED: u32 = 0x401C;
+/// tCL in bits 20:16.
+pub const SKL_TC_CAS: u32 = 0x4070;
+
+/// Meteor Lake and Arrow Lake (2.3), memtest86+'s reader of both: channel 1 of a controller at
+/// +0x800, tRCD in its own register, and the memory clock in one register for both controllers.
+pub const MTL_DIMM_CH1: u32 = 0xD810;
+pub const MTL_CH1: u32 = 0x800;
+/// tRCD in bits 29:22.
+pub const MTL_TC_ACT: u32 = 0xE138;
+/// Bits 23:20 the reference clock, 19:12 the ratio, 24 gear 2.
+pub const MTL_PTGRAM: u32 = 0x1_3D98;
+
+const SKL_REGS: [u32; 8] = [
+    SKL_MAD_CH0,
+    SKL_MAD_CH1,
+    SKL_TC_PRE,
+    SKL_SCHED,
+    SKL_TC_CAS,
+    SKL_CH1 + SKL_TC_PRE,
+    SKL_CH1 + SKL_SCHED,
+    SKL_CH1 + SKL_TC_CAS,
+];
+const ICL_REGS: [u32; 8] = [
+    SKL_MAD_CH0,
+    SKL_MAD_CH1,
+    SKL_TC_PRE,
+    SKL_TC_CAS,
+    SKL_CH1 + SKL_TC_PRE,
+    SKL_CH1 + SKL_TC_CAS,
+    IMC_BIOS_DATA,
+    IMC_BCLK,
+];
+const MTL_REGS: [u32; 21] = [
+    IMC_DIMM_CH0,
+    MTL_DIMM_CH1,
+    IMC_MC1 + IMC_DIMM_CH0,
+    IMC_MC1 + MTL_DIMM_CH1,
+    IMC_TC_PRE,
+    IMC_TC_PRE_HIGH,
+    IMC_ODT_TCL,
+    MTL_TC_ACT,
+    MTL_CH1 + IMC_TC_PRE,
+    MTL_CH1 + IMC_TC_PRE_HIGH,
+    MTL_CH1 + IMC_ODT_TCL,
+    MTL_CH1 + MTL_TC_ACT,
+    IMC_MC1 + IMC_TC_PRE,
+    IMC_MC1 + IMC_TC_PRE_HIGH,
+    IMC_MC1 + IMC_ODT_TCL,
+    IMC_MC1 + MTL_TC_ACT,
+    IMC_MC1 + MTL_CH1 + IMC_TC_PRE,
+    IMC_MC1 + MTL_CH1 + IMC_TC_PRE_HIGH,
+    IMC_MC1 + MTL_CH1 + IMC_ODT_TCL,
+    IMC_MC1 + MTL_CH1 + MTL_TC_ACT,
+    MTL_PTGRAM,
+];
+
+/// Which Intel memory controller a CPU has, as memtest86+ tells them apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImcLayout {
+    /// Comet Lake-S (10th gen desktop): Skylake's controller, DDR4.
+    Skylake,
+    /// Rocket Lake (11th gen desktop): Ice Lake's controller, DDR4.
+    IceLake,
+    /// Alder Lake and Raptor Lake (12th to 14th gen).
+    AlderLake,
+    /// Meteor Lake and Arrow Lake (Core Ultra 100 and 200S): DDR5.
+    MeteorLake,
 }
 
-/// Decodes an Intel 12th to 14th gen memory controller's running timings: the data rate and
-/// CL-tRCD-tRP-tRAS, which is what its registers give (the others stay 0). `None` when the
-/// registers do not look like a trained DDR4 or DDR5 controller.
-pub fn decode_intel(read: impl Fn(u32) -> Option<u32>) -> Option<MemTimings> {
+/// The controller of an Intel CPU Clokrix reads (family 6): `None` for the others.
+pub const fn intel_layout(family: u32, model: u32) -> Option<ImcLayout> {
+    if family != 6 {
+        return None;
+    }
+    match model {
+        0xA5 => Some(ImcLayout::Skylake),
+        0xA7 => Some(ImcLayout::IceLake),
+        0x97 | 0x9A | 0xB7 | 0xBA | 0xBF => Some(ImcLayout::AlderLake),
+        0xAA | 0xC6 => Some(ImcLayout::MeteorLake),
+        _ => None,
+    }
+}
+
+/// Intel CPUs whose memory controller [`decode_intel`] reads.
+pub const fn intel_imc(family: u32, model: u32) -> bool {
+    intel_layout(family, model).is_some()
+}
+
+/// Every register [`decode_intel`] reads for a layout (MCHBAR offsets), for dumps and fixtures.
+pub const fn intel_regs(layout: ImcLayout) -> &'static [u32] {
+    match layout {
+        ImcLayout::Skylake => &SKL_REGS,
+        ImcLayout::IceLake => &ICL_REGS,
+        ImcLayout::AlderLake => &ALDER_REGS,
+        ImcLayout::MeteorLake => &MTL_REGS,
+    }
+}
+
+/// Decodes an Intel memory controller's running timings: the data rate and CL-tRCD-tRP-tRAS,
+/// which is what its registers give (the others stay 0). `None` when the registers do not look
+/// like a trained controller.
+pub fn decode_intel(layout: ImcLayout, read: impl Fn(u32) -> Option<u32>) -> Option<MemTimings> {
+    let t = match layout {
+        ImcLayout::Skylake | ImcLayout::IceLake => decode_skylake(layout, &read)?,
+        ImcLayout::AlderLake => decode_alder(&read)?,
+        ImcLayout::MeteorLake => decode_meteor(&read)?,
+    };
+    let sane = (1000.0..=10000.0).contains(&t.mts)
+        && (8..=80).contains(&t.cl)
+        && t.rcd_rd != 0
+        && t.rp != 0
+        && t.ras != 0;
+    sane.then_some(t)
+}
+
+/// Comet Lake and Rocket Lake: the channel in use is the first with a DIMM size.
+fn decode_skylake(layout: ImcLayout, read: &impl Fn(u32) -> Option<u32>) -> Option<MemTimings> {
+    let populated = |v: u32| v != u32::MAX && v & 0x003F_003F != 0;
+    let ch = [(SKL_MAD_CH0, 0), (SKL_MAD_CH1, SKL_CH1)]
+        .into_iter()
+        .find(|&(mad, _)| read(mad).is_some_and(populated))?
+        .1;
+    let mts = if layout == ImcLayout::Skylake {
+        if read(ch + SKL_SCHED)? & 3 != 0 {
+            return None; // DDR3
+        }
+        // The ratio already counts the data rate, in steps of the 100 MHz reference (bit 7 set)
+        // or of the 133 MHz one; the base clock is taken as 100 MHz.
+        let perf = read(IMC_SA_PERF)?;
+        let ratio = f64::from(perf & 0x7F);
+        if perf & 0x80 != 0 {
+            ratio * 100.0
+        } else {
+            ratio * 400.0 / 3.0
+        }
+    } else {
+        let bclk = f64::from(read(IMC_BCLK)?) / 1000.0;
+        if !(50.0..=200.0).contains(&bclk) {
+            return None;
+        }
+        let bios = read(IMC_BIOS_DATA)?;
+        let mut mts = f64::from(bios & 0xFF) * bclk;
+        if bios & 0x1_0000 != 0 {
+            mts *= 2.0;
+        }
+        if bios & 0xF00 == 0 {
+            mts *= 4.0 / 3.0;
+        }
+        mts
+    };
+    let pre = read(ch + SKL_TC_PRE)?;
+    Some(MemTimings {
+        mts: mts.round(),
+        cl: bits(read(ch + SKL_TC_CAS)?, 20, 16),
+        rcd_rd: bits(pre, 5, 0),
+        rp: bits(pre, 5, 0),
+        ras: if layout == ImcLayout::Skylake {
+            bits(pre, 14, 8)
+        } else {
+            bits(pre, 15, 9)
+        },
+        ..MemTimings::default()
+    })
+}
+
+/// Alder Lake and Raptor Lake: the controller in use is the first whose channel 0 has a DIMM.
+fn decode_alder(read: &impl Fn(u32) -> Option<u32>) -> Option<MemTimings> {
     let populated = |v: u32| v != u32::MAX && bits(v, 6, 0) + bits(v, 22, 16) > 0;
     let mc = [0, IMC_MC1]
         .into_iter()
@@ -299,20 +564,48 @@ pub fn decode_intel(read: impl Fn(u32) -> Option<u32>) -> Option<MemTimings> {
         mts *= 4.0 / 3.0;
     }
     let (pre, high) = (read(mc + IMC_TC_PRE)?, read(mc + IMC_TC_PRE_HIGH)?);
-    let t = MemTimings {
+    Some(MemTimings {
         mts: mts.round(),
         cl: bits(read(mc + IMC_ODT_TCL)?, 22, 16),
         rcd_rd: bits(high, 26, 19),
         rp: bits(pre, 7, 0),
         ras: bits(high, 18, 10),
         ..MemTimings::default()
+    })
+}
+
+/// Meteor Lake and Arrow Lake: the first controller that is on, and in it the channel with a
+/// DIMM (a single DIMM may sit on channel 1 only).
+fn decode_meteor(read: &impl Fn(u32) -> Option<u32>) -> Option<MemTimings> {
+    let size = |v: u32| v & 0x007F_007F != 0;
+    let mc = [0, IMC_MC1]
+        .into_iter()
+        .find(|&mc| read(mc + IMC_DIMM_CH0).is_some_and(|v| v != u32::MAX))?;
+    let ch0 = read(mc + IMC_DIMM_CH0)?;
+    let ch = if !size(ch0) && read(mc + MTL_DIMM_CH1).is_some_and(size) {
+        mc + MTL_CH1
+    } else {
+        mc
     };
-    let sane = (1000.0..=10000.0).contains(&t.mts)
-        && (8..=80).contains(&t.cl)
-        && t.rcd_rd != 0
-        && t.rp != 0
-        && t.ras != 0;
-    sane.then_some(t)
+    let clock = read(MTL_PTGRAM)?;
+    let reference = match bits(clock, 23, 20) {
+        0x1 => 200.0,
+        0x2 => 100.0,
+        0xA => 400.0 / 3.0,
+        0xB => 200.0 / 3.0,
+        0xC => 100.0 / 3.0,
+        _ => return None,
+    };
+    let gear = f64::from(bits(clock, 24, 24) + 1);
+    let mts = reference * f64::from(bits(clock, 19, 12)) * gear * 2.0;
+    Some(MemTimings {
+        mts: mts.round(),
+        cl: bits(read(ch + IMC_ODT_TCL)?, 22, 16),
+        rcd_rd: bits(read(ch + MTL_TC_ACT)?, 29, 22),
+        rp: bits(read(ch + IMC_TC_PRE)?, 7, 0),
+        ras: bits(read(ch + IMC_TC_PRE_HIGH)?, 21, 13),
+        ..MemTimings::default()
+    })
 }
 
 #[cfg(test)]
@@ -384,7 +677,7 @@ mod tests {
     #[test]
     fn decodes_intel_timings_from_the_controller_in_use() {
         let regs = adl_ddr4();
-        let t = decode_intel(|a| regs.get(&a).copied()).expect("timings");
+        let t = decode_intel(ImcLayout::AlderLake, |a| regs.get(&a).copied()).expect("timings");
         assert_eq!(t.mts, 3200.0);
         assert_eq!((t.cl, t.rcd_rd, t.rp, t.ras), (16, 18, 18, 38));
         assert_eq!(
@@ -398,12 +691,30 @@ mod tests {
         ddr5.insert(IMC_SA_PERF, 30 << 2);
         ddr5.insert(IMC_BIOS_DATA, 1 << 12 | 0x100);
         assert_eq!(
-            decode_intel(|a| ddr5.get(&a).copied()).expect("ddr5").mts,
+            decode_intel(ImcLayout::AlderLake, |a| ddr5.get(&a).copied())
+                .expect("ddr5")
+                .mts,
             6000.0
         );
         assert!(intel_imc(6, 0x97));
         assert!(intel_imc(6, 0xB7));
-        assert!(!intel_imc(6, 0xC6), "Arrow Lake: another layout");
+        assert_eq!(
+            intel_layout(6, 0xC6),
+            Some(ImcLayout::MeteorLake),
+            "Arrow Lake"
+        );
+        assert_eq!(
+            intel_layout(6, 0xA5),
+            Some(ImcLayout::Skylake),
+            "Comet Lake-S"
+        );
+        assert_eq!(
+            intel_layout(6, 0xA7),
+            Some(ImcLayout::IceLake),
+            "Rocket Lake"
+        );
+        assert_eq!(intel_layout(6, 0xA6), None, "Comet Lake-U: not read");
+        assert_eq!(intel_layout(0x12, 0x01), None, "another family");
     }
 
     #[test]
@@ -411,21 +722,101 @@ mod tests {
         let mut regs = adl_ddr4();
         regs.insert(IMC_MC1 + IMC_DIMM_CH0, u32::MAX);
         assert_eq!(
-            decode_intel(|a| regs.get(&a).copied()),
+            decode_intel(ImcLayout::AlderLake, |a| regs.get(&a).copied()),
             None,
             "no controller in use"
         );
         let mut regs = adl_ddr4();
         regs.insert(IMC_BCLK, 0);
         assert_eq!(
-            decode_intel(|a| regs.get(&a).copied()),
+            decode_intel(ImcLayout::AlderLake, |a| regs.get(&a).copied()),
             None,
             "no base clock"
         );
         let mut regs = adl_ddr4();
         regs.insert(IMC_MC1 + IMC_ODT_TCL, 0);
-        assert_eq!(decode_intel(|a| regs.get(&a).copied()), None, "CL 0");
-        assert_eq!(decode_intel(|_| None), None);
+        assert_eq!(
+            decode_intel(ImcLayout::AlderLake, |a| regs.get(&a).copied()),
+            None,
+            "CL 0"
+        );
+        assert_eq!(decode_intel(ImcLayout::AlderLake, |_| None), None);
+    }
+
+    /// Constructed Comet Lake-S registers in memtest86+'s Skylake layout (no field dump from such
+    /// a PC): DDR4-2933 16-18-18-36 on channel 1, ratio 22 on the 133 MHz reference.
+    #[test]
+    fn decodes_comet_lake() {
+        let mut regs = HashMap::from([
+            (SKL_MAD_CH0, 0),
+            (SKL_MAD_CH1, 0x0000_0010),
+            (SKL_CH1 + SKL_SCHED, 0),
+            (IMC_SA_PERF, 22),
+            (SKL_CH1 + SKL_TC_PRE, 18 | 36 << 8),
+            (SKL_CH1 + SKL_TC_CAS, 16 << 16),
+        ]);
+        let read = |r: &HashMap<u32, u32>| decode_intel(ImcLayout::Skylake, |a| r.get(&a).copied());
+        let t = read(&regs).expect("timings");
+        assert_eq!(t.mts, 2933.0);
+        assert_eq!((t.cl, t.rcd_rd, t.rp, t.ras), (16, 18, 18, 36));
+        // Bit 7: the 100 MHz reference, ratio 32 = DDR4-3200.
+        regs.insert(IMC_SA_PERF, 0x80 | 32);
+        assert_eq!(read(&regs).map(|t| t.mts), Some(3200.0));
+        regs.insert(SKL_CH1 + SKL_SCHED, 1);
+        assert_eq!(read(&regs), None, "DDR3");
+        regs.insert(SKL_CH1 + SKL_SCHED, 0);
+        regs.insert(SKL_MAD_CH1, 0);
+        assert_eq!(read(&regs), None, "no channel in use");
+        assert_eq!(intel_regs(ImcLayout::Skylake).len(), 8);
+    }
+
+    /// Constructed Rocket Lake registers in memtest86+'s Ice Lake layout: DDR4-3200 16-16-16-36
+    /// in gear 1 on the 133 MHz reference, then DDR4-3600 in gear 2 on the 100 MHz one.
+    #[test]
+    fn decodes_rocket_lake() {
+        let mut regs = HashMap::from([
+            (SKL_MAD_CH0, 0x0000_0010),
+            (SKL_MAD_CH1, 0x0000_0010),
+            (IMC_BCLK, 100_000),
+            (IMC_BIOS_DATA, 24),
+            (SKL_TC_PRE, 16 | 36 << 9),
+            (SKL_TC_CAS, 16 << 16),
+        ]);
+        let read = |r: &HashMap<u32, u32>| decode_intel(ImcLayout::IceLake, |a| r.get(&a).copied());
+        let t = read(&regs).expect("timings");
+        assert_eq!(t.mts, 3200.0);
+        assert_eq!((t.cl, t.rcd_rd, t.rp, t.ras), (16, 16, 16, 36));
+        regs.insert(IMC_BIOS_DATA, 0x1_0000 | 0x100 | 18);
+        assert_eq!(read(&regs).map(|t| t.mts), Some(3600.0));
+        regs.insert(IMC_BCLK, 0);
+        assert_eq!(read(&regs), None, "no base clock");
+    }
+
+    /// Constructed Arrow Lake registers in memtest86+'s Meteor Lake layout: the first controller
+    /// off, one DIMM on channel 1 of the second, DDR5-6400 32-39-39-102 (ratio 48 of the
+    /// 33.3 MHz reference, gear 2).
+    #[test]
+    fn decodes_arrow_lake() {
+        let mut regs = HashMap::from([
+            (IMC_DIMM_CH0, u32::MAX),
+            (IMC_MC1 + IMC_DIMM_CH0, 0),
+            (IMC_MC1 + MTL_DIMM_CH1, 0x0000_0020),
+            (MTL_PTGRAM, 0xC << 20 | 48 << 12 | 1 << 24),
+            (IMC_MC1 + MTL_CH1 + IMC_ODT_TCL, 32 << 16),
+            (IMC_MC1 + MTL_CH1 + MTL_TC_ACT, 39 << 22),
+            (IMC_MC1 + MTL_CH1 + IMC_TC_PRE, 39),
+            (IMC_MC1 + MTL_CH1 + IMC_TC_PRE_HIGH, 102 << 13),
+        ]);
+        let read =
+            |r: &HashMap<u32, u32>| decode_intel(ImcLayout::MeteorLake, |a| r.get(&a).copied());
+        let t = read(&regs).expect("timings");
+        assert_eq!(t.mts, 6400.0);
+        assert_eq!((t.cl, t.rcd_rd, t.rp, t.ras), (32, 39, 39, 102));
+        assert!(intel_regs(ImcLayout::MeteorLake).contains(&(IMC_MC1 + MTL_CH1 + MTL_TC_ACT)));
+        regs.insert(MTL_PTGRAM, 0x5 << 20 | 48 << 12);
+        assert_eq!(read(&regs), None, "an unknown reference clock");
+        regs.insert(IMC_MC1 + IMC_DIMM_CH0, u32::MAX);
+        assert_eq!(read(&regs), None, "both controllers off");
     }
 
     #[test]
@@ -543,6 +934,93 @@ mod tests {
         // Hub temperature words from the same run (HWMonitor's PMIC sensors: 39 / 38 °C).
         assert_eq!(spd5_temp(0x0268), Some(38.5));
         assert_eq!(spd5_temp(0x025C), Some(37.75));
+    }
+
+    #[test]
+    fn amd_cpus_get_their_controller_layout() {
+        assert_eq!(umc_layout(0x17, 0x71), UmcLayout::Ddr4, "Matisse");
+        assert_eq!(umc_layout(0x17, 0x08), UmcLayout::Ddr4, "Pinnacle Ridge");
+        assert_eq!(umc_layout(0x19, 0x21), UmcLayout::Ddr4, "Vermeer");
+        assert_eq!(umc_layout(0x19, 0x50), UmcLayout::Ddr4, "Cezanne");
+        assert_eq!(umc_layout(0x19, 0x44), UmcLayout::Ddr5, "Rembrandt");
+        assert_eq!(umc_layout(0x19, 0x61), UmcLayout::Ddr5, "Raphael");
+        assert_eq!(umc_layout(0x1A, 0x44), UmcLayout::Ddr5, "Granite Ridge");
+    }
+
+    /// Constructed registers in the ZenStates-Core DDR4 layout for a Ryzen 5000 with DDR4-3600
+    /// 16-19-19-39 (not a field dump: none from an AM4 PC yet): ratio 54 thirds, 1T, gear-down
+    /// on, tRFC 630 in the second copy behind the placeholder, power-down off.
+    fn ddr4_3600() -> HashMap<u32, u32> {
+        HashMap::from([
+            (UMC_DIMM_CS[0], 1),
+            (UMC_REFRESH, 0),
+            (UMC_RATIO, 54 | 1 << 11),
+            (0x5_0204, 16 | 39 << 8 | 19 << 16 | 19 << 24),
+            (0x5_0208, 58 | 19 << 16),
+            (0x5_020C, 4 | 6 << 8 | 12 << 24),
+            (0x5_0210, 16),
+            (0x5_0214, 16 | 4 << 8 | 12 << 16),
+            (0x5_0218, 26),
+            (0x5_0230, 14029),
+            (UMC_RFC[0], DDR4_RFC_UNSET),
+            (UMC_RFC[1], 630 | 468 << 11 | 288 << 22),
+        ])
+    }
+
+    #[test]
+    fn decodes_ddr4_timings() {
+        let regs = ddr4_3600();
+        let t = decode_ddr4(|a| regs.get(&a).copied().unwrap_or(0)).expect("timings");
+        assert_eq!(t.mts, 3600.0);
+        assert_eq!(
+            (t.cl, t.rcd_rd, t.rcd_wr, t.rp, t.ras, t.rc),
+            (16, 19, 19, 19, 39, 58)
+        );
+        assert_eq!((t.rrd_s, t.rrd_l, t.faw, t.rtp), (4, 6, 16, 12));
+        assert_eq!((t.cwl, t.wtr_s, t.wtr_l, t.wr), (16, 4, 12, 26));
+        assert_eq!((t.rfc, t.rfc_sb, t.refi), (630, 0, 14029));
+        assert_eq!(t.command_rate, 1);
+        assert!(t.gear_down);
+        assert!(!t.power_down);
+    }
+
+    #[test]
+    fn ddr4_refresh_modes_and_odd_ratios() {
+        let mut regs = ddr4_3600();
+        regs.insert(UMC_REFRESH, 1 << 16 | 1 << 28);
+        let t = decode_ddr4(|a| regs.get(&a).copied().unwrap_or(0)).expect("2x");
+        assert_eq!(t.rfc, 468, "fine-granularity 2x: tRFC2");
+        assert!(t.power_down);
+        regs.insert(UMC_REFRESH, 6 << 16);
+        let t = decode_ddr4(|a| regs.get(&a).copied().unwrap_or(0)).expect("4x");
+        assert_eq!(t.rfc, 288, "on the fly 1x/4x: tRFC4");
+        // The first copy set: it counts.
+        regs.insert(UMC_REFRESH, 0);
+        regs.insert(UMC_RFC[0], 560);
+        let t = decode_ddr4(|a| regs.get(&a).copied().unwrap_or(0)).expect("first");
+        assert_eq!(t.rfc, 560);
+        // DDR4-3466 and 3733: thirds of the reference, rounded down; 2T.
+        regs.insert(UMC_RATIO, 52 | 1 << 10);
+        let t = decode_ddr4(|a| regs.get(&a).copied().unwrap_or(0)).expect("3466");
+        assert_eq!((t.mts, t.command_rate, t.gear_down), (3466.0, 2, false));
+        regs.insert(UMC_RATIO, 56);
+        assert_eq!(
+            decode_ddr4(|a| regs.get(&a).copied().unwrap_or(0)).map(|t| t.mts),
+            Some(3733.0)
+        );
+    }
+
+    #[test]
+    fn rejects_an_untrained_ddr4_controller() {
+        assert_eq!(decode_ddr4(|_| 0), None);
+        assert_eq!(
+            decode_ddr4(|_| u32::MAX),
+            None,
+            "all ones: ratio 127, 8466 MT/s"
+        );
+        let mut regs = ddr4_3600();
+        regs.insert(0x5_0204, 0);
+        assert_eq!(decode_ddr4(|a| regs.get(&a).copied().unwrap_or(0)), None);
     }
 
     #[test]

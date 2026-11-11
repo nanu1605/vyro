@@ -1,6 +1,7 @@
 //! Nuvoton NCT6791D to NCT6799D, and the NCT6701D read as a NCT6799D (2.1): the hardware
-//! monitor of most ASUS boards and many ASRock ones. Unlike the NCT6687's EC space its registers are banked: the bank goes to register
-//! 0x4E, then the register's address to the monitor base + 5 and its value comes back at + 6.
+//! monitor of most ASUS boards and many ASRock ones. Unlike the NCT6687's EC space its registers
+//! are banked: the bank goes to register 0x4E, then the register's address to the monitor base + 5
+//! and its value comes back at + 6.
 //! The register tables and scales are the Linux `nct6775` driver's. Pure: the port I/O is behind
 //! [`PortIo`], so the access sequence is tested without hardware.
 //!
@@ -201,7 +202,7 @@ pub const fn tables(chip: Chip) -> Option<&'static Tables> {
         Chip::Nct6797 => Some(&NCT6797),
         Chip::Nct6798 => Some(&NCT6798),
         Chip::Nct6799 | Chip::Nct6701 => Some(&NCT6799),
-        Chip::Nct6687 => None,
+        _ => None,
     }
 }
 
@@ -247,10 +248,46 @@ impl<P: PortIo> Banked<'_, P> {
         self.io.inb(self.base + DATA_PORT)
     }
 
+    fn write(&mut self, addr: u16, value: u8) -> Result<(), P::Error> {
+        let [bank, reg] = addr.to_be_bytes();
+        self.select(bank)?;
+        self.io.outb(self.base + ADDR_PORT, reg)?;
+        self.io.outb(self.base + DATA_PORT, value)
+    }
+
     /// Leaves bank 0 selected, as the firmware does, for tools that assume it.
     fn done(mut self) -> Result<(), P::Error> {
         self.select(0)
     }
+}
+
+/// Reads one register (bank << 8 | register), then selects bank 0 again. Call with the ISA-bus
+/// mutex held.
+pub fn read_reg<P: PortIo>(io: &mut P, base: u16, addr: u16) -> Result<u8, P::Error> {
+    let mut b = Banked {
+        io,
+        base,
+        bank: None,
+    };
+    let value = b.read(addr);
+    let done = b.done();
+    let value = value?;
+    done?;
+    Ok(value)
+}
+
+/// Writes one register, then selects bank 0 again: fan control's write path
+/// ([`super::control679x`]) and nothing else. Call with the ISA-bus mutex held.
+pub fn write_reg<P: PortIo>(io: &mut P, base: u16, addr: u16, value: u8) -> Result<(), P::Error> {
+    let mut b = Banked {
+        io,
+        base,
+        bank: None,
+    };
+    let wrote = b.write(addr, value);
+    let done = b.done();
+    wrote?;
+    done
 }
 
 /// Reads `regs` (bank << 8 | register). Call with the ISA-bus mutex held.

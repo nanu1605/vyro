@@ -1,12 +1,13 @@
-//! The NCT6687 as a [`FanDevice`]: PawnIO `LpcIO` port I/O, each call one transaction under
-//! the ISA-bus mutex, only on an allow-listed board (`sio::control::capability`).
+//! The fan controller chip as a [`FanDevice`]: the NCT6687's EC transactions or a NCT679x's banked
+//! registers (2.3), PawnIO `LpcIO` port I/O, each call one transaction under the ISA-bus mutex,
+//! only on an allow-listed board (`sio::control::capability`).
 
 use super::controller::{ChipState, DevError, FanDevice};
 use super::FanCapability;
 use crate::hwid::smbios;
 use crate::pawnio::{BusLock, Handle, Module, PawnIoError, MUTEX_ISABUS};
 use crate::sio::control::{self, BiosState, Board, ControlError};
-use crate::sio::{self, Found, Ports};
+use crate::sio::{self, control679x, nct679x, Family, Found, Ports};
 
 /// Longest wait for another tool's bus access before skipping this write (tried next tick).
 const LOCK_MS: u32 = 200;
@@ -28,6 +29,21 @@ impl SioDevice {
             .ok_or(DevError::Busy)?
             .map_err(DevError::from)
     }
+
+    fn banked(&self) -> bool {
+        self.found.chip.family() == Family::Nct679x
+    }
+
+    /// A saved state is this chip's: the same ID and revision.
+    fn ours(&self, bios: &BiosState) -> Result<(), DevError> {
+        if (bios.chip_id, bios.chip_rev) == (self.found.id, self.found.rev) {
+            Ok(())
+        } else {
+            Err(DevError::Io(
+                ControlError::<PawnIoError>::WrongState.to_string(),
+            ))
+        }
+    }
 }
 
 impl FanDevice for SioDevice {
@@ -37,26 +53,52 @@ impl FanDevice for SioDevice {
 
     fn capture(&mut self, now: u64) -> Result<BiosState, DevError> {
         let (base, id, rev) = (self.found.base, self.found.id, self.found.rev);
-        self.locked(|io| control::capture(io, base, id, rev, now))
+        if self.banked() {
+            let n = control679x::outputs(self.found.chip);
+            self.locked(|io| control679x::capture(io, base, (id, rev), n, now))
+        } else {
+            self.locked(|io| control::capture(io, base, id, rev, now))
+        }
     }
 
     fn set(&mut self, header: u16, pct: f64) -> Result<u8, DevError> {
         let (base, board) = (self.found.base, self.board);
-        self.locked(|io| control::set_duty(io, base, board, header, pct))
+        if self.banked() {
+            self.locked(|io| control679x::set_duty(io, base, board, header, pct))
+        } else {
+            self.locked(|io| control::set_duty(io, base, board, header, pct))
+        }
     }
 
     fn release(&mut self, header: u16, bios: &BiosState) -> Result<(), DevError> {
+        self.ours(bios)?;
         let base = self.found.base;
-        self.locked(|io| control::release(io, base, header, bios))
+        if self.banked() {
+            self.locked(|io| control679x::release(io, base, header, bios))
+        } else {
+            self.locked(|io| control::release(io, base, header, bios))
+        }
     }
 
     fn restore(&mut self, bios: &BiosState) -> Result<(), DevError> {
+        self.ours(bios)?;
         let base = self.found.base;
-        self.locked(|io| control::restore(io, base, bios))
+        if self.banked() {
+            self.locked(|io| control679x::restore(io, base, bios))
+        } else {
+            self.locked(|io| control::restore(io, base, bios))
+        }
     }
 
     fn read(&mut self) -> Result<ChipState, DevError> {
         let base = self.found.base;
+        if self.banked() {
+            let n = control679x::outputs(self.found.chip);
+            return self.locked(|io| {
+                let (mode, outputs) = control679x::read_state(io, base, n)?;
+                Ok(ChipState { mode, outputs })
+            });
+        }
         self.locked(|io| {
             let read = |io: &mut Ports<'_>, start, len| {
                 sio::read_ec(io, base, start, len)?.ok_or(ControlError::Busy)
@@ -66,6 +108,31 @@ impl FanDevice for SioDevice {
             Ok(ChipState { mode, outputs })
         })
     }
+}
+
+/// A NCT679x whose firmware locked its monitor's ports answers nothing until the lock is
+/// cleared, as the sensor reader clears it (`sio::win::unlock_monitor`).
+fn unlock_if_needed(io: &Handle, lock: &BusLock, found: &Found) -> Result<(), String> {
+    if found.chip.family() != Family::Nct679x {
+        return Ok(());
+    }
+    let answers = || {
+        lock.hold(500, || nct679x::vendor(&mut Ports(io), found.base))
+            .and_then(Result::ok)
+            == Some(nct679x::NUVOTON)
+    };
+    if answers() {
+        return Ok(());
+    }
+    if found.io_locked {
+        lock.hold(500, || sio::unlock_monitor(io, found))
+            .ok_or("the ISA bus is busy")?
+            .map_err(|e| e.to_string())?;
+        if answers() {
+            return Ok(());
+        }
+    }
+    Err(format!("the {} does not answer", found.chip.name()))
 }
 
 /// The fan controller of this PC, if Clokrix may drive it.
@@ -92,6 +159,7 @@ pub fn open_device() -> Result<Box<dyn FanDevice>, FanCapability> {
     .map_err(|r| FanCapability::ReadOnly {
         reason: r.reason().into(),
     })?;
+    unlock_if_needed(&io, &lock, &found).map_err(unavailable)?;
     log::info!(
         "fans: control available on {} ({} rev {:#04x})",
         board.name,

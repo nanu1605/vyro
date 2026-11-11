@@ -20,6 +20,7 @@ hardFaultsPerSec: number | null,
  */
 channels: number | null, dimms: Array<DimmSnapshot>, 
 /**
- * Memory-controller timings (AMD Zen 4/5 DDR5 through PawnIO); `null` elsewhere.
+ * Memory-controller timings through PawnIO (AMD Zen to Zen 5, Intel Core 10th gen to Core
+ * Ultra 200S); `null` elsewhere.
  */
 timings: MemTimings | null, };

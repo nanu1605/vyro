@@ -219,22 +219,43 @@ fn sio_raw() -> serde_json::Value {
         let (block, banked, vendor) = match found {
             // A NCT679x: its vendor ID and every register Clokrix decodes, by address (only read:
             // a locked monitor shows as a wrong vendor ID here, it is not unlocked).
-            Some(f) => match sio::nct679x::tables(f.chip) {
-                Some(t) => {
-                    let regs = sio::nct679x::registers(t);
-                    let vendor = sio::nct679x::vendor(&mut sio::Ports(&io), f.base)?;
-                    (
-                        None,
-                        Some(sio::nct679x::read(&mut sio::Ports(&io), f.base, &regs)?),
-                        Some(vendor),
-                    )
-                }
-                None => (
-                    sio::read_block(&io, f.base, BLOCK_START, BLOCK_LEN)?,
+            Some(f) if f.chip.family() == sio::Family::Nct679x => {
+                let t = sio::nct679x::tables(f.chip).expect("a NCT679x has tables");
+                let regs = sio::nct679x::registers(t);
+                let vendor = sio::nct679x::vendor(&mut sio::Ports(&io), f.base)?;
+                (
                     None,
-                    None,
-                ),
-            },
+                    Some(sio::nct679x::read(&mut sio::Ports(&io), f.base, &regs)?),
+                    Some(vendor),
+                )
+            }
+            // An ITE chip: the registers its setup comes from and every one Clokrix decodes with
+            // all fans and temperatures counted in, by address (bank 0).
+            Some(f) if f.chip.family() == sio::Family::Ite => {
+                let all = sio::ite::Setup {
+                    fans: 0x3F,
+                    temps: 0x3F,
+                    avcc3: sio::ite::has_avcc3(f.chip),
+                };
+                let mut regs = vec![
+                    sio::ite::CONFIG,
+                    sio::ite::BANK,
+                    sio::ite::VENDOR,
+                    sio::ite::FAN_16BIT,
+                    sio::ite::FAN_MAIN_CTRL,
+                    sio::ite::TEMP456,
+                ];
+                regs.extend(sio::ite::registers(all));
+                let banks = sio::ite::has_banks(f.chip);
+                let dump = sio::ite::read(&mut sio::Ports(&io), f.base, banks, &regs)?;
+                let wide = dump.into_iter().map(|(a, v)| (u16::from(a), v)).collect();
+                (None, Some(wide), None)
+            }
+            Some(f) => (
+                sio::read_block(&io, f.base, BLOCK_START, BLOCK_LEN)?,
+                None,
+                None,
+            ),
             None => (None, None, None),
         };
         Ok::<_, clokrix_core::pawnio::PawnIoError>((found, block, banked, vendor))
@@ -318,27 +339,39 @@ fn ram_raw() -> serde_json::Value {
             .collect::<serde_json::Map<_, _>>()
     };
     let imc = if clokrix_core::amd::supported(&id.vendor, id.family) {
+        let layout = ram::umc_layout(id.family, id.model);
         match Handle::open(Module::AmdFamily17) {
-            Ok(io) => match BusLock::new(MUTEX_PCI).hold(500, || ram::read_umc(&io)) {
-                Some(channels) => serde_json::json!(channels
-                    .iter()
-                    .map(|c| serde_json::json!({ "channel": c.channel, "regs": regs(&c.regs) }))
-                    .collect::<Vec<_>>()),
+            Ok(io) => match BusLock::new(MUTEX_PCI).hold(500, || ram::read_umc(&io, layout)) {
+                Some(channels) => serde_json::json!({
+                    "model": format!("{:#x}", id.model),
+                    "layout": format!("{layout:?}"),
+                    "channels": channels
+                        .iter()
+                        .map(|c| serde_json::json!({ "channel": c.channel, "regs": regs(&c.regs) }))
+                        .collect::<Vec<_>>(),
+                }),
                 None => serde_json::json!({ "error": "PCI bus busy" }),
             },
             Err(e) => serde_json::json!({ "error": e.to_string() }),
         }
     } else if id.vendor == "GenuineIntel" {
-        match Handle::open(Module::IntelMchbar) {
-            Ok(io) => {
-                let r = ram::read_imc(&io);
+        match (
+            Handle::open(Module::IntelMchbar),
+            ram::intel_layout(id.family, id.model),
+        ) {
+            (Ok(io), Some(layout)) => {
+                let r = ram::read_imc(&io, layout);
                 serde_json::json!({
                     "model": format!("{:#x}", id.model),
-                    "decoded": ram::intel_imc(id.family, id.model),
+                    "layout": format!("{layout:?}"),
                     "regs": regs(&r),
                 })
             }
-            Err(e) => serde_json::json!({ "error": e.to_string() }),
+            (Ok(_), None) => serde_json::json!({
+                "model": format!("{:#x}", id.model),
+                "error": "no memory controller layout known for this CPU",
+            }),
+            (Err(e), _) => serde_json::json!({ "error": e.to_string() }),
         }
     } else {
         serde_json::Value::Null

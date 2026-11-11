@@ -164,7 +164,8 @@ pub struct MemorySnapshot {
     /// Decoded / heuristic; approximate.
     pub channels: Option<u32>,
     pub dimms: Vec<DimmSnapshot>,
-    /// Memory-controller timings (AMD Zen 4/5 DDR5 through PawnIO); `null` elsewhere.
+    /// Memory-controller timings through PawnIO (AMD Zen to Zen 5, Intel Core 10th gen to Core
+    /// Ultra 200S); `null` elsewhere.
     pub timings: Option<MemTimings>,
 }
 

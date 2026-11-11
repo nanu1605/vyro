@@ -1,13 +1,14 @@
-//! `SioProvider`: reads the Super-I/O hardware monitor through PawnIO's `LpcIO` module. Without
-//! PawnIO or a supported chip `init` fails and fans, voltages and board temperatures stay empty.
+//! `SioProvider`: reads the Super-I/O hardware monitor through PawnIO's `LpcIO` module: a
+//! Nuvoton NCT6687 or NCT679x, or an ITE chip (2.3). Without PawnIO or a supported chip `init`
+//! fails and fans, voltages and board temperatures stay empty.
 
 use std::time::Duration;
 
 use super::nct679x::{self, CR_ENABLE, CR_GLOBAL_OPTION, HM_IO_LOCK, NUVOTON};
 use super::{
-    decode, identify, layout, plausible, read_ec, valid_base, BoardTemp, Chip, Decoded, Layout,
-    PortIo, BLOCK_LEN, BLOCK_START, CONFIG_PORTS, ENTER_KEY, EXIT_KEY, LDN_HWM, REG_BASE,
-    REG_CHIP_ID, REG_CHIP_REV, REG_LDN,
+    decode, identify, ite, layout, plausible, read_ec, valid_base, BoardTemp, Chip, Decoded,
+    Family, Layout, PortIo, BLOCK_LEN, BLOCK_START, CONFIG_PORTS, ENTER_KEY, EXIT_KEY, LDN_HWM,
+    REG_BASE, REG_CHIP_ID, REG_CHIP_REV, REG_LDN,
 };
 use crate::hwid::smbios;
 use crate::pawnio::{BusLock, Handle, Module, PawnIoError, MUTEX_ISABUS};
@@ -24,6 +25,8 @@ const MAX_STALE: u32 = 3;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Found {
     pub chip: Chip,
+    /// Configuration registers 0x20 and 0x21: a Nuvoton chip's ID and revision, an ITE chip's two
+    /// ID bytes.
     pub id: u8,
     pub rev: u8,
     pub config_port: u16,
@@ -54,51 +57,106 @@ fn sio_out(io: &Handle, reg: u8, value: u8) -> Result<(), PawnIoError> {
         .map(drop)
 }
 
-/// Looks for a supported chip at 0x2E and 0x4E. Call with the ISA-bus mutex held. On success
-/// the handle's module keeps the chip's I/O ranges unlocked for [`read_block`].
+/// Looks for a supported chip at 0x2E and 0x4E: a Nuvoton one at either, then an ITE one at 0x2E
+/// (the ITE chip at 0x4E of some Gigabyte boards is not read; see [`ite`]). Call with the ISA-bus
+/// mutex held. On success the handle's module keeps the chip's I/O ranges unlocked for
+/// [`read_block`] and the other readers.
 pub fn detect(io: &Handle) -> Result<Option<Found>, PawnIoError> {
     for (slot, port) in (0u64..).zip(CONFIG_PORTS) {
         io.exec("ioctl_select_slot", &[slot], 0)?;
-        outb(io, port, ENTER_KEY)?;
-        outb(io, port, ENTER_KEY)?;
-        let probe = (|| {
-            let id = sio_in(io, REG_CHIP_ID)?;
-            let rev = sio_in(io, REG_CHIP_REV)?;
-            let Some(chip) = identify(id, rev) else {
-                return Ok(None);
-            };
-            io.exec("ioctl_find_bars", &[], 0)?;
-            sio_out(io, REG_LDN, LDN_HWM)?;
-            let base = u16::from_be_bytes([sio_in(io, REG_BASE)?, sio_in(io, REG_BASE + 1)?]);
-            // A NCT679x may report its address port (base + 5); Linux `nct6775` masks the low
-            // bits off, as PawnIO's `LpcIO` does when it lets the range through.
-            let base = if chip.banked() { base & !7 } else { base };
-            let (active, io_locked) = if chip.banked() {
-                (
-                    sio_in(io, CR_ENABLE)? & 1 != 0,
-                    sio_in(io, CR_GLOBAL_OPTION)? & HM_IO_LOCK != 0,
-                )
-            } else {
-                (true, false)
-            };
-            Ok(valid_base(base).then_some(Found {
-                chip,
-                id,
-                rev,
-                config_port: port,
-                base,
-                active,
-                io_locked,
-            }))
-        })();
-        // Always leave configuration mode, whatever the probe found.
-        let exit = outb(io, port, EXIT_KEY);
-        if let Some(found) = probe? {
-            exit?;
+        if let Some(found) = probe_nuvoton(io, port)? {
             return Ok(Some(found));
+        }
+        if port == CONFIG_PORTS[0] {
+            if let Some(found) = probe_ite(io, port)? {
+                return Ok(Some(found));
+            }
         }
     }
     Ok(None)
+}
+
+/// The Nuvoton key, ID and revision; on a chip Clokrix reads, its monitor's base.
+fn probe_nuvoton(io: &Handle, port: u16) -> Result<Option<Found>, PawnIoError> {
+    outb(io, port, ENTER_KEY)?;
+    outb(io, port, ENTER_KEY)?;
+    let probe = (|| {
+        let id = sio_in(io, REG_CHIP_ID)?;
+        let rev = sio_in(io, REG_CHIP_REV)?;
+        let Some(chip) = identify(id, rev) else {
+            return Ok(None);
+        };
+        io.exec("ioctl_find_bars", &[], 0)?;
+        sio_out(io, REG_LDN, LDN_HWM)?;
+        let base = u16::from_be_bytes([sio_in(io, REG_BASE)?, sio_in(io, REG_BASE + 1)?]);
+        // A NCT679x may report its address port (base + 5); Linux `nct6775` masks the low
+        // bits off, as PawnIO's `LpcIO` does when it lets the range through.
+        let base = if chip.banked() { base & !7 } else { base };
+        let (active, io_locked) = if chip.banked() {
+            (
+                sio_in(io, CR_ENABLE)? & 1 != 0,
+                sio_in(io, CR_GLOBAL_OPTION)? & HM_IO_LOCK != 0,
+            )
+        } else {
+            (true, false)
+        };
+        Ok(valid_base(base).then_some(Found {
+            chip,
+            id,
+            rev,
+            config_port: port,
+            base,
+            active,
+            io_locked,
+        }))
+    })();
+    // Always leave configuration mode, whatever the probe found.
+    let exit = outb(io, port, EXIT_KEY);
+    let found = probe?;
+    if found.is_some() {
+        exit?;
+    }
+    Ok(found)
+}
+
+/// The ITE key and ID; on a chip Clokrix reads, its environment controller's base.
+fn probe_ite(io: &Handle, port: u16) -> Result<Option<Found>, PawnIoError> {
+    for key in ite::ENTER_2E {
+        outb(io, port, key)?;
+    }
+    let mut id = 0xFFFF;
+    let probe = (|| {
+        id = u16::from_be_bytes([sio_in(io, REG_CHIP_ID)?, sio_in(io, REG_CHIP_REV)?]);
+        let Some(chip) = ite::identify(id) else {
+            return Ok(None);
+        };
+        io.exec("ioctl_find_bars", &[], 0)?;
+        sio_out(io, REG_LDN, ite::LDN_EC)?;
+        let base = u16::from_be_bytes([sio_in(io, REG_BASE)?, sio_in(io, REG_BASE + 1)?]) & !7;
+        let active = sio_in(io, ite::CR_ACTIVATE)? & 1 != 0;
+        let [hi, lo] = id.to_be_bytes();
+        Ok(valid_base(base).then_some(Found {
+            chip,
+            id: hi,
+            rev: lo,
+            config_port: port,
+            base,
+            active,
+            io_locked: false,
+        }))
+    })();
+    // Leave configuration mode: an ITE chip the ITE way; anything else that took the key (only
+    // 0x55, an SMSC chip's key, can open another maker's) with the common exit key.
+    let exit = if ite::is_ite(id) {
+        sio_out(io, ite::CR_CONFIG_CONTROL, ite::EXIT)
+    } else {
+        outb(io, port, EXIT_KEY)
+    };
+    let found = probe?;
+    if found.is_some() {
+        exit?;
+    }
+    Ok(found)
 }
 
 /// Clears a NCT679x's monitor I/O lock (Super-I/O register 0x28, bit 4) and nothing else, as
@@ -182,6 +240,8 @@ pub struct SioProvider {
     io: Option<Handle>,
     isa: BusLock,
     found: Option<Found>,
+    /// What an ITE chip's firmware enabled, read at start.
+    ite: Option<ite::Setup>,
     layout: Option<Layout>,
     keys: Keys,
     last: Readings,
@@ -189,11 +249,49 @@ pub struct SioProvider {
 }
 
 impl SioProvider {
+    /// An ITE chip's monitor must be on and answer; then what its firmware enabled.
+    fn ite_setup(&self, io: &Handle, found: &Found) -> Result<ite::Setup, BoxError> {
+        let name = found.chip.name();
+        if !found.active {
+            return Err(format!("{name}: the firmware left its hardware monitor off").into());
+        }
+        let regs = [ite::VENDOR, ite::CONFIG]
+            .into_iter()
+            .chain(ite::SETUP_REGS)
+            .collect::<Vec<_>>();
+        let got = self
+            .isa
+            .hold(500, || {
+                ite::read(
+                    &mut Ports(io),
+                    found.base,
+                    ite::has_banks(found.chip),
+                    &regs,
+                )
+            })
+            .ok_or("ISA bus busy")??;
+        let r = |a: u8| got.iter().find(|x| x.0 == a).map_or(0, |x| x.1);
+        ite::answers(r(ite::VENDOR), r(ite::CONFIG)).map_err(|e| format!("{name}: {e}"))?;
+        let s = ite::setup(
+            found.chip,
+            r(ite::FAN_MAIN_CTRL),
+            r(ite::FAN_16BIT),
+            r(ite::TEMP456),
+        );
+        log::info!(
+            "sio: {name} fans enabled {:#08b}, temperatures {:#08b}",
+            s.fans,
+            s.temps
+        );
+        Ok(s)
+    }
+
     pub fn new() -> Self {
         Self {
             io: None,
             isa: BusLock::new(MUTEX_ISABUS),
             found: None,
+            ite: None,
             layout: None,
             keys: Keys::default(),
             last: Readings::default(),
@@ -326,6 +424,9 @@ impl Provider for SioProvider {
             .hold(500, || detect(&io))
             .ok_or("ISA bus busy")??
             .ok_or("no supported Super-I/O chip")?;
+        if found.chip.family() == Family::Ite {
+            self.ite = Some(self.ite_setup(&io, &found)?);
+        }
         if found.chip.banked() {
             if !found.active {
                 return Err(format!(
@@ -407,6 +508,22 @@ impl Provider for SioProvider {
                 .filter(|dump| plausible(&dump.iter().map(|r| r.1).collect::<Vec<_>>()))
                 .map(|dump| {
                     nct679x::decode(t, |a| {
+                        dump.binary_search_by_key(&a, |r| r.0)
+                            .ok()
+                            .map(|i| dump[i].1)
+                    })
+                })
+        } else if let Some(s) = self.ite {
+            let regs = ite::registers(s);
+            let banks = ite::has_banks(found.chip);
+            self.isa
+                .hold(LOCK_MS, || {
+                    ite::read(&mut Ports(io), found.base, banks, &regs)
+                })
+                .transpose()?
+                .filter(|dump| plausible(&dump.iter().map(|r| r.1).collect::<Vec<_>>()))
+                .map(|dump| {
+                    ite::decode(s, |a| {
                         dump.binary_search_by_key(&a, |r| r.0)
                             .ok()
                             .map(|i| dump[i].1)

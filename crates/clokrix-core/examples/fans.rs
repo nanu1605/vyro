@@ -1,4 +1,5 @@
-//! Fan-control check for Phase 12a, run as administrator with PawnIO installed.
+//! Fan-control check for Phase 12a (and, from 2.3, a NCT679x board's first check), run as
+//! administrator with PawnIO installed.
 //!
 //! ```sh
 //! clokrix-fans                 # read only: control registers, each header's mode / duty / RPM
@@ -6,9 +7,11 @@
 //! clokrix-fans --restore       # hand every header back to the BIOS from clokrix-fans-restore.json
 //! ```
 //!
-//! The default run writes nothing. `--try` works only on an allow-listed board and header; it
-//! saves the BIOS state next to the executable before writing and restores it afterwards. Quit
-//! MSI Center / FanControl first: two programs driving the same chip fight each other.
+//! The default run writes nothing. `--try` works on an allow-listed board and header, and on an
+//! ASUS board with a NCT679x that has not had its field check yet (one PWM output at a time, with
+//! you watching: the first step of that check). It saves the BIOS state next to the executable
+//! before writing and restores it afterwards. Quit MSI Center, Armoury Crate / AI Suite and
+//! FanControl first: two programs driving the same chip fight each other.
 
 #[cfg(windows)]
 mod win {
@@ -18,7 +21,7 @@ mod win {
 
     use clokrix_core::pawnio::{BusLock, Handle, Module, PawnIoError, MUTEX_ISABUS};
     use clokrix_core::sio::control::{self, BiosState, Board, ControlError};
-    use clokrix_core::sio::{self, Found, FAN_BASE};
+    use clokrix_core::sio::{self, control679x, nct679x, Family, Found, FAN_BASE};
 
     type Error = Box<dyn std::error::Error>;
 
@@ -50,10 +53,30 @@ mod win {
                 .hold(LOCK_MS, || sio::detect(&io))
                 .ok_or("ISA bus busy")??
                 .ok_or("no supported Super-I/O chip found")?;
+            // A NCT679x whose firmware locked its monitor's ports answers nothing until the
+            // lock is cleared, as the app clears it.
+            if found.chip.family() == Family::Nct679x {
+                let vendor = lock
+                    .hold(LOCK_MS, || {
+                        nct679x::vendor(&mut sio::Ports(&io), found.base)
+                    })
+                    .ok_or("ISA bus busy")??;
+                if vendor != nct679x::NUVOTON && found.io_locked {
+                    println!(
+                        "The firmware locked the monitor's ports; unlocking, as the app does."
+                    );
+                    lock.hold(LOCK_MS, || sio::unlock_monitor(&io, &found))
+                        .ok_or("ISA bus busy")??;
+                }
+            }
             Ok(Self { io, lock, found })
         }
 
-        /// One locked access: reads `len` EC bytes from `start`.
+        fn banked(&self) -> bool {
+            self.found.chip.family() == Family::Nct679x
+        }
+
+        /// One locked access: reads `len` EC bytes from `start` (the NCT6687).
         fn read(&self, start: u16, len: u16) -> Result<Vec<u8>, Error> {
             let r = self
                 .lock
@@ -62,6 +85,17 @@ mod win {
                 })
                 .ok_or("ISA bus busy")??;
             Ok(r.ok_or("another program is using the fan controller")?)
+        }
+
+        /// One locked read of a NCT679x's registers.
+        fn read_banked(&self, regs: &[u16]) -> Result<Vec<(u16, u8)>, Error> {
+            let r = self
+                .lock
+                .hold(LOCK_MS, || {
+                    nct679x::read(&mut sio::Ports(&self.io), self.found.base, regs)
+                })
+                .ok_or("ISA bus busy")??;
+            Ok(r)
         }
 
         /// One locked control operation.
@@ -75,10 +109,51 @@ mod win {
                 .ok_or("ISA bus busy")?;
             r.map_err(|e| e.to_string().into())
         }
+
+        fn outputs(&self) -> u16 {
+            control679x::outputs(self.found.chip)
+        }
+
+        fn capture(&self, now: u64) -> Result<BiosState, Error> {
+            let (id, rev, base) = (self.found.id, self.found.rev, self.found.base);
+            if self.banked() {
+                let n = self.outputs();
+                self.control(|io| control679x::capture(io, base, (id, rev), n, now))
+            } else {
+                self.control(|io| control::capture(io, base, id, rev, now))
+            }
+        }
+
+        fn set(&self, board: &Board, header: u16, pct: f64) -> Result<u8, Error> {
+            let base = self.found.base;
+            if self.banked() {
+                self.control(|io| control679x::set_duty(io, base, board, header, pct))
+            } else {
+                self.control(|io| control::set_duty(io, base, board, header, pct))
+            }
+        }
+
+        fn restore(&self, state: &BiosState) -> Result<(), Error> {
+            let base = self.found.base;
+            if self.banked() {
+                self.control(|io| control679x::restore(io, base, state))
+            } else {
+                self.control(|io| control::restore(io, base, state))
+            }
+        }
+    }
+
+    fn name(board: Option<&Board>, index: u16) -> &'static str {
+        board
+            .and_then(|b| b.headers.iter().find(|x| x.index == index))
+            .map_or("-", |x| x.name)
     }
 
     /// Mode, duty command, duty output and RPM of each header, as a table and as JSON.
     fn snapshot(chip: &Chip, board: Option<&Board>) -> Result<serde_json::Value, Error> {
+        if chip.banked() {
+            return snapshot_banked(chip, board);
+        }
         let mode = chip.read(control::CTRL_MODE, 1)?[0];
         let commands = chip.read(control::DUTY_COMMAND, control::HEADERS)?;
         let outputs = chip.read(control::DUTY_OUTPUT, control::HEADERS)?;
@@ -88,9 +163,7 @@ mod win {
         for h in control::headers(mode, &commands, &outputs) {
             let i = usize::from(h.index) * 2;
             let rpm = sio::rpm(fans[i], fans[i + 1]);
-            let name = board
-                .and_then(|b| b.headers.iter().find(|x| x.index == h.index))
-                .map_or("-", |x| x.name);
+            let name = name(board, h.index);
             println!(
                 "  {:<4} {:<15} {:<9} {:>5.1} %   {:>5.1} %   {:>6}",
                 h.index,
@@ -108,6 +181,55 @@ mod win {
         Ok(serde_json::json!({ "mode": format!("{mode:#04x}"), "headers": rows }))
     }
 
+    /// The same for a NCT679x: each PWM output's mode register, duty, output and the speed of the
+    /// fan input with the same number (usually, not always, the header's own).
+    fn snapshot_banked(chip: &Chip, board: Option<&Board>) -> Result<serde_json::Value, Error> {
+        let base = chip.found.base;
+        let n = chip.outputs();
+        let dump = chip.control(|io| control679x::dump(io, base, n))?;
+        let fan_regs: Vec<u16> = nct679x::tables(chip.found.chip)
+            .map(|t| t.fans.iter().flat_map(|&f| [f, f + 1]).collect())
+            .unwrap_or_default();
+        let fans = chip.read_banked(&fan_regs)?;
+        let rpm = |i: usize| {
+            let r = |a: u16| fans.iter().find(|x| x.0 == a).map(|x| x.1);
+            let reg = *fan_regs.get(i * 2)?;
+            let v = u16::from_be_bytes([r(reg)?, r(reg + 1)?]);
+            (v != 0xFFFF).then_some(f64::from(v))
+        };
+        let mut rows = Vec::new();
+        println!("  pwm  name            mode            duty      output      RPM");
+        for control679x::OutputRegs {
+            index: h,
+            mode,
+            duty,
+            output,
+        } in dump
+        {
+            let software = control679x::manual(mode);
+            let name = name(board, h);
+            let rpm = rpm(usize::from(h));
+            println!(
+                "  {:<4} {:<15} {:<15} {:>5.1} %   {:>5.1} %   {:>6}",
+                h,
+                name,
+                if software {
+                    "software".to_owned()
+                } else {
+                    format!("BIOS ({mode:#04x})")
+                },
+                control::percent(duty),
+                control::percent(output),
+                rpm.map_or("-".to_owned(), |r| format!("{r:.0}")),
+            );
+            rows.push(serde_json::json!({
+                "header": h, "name": name, "software": software, "mode": format!("{mode:#04x}"),
+                "command": duty, "output": output, "rpm": rpm,
+            }));
+        }
+        Ok(serde_json::json!({ "headers": rows }))
+    }
+
     fn exe_dir() -> PathBuf {
         std::env::current_exe()
             .ok()
@@ -120,7 +242,7 @@ mod win {
     }
 
     fn restore(chip: &Chip, state: &BiosState) -> Result<(), Error> {
-        chip.control(|io| control::restore(io, chip.found.base, state))?;
+        chip.restore(state)?;
         std::fs::remove_file(restore_path())?;
         println!("BIOS control restored.");
         Ok(())
@@ -139,10 +261,9 @@ mod win {
         );
         println!("If this window is closed early, run `clokrix-fans --restore`.\n");
         let now = u64::try_from(clokrix_core::unix_now()).unwrap_or(0);
-        let (id, rev, base) = (chip.found.id, chip.found.rev, chip.found.base);
-        let state = chip.control(|io| control::capture(io, base, id, rev, now))?;
+        let state = chip.capture(now)?;
         control::save(&restore_path(), &state)?;
-        let result = chip.control(|io| control::set_duty(io, base, board, header, pct));
+        let result = chip.set(board, header, pct);
         let mut log = Vec::new();
         if let Err(e) = &result {
             println!("Write failed ({e}); restoring.");
@@ -178,7 +299,7 @@ mod win {
         );
         let f = chip.found;
         println!(
-            "{} (id {:#04x} rev {:#04x}) at {:#x}, EC base {:#06x}",
+            "{} (id {:#04x} rev {:#04x}) at {:#x}, base {:#06x}",
             f.chip.name(),
             f.id,
             f.rev,
@@ -186,11 +307,22 @@ mod win {
             f.base,
         );
         println!("Board: {} {}", maker.unwrap_or("?"), product.unwrap_or("?"));
-        let board = control::capability(f.chip, f.rev, maker, product);
-        match board {
-            Ok(b) => println!("Fan control: allowed on {} (validation pending)", b.name),
-            Err(r) => println!("Fan control: read-only ({})", r.reason()),
+        if f.chip.family() == Family::Ite {
+            println!("Fan control: none on ITE chips; the app reads their fans.");
+            return Ok(());
         }
+        let board = control::capability(f.chip, f.rev, maker, product);
+        // Before a NCT679x board's field check, only this tool's supervised test writes it.
+        let candidate = control::candidate(f.chip, f.rev, maker);
+        match (&board, &candidate) {
+            (Ok(b), _) => println!("Fan control: allowed on {} (validation pending)", b.name),
+            (Err(r), Some(_)) => println!(
+                "Fan control: read-only in the app ({}); --try can test one output at a time",
+                r.reason()
+            ),
+            (Err(r), None) => println!("Fan control: read-only ({})", r.reason()),
+        }
+        let tryable: Option<Board> = board.ok().copied().or(candidate);
 
         if args.iter().any(|a| a == "--restore") {
             let state = control::load(&restore_path())?.ok_or("nothing to restore")?;
@@ -209,33 +341,54 @@ mod win {
                 println!("A previous test did not finish; restoring it first.");
                 restore(&chip, &state)?;
             }
-            let board = board.map_err(|r| r.reason())?;
-            return try_duty(&chip, board, header, pct);
+            let board = tryable.ok_or("fan control is not validated on this motherboard")?;
+            return try_duty(&chip, &board, header, pct);
         }
 
         // Read only: registers and three samples a second apart (the BIOS curve at work).
-        let regs = serde_json::json!({
-            "controlA00": hex(&chip.read(0xA00, 0x40)?),
-            "output160": hex(&chip.read(control::DUTY_OUTPUT, 0x10)?),
-            "fans140": hex(&chip.read(FAN_BASE, 0x20)?),
-        });
-        println!("\nEC 0xA00-0xA3F:");
-        for row in regs["controlA00"].as_array().into_iter().flatten() {
-            println!("  {}", row.as_str().unwrap_or(""));
-        }
+        let regs = if chip.banked() {
+            let mut regs: Vec<u16> = control679x::MODE
+                .iter()
+                .chain(&control679x::DUTY)
+                .chain(&control679x::OUTPUT)
+                .copied()
+                .collect();
+            regs.sort_unstable();
+            regs.dedup();
+            let r = chip.read_banked(&regs)?;
+            println!("\nPWM registers:");
+            for (a, v) in &r {
+                println!("  {a:#05x} = {v:#04x}");
+            }
+            serde_json::json!({
+                "pwm": r.iter().map(|(a, v)| (format!("{a:#05x}"), serde_json::Value::from(format!("{v:#04x}")))).collect::<serde_json::Map<_, _>>(),
+            })
+        } else {
+            let regs = serde_json::json!({
+                "controlA00": hex(&chip.read(0xA00, 0x40)?),
+                "output160": hex(&chip.read(control::DUTY_OUTPUT, 0x10)?),
+                "fans140": hex(&chip.read(FAN_BASE, 0x20)?),
+            });
+            println!("\nEC 0xA00-0xA3F:");
+            for row in regs["controlA00"].as_array().into_iter().flatten() {
+                println!("  {}", row.as_str().unwrap_or(""));
+            }
+            regs
+        };
         let mut samples = Vec::new();
         for s in 0..3 {
             if s > 0 {
                 std::thread::sleep(Duration::from_secs(1));
             }
             println!();
-            samples.push(snapshot(&chip, board.ok())?);
+            samples.push(snapshot(&chip, tryable.as_ref())?);
         }
         let out = exe_dir().join("clokrix-fans.json");
         let json = serde_json::json!({
             "chip": f.chip.name(), "id": format!("{:#04x}", f.id), "rev": format!("{:#04x}", f.rev),
             "base": format!("{:#06x}", f.base), "boardMaker": maker, "boardProduct": product,
-            "allowed": board.is_ok(), "registers": regs, "samples": samples,
+            "allowed": board.is_ok(), "tryable": tryable.is_some(),
+            "registers": regs, "samples": samples,
         });
         std::fs::write(&out, serde_json::to_string_pretty(&json)?)?;
         println!(
