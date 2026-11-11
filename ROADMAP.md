@@ -4147,6 +4147,19 @@ the field check below ran it on the Intel PC, without its raw registers kept.
 - [x] **Version 2.1.0** (the owner, 2026-11-11: "release 2.1.0"): `scripts/set-version.py
       2.1.0`; What's new in 2.1.0: Intel CPUs read, ASUS boards' sensors, memory on Intel. All
       are this PC's, so none is marked for the phone app.
+- [x] **2.1.0 released** (2026-11-11, on the owner's go: "release 2.1.0"). CI passed on 7de6bf5
+      (run 42979892370; Linux, Windows with the smoke test, the relay and phone app with the
+      end-to-end test, accessibility). `main` fast-forwarded to it from 2.0.4's records, and
+      Release run 42983461336 tagged `v2.1.0`, found the relay's address in `vyro.exe` and
+      published the 14.1 MB MSI, `latest.json` and checksums here and to
+      `nanu1605/vyro-releases`; GitHub's own digests of the files published here match the
+      checksums the run printed (MSI `2c25b49e…`, `latest.json` `9d06ba16…`), and the
+      `latest.json` installed copies read (`nanu1605/vyro-releases`' latest) is that file,
+      offering 2.1.0 from there. Installed copies on 1.4.1 to 2.0.4 are offered it. Unsigned, as
+      before ([`docs/signing.md`](docs/signing.md)). The relay was not deployed again: it serves
+      8c53592's phone app and relay (run 40764531668). Of what the phone app is built from, only
+      the notes changed since (2.0.3's to 2.1.0's, none for the phone) and two bindings' doc
+      comments; the relay not at all.
 
 ## Risks
 
