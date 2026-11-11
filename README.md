@@ -12,40 +12,40 @@ third-party monitoring app or library).
 - **Build spec:** [`PROJECT_PLAN.md`](PROJECT_PLAN.md) — what to build and why.
 - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — milestones, phase tracker, decision log.
 
-**Status:** 2.0. Live CPU, GPU, board, fan, voltage, RAM, storage and network sensors on
-Windows (low-level ones through PawnIO, read by the Clokrix Sensor Service), history, System
-Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in 2.0:
-[notifications on your phone](#notifications-20) with the app closed (alerts, low batteries,
-game summaries and the PC going quiet), and [GPU tuning](#gpu-tuning-16) for AMD Radeon and
-Intel Arc cards too. New in 1.7: the
-[phone app](#phone-app-from-anywhere-14) shows the PC's screen and uses it, for a phone you
-allow, straight to the PC where it can and a picture at a time through the relay where it
-cannot, in full screen and in HD or SD; the phone's voice reaches the PC as a clip to paste or as
-its microphone; and the app is redesigned. New in 1.6:
-[GPU tuning](#gpu-tuning-16) for NVIDIA RTX 20 to RTX 50 cards, with presets made for the card,
-your own settings, a stability test and "Find my best". New in 1.5: the
-[phone app](#phone-app-from-anywhere-14) shows what runs on the PC, its devices and Health, and,
-if you allow it on the PC, changes it: end a program, shut down, restart, sleep or lock, wake
-another PC, switch profiles, run a benchmark or diagnostics. New in 1.4.1:
-Bluetooth Connect and Disconnect that work for headphones and speakers, a device's connection
-as Windows Settings shows it, and a low battery on the Dashboard. New in 1.4: a
-[phone app](#phone-app-from-anywhere-14) for Android and iPhone shows the PC's readings from any
+**Status:** 2.2. New in 2.2: the new name, Clokrix, and its logo; an installed Vyro updates to
+it and keeps its settings and history ([the relay](docs/remote.md#the-relays-new-address-22) has
+a new address, so phones pair again once). Live CPU, GPU, board, fan, voltage, RAM, storage and
+network sensors on Windows (low-level ones through PawnIO, read by the Clokrix Sensor Service),
+history, System Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in
+2.0: [notifications on your phone](#notifications-20) with the app closed (alerts, low
+batteries, game summaries and the PC going quiet), and [GPU tuning](#gpu-tuning-16) for AMD
+Radeon and Intel Arc cards too. New in 1.7: the [phone app](#phone-app-from-anywhere-14) shows
+the PC's screen and uses it, for a phone you allow, straight to the PC where it can and a
+picture at a time through the relay where it cannot, in full screen and in HD or SD; the phone's
+voice reaches the PC as a clip to paste or as its microphone; and the app is redesigned. New in
+1.6: [GPU tuning](#gpu-tuning-16) for NVIDIA RTX 20 to RTX 50 cards, with presets made for the
+card, your own settings, a stability test and "Find my best". New in 1.5: the [phone
+app](#phone-app-from-anywhere-14) shows what runs on the PC, its devices and Health, and, if you
+allow it on the PC, changes it: end a program, shut down, restart, sleep or lock, wake another
+PC, switch profiles, run a benchmark or diagnostics. New in 1.4.1: Bluetooth Connect and
+Disconnect that work for headphones and speakers, a device's connection as Windows Settings
+shows it, and a low battery on the Dashboard. New in 1.4: a [phone
+app](#phone-app-from-anywhere-14) for Android and iPhone shows the PC's readings from any
 network, through the Clokrix relay, encrypted end to end. Also new in 1.4: every device named as
 Windows Settings names it, the batteries of Logitech, PlayStation and Xbox wireless devices,
-Connect and Disconnect for Bluetooth devices, and an accent of any colour. 1.2:
-[desktop widgets](#desktop-widgets-11-12) stay in view through Show desktop, snap to the
-screen's edges and to each other, can let clicks through, and come in three new kinds (Network,
-Game FPS, Top processes); My PC shows its airflow as smoke lines; and Dashboard cards pack
-without blank space. 1.1 added a new look (a sidebar, a command palette and the whole width of
-the window), a livelier 3-D My PC with a laptop model, desktop widgets and a smoother overlay
-graph. 1.0 added
+Connect and Disconnect for Bluetooth devices, and an accent of any colour. 1.2: [desktop
+widgets](#desktop-widgets-11-12) stay in view through Show desktop, snap to the screen's edges
+and to each other, can let clicks through, and come in three new kinds (Network, Game FPS, Top
+processes); My PC shows its airflow as smoke lines; and Dashboard cards pack without blank
+space. 1.1 added a new look (a sidebar, a command palette and the whole width of the window), a
+livelier 3-D My PC with a laptop model, desktop widgets and a smoother overlay graph. 1.0 added
 Insights with a Performance Score, alerts with several conditions and actions, a benchmark,
 one-click diagnostics and reports, themes, a dashboard builder, a My PC view, a Devices tab and
 a phone companion (the sections marked (1.0) below). 0.3 added automatic game profiles, a
 configurable in-game overlay and a replay of each game session (see [Gaming](#gaming)). 0.2
 added fan and pump control, so far only on the MSI B650M GAMING PLUS WIFI (MS-7E24). See
-[`ROADMAP.md`](ROADMAP.md) for what is verified on which hardware.
-Contributions: [`CONTRIBUTING.md`](CONTRIBUTING.md).
+[`ROADMAP.md`](ROADMAP.md) for what is verified on which hardware. Contributions:
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Install
 

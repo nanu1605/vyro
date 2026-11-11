@@ -673,7 +673,7 @@ dependencies = [
 
 [[package]]
 name = "clokrix"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "clokrix-core",
  "log",
@@ -692,7 +692,7 @@ dependencies = [
 
 [[package]]
 name = "clokrix-core"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -724,7 +724,7 @@ dependencies = [
 
 [[package]]
 name = "clokrix-service"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "clokrix-core",
  "log",

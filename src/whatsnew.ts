@@ -21,6 +21,21 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '2.2.0',
+    items: [
+      {
+        icon: 'sparkles',
+        title: 'Vyro is now Clokrix',
+        text: 'A new name and a new logo. Your settings, layouts, widgets, alert rules, history and “Start with Windows” came along; share cards and reports are now in Pictures › Clokrix and Documents › Clokrix Reports. If you had pinned Vyro to the taskbar, pin Clokrix.',
+      },
+      {
+        icon: 'phone',
+        title: 'Pair your phones again',
+        text: 'The phone app has a new address, with the new name. In Settings › Remote, pair each phone again, then add the new app to its home screen, turn its notifications on and remove the old one. A phone on this network stays paired; Windows may ask once to let Clokrix answer it.',
+      },
+    ],
+  },
+  {
     version: '2.1.0',
     items: [
       {

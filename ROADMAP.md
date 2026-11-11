@@ -15,7 +15,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 
 | # | Decision | Answer | Status |
 |---|---|---|---|
-| 1 | Product name / codename | **Clokrix** (repo name) | decided |
+| 1 | Product name / codename | **Clokrix** (the owner, 2026-11-11: "Changing the name to Clokrix from Vyro", with its logo; Vyro, the repo's name, until 2.2) | decided |
 | 2 | First release cut | **Early release** after P5 (P11), before the low-level sensors; the former P11b (own driver signing) is dropped | decided |
 | 3 | Gaming module (P10) in v1? | **Yes**: frame capture with the bundled PresentMon (MIT, Intel-signed) run by the service; companion overlay, no injection | decided |
 | 4 | Fan control (v2 write path) | Superseded by 18 | superseded |
@@ -46,7 +46,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 29 | Navigation | A sidebar with grouped views replaces the tab strip (supersedes 26); the views and their ids stay | decided |
 | 30 | Widgets and Show desktop | "Behind windows" widgets stay in view through Show desktop (Win+D), as Rainmeter's "On desktop" skins do: a probe window detects it and the widgets go on top while it lasts; Clokrix's windows are never put inside Explorer's (the owner, 2026-10-17) | decided |
 | 31 | Moving widgets and clicks | Widgets snap while dragged, in Windows' own move loop (`WM_MOVING`): to the work area's edges, beside another widget 8 px apart, or in line with it; Shift places freely. "Clicks pass through" works only while a widget is locked, so unlocking it on the Widgets page is always the way back (in the plan the owner approved, 2026-10-17) | decided |
-| 32 | Accent of any colour | A colour wheel (1.3): fills (gauges, graphs, the 3-D view, the logo, the share card's ring) show the colour as picked; text in the accent takes a shade of the same hue and chroma, lightened or darkened just to 4.5:1 on every surface of the theme. The GPU colour is the main one turned round the hue circle, away from warning hues (the owner, 2026-10-17) | decided |
+| 32 | Accent of any colour | A colour wheel (1.3): fills (gauges, graphs, the 3-D view, the logo, the share card's ring) show the colour as picked; text in the accent takes a shade of the same hue and chroma, lightened or darkened just to 4.5:1 on every surface of the theme. The GPU colour is the main one turned round the hue circle, away from warning hues (the owner, 2026-10-17) From 2.2 the Clokrix logo keeps its own magenta and cyan in every theme and accent, its main strokes white or, on a light theme, near-black (the owner, 2026-11-11) | decided |
 | 33 | Connect and Disconnect | Paired Bluetooth devices only (the owner's "all Bluetooth", 2026-10-17): audio through its audio connection as Settings does; any other device's link dropped by the Clokrix service, and Connect asks Windows to reach it. Wired and receiver devices get no actions | decided |
 | 34 | Reach from anywhere | A phone app installed from the browser (no app stores) reaches the PC through the Clokrix relay: a Cloudflare Worker, one Durable Object per PC, in the owner's free account, built into releases for everyone, with any other relay allowed in Settings (the owner, 2026-10-17). Readings sealed end to end (HKDF-SHA256 to an auth key and an AES-256-GCM key; a secret per phone that replaces the pairing link's); the relay keeps only hashes and sees metadata. Off by default; the PC opens no port. Supersedes 19's "LAN only" | decided |
 | 36 | Control from the phone | A phone paired from anywhere may change the PC only if the owner allows it, on the PC, when pairing or later (1.5; the owner's request, 2026-10-18): a fixed list of requests (`relay::api`), each checked on the PC against that phone's permission; protocol 2 gives each connection a session and counts its messages, so nothing can be replayed; what phones changed is kept and shown in Settings. Turning fan control on, confirming a pump and editing GPU settings stay at the PC. The LAN page stays read-only. Amends 34's "read-only" | decided |
@@ -4160,6 +4160,68 @@ the field check below ran it on the Intel PC, without its raw registers kept.
       8c53592's phone app and relay (run 40764531668). Of what the phone app is built from, only
       the notes changed since (2.0.3's to 2.1.0's, none for the phone) and two bindings' doc
       comments; the relay not at all.
+
+### 2.2.0 — Vyro is now Clokrix
+
+The owner's "Changing the name to "Clokrix" from "Vyro"" (2026-11-11), with the new logo and app
+icon as three SVGs, and "Plan the whole thing before building": planned first and built from the
+approved plan. The owner's answers that day: the relay moves to a new address (`clokrix-relay`;
+phones pair again once), the logo keeps its magenta and cyan, the publisher is "Clokrix", and a
+tighter X at 16 to 32 px. On `claude/vyro-2.0`.
+
+- [x] **The rename.** Folders (`crates/clokrix-core`, `crates/clokrix-service`), packages and names
+      everywhere: `clokrix.exe`, `ClokrixService` ("Clokrix Sensor Service"),
+      `\\.\pipe\clokrix-engine`, `app.clokrix.monitor`, `%ProgramData%\Clokrix`, the `CLOKRIX_*`
+      variables, the pages' `clokrix.*` keys, the field tools (`clokrix-live.exe` and the rest,
+      in CI's `clokrix-windows-<sha>`), the MSI `Clokrix_<version>_x64_en-US.msi`, the publisher
+      "Clokrix" and "Clokrix contributors". The records (this file, the versioned field checks)
+      rename the product and today's code paths, and keep branch, artifact and released file
+      names as they were. A compiled Python cache, tracked by mistake since 1.7, is not any more.
+- [x] **Kept on purpose**, each with a comment where it is: the MSI's upgrade code (so the Clokrix
+      MSI replaces an installed Vyro as an upgrade) and the updater's signing key; the relay's
+      socket protocol `vyro.1`, the sealing's salt `vyro-relay-1` and tag `vyro1`
+      (`vectors.json`), and the DPAPI entropy `vyro relay keys` (the stored relay keys must still
+      open); the companion's port 8976; the legacy logon task "Vyro"; the fixture generators
+      (they build only against 0.1.4 to 0.3.0).
+- [x] **Carried over from an installed Vyro** (`clokrix_core::rename`), once Vyro is gone (no
+      longer in Windows' installed programs, which the upgrade updates before Clokrix first
+      starts; Vyro's service can linger a while, marked for deletion). The installed service
+      renames `%ProgramData%\Vyro` (history, alert rules, fan settings) when it passes the same
+      ownership check as before (an untrusted one is never adopted), or uses it in place for a
+      run while it is in use; a console run leaves it alone. The app, before Tauri opens the
+      window, moves `%APPDATA%` and `%LOCALAPPDATA%\app.vyro.monitor` (settings, layouts,
+      widgets, paired devices, WebView2's data with the page's own, logs; entry by entry if the
+      folder is in use), rewrites the "Vyro" Run entry for `clokrix.exe` and removes Vyro's
+      notification registration; then it moves `Pictures\Vyro` and `Documents\Vyro Reports`.
+      The page's `vyro.*` keys move to `clokrix.*`; the companion still reads the old cookie and
+      hands over the new one. Notifications carry the app's icon (`IconUri`). The MSI's
+      components have new GUIDs; its uninstall also removes Vyro's Run entry and registration.
+- [x] **The logo.** `assets/brand`: the owner's three SVGs without the editor's data (they render
+      pixel for pixel the same) and the tighter X for 16 to 32 px. `scripts/icons.mjs`, which
+      replaces `phone-icons.mjs`, makes the ICO (its 32 px picture first: Tauri's window and
+      tray icon), the PNGs, the phone app's icons, the notification icon, and the installer's
+      banner and dialog pictures. The app draws the logo from its own shapes (`brand.ts`; the
+      same pixels as the file): the sidebar (with its pixel scatter, the X alone when folded),
+      the phone app's bar and the companion page (without), and share cards. Its main strokes
+      follow the theme, white or Daylight's #15151F; magenta and cyan never change (decision 32).
+- [x] **Budgets** (`scripts/bundle_budget.py`): the companion page 34 to 35 kB and the phone app
+      44 to 45 kB, for the logo drawn in the page, about 0.7 kB each (2.1.0: 33.8 and 43.8 kB;
+      now 34.8 and 44.6). Moving old keys stays in the desktop app: the phone app has a new
+      address, and the companion keeps only the look, which the PC sends again.
+- [x] **The relay** is a new Worker, `clokrix-relay`
+      ([`docs/remote.md`](docs/remote.md#the-relays-new-address-22)): builds read
+      `CLOKRIX_RELAY_URL`, and the Release workflow stops if only `VYRO_RELAY_URL` is set. The old
+      `vyro-relay` keeps serving PCs still on Vyro until the owner deletes it.
+- [x] **CI checks the upgrade:** the released Vyro 2.1.0 MSI (pinned SHA-256), run once and left
+      as a user leaves it, then this build's MSI over it, as the updater installs it: one
+      program, Clokrix by Clokrix; Vyro's service and folder gone; the history, both app folders
+      (with WebView2's data), "Start with Windows" and the notification registration carried
+      over; the app's smoke test passing; and the uninstall removing both names' entries.
+- [x] **Version 2.2.0**: `scripts/set-version.py 2.2.0`; What's new: "Vyro is now Clokrix" and
+      "Pair your phones again", not for the phone app (a phone pairing anew hears no news).
+- [ ] **Relay deployed** (on the owner's go), and `CLOKRIX_RELAY_URL` set by the owner.
+- [ ] **Field check** ([`docs/field-check-2.2.md`](docs/field-check-2.2.md)).
+- [ ] **2.2.0 released** (on "release 2.2.0").
 
 ## Risks
 
