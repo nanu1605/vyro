@@ -1,8 +1,8 @@
 //! What an installed Vyro kept, carried over after the rename to Clokrix (2.2). The Clokrix MSI
 //! replaces Vyro as an ordinary upgrade (the same upgrade code), but Vyro's folders, "Start with
 //! Windows" entry and notification registration keep their old names until the new service and
-//! app move them: once, and only when Vyro itself is gone (its service no longer registered), so
-//! a bare `clokrix.exe` run beside an installed Vyro takes nothing from it.
+//! app move them: once, and only when Vyro itself is gone (no longer in Windows' list of
+//! installed programs), so a bare `clokrix.exe` run beside an installed Vyro takes nothing from it.
 
 use std::io;
 use std::path::Path;
@@ -14,18 +14,34 @@ pub const OLD_NAME: &str = "Vyro";
 /// The app's identifier before 2.2: its folders under `%APPDATA%` and `%LOCALAPPDATA%` (with
 /// WebView2's data) and its notification registration.
 pub const OLD_IDENTIFIER: &str = "app.vyro.monitor";
-/// The sensor service before 2.2.
-pub const OLD_SERVICE: &str = "VyroService";
 
 /// A folder in use (a file still open by a process that is exiting) is tried this many more
 /// times, this far apart.
 const RETRIES: u32 = 4;
 const RETRY_GAP: Duration = Duration::from_millis(250);
 
-/// Whether Vyro is still installed: its service is registered. Nothing is carried over then.
+/// Where Windows lists installed programs (the MSI's entry, by product code).
+#[cfg(windows)]
+const UNINSTALL: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
+
+/// Whether Vyro is still installed: Windows lists a program named and published "Vyro". Nothing is
+/// carried over then. The upgrade removes that entry before Clokrix first starts, whereas Vyro's
+/// service can linger for a while, marked for deletion.
 pub fn vyro_installed() -> bool {
     #[cfg(windows)]
-    return crate::ipc::transport::service_registered(OLD_SERVICE);
+    {
+        use crate::winutil::{Key, HKEY_LOCAL_MACHINE};
+        let Some(list) = Key::open(HKEY_LOCAL_MACHINE, UNINSTALL) else {
+            return false;
+        };
+        list.subkeys()
+            .iter()
+            .filter_map(|k| list.subkey(k))
+            .any(|k| {
+                k.string("DisplayName").as_deref() == Some(OLD_NAME)
+                    && k.string("Publisher").as_deref() == Some(OLD_NAME)
+            })
+    }
     #[cfg(not(windows))]
     false
 }

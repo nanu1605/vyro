@@ -17,7 +17,8 @@ name: Release
 #                                                (owner/name, created with a README)
 #   secret   RELEASES_TOKEN                      fine-grained token: Contents read and write on it
 # and, for reach from anywhere (1.4):
-#   variable CLOKRIX_RELAY_URL                      the relay built into the app (relay.yml deploys it)
+#   variable CLOKRIX_RELAY_URL                   the relay built into the app (relay.yml deploys it;
+#                                                VYRO_RELAY_URL until 2.2, no longer read)
 # and, to sign the app and its installer (2.0, decision 11; docs/signing.md), all four:
 #   variable SIGNPATH_ORGANIZATION_ID            SignPath's organization id for Clokrix
 #   variable SIGNPATH_PROJECT_SLUG               its project (normally "clokrix")
@@ -65,7 +66,14 @@ jobs:
           RELEASES_REPO: ${{ vars.RELEASES_REPO }}
           HAS_RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN != '' }}
           PRERELEASE: ${{ inputs.prerelease == true }}
+          # Renamed in 2.2: builds read CLOKRIX_RELAY_URL. With only the old variable set, the
+          # release would ship with no relay, so it stops here instead.
+          HAS_OLD_RELAY: ${{ vars.VYRO_RELAY_URL != '' }}
+          HAS_RELAY: ${{ vars.CLOKRIX_RELAY_URL != '' }}
         run: |
+          if ($env:HAS_OLD_RELAY -eq 'true' -and $env:HAS_RELAY -ne 'true') {
+            throw "set the variable CLOKRIX_RELAY_URL to the clokrix-relay address (the Relay workflow prints it); VYRO_RELAY_URL is no longer read"
+          }
           $version = python scripts/set-version.py --check
           if ($LASTEXITCODE -ne 0) { throw "version files disagree" }
           $tag = "v$version"

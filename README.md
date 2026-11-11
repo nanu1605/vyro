@@ -1,8 +1,13 @@
-# Clokrix
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="assets/brand/clokrix-logo-light.svg" />
+    <img src="assets/brand/clokrix-logo.svg" alt="Clokrix" width="400" />
+  </picture>
+</h1>
 
-A low-footprint Windows hardware monitor: animated CPU/GPU speedometers, per-subsystem
-sensors, history, health and alerts, with direct sensor access (no third-party monitoring
-app or library).
+**Clokrix** (Vyro until 2.2) is a low-footprint Windows hardware monitor: animated CPU/GPU
+speedometers, per-subsystem sensors, history, health and alerts, with direct sensor access (no
+third-party monitoring app or library).
 
 - **Build spec:** [`PROJECT_PLAN.md`](PROJECT_PLAN.md) — what to build and why.
 - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — milestones, phase tracker, decision log.

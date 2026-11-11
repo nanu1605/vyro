@@ -146,7 +146,7 @@ unsafe extern "system" fn service_main(_argc: u32, _argv: *mut PWSTR) {
     STATUS.store(handle.0 as usize, Ordering::SeqCst);
     report(SERVICE_START_PENDING, 0, 10_000);
 
-    let data = data_dir();
+    let data = data_dir(true);
     crate::logger::init(data.as_ref().ok().map(|d| d.join(crate::LOG_FILE)), false);
     log_notes();
     let data = data
@@ -171,14 +171,16 @@ unsafe extern "system" fn service_main(_argc: u32, _argv: *mut PWSTR) {
 /// by SYSTEM or the administrators and must not be a link; anything else (planted by a
 /// standard user to redirect the service's writes) is moved aside and replaced.
 ///
-/// Vyro's folder (before 2.2) becomes it, once Vyro is gone, under the same rules: a trusted
-/// folder is renamed; an untrusted one is never adopted. One that cannot be renamed yet (in use)
-/// is used where it is for this run, and tried again at the next start.
-pub fn data_dir() -> Result<PathBuf, String> {
+/// With `carry` (the installed service), Vyro's folder (before 2.2) becomes it under the same
+/// rules: a trusted folder is renamed; an untrusted one is never adopted. One that cannot be
+/// renamed yet (in use) is used where it is for this run, and tried again at the next start. The
+/// service exists only once the Clokrix MSI has replaced Vyro (the same upgrade code), so Vyro is
+/// gone by then; a console run (`--console`, debugging) leaves Vyro's folder alone.
+pub fn data_dir(carry: bool) -> Result<PathBuf, String> {
     let base = PathBuf::from(std::env::var_os("ProgramData").ok_or("%ProgramData% is not set")?);
     let dir = base.join("Clokrix");
     let mut notes = Vec::new();
-    if let Some(old) = from_vyro(&base, &dir, &mut notes) {
+    if let Some(old) = carry.then(|| from_vyro(&base, &dir, &mut notes)).flatten() {
         protect(&old)?;
         lock(&NOTES).extend(notes);
         return Ok(old);
@@ -228,7 +230,7 @@ pub fn log_notes() {
 fn from_vyro(base: &Path, dir: &Path, notes: &mut Vec<String>) -> Option<PathBuf> {
     use clokrix_core::rename;
     let old = base.join(rename::OLD_NAME);
-    if std::fs::symlink_metadata(dir).is_ok() || rename::vyro_installed() {
+    if std::fs::symlink_metadata(dir).is_ok() {
         return None;
     }
     let meta = std::fs::symlink_metadata(&old).ok()?;

@@ -88,7 +88,7 @@ fn console(args: &[String]) -> i32 {
 /// user data folder.
 fn default_data_dir() -> Result<PathBuf, String> {
     #[cfg(windows)]
-    return win::data_dir();
+    return win::data_dir(false);
     #[cfg(not(windows))]
     {
         let base = std::env::var_os("XDG_DATA_HOME")

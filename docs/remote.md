@@ -229,6 +229,20 @@ A relay set up before 2.0 sends no notifications until it is deployed again from
 repository: `wrangler.jsonc` adds the `Keys` Durable Object (migration `v2`). Until then the PC
 and the phone leave notifications off, and everything else works as before.
 
+### The relay's new address (2.2)
+
+With the rename, the relay is a new Worker, `clokrix-relay`, at its own address; the owner chose
+that over keeping `vyro-relay` (2026-11-11). A phone keeps its paired PCs in its browser, for that
+address only, so each phone pairs again once, through the new address, and turns notifications on
+again there. Nothing about the relay changed besides its name: the sealing and the socket
+protocol (`vyro.1`) are the same, so the old Worker keeps serving PCs still on Vyro 2.1.
+
+1. Run the Relay workflow (`relay.yml`) on the commit to release; it deploys `clokrix-relay` and
+   prints its address.
+2. Set the repository variable `CLOKRIX_RELAY_URL` to it (builds read only this variable now; the
+   Release workflow stops if only `VYRO_RELAY_URL` is set).
+3. Once every PC runs Clokrix: **Workers & Pages → vyro-relay → Settings → Delete**.
+
 ### A TURN server for the screen (2.0.1)
 
 The relay can give a PC's phones Cloudflare's TURN service for the screen, so a session works in

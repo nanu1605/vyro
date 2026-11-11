@@ -303,6 +303,109 @@ jobs:
             '| Uninstalled | service and program files removed; history kept in %ProgramData%\Clokrix |'
           ) -join "`n" | Add-Content $env:GITHUB_STEP_SUMMARY
 
+      # 2.2: Vyro became Clokrix. The runner gets Vyro 2.1.0 as released, run once and left as a
+      # user leaves it, then this build's MSI over it as the app's updater installs it: Windows
+      # replaces Vyro (the same upgrade code), and the service and the app carry Vyro's folders,
+      # "Start with Windows" and notification registration over (clokrix_core::rename).
+      - name: Upgrade from Vyro 2.1.0, then uninstall
+        shell: pwsh
+        run: |
+          function Tell($title, $text) {
+            $t = (($text | Out-String).Trim() -replace '%', '%25' -replace "`r", '' -replace "`n", '%0A')
+            if ($t) { Write-Host "::notice title=$title::$t" }
+          }
+          trap {
+            Tell 'App log' (Get-Content "$env:LOCALAPPDATA\app.clokrix.monitor\logs\*.log" -Tail 25 -ErrorAction SilentlyContinue)
+            Tell 'Service log' (Get-Content "$env:ProgramData\Clokrix\*.log", "$env:ProgramData\Vyro\*.log" -Tail 15 -ErrorAction SilentlyContinue)
+            Write-Host "::error title=Upgrade from Vyro::$($_.Exception.Message -replace '%', '%25' -replace "`r", '' -replace "`n", '%0A')"
+            break
+          }
+          function Msi($verb, $file, $log) {
+            $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList "$verb `"$file`" /qn /norestart /l*v `"$log`""
+            if ($p.ExitCode -ne 0) { Get-Content $log -Tail 60; throw "msiexec $verb $file failed: $($p.ExitCode)" }
+          }
+          function Until($what, $seconds, [scriptblock]$ok) {
+            $end = (Get-Date).AddSeconds($seconds)
+            while (-not (& $ok)) {
+              if ((Get-Date) -gt $end) { throw "$what (waited $seconds s)" }
+              Start-Sleep -Milliseconds 500
+            }
+          }
+          $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+          $toasts = 'HKCU:\Software\Classes\AppUserModelId'
+          # A machine that only ever had Vyro: what the clean install above kept goes first.
+          Remove-Item -Recurse -Force "$env:ProgramData\Clokrix", "$env:APPDATA\app.clokrix.monitor",
+            "$env:LOCALAPPDATA\app.clokrix.monitor" -ErrorAction SilentlyContinue
+
+          $old = Join-Path $env:RUNNER_TEMP 'Vyro_2.1.0_x64_en-US.msi'
+          Invoke-WebRequest 'https://github.com/nanu1605/vyro-releases/releases/download/v2.1.0/Vyro_2.1.0_x64_en-US.msi' -OutFile $old
+          $hash = (Get-FileHash $old -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne '2c25b49ec013444098f670ae2eae47e7e3a6d854891239955ffbeb174084f286') { throw "not the released Vyro 2.1.0 MSI: $hash" }
+          Msi '/i' $old "$env:RUNNER_TEMP\vyro-install.log"
+          Until 'VyroService did not start' 90 { (Get-Service VyroService -ErrorAction SilentlyContinue).Status -eq 'Running' }
+          Until 'VyroService kept no history' 90 { Test-Path "$env:ProgramData\Vyro\history.sqlite" }
+          # Vyro's app, once (its own smoke run): its folders, WebView2's data, its toast registration.
+          $smoke = Join-Path $env:RUNNER_TEMP 'vyro-smoke.json'
+          $env:VYRO_SMOKE = $smoke
+          $app = Start-Process "$env:ProgramFiles\Vyro\vyro.exe" -PassThru
+          $env:VYRO_SMOKE = $null
+          if (-not $app.WaitForExit(150000)) { Stop-Process -Id $app.Id -Force; throw 'Vyro 2.1.0 did not finish its smoke run' }
+          foreach ($d in "$env:APPDATA\app.vyro.monitor", "$env:LOCALAPPDATA\app.vyro.monitor\EBWebView") {
+            if (-not (Test-Path $d)) { throw "Vyro 2.1.0 left no $d" }
+          }
+          # And as a user leaves it: things of its own in each folder, "Start with Windows" on.
+          foreach ($d in "$env:ProgramData\Vyro", "$env:APPDATA\app.vyro.monitor", "$env:LOCALAPPDATA\app.vyro.monitor") {
+            'kept since Vyro' | Set-Content (Join-Path $d 'upgrade-marker.txt')
+          }
+          Set-ItemProperty $run -Name Vyro -Value "`"$env:ProgramFiles\Vyro\vyro.exe`" --minimized"
+          if (-not (Test-Path "$toasts\app.vyro.monitor")) { throw 'Vyro 2.1.0 registered no notifications' }
+
+          # This build over it.
+          $msi = (Get-Item target\release\bundle\msi\*.msi | Select-Object -First 1).FullName
+          Msi '/i' $msi "$env:RUNNER_TEMP\upgrade.log"
+          $listed = @(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*' |
+            Where-Object { $_.DisplayName -in 'Vyro', 'Clokrix' })
+          if ($listed.Count -ne 1 -or $listed[0].DisplayName -ne 'Clokrix' -or $listed[0].Publisher -ne 'Clokrix') {
+            throw "installed programs: $(($listed | ForEach-Object { "$($_.DisplayName) by $($_.Publisher)" }) -join ', ')"
+          }
+          if (Get-Service VyroService -ErrorAction SilentlyContinue) { throw 'VyroService is still registered' }
+          if (Test-Path "$env:ProgramFiles\Vyro") { throw "Vyro's folder stayed: $(Get-ChildItem -Recurse "$env:ProgramFiles\Vyro" -Name)" }
+          # The service carries its data over as it starts; the app its part at its first start.
+          Until 'ClokrixService did not carry %ProgramData%\Vyro over' 90 { Test-Path "$env:ProgramData\Clokrix\upgrade-marker.txt" }
+          if (Test-Path "$env:ProgramData\Vyro") { throw '%ProgramData%\Vyro is still there' }
+          if (-not (Test-Path "$env:ProgramData\Clokrix\history.sqlite")) { throw "Vyro's history did not come along" }
+          $dir = Join-Path $env:ProgramFiles 'Clokrix'
+          $smoke = Join-Path $env:RUNNER_TEMP 'upgrade-smoke.json'
+          $env:CLOKRIX_SMOKE = $smoke
+          $app = Start-Process (Join-Path $dir 'clokrix.exe') -PassThru
+          $env:CLOKRIX_SMOKE = $null
+          if (-not $app.WaitForExit(150000)) { Stop-Process -Id $app.Id -Force; throw 'the app did not finish its smoke test after the upgrade' }
+          $result = Get-Content $smoke -Raw | ConvertFrom-Json
+          if (-not $result.ok) { throw "app smoke test after the upgrade failed: $($result.failures -join '; ')" }
+          foreach ($base in $env:APPDATA, $env:LOCALAPPDATA) {
+            if (-not (Test-Path "$base\app.clokrix.monitor\upgrade-marker.txt")) { throw "$base\app.vyro.monitor was not carried over" }
+            if (Test-Path "$base\app.vyro.monitor") { throw "$base\app.vyro.monitor is still there" }
+          }
+          if (-not (Test-Path "$env:LOCALAPPDATA\app.clokrix.monitor\EBWebView")) { throw "WebView2's data did not come along" }
+          $entries = Get-ItemProperty $run
+          if ($entries.Vyro) { throw "Vyro's Run entry is still there" }
+          if ($entries.Clokrix -ne "`"$dir\clokrix.exe`" --minimized") { throw "Start with Windows was not carried over: '$($entries.Clokrix)'" }
+          if (Test-Path "$toasts\app.vyro.monitor") { throw "Vyro's notification registration is still there" }
+          $toast = Get-ItemProperty "$toasts\app.clokrix.monitor"
+          if ($toast.DisplayName -ne 'Clokrix' -or -not (Test-Path $toast.IconUri)) { throw "notifications: $($toast.DisplayName), icon $($toast.IconUri)" }
+
+          # Uninstalled: both names leave the registry; the data stays, as for any uninstall.
+          Msi '/x' $msi "$env:RUNNER_TEMP\upgrade-uninstall.log"
+          $entries = Get-ItemProperty $run
+          if ($entries.Clokrix -or $entries.Vyro) { throw 'a Run entry stayed after the uninstall' }
+          if ((Test-Path "$toasts\app.clokrix.monitor") -or (Test-Path "$toasts\app.vyro.monitor")) { throw 'a notification registration stayed' }
+          if (-not (Test-Path "$env:ProgramData\Clokrix\upgrade-marker.txt")) { throw 'the uninstall removed the data' }
+          @(
+            '| Upgrade from Vyro 2.1.0 | one program, Clokrix by Clokrix; VyroService and Program Files\Vyro gone |',
+            '| Carried over | %ProgramData%\Vyro (history), both app folders (with WebView2), Start with Windows, notifications (with the icon) |',
+            '| Uninstalled after it | Run entries and notification registrations of both names removed; data kept |'
+          ) -join "`n" | Add-Content $env:GITHUB_STEP_SUMMARY
+
       # Ready-to-run downloads for checking on a real PC without a toolchain.
       - name: Collect Windows binaries
         shell: pwsh
