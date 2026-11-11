@@ -106,7 +106,7 @@
 <nav class="sidebar" class:rail aria-label="Clokrix">
   <div class="brand">
     <!-- Folded: the X alone. Open: the logo, X and word with its pixels (2.2). -->
-    <Logo word={false} class="mark" />
+    <Logo word={false} class="logo-mark" />
     <div class="name">
       <h1><span class="sr-only">Clokrix</span><Logo pixels={PIXELS} class="logo" /></h1>
       <span class="sub">hardware monitor</span>
@@ -183,13 +183,13 @@
     gap: 0.65rem;
     padding: 0 0.35rem 1rem;
   }
-  .brand :global(.mark) {
+  .brand :global(.logo-mark) {
     display: none;
     flex: none;
     width: 2rem;
     height: 2rem;
   }
-  .rail .brand :global(.mark) {
+  .rail .brand :global(.logo-mark) {
     display: block;
   }
   .name {

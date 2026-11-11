@@ -156,7 +156,7 @@ function moving() {
 
 /** How far the sidebar's highlight is off the selected view, px; null where either is missing. */
 function markOff() {
-  const m = document.querySelector('.sidebar .mark')?.getBoundingClientRect();
+  const m = document.querySelector('.sidebar [role="tablist"] > .mark')?.getBoundingClientRect();
   const b = document.querySelector('.sidebar [role="tab"][aria-selected="true"]')?.getBoundingClientRect();
   return m && b ? Math.max(Math.abs(m.top - b.top), Math.abs(m.height - b.height)) : null;
 }

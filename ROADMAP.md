@@ -4205,9 +4205,10 @@ tighter X at 16 to 32 px. On `claude/vyro-2.0`.
       the phone app's bar and the companion page (without), and share cards. Its main strokes
       follow the theme, white or Daylight's #15151F; magenta and cyan never change (decision 32).
 - [x] **Budgets** (`scripts/bundle_budget.py`): the companion page 34 to 35 kB and the phone app
-      44 to 45 kB, for the logo drawn in the page, about 0.7 kB each (2.1.0: 33.8 and 43.8 kB;
-      now 34.8 and 44.6). Moving old keys stays in the desktop app: the phone app has a new
-      address, and the companion keeps only the look, which the PC sends again.
+      44 to 45 kB, for the logo drawn in the page, 0.8 kB of each (2.1.0: 33.8 and 43.8 kB; now
+      34.8 and 44.7, and 34.0 and 43.9 with the logo left out). Moving old keys stays in the
+      desktop app: the phone app has a new address, and the companion keeps only the look, which
+      the PC sends again.
 - [x] **The relay** is a new Worker, `clokrix-relay`
       ([`docs/remote.md`](docs/remote.md#the-relays-new-address-22)): builds read
       `CLOKRIX_RELAY_URL`, and the Release workflow stops if only `VYRO_RELAY_URL` is set. The old
@@ -4219,6 +4220,25 @@ tighter X at 16 to 32 px. On `claude/vyro-2.0`.
       over; the app's smoke test passing; and the uninstall removing both names' entries.
 - [x] **Version 2.2.0**: `scripts/set-version.py 2.2.0`; What's new: "Vyro is now Clokrix" and
       "Pair your phones again", not for the phone app (a phone pairing anew hears no news).
+- [x] **Locally:** types, 295 frontend tests, 834 core tests and the service's, the relay's 41,
+      formatting, clippy (Linux, and for Windows with the app), the accessibility sweep (1,854
+      checks), the size budget.
+- [x] **Found by CI's accessibility sweep** (fixed and pushed): the folded sidebar's X had the
+      class `mark`, as the sidebar's highlight has, and comes before it, so the sweep took the X
+      for the highlight. Every view then waited the full 15 s for a highlight "N px off the
+      selected view" (the X's distance from it), and on GPU tuning the stability test ended in
+      that wait, taking its Stop button away: run 43004709347 failed there after 36 minutes, as
+      the sweep here had (put down at first to this machine's slowness). The X's class is
+      `logo-mark` now, and the sweep looks for the highlight in the tab list only; the highlight
+      itself always followed the selected view.
+- [x] **Found by CI's upgrade check** (each fixed and pushed): after the upgrade,
+      `Program Files\Vyro` still held "Uninstall Vyro.lnk" (run 42999635448). Tauri's template
+      keeps its shortcuts' key paths in HKCU, which Windows Installer does not look at while it
+      removes Vyro, so the MSI now deletes Vyro's shortcuts by name (that one, the Start menu's
+      and the desktop's; each folder only once empty) and `HKCU\Software\Vyro` (011a7b3). Then
+      the notification registration's icon was a verbatim path (`\\?\C:\…`, as Tauri gives the
+      app's folder), which Windows does not take for an icon; it is written plain now (1abaf5a,
+      after run 43002142410).
 - [ ] **Relay deployed** (on the owner's go), and `CLOKRIX_RELAY_URL` set by the owner.
 - [ ] **Field check** ([`docs/field-check-2.2.md`](docs/field-check-2.2.md)).
 - [ ] **2.2.0 released** (on "release 2.2.0").
