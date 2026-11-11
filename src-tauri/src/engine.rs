@@ -73,10 +73,17 @@ impl Engine {
             .spawn(move || warm.warm())?;
 
         #[cfg(windows)]
-        if let Err(e) =
-            clokrix_core::alerts::register_toast_app(&app.config().identifier, "Clokrix")
         {
-            log::warn!("alerts: could not register for notifications: {e}");
+            // The installed icon (tauri.conf.json resources); none in a bare build.
+            let icon = (app.path().resource_dir().ok())
+                .map(|d| d.join("notification.png"))
+                .filter(|p| p.is_file());
+            let aumid = &app.config().identifier;
+            if let Err(e) =
+                clokrix_core::alerts::register_toast_app(aumid, "Clokrix", icon.as_deref())
+            {
+                log::warn!("alerts: could not register for notifications: {e}");
+            }
         }
 
         let status = Arc::new(Mutex::new(BackendStatus::default()));

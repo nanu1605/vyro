@@ -11,6 +11,7 @@ mod engine;
 mod gaming;
 mod gpu_tune;
 mod look;
+mod migrate;
 mod overlay;
 mod pin;
 mod remote;
@@ -43,6 +44,8 @@ fn main() {
         .build();
 
     let context = tauri::generate_context!();
+    // Before Tauri opens anything: what Vyro kept, once it is gone (2.2). Logged in setup.
+    let carried = migrate::before_start(&context.config().identifier);
     // Release builds only: the release workflow adds the updater's public key.
     let can_update = updates::configured(context.config());
     let current = context.package_info().version.to_string();
@@ -64,7 +67,11 @@ fn main() {
             // The window starts hidden (tauri.conf.json); autostart passes --minimized to stay
             // in the tray.
             let minimized = std::env::args().any(|a| a == clokrix_core::autostart::MINIMIZED_ARG);
-            // First: it looks for an earlier Clokrix's files before this start writes any.
+            for note in carried.iter().chain(&migrate::after_start(app.handle())) {
+                log::info!("from Vyro: {note}");
+            }
+            // First: it looks for an earlier install's files (Vyro's, moved above, count) before
+            // this start writes any.
             app.manage(whats_new::WhatsNew::load(app.handle(), &version));
             let engine = Engine::start(app.handle(), !minimized)?;
             app.manage(overlay::Overlay::default());

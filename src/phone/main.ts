@@ -1,5 +1,7 @@
 // The phone app's page (1.4): its own entry and build (vite.phone.config.ts), served by the
 // relay, so it loads none of the desktop app.
+// First: page keys saved before the rename to Clokrix move before anything reads them.
+import '../rename-storage';
 import { mount } from 'svelte';
 import '../styles/theme.css';
 import '../remote/page.css';

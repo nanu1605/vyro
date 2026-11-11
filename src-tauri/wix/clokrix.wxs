@@ -9,11 +9,17 @@
   - installs clokrix-service.exe as "ClokrixService" (LocalSystem, automatic start, restarted on
     failure) and starts it without waiting: if it cannot start, the install still succeeds and
     the app falls back to reading unprivileged sensors itself, with a banner saying so.
-  - removes the elevated "Clokrix" logon task of versions before the service, on every install
-    and uninstall (not on the uninstall half of an upgrade).
+  - removes the elevated "Vyro" logon task of versions before the service, on every install and
+    uninstall (not on the uninstall half of an upgrade).
   - on uninstall, for the user running it, removes the per-user toast registration and the
-    "Start with Windows" Run entry. Settings, alert rules and history (%ProgramData%\Clokrix and
+    "Start with Windows" Run entry, under both names (Vyro's too, in case it was never carried
+    over). Settings, alert rules and history (%ProgramData%\Clokrix and
     %APPDATA%\app.clokrix.monitor) are kept, as usual for user data.
+
+  Vyro became Clokrix in 2.2 with the same upgrade code (tauri.conf.json), so this MSI replaces an
+  installed Vyro as an upgrade: Windows removes Vyro (its service too) before installing this. The
+  components have new GUIDs, as their folder and the service changed; the service and the app
+  then carry Vyro's folders and settings over (clokrix_core::rename).
 -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Fragment>
@@ -25,20 +31,20 @@
 
     <DirectoryRef Id="INSTALLDIR">
       <Directory Id="PawnIODir" Name="pawnio">
-        <Component Id="PawnIOSetup" Guid="{6F2B7F5C-3C0B-4E53-9B1E-2E8A5C7D4A11}" Win64="yes">
+        <Component Id="PawnIOSetup" Guid="{324AB78E-31EE-4D0B-8649-8EE947016DB4}" Win64="yes">
           <File Id="PawnIOSetupExe" Name="PawnIO_setup.exe" KeyPath="yes"
                 Source="$(sys.SOURCEFILEDIR)..\pawnio\PawnIO_setup.exe" />
         </Component>
       </Directory>
 
       <!-- Fetched by scripts/fetch-presentmon.ps1 (pinned SHA-256). -->
-      <Component Id="PresentMon" Guid="{659A2288-2E71-47AC-A0FF-7AFCDD2B8746}" Win64="yes">
+      <Component Id="PresentMon" Guid="{38B33DDC-7433-46C7-A545-2B6449F66F6B}" Win64="yes">
         <File Id="PresentMonExe" Name="PresentMon.exe" KeyPath="yes"
               Source="$(sys.SOURCEFILEDIR)..\presentmon\PresentMon.exe" />
       </Component>
 
       <!-- Built by tauri.conf.json → build.beforeBuildCommand. -->
-      <Component Id="ClokrixService" Guid="{5355C655-ABE9-4732-840C-FF61D9DBD922}" Win64="yes">
+      <Component Id="ClokrixService" Guid="{7A5FAB29-9EB4-49B2-8D8B-752FB00242F1}" Win64="yes">
         <File Id="ClokrixServiceExe" Name="clokrix-service.exe" KeyPath="yes"
               Source="$(sys.SOURCEFILEDIR)..\..\target\release\clokrix-service.exe" />
         <ServiceInstall Id="ClokrixServiceInstall" Name="ClokrixService"
@@ -70,6 +76,13 @@
     <CustomAction Id="RemoveRunEntry" Directory="INSTALLDIR"
                   ExeCommand="&quot;[SystemFolder]reg.exe&quot; delete &quot;HKCU\Software\Microsoft\Windows\CurrentVersion\Run&quot; /v Clokrix /f"
                   Execute="deferred" Impersonate="yes" Return="ignore" />
+    <!-- Vyro's (before 2.2), when the app never ran after the upgrade to carry them over. -->
+    <CustomAction Id="RemoveVyroToastRegistration" Directory="INSTALLDIR"
+                  ExeCommand="&quot;[SystemFolder]reg.exe&quot; delete &quot;HKCU\Software\Classes\AppUserModelId\app.vyro.monitor&quot; /f"
+                  Execute="deferred" Impersonate="yes" Return="ignore" />
+    <CustomAction Id="RemoveVyroRunEntry" Directory="INSTALLDIR"
+                  ExeCommand="&quot;[SystemFolder]reg.exe&quot; delete &quot;HKCU\Software\Microsoft\Windows\CurrentVersion\Run&quot; /v Vyro /f"
+                  Execute="deferred" Impersonate="yes" Return="ignore" />
 
     <InstallExecuteSequence>
       <Custom Action="InstallPawnIO" After="InstallFiles">
@@ -85,6 +98,12 @@
         <![CDATA[REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE]]>
       </Custom>
       <Custom Action="RemoveRunEntry" Before="RemoveFiles">
+        <![CDATA[REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE]]>
+      </Custom>
+      <Custom Action="RemoveVyroToastRegistration" Before="RemoveFiles">
+        <![CDATA[REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE]]>
+      </Custom>
+      <Custom Action="RemoveVyroRunEntry" Before="RemoveFiles">
         <![CDATA[REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE]]>
       </Custom>
     </InstallExecuteSequence>

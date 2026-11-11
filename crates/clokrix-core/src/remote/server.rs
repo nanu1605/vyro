@@ -40,6 +40,9 @@ const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
 /// A comment line keeps a quiet live view open through proxies and sleepy phones.
 const HEARTBEAT: Duration = Duration::from_secs(15);
 const COOKIE: &str = "clokrix";
+/// The cookie's name before the rename to Clokrix (2.2): still read, so a phone signed in then
+/// stays signed in; the page's info request hands it [`COOKIE`] for the rest of its sign-in.
+const LEGACY_COOKIE: &str = "vyro";
 const STACK: usize = 256 * 1024;
 
 /// The page's content policy: its own files only, no frames, no other origins.
@@ -359,10 +362,14 @@ fn route(shared: &Shared, req: &Request, conn: u64, peer: IpAddr) -> Route {
                 .and_modify(|c| c.device = Some(device.id.clone()));
             match (path, req.method) {
                 ("/api/info", Method::Get) => {
+                    let renamed = renamed_cookie(req, &device);
                     let mut info = (shared.hooks.info)();
                     info.device = device.name;
                     info.expires = device.expires;
-                    Response::json(200, &info).with("Cache-Control", "no-store")
+                    let resp = Response::json(200, &info).with("Cache-Control", "no-store");
+                    renamed
+                        .into_iter()
+                        .fold(resp, |r, c| r.with("Set-Cookie", c))
                 }
                 ("/api/view", Method::Get) => match lock(&shared.feed).json.clone() {
                     Some(json) => {
@@ -422,7 +429,7 @@ fn asset(shared: &Shared, path: &str) -> Response {
 }
 
 fn session(shared: &Shared, req: &Request, peer: IpAddr) -> Option<StoredDevice> {
-    let token = req.cookie(COOKIE)?;
+    let token = req.cookie(COOKIE).or_else(|| req.cookie(LEGACY_COOKIE))?;
     let (device, dirty) = {
         let mut auth = lock(&shared.auth);
         let d = auth.check(unix_now(), token, &peer.to_string());
@@ -432,6 +439,22 @@ fn session(shared: &Shared, req: &Request, peer: IpAddr) -> Option<StoredDevice>
         (shared.hooks.saved)();
     }
     device
+}
+
+/// For a phone still signed in under [`LEGACY_COOKIE`]: the same sign-in under [`COOKIE`], until
+/// it ends, and the old cookie cleared.
+fn renamed_cookie(req: &Request, device: &StoredDevice) -> Vec<String> {
+    let Some(token) = req
+        .cookie(LEGACY_COOKIE)
+        .filter(|_| req.cookie(COOKIE).is_none())
+    else {
+        return Vec::new();
+    };
+    let age = (device.expires - unix_now()).max(0);
+    vec![
+        format!("{COOKIE}={token}; Path=/; Max-Age={age}; HttpOnly; SameSite=Strict"),
+        format!("{LEGACY_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict"),
+    ]
 }
 
 /// A sign-in or sign-out must come from the page: JSON, from this origin.
@@ -510,10 +533,15 @@ fn logout(shared: &Shared, req: &Request, host: &str, device: &StoredDevice) -> 
         (shared.hooks.saved)();
         log::info!("remote: \"{}\" signed itself out", device.name);
     }
-    Response::new(204, "text/plain", Vec::new()).with(
-        "Set-Cookie",
-        format!("{COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict"),
-    )
+    Response::new(204, "text/plain", Vec::new())
+        .with(
+            "Set-Cookie",
+            format!("{COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict"),
+        )
+        .with(
+            "Set-Cookie",
+            format!("{LEGACY_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict"),
+        )
 }
 
 fn stream_view(shared: &Shared, stream: &mut TcpStream, conn: u64, device: &StoredDevice) {

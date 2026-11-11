@@ -65,6 +65,8 @@ fn console(args: &[String]) -> i32 {
         }
     };
     logger::init(data.as_deref().map(|d| d.join(LOG_FILE)), true);
+    #[cfg(windows)]
+    win::log_notes();
     let endpoint = arg(args, "--endpoint").unwrap_or_else(clokrix_core::ipc::default_endpoint);
     let (stop_tx, stop_rx) = mpsc::channel();
     std::thread::spawn(move || {

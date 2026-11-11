@@ -101,6 +101,13 @@ pub fn service_state() -> ServiceState {
     ServiceState::NotInstalled
 }
 
+/// Whether a Windows service named `name` is registered, whatever its state. When the Service
+/// Control Manager does not say (no access), it counts as registered.
+#[cfg(windows)]
+pub fn service_registered(name: &str) -> bool {
+    win::service_registered(name)
+}
+
 #[cfg(windows)]
 mod win {
     use std::fs::File;
@@ -111,8 +118,8 @@ mod win {
 
     use windows::core::{HSTRING, PCWSTR};
     use windows::Win32::Foundation::{
-        CloseHandle, LocalFree, ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED, HANDLE, HLOCAL,
-        INVALID_HANDLE_VALUE,
+        CloseHandle, LocalFree, ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED,
+        ERROR_SERVICE_DOES_NOT_EXIST, HANDLE, HLOCAL, INVALID_HANDLE_VALUE,
     };
     use windows::Win32::Security::Authorization::{
         ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
@@ -312,6 +319,25 @@ mod win {
                 io::ErrorKind::PermissionDenied,
                 "the engine pipe is not served by the Clokrix service",
             )),
+        }
+    }
+
+    /// See [`super::service_registered`].
+    pub fn service_registered(name: &str) -> bool {
+        // SAFETY: plain SCM calls; both handles are closed before returning.
+        unsafe {
+            let Ok(scm) = OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_CONNECT) else {
+                return true;
+            };
+            let registered = match OpenServiceW(scm, &HSTRING::from(name), SERVICE_QUERY_STATUS) {
+                Ok(svc) => {
+                    let _ = CloseServiceHandle(svc);
+                    true
+                }
+                Err(e) => e.code() != ERROR_SERVICE_DOES_NOT_EXIST.to_hresult(),
+            };
+            let _ = CloseServiceHandle(scm);
+            registered
         }
     }
 

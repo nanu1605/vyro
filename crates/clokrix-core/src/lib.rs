@@ -37,6 +37,7 @@ pub mod provider;
 pub mod ram;
 pub mod registry;
 pub mod remote;
+pub mod rename;
 pub mod score;
 pub mod screen;
 pub mod sim;

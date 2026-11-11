@@ -81,8 +81,9 @@ fn made_before(paths: &[PathBuf], dirs: &[PathBuf], now: SystemTime) -> bool {
         })
 }
 
-/// An earlier Clokrix was here: run before anything of this start writes its files.
-fn earlier_clokrix(app: &AppHandle) -> bool {
+/// An earlier install was here (Vyro's files count, once moved): run before anything of this
+/// start writes its files.
+fn earlier_install(app: &AppHandle) -> bool {
     let p = app.path();
     // Settings the window or the Remote card saved: there before this start whatever their age.
     let saved: Vec<PathBuf> = [
@@ -141,7 +142,7 @@ impl WhatsNew {
             .map(|s| s.seen)
             .filter(|s| !s.is_empty());
         // Only when nothing says which version came before: the folders' look is not needed.
-        let earlier = seen.is_none() && earlier_clokrix(app);
+        let earlier = seen.is_none() && earlier_install(app);
         let decision = decide(seen.as_deref(), current, earlier);
         log::info!(
             "what's new: {decision:?} (seen {}, this {current})",

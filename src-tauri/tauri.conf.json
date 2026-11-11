@@ -46,7 +46,8 @@
       "../LICENSE-APACHE": "LICENSE-APACHE",
       "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
       "../THIRD_PARTY_LICENSES.md": "THIRD_PARTY_LICENSES.md",
-      "../crates/clokrix-core/pawnio/COPYING": "COPYING-PawnIO-modules"
+      "../crates/clokrix-core/pawnio/COPYING": "COPYING-PawnIO-modules",
+      "icons/notification.png": "notification.png"
     },
     "windows": {
       "wix": {

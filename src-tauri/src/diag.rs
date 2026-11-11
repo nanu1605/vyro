@@ -14,7 +14,9 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::engine::Engine;
 
-const FOLDER: &str = "Clokrix Reports";
+pub const FOLDER: &str = "Clokrix Reports";
+/// The folder before the rename to Clokrix (2.2): moved to [`FOLDER`] once (`migrate.rs`).
+pub const LEGACY_FOLDER: &str = "Vyro Reports";
 
 fn join(parts: &[Option<&str>]) -> Option<String> {
     let s = parts

@@ -505,18 +505,36 @@ pub fn save(path: &std::path::Path, rules: &[AlertRule]) -> std::io::Result<()> 
 }
 
 /// Lets Windows show toasts for `aumid` without an installer-made Start-menu shortcut: the
-/// per-user `AppUserModelId` registration unpackaged desktop apps use. The MSI removes the key
-/// on uninstall (`src-tauri/wix/clokrix.wxs`).
+/// per-user `AppUserModelId` registration unpackaged desktop apps use, with the app's name and,
+/// when given, its icon (a PNG) on each notification (2.2). The MSI removes the key on uninstall
+/// (`src-tauri/wix/clokrix.wxs`).
 #[cfg(windows)]
-pub fn register_toast_app(aumid: &str, display_name: &str) -> Result<(), String> {
-    let path = format!(r"Software\Classes\AppUserModelId\{aumid}");
-    crate::winutil::set_string(
-        crate::winutil::HKEY_CURRENT_USER,
-        &path,
-        "DisplayName",
-        display_name,
-    )
+pub fn register_toast_app(
+    aumid: &str,
+    display_name: &str,
+    icon: Option<&std::path::Path>,
+) -> Result<(), String> {
+    use crate::winutil::{delete_value, set_string, HKEY_CURRENT_USER};
+    let path = toast_key(aumid);
+    set_string(HKEY_CURRENT_USER, &path, "DisplayName", display_name).map_err(|e| e.to_string())?;
+    match icon {
+        Some(icon) => set_string(HKEY_CURRENT_USER, &path, "IconUri", &icon.to_string_lossy()),
+        None => delete_value(HKEY_CURRENT_USER, &path, "IconUri").or(Ok(())),
+    }
     .map_err(|e| e.to_string())
+}
+
+/// Removes the toast registration of `aumid` (Vyro's, after the rename). `Ok(true)`: it was
+/// there.
+#[cfg(windows)]
+pub fn unregister_toast_app(aumid: &str) -> Result<bool, String> {
+    crate::winutil::delete_key(crate::winutil::HKEY_CURRENT_USER, &toast_key(aumid))
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(windows)]
+fn toast_key(aumid: &str) -> String {
+    format!(r"Software\Classes\AppUserModelId\{aumid}")
 }
 
 /// A sensor's current reading as the rules see it.

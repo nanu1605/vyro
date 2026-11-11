@@ -1,3 +1,5 @@
+// First: page keys saved before the rename to Clokrix move before anything reads them.
+import './rename-storage';
 import { mount } from 'svelte';
 import './styles/theme.css';
 import './styles/app.css';

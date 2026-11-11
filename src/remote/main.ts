@@ -1,5 +1,7 @@
 // The remote companion's page (P26): its own entry, so the phone loads neither the app's views
 // nor its Tauri bridge.
+// First: page keys saved before the rename to Clokrix move before anything reads them.
+import '../rename-storage';
 import { mount } from 'svelte';
 import '../styles/theme.css';
 import './page.css';

@@ -801,10 +801,24 @@ fn pairing_gives_a_cookie_that_reads_the_view() {
     assert!(view.contains(r#""usage":37.0"#));
     assert!(!view.contains("secret-project"));
 
+    // A phone signed in before the rename to Clokrix (2.2) sends the old cookie: it stays signed
+    // in, and the page's info request gives it the new one and clears the old.
+    let old = cookie.replacen("clokrix=", "vyro=", 1);
+    assert_eq!(status(&t.get("/api/view", &old)), 200);
+    let info = t.get("/api/info", &old);
+    assert_eq!(status(&info), 200);
+    assert!(
+        info.contains(&format!("Set-Cookie: {cookie}; Path=/; Max-Age=")),
+        "{info}"
+    );
+    assert!(info.contains("Set-Cookie: vyro=; Path=/; Max-Age=0"));
+    assert!(!t.get("/api/info", &cookie).contains("Set-Cookie"));
+
     // Signing out from the page ends the session.
     let out = t.post("/api/logout", "{}", &format!("Cookie: {cookie}\r\n"));
     assert_eq!(status(&out), 204);
     assert!(out.contains("clokrix=; Path=/; Max-Age=0"));
+    assert!(out.contains("vyro=; Path=/; Max-Age=0"));
     assert_eq!(status(&t.get("/api/view", &cookie)), 401);
     assert!(t.auth.lock().unwrap().stored().is_empty());
 }

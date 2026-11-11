@@ -148,6 +148,7 @@ unsafe extern "system" fn service_main(_argc: u32, _argv: *mut PWSTR) {
 
     let data = data_dir();
     crate::logger::init(data.as_ref().ok().map(|d| d.join(crate::LOG_FILE)), false);
+    log_notes();
     let data = data
         .inspect_err(|e| log::error!("data folder unusable, running without history: {e}"))
         .ok();
@@ -169,10 +170,19 @@ unsafe extern "system" fn service_main(_argc: u32, _argv: *mut PWSTR) {
 /// `%ProgramData%\Clokrix`, created with [`DATA_SDDL`]. A folder that already exists must be owned
 /// by SYSTEM or the administrators and must not be a link; anything else (planted by a
 /// standard user to redirect the service's writes) is moved aside and replaced.
+///
+/// Vyro's folder (before 2.2) becomes it, once Vyro is gone, under the same rules: a trusted
+/// folder is renamed; an untrusted one is never adopted. One that cannot be renamed yet (in use)
+/// is used where it is for this run, and tried again at the next start.
 pub fn data_dir() -> Result<PathBuf, String> {
-    let base = std::env::var_os("ProgramData").ok_or("%ProgramData% is not set")?;
-    let dir = PathBuf::from(base).join("Clokrix");
+    let base = PathBuf::from(std::env::var_os("ProgramData").ok_or("%ProgramData% is not set")?);
+    let dir = base.join("Clokrix");
     let mut notes = Vec::new();
+    if let Some(old) = from_vyro(&base, &dir, &mut notes) {
+        protect(&old)?;
+        lock(&NOTES).extend(notes);
+        return Ok(old);
+    }
     match std::fs::symlink_metadata(&dir) {
         Ok(meta) => {
             let link = meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0 != 0;
@@ -199,10 +209,48 @@ pub fn data_dir() -> Result<PathBuf, String> {
         Err(e) => return Err(format!("{}: {e}", dir.display())),
     }
     // The logger starts after this; keep what happened for the log.
-    for n in notes {
-        eprintln!("clokrix-service: {n}");
-    }
+    lock(&NOTES).extend(notes);
     Ok(dir)
+}
+
+/// What [`data_dir`] did (a folder moved aside or carried over from Vyro), for the log.
+static NOTES: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+/// Logs what [`data_dir`] did; called once the logger runs.
+pub fn log_notes() {
+    for n in std::mem::take(&mut *lock(&NOTES)) {
+        log::info!("{n}");
+    }
+}
+
+/// Renames Vyro's data folder to `dir` (see [`data_dir`]). `Some`: Vyro's folder, to use as it
+/// is for this run.
+fn from_vyro(base: &Path, dir: &Path, notes: &mut Vec<String>) -> Option<PathBuf> {
+    use clokrix_core::rename;
+    let old = base.join(rename::OLD_NAME);
+    if std::fs::symlink_metadata(dir).is_ok() || rename::vyro_installed() {
+        return None;
+    }
+    let meta = std::fs::symlink_metadata(&old).ok()?;
+    let link = meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0 != 0;
+    if link || !meta.is_dir() || !trusted_owner(&old) {
+        notes.push(format!("left an untrusted {} alone", old.display()));
+        return None;
+    }
+    match rename::rename_folder(&old, dir) {
+        Ok(true) => {
+            notes.push(format!("moved {} to {}", old.display(), dir.display()));
+            None
+        }
+        Ok(false) => None,
+        Err(e) => {
+            notes.push(format!(
+                "cannot move {} yet ({e}); using it for now",
+                old.display()
+            ));
+            Some(old)
+        }
+    }
 }
 
 struct Descriptor(PSECURITY_DESCRIPTOR);

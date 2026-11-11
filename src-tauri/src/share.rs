@@ -7,7 +7,9 @@ use std::path::PathBuf;
 use tauri::ipc::{InvokeBody, Request};
 use tauri::{AppHandle, Manager};
 
-const FOLDER: &str = "Clokrix";
+pub const FOLDER: &str = "Clokrix";
+/// The folder before the rename to Clokrix (2.2): moved to [`FOLDER`] once (`migrate.rs`).
+pub const LEGACY_FOLDER: &str = "Vyro";
 /// A 1080 × 1920 card is about 1 MB; anything far bigger is not a card.
 const MAX_BYTES: usize = 16 * 1024 * 1024;
 const PNG: &[u8] = b"\x89PNG\r\n\x1a\n";

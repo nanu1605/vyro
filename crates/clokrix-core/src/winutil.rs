@@ -1,10 +1,11 @@
 //! Small safe wrappers over Win32 APIs shared by the Windows collectors.
 
 use windows::core::{HSTRING, PCWSTR, PWSTR};
+use windows::Win32::Foundation::ERROR_FILE_NOT_FOUND;
 use windows::Win32::Foundation::{ERROR_MORE_DATA, ERROR_SUCCESS};
 use windows::Win32::System::Registry::{
-    RegCloseKey, RegDeleteKeyValueW, RegEnumKeyExW, RegEnumValueW, RegGetValueW, RegOpenKeyExW,
-    RegSetKeyValueW, HKEY, KEY_READ, REG_DWORD, REG_EXPAND_SZ, REG_MULTI_SZ, REG_SZ,
+    RegCloseKey, RegDeleteKeyValueW, RegDeleteTreeW, RegEnumKeyExW, RegEnumValueW, RegGetValueW,
+    RegOpenKeyExW, RegSetKeyValueW, HKEY, KEY_READ, REG_DWORD, REG_EXPAND_SZ, REG_MULTI_SZ, REG_SZ,
     REG_VALUE_TYPE, RRF_RT_ANY,
 };
 
@@ -80,6 +81,16 @@ pub fn set_string(root: HKEY, path: &str, name: &str, value: &str) -> windows::c
 pub fn delete_value(root: HKEY, path: &str, name: &str) -> windows::core::Result<()> {
     // SAFETY: path and name are NUL-terminated HSTRINGs.
     unsafe { RegDeleteKeyValueW(root, &HSTRING::from(path), &HSTRING::from(name)) }.ok()
+}
+
+/// Deletes a key with its values and subkeys. `Ok(false)`: there was no such key.
+pub fn delete_key(root: HKEY, path: &str) -> windows::core::Result<bool> {
+    // SAFETY: the path is a NUL-terminated HSTRING.
+    let rc = unsafe { RegDeleteTreeW(root, &HSTRING::from(path)) };
+    if rc == ERROR_FILE_NOT_FOUND {
+        return Ok(false);
+    }
+    rc.ok().map(|()| true)
 }
 
 /// An open registry key, closed on drop. Read-only.
