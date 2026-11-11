@@ -2,9 +2,9 @@
 
 What only the owner's Intel PC can show: its CPU's sensors through PawnIO's Intel module, the
 ASUS board's Nuvoton chip, and the DDR4 modules. The tests check the decoding, but only with
-register values made up from the documentation (Intel's, Linux's drivers, memtest86+'s): none of
-this has run on an Intel CPU, an ASUS board or DDR4 yet, so a field difference is expected to need
-a fix, and `vyro-live.json` holds what that fix needs.
+register values made up from the documentation (Intel's, Linux's drivers, memtest86+'s), and
+before this check none of it had run on an Intel CPU, an ASUS board or DDR4: on a PC not checked
+yet, a field difference may need a fix, and `vyro-live.json` holds what that fix needs.
 
 Install the test build `vyro-windows-<commit>` of the latest green CI run on `claude/vyro-2.0`
 (or 2.1.0 once it is out) over 2.0.4. The same artifact has `vyro-live.exe`. Have

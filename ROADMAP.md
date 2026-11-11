@@ -4080,8 +4080,8 @@ The owner's next "continue" (2026-10-31): another look, at what labels say and a
 The owner's "i can test on the hardware" (2026-10-31), answering the list of what was left, whose
 hardware support each needed a PC with the part. Built for the owner's test PC, from their answers
 that day: a 12th to 14th gen Intel Core, an ASUS board, DDR4 on Intel; and 2.0.4 released first.
-On `claude/vyro-2.0`; not released. None of it has run on that hardware yet: the decoders are
-tested with register values made up from the documentation, and `vyro-live` dumps the real ones.
+On `claude/vyro-2.0`; not released. The decoders' tests use register values made up from the
+documentation; the field check below ran it on the Intel PC, without its raw registers kept.
 
 - [x] **PawnIO modules.** `IntelMSR.bin`, `SmbusI801.bin` and `IntelMCHBAR.bin`, unmodified, from
       the PawnIO.Modules 0.2.11 release archive, whose other files match the five already
@@ -4138,9 +4138,12 @@ tested with register values made up from the documentation, and `vyro-live` dump
       service answered and read 34 sensors, and the app's smoke test passed. Test build
       `vyro-windows-cacf0fd`, with `vyro-live.exe`. ead63e5's and 109b57d's runs were cancelled
       by the pushes of those fixes.
-- [ ] **Field check (the owner, on the Intel PC):**
-      [`docs/field-check-2.1.md`](docs/field-check-2.1.md), with HWiNFO beside Vyro, and
-      `vyro-live.json` kept.
+- [x] **Field check (the owner, on the Intel PC), passed** (2026-11-11: "Everything worked on
+      intel PC"): [`docs/field-check-2.1.md`](docs/field-check-2.1.md). The PC is a friend's, so
+      no `vyro-live.json` from it: the decoders stand on the owner's check in the app, with no
+      raw registers kept to compare a later report against. The `vyro-live.json` sent first came
+      from the reference PC, not elevated: the Intel provider off there ("not an Intel Core
+      CPU"), every PawnIO read refused for want of administrator rights, the rest reading.
 
 ## Risks
 

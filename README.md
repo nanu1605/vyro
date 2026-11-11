@@ -74,7 +74,7 @@ Through PawnIO, Vyro reads:
   tRCD, tRP and tRAS).
 
 Elsewhere Vyro says those readings are not read, rather than asking for PawnIO (2.0.4). The
-Intel CPUs, the NCT679x and DDR4 on Intel have not been checked on real hardware yet
+Intel CPUs, the NCT679x and DDR4 on Intel have been checked on one PC so far
 ([`docs/field-check-2.1.md`](docs/field-check-2.1.md)).
 
 ## Fan and pump control
