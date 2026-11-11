@@ -518,10 +518,23 @@ pub fn register_toast_app(
     let path = toast_key(aumid);
     set_string(HKEY_CURRENT_USER, &path, "DisplayName", display_name).map_err(|e| e.to_string())?;
     match icon {
-        Some(icon) => set_string(HKEY_CURRENT_USER, &path, "IconUri", &icon.to_string_lossy()),
+        Some(icon) => {
+            let icon = icon.to_string_lossy();
+            set_string(HKEY_CURRENT_USER, &path, "IconUri", plain_path(&icon))
+        }
         None => delete_value(HKEY_CURRENT_USER, &path, "IconUri").or(Ok(())),
     }
     .map_err(|e| e.to_string())
+}
+
+/// `\\?\C:\…` (as Tauri gives the app's folder) as `C:\…`: the notification platform takes a
+/// plain path for the icon (CI found the verbatim one, 2.2). Other paths are left as they are.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn plain_path(path: &str) -> &str {
+    match path.strip_prefix(r"\\?\") {
+        Some(rest) if rest.as_bytes().get(1) == Some(&b':') => rest,
+        _ => path,
+    }
 }
 
 /// Removes the toast registration of `aumid` (Vyro's, after the rename). `Ok(true)`: it was
@@ -670,6 +683,16 @@ pub fn show(value: f64, unit: Unit) -> String {
 mod tests {
     use super::*;
     use crate::snapshot::Status;
+
+    #[test]
+    fn the_notification_icon_gets_a_plain_path() {
+        let plain = r"C:\Program Files\Clokrix\notification.png";
+        assert_eq!(plain_path(&format!(r"\\?\{plain}")), plain);
+        assert_eq!(plain_path(plain), plain);
+        // A share's verbatim form names \\server\share: kept as it is.
+        let share = r"\\?\UNC\server\share\notification.png";
+        assert_eq!(plain_path(share), share);
+    }
 
     fn cpu(v: f64) -> impl Fn(&str) -> Option<Reading> {
         move |id| {
