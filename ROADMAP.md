@@ -4080,8 +4080,8 @@ The owner's next "continue" (2026-10-31): another look, at what labels say and a
 The owner's "i can test on the hardware" (2026-10-31), answering the list of what was left, whose
 hardware support each needed a PC with the part. Built for the owner's test PC, from their answers
 that day: a 12th to 14th gen Intel Core, an ASUS board, DDR4 on Intel; and 2.0.4 released first.
-On `claude/vyro-2.0`; not released. The decoders' tests use register values made up from the
-documentation; the field check below ran it on the Intel PC, without its raw registers kept.
+On `claude/vyro-2.0`. The decoders' tests use register values made up from the documentation;
+the field check below ran it on the Intel PC, without its raw registers kept.
 
 - [x] **PawnIO modules.** `IntelMSR.bin`, `SmbusI801.bin` and `IntelMCHBAR.bin`, unmodified, from
       the PawnIO.Modules 0.2.11 release archive, whose other files match the five already
@@ -4144,6 +4144,9 @@ documentation; the field check below ran it on the Intel PC, without its raw reg
       raw registers kept to compare a later report against. The `vyro-live.json` sent first came
       from the reference PC, not elevated: the Intel provider off there ("not an Intel Core
       CPU"), every PawnIO read refused for want of administrator rights, the rest reading.
+- [x] **Version 2.1.0** (the owner, 2026-11-11: "release 2.1.0"): `scripts/set-version.py
+      2.1.0`; What's new in 2.1.0: Intel CPUs read, ASUS boards' sensors, memory on Intel. All
+      are this PC's, so none is marked for the phone app.
 
 ## Risks
 

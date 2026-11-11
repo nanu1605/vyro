@@ -21,6 +21,26 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '2.1.0',
+    items: [
+      {
+        icon: 'gauge',
+        title: 'Intel CPUs read',
+        text: 'On Intel Core CPUs Vyro now reads the package’s and each core’s temperature, the package, cores and graphics power, the core voltage and the effective clock, and says when heat or the power limit holds the CPU back. Cores are named P-core and E-core.',
+      },
+      {
+        icon: 'fan',
+        title: 'ASUS boards’ sensors',
+        text: 'Boards with a Nuvoton NCT6791D to NCT6799D, as most ASUS boards and many ASRock ones have, now show their fans, temperatures and voltages, named as ASUS names them. They are shown only: fan control stays on the boards it was checked on.',
+      },
+      {
+        icon: 'sparkles',
+        title: 'Memory on Intel',
+        text: 'On Intel 12th to 14th gen, the Memory card shows the running timings: the data rate and CL-tRCD-tRP-tRAS. DDR4 modules that have a temperature sensor show it there too.',
+      },
+    ],
+  },
+  {
     version: '2.0.4',
     items: [
       {
