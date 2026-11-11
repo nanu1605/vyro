@@ -291,6 +291,15 @@ jobs:
 
           Msi '/x' "$env:RUNNER_TEMP\uninstall.log"
           if (Get-Service ClokrixService -ErrorAction SilentlyContinue) { throw 'ClokrixService is still registered' }
+          # For the record (Tauri's own shortcuts): what the uninstall left besides the user's data.
+          $menu = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\Clokrix'
+          $stayed = @(
+            if (Test-Path $dir) { "$dir ($((Get-ChildItem -Recurse $dir -Name) -join ', '))" }
+            if (Test-Path $menu) { $menu }
+            if (Test-Path "$env:PUBLIC\Desktop\Clokrix.lnk") { "$env:PUBLIC\Desktop\Clokrix.lnk" }
+            if (Test-Path 'HKCU:\Software\Clokrix') { 'HKCU\Software\Clokrix' }
+          )
+          if ($stayed) { Write-Host "::notice title=Left after the uninstall::$($stayed -join '; ')" }
           if (Test-Path (Join-Path $dir 'clokrix-service.exe')) { throw 'program files left behind' }
           # User data stays, as for any uninstall (the WiX notes in src-tauri/wix/clokrix.wxs).
           if (-not (Test-Path "$data\history.sqlite")) { throw 'the history was removed' }
@@ -323,6 +332,18 @@ jobs:
           function Msi($verb, $file, $log) {
             $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList "$verb `"$file`" /qn /norestart /l*v `"$log`""
             if ($p.ExitCode -ne 0) { Get-Content $log -Tail 60; throw "msiexec $verb $file failed: $($p.ExitCode)" }
+          }
+          # What an install of `$name` left: its folder (and what is in it), Start menu entry,
+          # desktop shortcut and Tauri's key in HKCU.
+          function Leftovers($name) {
+            $dir = Join-Path $env:ProgramFiles $name
+            $menu = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs\$name"
+            @(
+              if (Test-Path $dir) { "$dir ($((Get-ChildItem -Recurse $dir -Name) -join ', '))" }
+              if (Test-Path $menu) { "$menu ($((Get-ChildItem -Recurse $menu -Name) -join ', '))" }
+              if (Test-Path "$env:PUBLIC\Desktop\$name.lnk") { "$env:PUBLIC\Desktop\$name.lnk" }
+              if (Test-Path "HKCU:\Software\$name") { "HKCU\Software\$name" }
+            )
           }
           function Until($what, $seconds, [scriptblock]$ok) {
             $end = (Get-Date).AddSeconds($seconds)
@@ -363,13 +384,16 @@ jobs:
           # This build over it.
           $msi = (Get-Item target\release\bundle\msi\*.msi | Select-Object -First 1).FullName
           Msi '/i' $msi "$env:RUNNER_TEMP\upgrade.log"
-          $listed = @(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*' |
+          $listed = @(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
             Where-Object { $_.DisplayName -in 'Vyro', 'Clokrix' })
           if ($listed.Count -ne 1 -or $listed[0].DisplayName -ne 'Clokrix' -or $listed[0].Publisher -ne 'Clokrix') {
             throw "installed programs: $(($listed | ForEach-Object { "$($_.DisplayName) by $($_.Publisher)" }) -join ', ')"
           }
           if (Get-Service VyroService -ErrorAction SilentlyContinue) { throw 'VyroService is still registered' }
-          if (Test-Path "$env:ProgramFiles\Vyro") { throw "Vyro's folder stayed: $(Get-ChildItem -Recurse "$env:ProgramFiles\Vyro" -Name)" }
+          # Windows leaves Vyro's shortcuts (Tauri keeps their components' key paths in HKCU); the
+          # MSI removes them by name (clokrix.wxs).
+          $left = Leftovers 'Vyro'
+          if ($left) { throw "Vyro left: $($left -join '; ')" }
           # The service carries its data over as it starts; the app its part at its first start.
           Until 'ClokrixService did not carry %ProgramData%\Vyro over' 90 { Test-Path "$env:ProgramData\Clokrix\upgrade-marker.txt" }
           if (Test-Path "$env:ProgramData\Vyro") { throw '%ProgramData%\Vyro is still there' }

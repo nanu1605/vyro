@@ -19,10 +19,21 @@
   Vyro became Clokrix in 2.2 with the same upgrade code (tauri.conf.json), so this MSI replaces an
   installed Vyro as an upgrade: Windows removes Vyro (its service too) before installing this. The
   components have new GUIDs, as their folder and the service changed; the service and the app
-  then carry Vyro's folders and settings over (clokrix_core::rename).
+  then carry Vyro's folders and settings over (clokrix_core::rename). Windows leaves Vyro's
+  shortcuts behind (Tauri keeps their components' key paths in HKCU), so this install removes
+  them by name, each folder only once empty, and Vyro's own key in HKCU.
 -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Fragment>
+    <!-- Where Vyro was installed (Tauri's template keeps it in HKCU); read before it is removed. -->
+    <Property Id="VYRO_INSTALLDIR">
+      <RegistrySearch Id="VyroInstallDir" Root="HKCU" Key="Software\Vyro\Vyro" Name="InstallDir"
+                      Type="raw" />
+    </Property>
+    <SetProperty Id="VYRO_DIR" Action="SetVyroDirFound" Value="[VYRO_INSTALLDIR]" After="AppSearch"
+                 Sequence="execute"><![CDATA[VYRO_INSTALLDIR]]></SetProperty>
+    <SetProperty Id="VYRO_DIR" Action="SetVyroDirDefault" Value="[ProgramFiles64Folder]Vyro\"
+                 After="AppSearch" Sequence="execute"><![CDATA[NOT VYRO_INSTALLDIR]]></SetProperty>
     <Property Id="PAWNIO_VERSION">
       <RegistrySearch Id="PawnIOVersion" Root="HKLM" Win64="yes"
                       Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO"
@@ -83,6 +94,15 @@
     <CustomAction Id="RemoveVyroRunEntry" Directory="INSTALLDIR"
                   ExeCommand="&quot;[SystemFolder]reg.exe&quot; delete &quot;HKCU\Software\Microsoft\Windows\CurrentVersion\Run&quot; /v Vyro /f"
                   Execute="deferred" Impersonate="yes" Return="ignore" />
+    <!-- Vyro's shortcuts, which its removal leaves: "Uninstall Vyro" in its folder, its Start menu
+         entry and its desktop shortcut, each folder only if nothing else is left in it (rmdir
+         without /s); then the key Tauri's template kept for Vyro in HKCU. -->
+    <CustomAction Id="RemoveVyroShortcuts" Directory="INSTALLDIR"
+                  ExeCommand="&quot;[System64Folder]cmd.exe&quot; /c del /f /q &quot;[VYRO_DIR]Uninstall Vyro.lnk&quot; &amp; rmdir &quot;[VYRO_DIR].&quot; &amp; del /f /q &quot;[ProgramMenuFolder]Vyro\Vyro.lnk&quot; &amp; rmdir &quot;[ProgramMenuFolder]Vyro&quot; &amp; del /f /q &quot;[DesktopFolder]Vyro.lnk&quot;"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
+    <CustomAction Id="RemoveVyroUserKey" Directory="INSTALLDIR"
+                  ExeCommand="&quot;[SystemFolder]reg.exe&quot; delete &quot;HKCU\Software\Vyro&quot; /f"
+                  Execute="deferred" Impersonate="yes" Return="ignore" />
 
     <InstallExecuteSequence>
       <Custom Action="InstallPawnIO" After="InstallFiles">
@@ -105,6 +125,13 @@
       </Custom>
       <Custom Action="RemoveVyroRunEntry" Before="RemoveFiles">
         <![CDATA[REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE]]>
+      </Custom>
+      <!-- After Vyro is gone (RemoveExistingProducts runs right after InstallInitialize). -->
+      <Custom Action="RemoveVyroShortcuts" After="InstallFiles">
+        <![CDATA[NOT REMOVE]]>
+      </Custom>
+      <Custom Action="RemoveVyroUserKey" After="InstallFiles">
+        <![CDATA[NOT REMOVE]]>
       </Custom>
     </InstallExecuteSequence>
   </Fragment>
