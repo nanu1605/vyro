@@ -4254,9 +4254,22 @@ tighter X at 16 to 32 px. On `claude/vyro-2.0`.
       `531fbe97`): the Worker with its rooms and its push key (a new one, made the first time a
       phone asks), and the phone app's 39 files. Not opened from here: this session's network
       does not reach workers.dev. `vyro-relay` was left as it was, for PCs still on Vyro.
-- [ ] **`CLOKRIX_RELAY_URL` set** (the owner's) to that address.
+- [x] **`CLOKRIX_RELAY_URL` set** (the owner's) to that address: Release run 43019341840 built
+      with it and found it in `clokrix.exe`.
 - [ ] **Field check** ([`docs/field-check-2.2.md`](docs/field-check-2.2.md)).
-- [ ] **2.2.0 released** (on "release 2.2.0").
+- [x] **2.2.0 released** (2026-11-11, on the owner's go: "release 2.2.0"). CI passed on 30b9fb8
+      (run 43015948992; Linux, Windows with the smoke test, the clean install and the upgrade from
+      Vyro 2.1.0, the relay and phone app with the end-to-end test, accessibility). `main`
+      fast-forwarded to it from 2.1.0's records, and Release run 43019341840 tagged `v2.2.0`,
+      found the relay's new address in `clokrix.exe` and published the 13.96 MB
+      `Clokrix_2.2.0_x64_en-US.msi`, `latest.json` and checksums here and to
+      `nanu1605/vyro-releases` (not renamed); GitHub's own digests of the files published here
+      match the checksums the run printed (MSI `2a0678ed…`, `latest.json` `5c2eb894…`), the MSI
+      downloaded from `nanu1605/vyro-releases` has the same SHA-256, and the `latest.json`
+      installed copies read (`nanu1605/vyro-releases`' latest) is that file, offering 2.2.0 from
+      there. Installed copies on 1.4.1 to 2.1.0 are offered it. Unsigned, as before
+      ([`docs/signing.md`](docs/signing.md)). The relay serves this release's phone app and relay:
+      only these records changed after 2990da0, from which it was deployed.
 
 ## Risks
 
