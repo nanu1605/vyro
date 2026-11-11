@@ -80,9 +80,9 @@ function checks(fanStopped: boolean): DiagCheck[] {
       n('RAM modules with a temperature', 2, '', 0, 'live'),
       n('Drives with health data', 2, '', 0, 'smart'),
     ]),
-    c('service', 'pass', 'The app reaches the engine through the Vyro service.', [
-      t('Vyro app', '0.4.0', 'service'),
-      t('Vyro service', '0.4.0', 'service'),
+    c('service', 'pass', 'The app reaches the engine through the Clokrix service.', [
+      t('Clokrix app', '0.4.0', 'service'),
+      t('Clokrix service', '0.4.0', 'service'),
     ]),
   ];
 }
@@ -100,7 +100,7 @@ const PC = [
 let reports: DiagReport[] | null = null;
 const all = () =>
   (reports ??= [
-    { id: 1, ts: Math.floor(Date.now() / 1000) - 5 * 86_400, version: 1, appVersion: '0.4.0', engine: 'Vyro service 0.4.0', pc: PC, checks: checks(false) },
+    { id: 1, ts: Math.floor(Date.now() / 1000) - 5 * 86_400, version: 1, appVersion: '0.4.0', engine: 'Clokrix service 0.4.0', pc: PC, checks: checks(false) },
   ]);
 
 const summary = (r: DiagReport): DiagSummary => ({
@@ -114,7 +114,7 @@ const summary = (r: DiagReport): DiagSummary => ({
 export async function simRunDiagnostics(): Promise<DiagReport> {
   await new Promise((r) => setTimeout(r, 700));
   const id = Math.max(0, ...all().map((r) => r.id)) + 1;
-  const r: DiagReport = { id, ts: Math.floor(Date.now() / 1000), version: 1, appVersion: '0.4.0', engine: 'Vyro service 0.4.0', pc: PC, checks: checks(true) };
+  const r: DiagReport = { id, ts: Math.floor(Date.now() / 1000), version: 1, appVersion: '0.4.0', engine: 'Clokrix service 0.4.0', pc: PC, checks: checks(true) };
   all().push(r);
   return r;
 }

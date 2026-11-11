@@ -3,7 +3,7 @@
 /**
  * The setup the run had, for comparing runs.
  */
-export type BenchSetup = { vyro: string, cpu: string | null, cores: number | null, threads: number | null, gpu: string | null, gpuDriver: string | null, ramGb: number | null, ramMts: number | null, board: string | null, bios: string | null, windows: string | null, powerPlan: string | null, profile: string | null, fanProfile: string | null, 
+export type BenchSetup = { clokrix: string, cpu: string | null, cores: number | null, threads: number | null, gpu: string | null, gpuDriver: string | null, ramGb: number | null, ramMts: number | null, board: string | null, bios: string | null, windows: string | null, powerPlan: string | null, profile: string | null, fanProfile: string | null, 
 /**
  * The drive the storage area ran on.
  */

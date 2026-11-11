@@ -114,7 +114,7 @@ describe('share cards', () => {
   });
 
   it('names the files by size and style', () => {
-    expect(fileName('20261015-1024', 'wide', 'full')).toBe('vyro-card-20261015-1024-16x9.png');
-    expect(fileName('20261015-1024', 'story', 'transparent')).toBe('vyro-card-20261015-1024-story-transparent.png');
+    expect(fileName('20261015-1024', 'wide', 'full')).toBe('clokrix-card-20261015-1024-16x9.png');
+    expect(fileName('20261015-1024', 'story', 'transparent')).toBe('clokrix-card-20261015-1024-story-transparent.png');
   });
 });

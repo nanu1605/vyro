@@ -15,7 +15,7 @@
     v == null ? null : `${text} ${v < limit ? '✓' : '✗'}`;
 </script>
 
-<Card title="Vyro itself" subtitle={app?.ramMB != null ? `${fmt(app.ramMB)} MB · ${fmt(app.cpuPct, 1)}% CPU` : 'Footprint'}>
+<Card title="Clokrix itself" subtitle={app?.ramMB != null ? `${fmt(app.ramMB)} MB · ${fmt(app.cpuPct, 1)}% CPU` : 'Footprint'}>
   <KV
     rows={[
       ['CPU', app?.cpuPct != null ? `${fmt(app.cpuPct, 2)}%` : null],

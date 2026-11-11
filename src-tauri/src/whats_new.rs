@@ -1,26 +1,26 @@
-//! What's new (1.5): on the first start after Vyro was updated, the window shows what the new
+//! What's new (1.5): on the first start after Clokrix was updated, the window shows what the new
 //! version brings (the notes are the page's, `src/whatsnew.ts`). The version last shown is kept
 //! in `version.json` beside the settings, apart from them: the window saves its settings whole
 //! and would write over it.
 //!
-//! Vyro before 1.5 kept no version, so an update from it is told from a new install by what an
-//! earlier Vyro leaves behind: its settings files, or a WebView or log folder from before this
+//! Clokrix before 1.5 kept no version, so an update from it is told from a new install by what an
+//! earlier Clokrix leaves behind: its settings files, or a WebView or log folder from before this
 //! start.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
+use clokrix_core::profiles::NotifyPolicy;
+use clokrix_core::{files, lock};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_notification::NotificationExt;
-use vyro_core::profiles::NotifyPolicy;
-use vyro_core::{files, lock};
 
 use crate::tray::SettingsStore;
 
 const FILE: &str = "version.json";
-/// Made before this start: older than this (the WebView and the log are made as Vyro starts).
+/// Made before this start: older than this (the WebView and the log are made as Clokrix starts).
 const EARLIER: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -33,7 +33,7 @@ struct Stored {
 /// What to do at start.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Decision {
-    /// Show the notes of every version after `from`; `None`: updated from a Vyro before 1.5,
+    /// Show the notes of every version after `from`; `None`: updated from a Clokrix before 1.5,
     /// whose version is not known, so every version's notes.
     Show { from: Option<String> },
     /// Keep this version without showing anything (a new install, or an older version put back).
@@ -52,7 +52,7 @@ pub fn parse(v: &str) -> Option<(u32, u32, u32)> {
     parts.next().is_none().then_some((major, minor, patch))
 }
 
-/// `seen`: the stored version, if any; `earlier`: an earlier Vyro was on this PC.
+/// `seen`: the stored version, if any; `earlier`: an earlier Clokrix was on this PC.
 pub fn decide(seen: Option<&str>, current: &str, earlier: bool) -> Decision {
     let now = parse(current);
     match seen.and_then(|s| parse(s).map(|v| (s, v))) {
@@ -81,8 +81,8 @@ fn made_before(paths: &[PathBuf], dirs: &[PathBuf], now: SystemTime) -> bool {
         })
 }
 
-/// An earlier Vyro was here: run before anything of this start writes its files.
-fn earlier_vyro(app: &AppHandle) -> bool {
+/// An earlier Clokrix was here: run before anything of this start writes its files.
+fn earlier_clokrix(app: &AppHandle) -> bool {
     let p = app.path();
     // Settings the window or the Remote card saved: there before this start whatever their age.
     let saved: Vec<PathBuf> = [
@@ -94,9 +94,9 @@ fn earlier_vyro(app: &AppHandle) -> bool {
             ]
         }),
         p.app_local_data_dir()
-            .map(|d| vec![d.join(vyro_core::remote::FILE)]),
+            .map(|d| vec![d.join(clokrix_core::remote::FILE)]),
         p.app_data_dir()
-            .map(|d| vec![d.join(vyro_core::engine::ALERTS_FILE)]),
+            .map(|d| vec![d.join(clokrix_core::engine::ALERTS_FILE)]),
     ]
     .into_iter()
     .flatten()
@@ -141,7 +141,7 @@ impl WhatsNew {
             .map(|s| s.seen)
             .filter(|s| !s.is_empty());
         // Only when nothing says which version came before: the folders' look is not needed.
-        let earlier = seen.is_none() && earlier_vyro(app);
+        let earlier = seen.is_none() && earlier_clokrix(app);
         let decision = decide(seen.as_deref(), current, earlier);
         log::info!(
             "what's new: {decision:?} (seen {}, this {current})",
@@ -201,8 +201,8 @@ pub fn announce(app: &AppHandle, minimized: bool) {
     let shown = app
         .notification()
         .builder()
-        .title(format!("Vyro was updated to {}", state.current))
-        .body("Open Vyro to see what's new.")
+        .title(format!("Clokrix was updated to {}", state.current))
+        .body("Open Clokrix to see what's new.")
         .show();
     if let Err(e) = shown {
         log::warn!("what's new notification failed: {e}");
@@ -264,14 +264,14 @@ mod tests {
 
     #[test]
     fn only_folders_from_before_this_start_count() {
-        let dir = std::env::temp_dir().join(format!("vyro-whatsnew-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("clokrix-whatsnew-{}", std::process::id()));
         let logs = dir.join("logs");
         std::fs::create_dir_all(&logs).unwrap();
-        std::fs::write(logs.join("Vyro.log"), "started").unwrap();
+        std::fs::write(logs.join("Clokrix.log"), "started").unwrap();
         let webview = dir.join("EBWebView");
         std::fs::create_dir_all(&webview).unwrap();
         let now = SystemTime::now();
-        // Made just now (this start): not an earlier Vyro.
+        // Made just now (this start): not an earlier Clokrix.
         let (webview, logs) = (vec![webview], vec![logs]);
         assert!(!made_before(&webview, &logs, now));
         // Seen from an hour later, the same folders are from before.

@@ -1,5 +1,5 @@
 //! A phone's requests through the relay (1.5), answered here in the app with the same work the
-//! window's commands do. `vyro_core::remote::relay::api` lists them and who may make them; the
+//! window's commands do. `clokrix_core::remote::relay::api` lists them and who may make them; the
 //! relay connection has already checked the phone's session and permission. What a phone
 //! changed is kept for Settings → Remote, and ending a process or a power action also shows a
 //! notification on the PC.
@@ -8,21 +8,21 @@ use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
+use clokrix_core::actions::power::{self, PendingPower, PowerRequest, PowerState};
+use clokrix_core::actions::{process, wake};
+use clokrix_core::alerts::AlertRule;
+use clokrix_core::bench::BenchMode;
+use clokrix_core::devices::Control;
+use clokrix_core::engine::EngineApi;
+use clokrix_core::profiles::Profile;
+use clokrix_core::remote::relay::api::{self, Access, PhoneAction, MAX_ACTIONS};
+use clokrix_core::remote::relay::{Reply, Request};
+use clokrix_core::{files, lock, unix_now};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
-use vyro_core::actions::power::{self, PendingPower, PowerRequest, PowerState};
-use vyro_core::actions::{process, wake};
-use vyro_core::alerts::AlertRule;
-use vyro_core::bench::BenchMode;
-use vyro_core::devices::Control;
-use vyro_core::engine::EngineApi;
-use vyro_core::profiles::Profile;
-use vyro_core::remote::relay::api::{self, Access, PhoneAction, MAX_ACTIONS};
-use vyro_core::remote::relay::{Reply, Request};
-use vyro_core::{files, lock, unix_now};
 
 use crate::engine::Engine;
 
@@ -89,7 +89,7 @@ impl PhoneState {
 pub fn handle(app: &AppHandle, r: Request, reply: Reply) {
     let app = app.clone();
     let spawned = std::thread::Builder::new()
-        .name("vyro-phone".into())
+        .name("clokrix-phone".into())
         .spawn(move || {
             let result = call(&app, &r);
             if api::access(&r.method) == Some(Access::Control) {
@@ -249,7 +249,7 @@ fn call(app: &AppHandle, r: &Request) -> Result<Value, String> {
             process::end(pid, &name)?;
             notify(
                 app,
-                "Vyro",
+                "Clokrix",
                 &format!("{} ended {name} from a phone.", r.name),
             );
             done()
@@ -258,7 +258,7 @@ fn call(app: &AppHandle, r: &Request) -> Result<Value, String> {
             app, false,
         ))),
         "updates.install" => {
-            // Windows asks someone at the PC to allow the installer, and Vyro closes as it
+            // Windows asks someone at the PC to allow the installer, and Clokrix closes as it
             // starts: on a locked PC nobody can, and the phone would lose the PC until then.
             if power::locked() == Some(true) {
                 return Err(UPDATE_LOCKED.into());
@@ -267,8 +267,8 @@ fn call(app: &AppHandle, r: &Request) -> Result<Value, String> {
             done()
         }
         "power" => {
-            let req: PowerRequest =
-                serde_json::from_value(p.clone()).map_err(|_| "Not a power action Vyro knows.")?;
+            let req: PowerRequest = serde_json::from_value(p.clone())
+                .map_err(|_| "Not a power action Clokrix knows.")?;
             power_action(app, &req, &r.name)?;
             to_json(power_state(app))
         }
@@ -364,7 +364,7 @@ fn power_action(app: &AppHandle, req: &PowerRequest, by: &str) -> Result<(), Str
         notify(
             app,
             &format!("{} in {wait} s", req.action.label()),
-            &format!("Asked from {by}. Open Vyro from its tray icon to cancel."),
+            &format!("Asked from {by}. Open Clokrix from its tray icon to cancel."),
         );
     }
     let result = power::act(req, by);

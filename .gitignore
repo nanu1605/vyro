@@ -11,10 +11,13 @@ node_modules/
 # Tauri
 src-tauri/gen/schemas/
 
+# Python caches
+__pycache__/
+
 # Local data / logs
 *.sqlite
 # Migration fixtures: history files written by released versions (P27).
-!crates/vyro-core/tests/fixtures/*/data/history.sqlite
+!crates/clokrix-core/tests/fixtures/*/data/history.sqlite
 *.sqlite-wal
 *.sqlite-shm
 *.log

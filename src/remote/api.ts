@@ -1,4 +1,4 @@
-// The companion page's calls to the Vyro app that served it (P26): same origin, the session in
+// The companion page's calls to the Clokrix app that served it (P26): same origin, the session in
 // an HttpOnly cookie the page never sees.
 
 import type { RemoteInfo, RemoteView } from '../types';

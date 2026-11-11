@@ -16,7 +16,7 @@
   }
   let { ts, live, ping }: Props = $props();
 
-  const HOST_KEY = 'vyro.pingHost';
+  const HOST_KEY = 'clokrix.pingHost';
 
   let adapters = $state.raw<NetAdapterInfo[] | null>(null);
   let error = $state<string | null>(null);
@@ -104,7 +104,7 @@
   }
 
   const KIND: Record<string, string> = { ethernet: 'Ethernet', wifi: 'Wi-Fi', other: 'Other' };
-  // Ping, then one card per adapter, in Vyro's order or the owner's (2.0.2).
+  // Ping, then one card per adapter, in Clokrix's order or the owner's (2.0.2).
   const cards = $derived<CardItem[]>([
     { id: 'net-ping', title: 'Ping' },
     ...(adapters ?? []).map((a) => ({ id: `net:${a.id}`, title: `${KIND[a.type] ?? a.type}: ${a.name}` })),

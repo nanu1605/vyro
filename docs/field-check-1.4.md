@@ -29,7 +29,7 @@ The relay has to be live first:
    `https://vyro-relay.tanishqjain010.workers.dev`.
 5. **The address in builds.** Settings → Secrets and variables → Actions → Variables → New
    repository variable `VYRO_RELAY_URL` = `https://vyro-relay.tanishqjain010.workers.dev`. Then the next CI run's
-   `vyro-windows-<commit>` artifact has it built in. (Without it, enter the address in Vyro:
+   `vyro-windows-<commit>` artifact has it built in. (Without it, enter the address in Clokrix:
    Settings → Remote → Options → Relay address.)
 
 **Build.** The `vyro-windows-<commit>` artifact of the latest CI run on `claude/vyro-1.4`, version
@@ -40,10 +40,10 @@ The relay has to be live first:
 - Settings → Remote → From anywhere → **Turn on reach from anywhere…**: the confirmation says
   what the relay sees and does not. Turn it on: within seconds it says "Connected to the relay".
 - **Pair a phone**: a QR code with a 10-minute countdown.
-- **Android** (Chrome): scan it with the camera. Vyro opens and shows the readings within a few
+- **Android** (Chrome): scan it with the camera. Clokrix opens and shows the readings within a few
   seconds. Install it (the Install button, or the menu → Install app). Open it from the home
   screen: the readings come back.
-- **iPhone** (Safari): scan it with the camera. The page asks to add Vyro to the Home Screen
+- **iPhone** (Safari): scan it with the camera. The page asks to add Clokrix to the Home Screen
   first. Do so (Share → Add to Home Screen), open it, tap **Scan the code**, allow the camera, and
   scan the same code (still within its 10 minutes). The readings show.
 - In Settings, the phone is listed as "Anywhere", "watching now" while the app is open.
@@ -76,7 +76,7 @@ The relay has to be live first:
 
 ## 5. Footprint
 
-- With reach from anywhere on and no phone watching, Task Manager shows Vyro's CPU and memory as
+- With reach from anywhere on and no phone watching, Task Manager shows Clokrix's CPU and memory as
   with it off (one idle connection).
 - With the app open on the phone, the PC reads at the window's rate (1 s), as with the local
   companion.

@@ -88,7 +88,7 @@ describe("a PC's notification wish", () => {
     expect(loadPcs(store)[0]!.push).toBe(true);
     pcs = updatePc(pcs, ROOM, { push: false });
     expect('push' in pcs[0]!).toBe(false);
-    m.set('vyro.pcs', JSON.stringify([{ ...pcs[0], push: 'yes' }]));
+    m.set('clokrix.pcs', JSON.stringify([{ ...pcs[0], push: 'yes' }]));
     expect(loadPcs(store)).toEqual([]);
   });
 });
@@ -136,8 +136,8 @@ describe('the service worker', () => {
     await w.run('push', { data: { text: () => 'garbage' } });
     await w.run('push', {});
     await w.run('push', { data: { text: () => JSON.stringify({ ...note, pc: 'not a room', v: 1 }) } });
-    expect(w.shown.map((s) => s.title)).toEqual(['Vyro', 'Vyro', 'CPU at 97 °C']);
-    expect(w.shown[0]!.options.body).toBe('Open Vyro to see what your PC said.');
+    expect(w.shown.map((s) => s.title)).toEqual(['Clokrix', 'Clokrix', 'CPU at 97 °C']);
+    expect(w.shown[0]!.options.body).toBe('Open Clokrix to see what your PC said.');
     expect(w.shown[2]!.options.tag).toBeUndefined();
   });
 

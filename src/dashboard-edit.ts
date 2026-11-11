@@ -24,7 +24,7 @@ export const CARDS: Record<CardId, string> = {
   memory: 'Memory',
   power: 'Power',
   board: 'Board and fans',
-  self: 'Vyro itself',
+  self: 'Clokrix itself',
 };
 export const isCard = (c: string | null): c is CardId => c != null && c in CARDS;
 
@@ -42,7 +42,7 @@ export function gaugeSources(snap: SensorSnapshot | null): string[] {
 
 /** A short name for a widget, for its edit bar and screen readers. */
 export function widgetTitle(w: Widget, snap: SensorSnapshot | null): string {
-  if (!isKind(w.kind)) return 'Widget from a newer Vyro';
+  if (!isKind(w.kind)) return 'Widget from a newer Clokrix';
   const kind = KINDS[w.kind].label;
   switch (w.kind) {
     case 'gauge':

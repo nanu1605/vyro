@@ -1,4 +1,4 @@
-# Vyro — Roadmap & Decision Log
+# Clokrix — Roadmap & Decision Log
 
 Execution tracker for [`PROJECT_PLAN.md`](PROJECT_PLAN.md) (the build spec, v2). The spec is the
 source of truth for *what* to build; this file records *in what order*, what is done, and which
@@ -15,7 +15,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 
 | # | Decision | Answer | Status |
 |---|---|---|---|
-| 1 | Product name / codename | **Vyro** (repo name) | decided |
+| 1 | Product name / codename | **Clokrix** (repo name) | decided |
 | 2 | First release cut | **Early release** after P5 (P11), before the low-level sensors; the former P11b (own driver signing) is dropped | decided |
 | 3 | Gaming module (P10) in v1? | **Yes**: frame capture with the bundled PresentMon (MIT, Intel-signed) run by the service; companion overlay, no injection | decided |
 | 4 | Fan control (v2 write path) | Superseded by 18 | superseded |
@@ -44,18 +44,18 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 27 | Fans with no speed reading (My PC) | Turn slowly and say "Speed not reported"; a real 0 RPM stays still (the owner, 2026-10-16) | decided |
 | 28 | Installer size budget | **< 60 MB** from 1.1 (was < 20 MB, spec §8): "we have to make good software using good tools" (the owner, 2026-10-16). The window's start bundle budget goes from 125 to 200 kB gzipped | decided |
 | 29 | Navigation | A sidebar with grouped views replaces the tab strip (supersedes 26); the views and their ids stay | decided |
-| 30 | Widgets and Show desktop | "Behind windows" widgets stay in view through Show desktop (Win+D), as Rainmeter's "On desktop" skins do: a probe window detects it and the widgets go on top while it lasts; Vyro's windows are never put inside Explorer's (the owner, 2026-10-17) | decided |
+| 30 | Widgets and Show desktop | "Behind windows" widgets stay in view through Show desktop (Win+D), as Rainmeter's "On desktop" skins do: a probe window detects it and the widgets go on top while it lasts; Clokrix's windows are never put inside Explorer's (the owner, 2026-10-17) | decided |
 | 31 | Moving widgets and clicks | Widgets snap while dragged, in Windows' own move loop (`WM_MOVING`): to the work area's edges, beside another widget 8 px apart, or in line with it; Shift places freely. "Clicks pass through" works only while a widget is locked, so unlocking it on the Widgets page is always the way back (in the plan the owner approved, 2026-10-17) | decided |
 | 32 | Accent of any colour | A colour wheel (1.3): fills (gauges, graphs, the 3-D view, the logo, the share card's ring) show the colour as picked; text in the accent takes a shade of the same hue and chroma, lightened or darkened just to 4.5:1 on every surface of the theme. The GPU colour is the main one turned round the hue circle, away from warning hues (the owner, 2026-10-17) | decided |
-| 33 | Connect and Disconnect | Paired Bluetooth devices only (the owner's "all Bluetooth", 2026-10-17): audio through its audio connection as Settings does; any other device's link dropped by the Vyro service, and Connect asks Windows to reach it. Wired and receiver devices get no actions | decided |
-| 34 | Reach from anywhere | A phone app installed from the browser (no app stores) reaches the PC through the Vyro relay: a Cloudflare Worker, one Durable Object per PC, in the owner's free account, built into releases for everyone, with any other relay allowed in Settings (the owner, 2026-10-17). Readings sealed end to end (HKDF-SHA256 to an auth key and an AES-256-GCM key; a secret per phone that replaces the pairing link's); the relay keeps only hashes and sees metadata. Off by default; the PC opens no port. Supersedes 19's "LAN only" | decided |
+| 33 | Connect and Disconnect | Paired Bluetooth devices only (the owner's "all Bluetooth", 2026-10-17): audio through its audio connection as Settings does; any other device's link dropped by the Clokrix service, and Connect asks Windows to reach it. Wired and receiver devices get no actions | decided |
+| 34 | Reach from anywhere | A phone app installed from the browser (no app stores) reaches the PC through the Clokrix relay: a Cloudflare Worker, one Durable Object per PC, in the owner's free account, built into releases for everyone, with any other relay allowed in Settings (the owner, 2026-10-17). Readings sealed end to end (HKDF-SHA256 to an auth key and an AES-256-GCM key; a secret per phone that replaces the pairing link's); the relay keeps only hashes and sees metadata. Off by default; the PC opens no port. Supersedes 19's "LAN only" | decided |
 | 36 | Control from the phone | A phone paired from anywhere may change the PC only if the owner allows it, on the PC, when pairing or later (1.5; the owner's request, 2026-10-18): a fixed list of requests (`relay::api`), each checked on the PC against that phone's permission; protocol 2 gives each connection a session and counts its messages, so nothing can be replayed; what phones changed is kept and shown in Settings. Turning fan control on, confirming a pump and editing GPU settings stay at the PC. The LAN page stays read-only. Amends 34's "read-only" | decided |
 | 35 | 1.3 ships in 1.4.0 | 1.3.0 is not released on its own: its changes (decisions 32 and 33, device names, wireless batteries) ship in 1.4.0, once field check 1.3 passes on the 1.4 test build (the owner, 2026-10-18). One update for installed copies instead of two; the 1.3 branch is neither merged nor released | decided |
-| 37 | GPU tuning | Vyro may change an NVIDIA card's core and memory clock offsets and its power limit (1.6; the owner's request, 2026-10-18, on an NVIDIA desktop card and a laptop GPU): only through the driver's own interface (NVML, loaded from System32), only in the service, off until the owner turns it on and confirms, only on RTX 20 to RTX 50 cards and only what the driver gives a range for. Presets per family scaled to those ranges, the owner's own, one per profile; a stability test and "Find my best"; stock on every exit, after heat, a crash or a driver reset, and when another program keeps changing the values; only tested settings at start; from a phone only Stock and tested presets. AMD Radeon RX 6000 to RX 9000 through ADLX and Intel Arc A- and B-series through the Intel Graphics Control Library from 2.0 (the owner, 2026-10-27), the same way and under the same rules; Intel's warranty waiver is set when tuning is on, as Intel asks. Supersedes "never writes GPU settings" (anti-cheat notes) and the plans' "overclocking out of scope" | decided |
+| 37 | GPU tuning | Clokrix may change an NVIDIA card's core and memory clock offsets and its power limit (1.6; the owner's request, 2026-10-18, on an NVIDIA desktop card and a laptop GPU): only through the driver's own interface (NVML, loaded from System32), only in the service, off until the owner turns it on and confirms, only on RTX 20 to RTX 50 cards and only what the driver gives a range for. Presets per family scaled to those ranges, the owner's own, one per profile; a stability test and "Find my best"; stock on every exit, after heat, a crash or a driver reset, and when another program keeps changing the values; only tested settings at start; from a phone only Stock and tested presets. AMD Radeon RX 6000 to RX 9000 through ADLX and Intel Arc A- and B-series through the Intel Graphics Control Library from 2.0 (the owner, 2026-10-27), the same way and under the same rules; Intel's warranty waiver is set when tuning is on, as Intel asks. Supersedes "never writes GPU settings" (anti-cheat notes) and the plans' "overclocking out of scope" | decided |
 | 38 | The screen on the phone | A phone may see and use the PC's screen only if the owner allows it, on the PC, apart from control (1.7; the owner's request, 2026-10-18, "direct, slow fallback"): one phone at a time, a banner and a tray item with Stop while it lasts, a notification at the start, a record of each session, an end after 10 minutes unused. Direct over WebRTC (str0m in the app, the phone's own browser), its fingerprints inside the sealed offer and answer so the relay cannot step in; the picture as H.264 from Windows' own encoder, input as Windows input in the signed-in session. Where no direct path exists, the slow view: one JPEG at a time through the relay, at most 2 a second, 20 minutes a day; the relay caps what a PC sends its phones at 1 GB a day. Windows' secure screens cannot be seen or used, and Ctrl+Alt+Del cannot be sent | decided |
-| 39 | Voice from the phone | The phone's voice reaches the PC two ways (1.7; the owner's report, 2026-10-21: a WhatsApp Web voice note sent through the phone's screen recorded nothing, as it records the PC's microphone and the phone's never reached the PC; the owner's choice, "clips and live mic"). Windows adds a microphone only through a driver Microsoft has signed (an EV certificate and a partner account Vyro does not have), so Vyro ships none. A **clip** recorded on the phone is kept on the PC (AAC through Windows' own encoder, or WAV without one; named by Vyro, never the phone; 5 minutes at most; deleted after 7 days) and put on the clipboard as a file, only when the phone sends one, so Paste in a chat attaches it. The **live microphone** plays into a virtual cable the owner installs (VB-CABLE, VoiceMeeter or Virtual Audio Cable, found by name, never bundled); while it plays, the cable's recording side is Windows' default microphone (an option, on by default) through `IPolicyConfig`, an interface Windows does not document but has kept since Windows 7 (EarTrumpet and SoundSwitch use it). The defaults it replaced are kept in a file first and put back when the microphone stops, the session ends or Vyro closes, or at the next start after a crash; a role the owner changed meanwhile is left alone. Both need the Screen permission and a session on; the live microphone the direct connection | decided |
+| 39 | Voice from the phone | The phone's voice reaches the PC two ways (1.7; the owner's report, 2026-10-21: a WhatsApp Web voice note sent through the phone's screen recorded nothing, as it records the PC's microphone and the phone's never reached the PC; the owner's choice, "clips and live mic"). Windows adds a microphone only through a driver Microsoft has signed (an EV certificate and a partner account Clokrix does not have), so Clokrix ships none. A **clip** recorded on the phone is kept on the PC (AAC through Windows' own encoder, or WAV without one; named by Clokrix, never the phone; 5 minutes at most; deleted after 7 days) and put on the clipboard as a file, only when the phone sends one, so Paste in a chat attaches it. The **live microphone** plays into a virtual cable the owner installs (VB-CABLE, VoiceMeeter or Virtual Audio Cable, found by name, never bundled); while it plays, the cable's recording side is Windows' default microphone (an option, on by default) through `IPolicyConfig`, an interface Windows does not document but has kept since Windows 7 (EarTrumpet and SoundSwitch use it). The defaults it replaced are kept in a file first and put back when the microphone stops, the session ends or Clokrix closes, or at the next start after a crash; a role the owner changed meanwhile is left alone. Both need the Screen permission and a session on; the live microphone the direct connection | decided |
 | 40 | Notifications on the phone | A phone may get notifications with its app closed (2.0; the owner's choice, 2026-10-27): it turns them on for each PC and chooses what about (alerts as Windows shows them, low batteries, game summaries, the PC going quiet), and only it turns them on; any paired phone may, as they concern only it. Web Push: the browser's subscription goes to the PC sealed; the PC seals each notification for it (RFC 8291) and the relay posts it to the browser's push service (Google's, Apple's, Mozilla's or Microsoft's only) signed with a key the relay makes and keeps (VAPID, RFC 8292), at a limited rate. "Stopped answering" is sealed ahead of time and left with the relay, sent when the PC's connection ends or its pings stop without its "leaving", and it is not back within two minutes | decided |
-| 41 | TURN for the screen | Where a phone has no direct path to the PC (most mobile networks; the owner, 2026-10-28: "can we cast without any time constraint?"), its screen session may go through Cloudflare's TURN service instead of the slow view (2.0.1): only where the relay's owner set a TURN key and listed the PC's room (`TURN_ROOMS`, or `*`), as the relay is shared by every installed Vyro and Cloudflare charges past 1,000 GB a month. The relay gets day-long credentials with the key, which never leaves it, and hands them to a phone of a listed room; the picture stays encrypted end to end, the TURN server passing packets it cannot read. The slow view stays for where there is neither | decided |
+| 41 | TURN for the screen | Where a phone has no direct path to the PC (most mobile networks; the owner, 2026-10-28: "can we cast without any time constraint?"), its screen session may go through Cloudflare's TURN service instead of the slow view (2.0.1): only where the relay's owner set a TURN key and listed the PC's room (`TURN_ROOMS`, or `*`), as the relay is shared by every installed Clokrix and Cloudflare charges past 1,000 GB a month. The relay gets day-long credentials with the key, which never leaves it, and hands them to a phone of a listed room; the picture stays encrypted end to end, the TURN server passing packets it cannot read. The slow view stays for where there is neither | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -86,7 +86,7 @@ pulled ahead of P6 if the early release should include history/alerts — decide
 - **Provider = parse + win.** Byte/struct decoders (EDID, SMBIOS, NVMe health log, ATA SMART,
   SPD, Super-I/O dumps) live in platform-neutral modules with fixture tests; a thin
   `#[cfg(windows)]` module fetches the bytes. Most logic is testable on any OS.
-- Every provider implements `vyro_core::Provider`, registers its sensors in the unified
+- Every provider implements `clokrix_core::Provider`, registers its sensors in the unified
   `Registry`, and fills its slice of `SensorSnapshot`. A failing sensor becomes `null` and is
   logged once — it never aborts the tick.
 - Static inventory is read once at startup (WMI only there) and served by commands.
@@ -100,7 +100,7 @@ pulled ahead of P6 if the early release should include history/alerts — decide
 Built and verified on Linux (unit tests; app run under Xvfb). Pending: first run on a Windows machine
 (`pnpm tauri dev`) and a first footprint measurement there.
 
-- [x] Workspace: `crates/vyro-core` (pure Rust) + `src-tauri` (Tauri 2 shell)
+- [x] Workspace: `crates/clokrix-core` (pure Rust) + `src-tauri` (Tauri 2 shell)
 - [x] Unified sensor `Registry` with min/max/avg; `Provider` trait
 - [x] `SensorSnapshot` + aux structs, generated TS bindings
 - [x] Poller (1 Hz, 5 s when hidden) → registry → history → `sensors` event
@@ -237,7 +237,7 @@ DHCP), `GetBestInterface` for the primary adapter, WLAN API (RSSI, channel, SSID
 (1 / s, default 1.1.1.1, host names resolved, changeable from the UI and remembered). MAC,
 IPv6, SSID and BSSID are local-only. Self-monitoring: app + descendants (WebView2) CPU / RAM /
 GPU from the process walk. Power: GPU sum now; CPU and total stay "needs driver". Network tab,
-dashboard Power and "Vyro itself" cards.
+dashboard Power and "Clokrix itself" cards.
 Field check 1 (Ryzen desktop, Realtek 2.5GbE at 1 Gbps + Radmin VPN + idle RZ616 Wi-Fi 6E):
 primary route found, ping to 1.1.1.1 10.4 ms / 0 % loss / 0.4 ms jitter, VPN listed (has a
 default route), disconnected Wi-Fi listed; network poll ≈ 2 ms. Fixes: MTU from the IP layer
@@ -248,13 +248,13 @@ inventory. Wi-Fi link details and throughput under load still to check.
 ### P11 — Early release (M3)
 In progress. Done: WiX MSI (`pnpm tauri build`, uploaded by CI) with the pinned PawnIO 2.2.0
 installer (`scripts/fetch-pawnio.ps1`, SHA-256 checked) run silently and elevated when PawnIO
-is missing or 1.x (`src-tauri/wix/vyro.wxs`; a PawnIO failure never fails the install);
+is missing or 1.x (`src-tauri/wix/clokrix.wxs`; a PawnIO failure never fails the install);
 Start-menu shortcut carrying the toast app id; fixed upgrade code; "Start with Windows" as an
 elevated logon task (a per-user Run entry since P8); uninstall removes that task and the user's toast
 registration and keeps settings and history; single instance; license MIT OR Apache-2.0
 (decision 12); `THIRD_PARTY_NOTICES.md` and full texts in `THIRD_PARTY_LICENSES.md`, generated
 from Cargo.lock and the UI packages and checked in CI; `CONTRIBUTING.md`; spec §8 budget
-readout in the "Vyro itself" card (average CPU, peak memory, startup to first data) and a CI
+readout in the "Clokrix itself" card (average CPU, peak memory, startup to first data) and a CI
 installer-size check (< 20 MB); updates: a Release workflow (Actions tab or a `vX.Y.Z` tag)
 publishes the MSI with `latest.json` and checksums, and only those builds carry the Tauri updater
 (daily check, Settings → Updates, dashboard notice, a notification once per version; install runs
@@ -274,15 +274,15 @@ account); clean-machine test with Memory Integrity on.
   task; perf pass against spec §8; verify on a clean Win11 24H2+ with Memory Integrity on.
 - LICENSE, THIRD_PARTY_NOTICES (PawnIO driver GPL-2.0 with IOCTL exception, PawnIO modules
   LGPL-2.1, with source links), CONTRIBUTING.
-- Uninstall removes the per-user toast registration Vyro writes at start
+- Uninstall removes the per-user toast registration Clokrix writes at start
   (`HKCU\Software\Classes\AppUserModelId\app.vyro.monitor`); history and alert rules
-  (`%ProgramData%\Vyro` since P8) and settings (`%APPDATA%\app.vyro.monitor`) stay.
+  (`%ProgramData%\Clokrix` since P8) and settings (`%APPDATA%\app.vyro.monitor`) stay.
 
 ### P6 — Low-level sensors via PawnIO (M4)
-Our own KMDF driver and its attestation signing are dropped. Vyro talks to the PawnIO driver
+Our own KMDF driver and its attestation signing are dropped. Clokrix talks to the PawnIO driver
 (`\\?\GLOBALROOT\Device\PawnIO`) through its IOCTLs and loads the signed modules it needs,
-embedded from `crates/vyro-core/pawnio/` (PawnIO.Modules release, LGPL-2.1). Missing PawnIO →
-those sensors stay `null` and the UI says "needs PawnIO". Vyro only issues reads, except SMBus
+embedded from `crates/clokrix-core/pawnio/` (PawnIO.Modules release, LGPL-2.1). Missing PawnIO →
+those sensors stay `null` and the UI says "needs PawnIO". Clokrix only issues reads, except SMBus
 page-select writes that SPD reads require, and holds the `Access_ISABUS` / `Access_SMBUS`
 coexistence mutexes around bus access.
 
@@ -290,7 +290,7 @@ PawnIO check (2026-09):
 
 | Point | Result |
 |---|---|
-| License | Driver GPL-2.0 with an exception for programs using only its IOCTLs; modules and PawnIOLib LGPL-2.1. Shipping the signed setup and module binaries with license texts and source links is allowed; Vyro's own license is unconstrained. |
+| License | Driver GPL-2.0 with an exception for programs using only its IOCTLs; modules and PawnIOLib LGPL-2.1. Shipping the signed setup and module binaries with license texts and source links is allowed; Clokrix's own license is unconstrained. |
 | Silent install | `PawnIO_setup.exe -install -silent` (`-uninstall -silent`); installed version in the Uninstall registry key. |
 | Ryzen 9700X (family 1Ah, model 44h) | `AMDFamily17` accepts families 17h–1Ah: whitelisted MSRs (RAPL, P-state, APERF/MPERF) and SMN reads → Tctl, CCD temps, package/core power, VID, effective clocks. SoC rails via `RyzenSMU` (later). |
 | MSI B650M (MS-7E24) | `LpcIO` Super-I/O access at 0x2E/0x4E with chip-ID check and HWM BAR discovery → NCT6687D. `SmbusPIIX4` covers the AMD FCH SMBus → DDR5 SPD / hub temperature; UMC timings via SMN. |
@@ -327,11 +327,11 @@ the browser build).
       charts (average + min–max band, gaps where the app was closed, hover readout) for usage,
       temperatures, power, clocks, RAM/VRAM, board + DIMM temps, drive temps, fans, core
       voltages, disk and network throughput, ping. Board voltages are now history-tracked.
-- [x] **System Health** (`vyro_core::health`, Health tab): per-subsystem status with fixed,
+- [x] **System Health** (`clokrix_core::health`, Health tab): per-subsystem status with fixed,
       hysteresis-damped limits; event log of the last 200 changes; dashboard strip and tab dot
       when something needs attention. CPU limit 90 °C warning / 99 °C problem, since Ryzen
       7000/9000 hold 95 °C under full load by design.
-- [x] **Alerts** (`vyro_core::alerts`, Health tab): sensor-threshold rules (above / below, hold
+- [x] **Alerts** (`clokrix_core::alerts`, Health tab): sensor-threshold rules (above / below, hold
       time, cooldown, sound) and System Health forwarding; saved to `alerts.json` in the app
       config folder (a bad file is moved aside, defaults used); Windows toast notifications via
       `tauri-plugin-notification`, silent unless the rule asks for sound (the app registers its
@@ -349,9 +349,9 @@ history kept while the app is closed, reconnect across `sc stop` / `sc start`, "
 Windows" into the tray without a prompt.
 Footprint with the service: 185 MB (service + app + WebView2), above the §8 120 MB target — P9.
 
-- [x] `vyro_core::engine`: the engine as one object (`LocalEngine`: registry, poller and
+- [x] `clokrix_core::engine`: the engine as one object (`LocalEngine`: registry, poller and
       providers, history, health, alert rules) behind `EngineApi`, moved out of the Tauri shell.
-- [x] `vyro_core::ipc`: protocol v1, length-prefixed JSON. Per client session one commands
+- [x] `clokrix_core::ipc`: protocol v1, length-prefixed JSON. Per client session one commands
       connection (request → reply) and one snapshot stream (server → client), so both ends use
       plain blocking I/O. The server polls at 1 Hz while any client window is visible, at the
       tray rate otherwise, and counts client processes in the app footprint. Unknown methods
@@ -362,8 +362,8 @@ Footprint with the service: 185 MB (service + app + WebView2), above the §8 120
       first instance claimed with `FILE_FLAG_FIRST_PIPE_INSTANCE`; clients open it with
       identification-level impersonation only and check that the server process is the
       running `VyroService` (`GetNamedPipeServerProcessId` vs the SCM's process id).
-- [x] `crates/vyro-service`: SCM glue (stop / shutdown), `--console` mode, rotating
-      `service.log`; data in `%ProgramData%\Vyro`, created with a protected ACL (users read
+- [x] `crates/clokrix-service`: SCM glue (stop / shutdown), `--console` mode, rotating
+      `service.log`; data in `%ProgramData%\Clokrix`, created with a protected ACL (users read
       only); a pre-existing folder not owned by SYSTEM / administrators, or a link, is moved
       aside. Retries the pipe for 10 s at start so a restart never races a stale client handle.
 - [x] App: `asInvoker`; connects to the service (waits up to 5 s while it starts), reconnects by
@@ -385,7 +385,7 @@ Footprint with the service: 185 MB (service + app + WebView2), above the §8 120
 ### P9 — Performance hardening, profiles, intelligent analysis, polish (M5)
 In progress.
 
-- [x] P9a Footprint breakdown per executable (service, app, WebView2 helpers) in "Vyro itself"
+- [x] P9a Footprint breakdown per executable (service, app, WebView2 helpers) in "Clokrix itself"
       (IPC protocol 2). Hidden to the tray: no snapshots sent to the page, engine at the tray
       rate, WebView2 invisible + low memory target + suspended; resumed before showing.
       `--minimized` starts park the page after 5 s.
@@ -406,14 +406,14 @@ In progress.
       dashboard says it is waiting for the first reading or the service. Tabs take Home/End;
       tile warnings and Health statuses are written out, not colour only; heading order and a
       low-contrast disabled-rule text fixed. axe-core: no violations on any tab.
-- [x] P9c Profiles (`vyro_core::profiles`): Desktop (1 s, all alerts, full animation, full
+- [x] P9c Profiles (`clokrix_core::profiles`): Desktop (1 s, all alerts, full animation, full
       dashboard), Gaming (2 s, hardware problems only, reduced, compact), Work (2 s, silent
       alerts, reduced, full), Benchmark (0.5 s, silent alerts, no animation, full), Silent (5 s,
       no notifications but alerts logged, no animation, compact). Poll rate goes to the service
       (`SetPollInterval`, clamped 250 ms–10 s, re-sent after reconnects); notifications and
       in-window toasts follow the policy (Test always shows); chosen in Settings or the tray's
       Profile menu. Field-checked: Gaming from the tray switches the dashboard to compact and History to 2 s readings.
-- [x] P9d Insights (`vyro_core::analysis`, pure and tested; `EngineApi::insights`, Health
+- [x] P9d Insights (`clokrix_core::analysis`, pure and tested; `EngineApi::insights`, Health
       tab, refreshed every minute): CPU / GPU running hotter than usual for their load (a
       straight-line fit of temperature on load over the past week vs the last 30 min); heat
       throttling (full load, high temperature, clock ≤ 90 % of the usual full-load clock);
@@ -424,7 +424,7 @@ In progress.
 ### P10 — Gaming capture + companion overlay (M6)
 In progress.
 
-- [x] P10a Frame capture (`vyro_core::gaming`): the app watches for a fullscreen, non-shell app
+- [x] P10a Frame capture (`clokrix_core::gaming`): the app watches for a fullscreen, non-shell app
       in the foreground (two 1 s samples; it stays the target while it runs, also alt-tabbed,
       until another fullscreen app takes over) and hands its process id to the service
       (`SetCaptureTarget`, IPC protocol 3; a client's target ends with its session). The service
@@ -489,7 +489,7 @@ allow-listed chip + revision + board + header, each read back and bounded.
 - [x] 12a Field-checked: `vyro-fans --try 0 100` (readback 255, CPU fan 1550 → 2010 RPM) and
       `--try 0 30` (readback 77, 1371 → 968 RPM, settled in ~7 s); only header 0 changed; after
       restore mode 0 and the output back on the BIOS curve.
-- [x] 12b Controller (`vyro_core::fan`): speeds decided in the poller tick right after the
+- [x] 12b Controller (`clokrix_core::fan`): speeds decided in the poller tick right after the
       providers (curve on any temperature sensor with hysteresis and ramp limits, or fixed; floors
       per header), written by a worker thread so EC waits never delay a tick. Failsafe core from
       12d built in: CPU / GPU emergency limit or a source without a reading → 100 %; readback
@@ -504,10 +504,10 @@ allow-listed chip + revision + board + header, each read back and bounded.
 - [x] 12b Field check: CPU fan Fixed 40 % holds; a curve follows a stress test; Return to BIOS
       (mode 0 in `vyro-fans`); kill `vyro-service.exe` with control on → BIOS curve back after the
       restart; emergency limit lowered to 50 °C → 100 %; footprint re-measured.
-      Fixed 40 % passed (2026-09-30). HWiNFO Sensors shows the same two fan speeds as Vyro
+      Fixed 40 % passed (2026-09-30). HWiNFO Sensors shows the same two fan speeds as Clokrix
       (CPU 1,246 RPM, PUMPFAN 4,428 RPM); the owner's other 8 fans are on splitters or a hub
       without a speed wire, or a SATA-powered hub. System Fan 1 at Fixed 100 % made the case fans
-      louder (2026-10-01), so the case hub is on SYS_FAN1 with no speed wire: Vyro drives it but
+      louder (2026-10-01), so the case hub is on SYS_FAN1 with no speed wire: Clokrix drives it but
       cannot see it spin, so a stalled fan there is not detectable. Return to BIOS passed
       (2026-10-13): `vyro-fans` reads mode 0x00 afterwards. Curve passed (2026-10-13): the fans
       followed a stress test and slowed after it. Killing `vyro-service.exe` with control on
@@ -537,7 +537,7 @@ allow-listed chip + revision + board + header, each read back and bounded.
       "+3.3V Standby at 0.00 V" and "CMOS battery low: 0.00 V" at every start. The chip reads
       0 on those inputs while it isn't sampling them. Earlier field reads of 3.37 V and 3.09 V
       were taken with HWMonitor open, which likely turned their monitoring on. Exactly 0 V is
-      now "no reading" (`sio::win`), and Health skips 0 V inputs. Vyro does not turn the
+      now "no reading" (`sio::win`), and Health skips 0 V inputs. Clokrix does not turn the
       monitoring on itself: that is a chip write and would need its own field check.
       Field-confirmed (2026-10-13): Voltages show OK.
 - [x] 12c Pump control (built 2026-10-13): the pump header is driven only
@@ -555,12 +555,12 @@ allow-listed chip + revision + board + header, each read back and bounded.
       stop / shutdown / crash (service restart restores first) came with 12b. Added: the service
       takes power events and hands the fans to the BIOS before the PC sleeps (it waits up to
       1.5 s), then captures the BIOS state afresh after waking before the next write. The chip is
-      re-read every few seconds: a driven header that lost Vyro's setting (mode bit cleared or
+      re-read every few seconds: a driven header that lost Clokrix's setting (mode bit cleared or
       another duty, read twice) is written again; three rewrites within 2 minutes mean another
       program is driving the fans, and control ends. Control-event log moves to 12e.
 - [x] 12d Field check (2026-10-13, MS-7E24): sleep and wake with control on (settings back
       after waking), reboot with control on (control resumes), uninstall with control on (BIOS
-      curve after removal) all passed. Not run: MSI Center fighting Vyro (covered by tests).
+      curve after removal) all passed. Not run: MSI Center fighting Clokrix (covered by tests).
 - [x] 12e (built 2026-10-13):
       - Per-profile fan settings: `FanConfig.profiles` holds the header settings of profiles
         that don't use the shared ones. The app sends the profile in use (`SetFanProfile`) on
@@ -593,13 +593,13 @@ allow-listed chip + revision + board + header, each read back and bounded.
 
 ### P13 — Automatic game profiles (M8 → 0.3)
 Owner's choices (2026-10-13): games without their own settings get the Gaming profile; the
-per-game "refresh Hz" is Vyro's update rate (the monitor's refresh rate is not touched).
+per-game "refresh Hz" is Clokrix's update rate (the monitor's refresh rate is not touched).
 Budget: no new process or thread; one more check per second in the existing game watcher;
 footprint within ±2 MB of 0.2.0. While a game runs, the engine keeps its update rate with the
 window hidden (the profile's or the game's own; Gaming = 2 s instead of the 5 s tray rate).
 
 - [x] Built (2026-10-13, branch `v2-p13-game-profiles`, 4723a88):
-      - `vyro_core::gaming::auto`: per-game `GameRule` (profile, "Don't switch", whose fan
+      - `clokrix_core::gaming::auto`: per-game `GameRule` (profile, "Don't switch", whose fan
         settings, overlay on/off, update rate 0.5/1/2/5 s, "Not a game"), `GameAutomation`
         (on by default, default profile Gaming, opt-in GPU-load trigger, rules) kept in the app's
         `settings.json`, and the `Switcher`. The owner's profile is never changed by a game, so
@@ -608,7 +608,7 @@ window hidden (the profile's or the game's own; Gaming = 2 s instead of the 5 s 
         Desktop" does the same without changing the profile).
       - Detection (`foreground.rs`): fullscreen or borderless as before; a saved game also in a
         window; with the opt-in trigger, an app in front using ≥ 60 % of the GPU for 10 s;
-        never Vyro, the shell, browsers and players, or an app marked "Not a game". Frame-rate
+        never Clokrix, the shell, browsers and players, or an app marked "Not a game". Frame-rate
         capture follows its own setting, so profiles also switch with capture off.
       - App: `apply_effective` puts the profile's update rate, the fan settings (12e's
         per-profile fans) and the overlay choice in force and moves the tray check mark;
@@ -635,7 +635,7 @@ taken in the field check.
 
 - [x] Built (2026-10-13, branch `v2-p14-overlay`, df67965; with 0d77a60, which marks fan control
       off before the BIOS settings go back, a race the Windows CI run found):
-      - `vyro_core::gaming::overlay`: `OverlayMode` (Minimal, Performance, Full, Graph),
+      - `clokrix_core::gaming::overlay`: `OverlayMode` (Minimal, Performance, Full, Graph),
         `OverlayMetric` (13 readings: FPS, 1 % and 0.1 % lows, frame time, latency, CPU and
         GPU use, temperature and power, VRAM, what limits the frame rate), each mode's
         defaults, `rows` from the snapshot, and `size` for the window. P13's `GameRule` gains
@@ -655,7 +655,7 @@ taken in the field check.
         scene, and per-game mode in the Game profiles card.
 - [x] Field check (2026-10-13, MS-7E24), all passed: the four modes over a borderless game;
       changes apply live; the game keeps input focus; exclusive fullscreen still reports
-      "overlay unavailable"; "Vyro itself" with the overlay shown and hidden.
+      "overlay unavailable"; "Clokrix itself" with the overlay shown and hidden.
 
 ### P15 — Game session replay (M8)
 Owner's choice (2026-10-13): full detail, every reading of the last 100 sessions, inside the
@@ -701,7 +701,7 @@ a newer schema.
       38685441589 (started from the Actions tab on `main`) tagged `v0.3.0` and published the
       9.9 MB MSI, `latest.json` and checksums here and to `nanu1605/vyro-releases`. Before the
       merge, a sweep of all 13 tabs in the browser preview, sampled every 250 ms with a replay
-      and its context open on Gaming, peaked at 154 MB (0.2.0: 167 MB); the "Vyro itself"
+      and its context open on Gaming, peaked at 154 MB (0.2.0: 167 MB); the "Clokrix itself"
       figures on the reference PC were not re-measured for the README.
 
 ### P19 — Hardware change detection (M9 → 0.4; first, P16 cites it)
@@ -716,7 +716,7 @@ it is part of the key. The history database moves to schema v3 (two new tables, 
 so going back to 0.3 turns its history off; IPC protocol 8.
 
 - [x] Built (2026-10-15, branch `v2-p19-changes`):
-      - `vyro_core::changes`: `fingerprint` (CPU; board and BIOS; each memory module by slot
+      - `clokrix_core::changes`: `fingerprint` (CPU; board and BIOS; each memory module by slot
         with its configured speed and voltage; GPUs with driver and VBIOS; internal drives
         with firmware; Windows edition and build; UEFI, Secure Boot, TPM, virtualization,
         hypervisor; and as hot-plug classes monitors by EDID, USB drives and physical network
@@ -767,7 +767,7 @@ candidates are each "possible"; anything else in the window is listed apart as "
 same time, not shown to be the cause".
 
 - [x] Built (2026-10-15, branch `v2-p16-intelligence`):
-      - `vyro_core::intel` replaces P9d's `analysis`. Derived metrics: thermal headroom against
+      - `clokrix_core::intel` replaces P9d's `analysis`. Derived metrics: thermal headroom against
         the Health problem limits, temperature for the load, CPU fan speed for the CPU
         temperature, frames per watt per game session (sessions now log CPU + GPU power), and
         clock steadiness under full load. Baselines: the last half hour against the past week
@@ -816,7 +816,7 @@ Started while P16 waits for its field check, on `v2-p18-alerts` stacked on
 `v2-p16-intelligence` (it merges after P16). Defaults chosen without the owner, open to change
 at the field check: an alert's profile and fan actions last while its conditions hold and end
 30 s after they clear; a profile the owner picks meanwhile wins until that alert clears; fans
-are only ever raised (5–50 points on top of what Vyro already drives, never a header left to
+are only ever raised (5–50 points on top of what Clokrix already drives, never a header left to
 the BIOS) and only while fan control is on; two alerts about the same part within a minute
 notify once (a hardware problem always notifies); the diagnostic record keeps readings and the
 five busiest program names, nothing else.
@@ -828,7 +828,7 @@ diagnostic record adds about 1.5 KB to its fired alert in the existing event log
 within +1 MB of P16. History schema unchanged; IPC protocol 10.
 
 - [x] Built (2026-10-15, branch `v2-p18-alerts`):
-      - Rules (`vyro_core::alerts`): besides one sensor against a limit and System Health, a
+      - Rules (`clokrix_core::alerts`): besides one sensor against a limit and System Health, a
         rule can hold up to five sensor conditions, all of them or any one: above or below a
         limit, rising or falling by an amount within 5–600 s, or an amount above or below the
         sensor's usual reading (a CPU or GPU temperature for the load of the moment, from the
@@ -838,7 +838,7 @@ within +1 MB of P16. History schema unchanged; IPC protocol 10.
         neither trips nor clears a rule, but never keeps its actions going (they come back with
         the reading while the rule still holds).
       - Actions: a notification (with or without sound, or none: logged only), the rule's name
-        in the tray tooltip, a profile, the fans Vyro drives raised by 5–50 points, and a
+        in the tray tooltip, a profile, the fans Clokrix drives raised by 5–50 points, and a
         diagnostic record (the rule's readings, key temperatures, loads, power and fan speeds,
         and the five busiest program names) kept with the fired alert. Tray, profile and fans
         last while the conditions hold and end 30 s after they clear; the first active rule's
@@ -888,7 +888,7 @@ stays v3 (the `score` table is created in place); IPC protocol 11.
 - [x] Formula v1 drafted (2026-10-15) and signed off the same day:
       [`docs/performance-score.md`](docs/performance-score.md).
 - [x] Built (2026-10-15, branch `v2-p17-score`, stacked on `v2-p18-alerts`):
-      - `vyro_core::score`: formula v1 as pure code. Each input's sub-score from the document's
+      - `clokrix_core::score`: formula v1 as pure code. Each input's sub-score from the document's
         breakpoints (straight lines between them), the worst part counting; the weighted average
         over the inputs with data, none below 60 % of the weight; the band; every input with its
         parts, weight, basis and, when missing, why.
@@ -929,7 +929,7 @@ Defaults chosen at build (2026-10-15). The owner can change them at the field ch
   graphics. Full (about 13 min) adds 10 one-minute loops of CPU and GPU load together.
 - **Passes.** A warm-up, then 3 measured passes per area. The result is the median and the spread.
 - **What runs where.**
-  - The load runs in the app, so quitting Vyro always ends it.
+  - The load runs in the app, so quitting Clokrix always ends it.
   - The GPU work is Direct3D 11 on the high-performance GPU.
   - Storage uses a 1 GiB uncached temporary file in the Windows temporary folder.
   - The Benchmark profile is in force during a run.
@@ -954,7 +954,7 @@ Budget:
 
 - [x] Method v1 written (2026-10-15): [`docs/benchmark.md`](docs/benchmark.md).
 - [x] Built (2026-10-15, branch `v2-p20-bench`, stacked on `v2-p17-score`):
-      - **Workloads (`vyro_core::bench`):**
+      - **Workloads (`clokrix_core::bench`):**
         - CPU rounds of four fixed kernels (hash, LZ match search, matrix product, sort), each
           round checked against a reference checksum.
         - Memory: read and copy over two 256 MiB buffers, with known sums, and latency along a
@@ -1024,7 +1024,7 @@ Defaults chosen at build (2026-10-15). The owner can change them at the field ch
   Performance Score formula v1 where they overlap.
 - **Status.** Pass / Attention / Info / Unavailable; every Attention cites its telemetry.
 - **Where it shows.** A Diagnostics card in Health, below each part's status.
-- **Exports.** HTML, JSON, Markdown and PDF, written to `Documents\Vyro Reports` and shown in
+- **Exports.** HTML, JSON, Markdown and PDF, written to `Documents\Clokrix Reports` and shown in
   Explorer. Serial numbers are never stored, and are added to an export only when asked.
 
 Budget:
@@ -1037,7 +1037,7 @@ Budget:
 
 - [x] Checks v1 written (2026-10-15): [`docs/diagnostics.md`](docs/diagnostics.md).
 - [x] Built (2026-10-15, branch `v2-p21-diag`, stacked on `v2-p20-bench`):
-      - **Checks (`vyro_core::diag::checks`).** Pure, over formula v1's measures plus each
+      - **Checks (`clokrix_core::diag::checks`).** Pure, over formula v1's measures plus each
         drive, the Health log, the readings now, PawnIO, fan control and what the app sends
         (how it reaches the engine, the PC summary, the GPU drivers).
         - Thermals, clock stability, power limits (Info), throttling, fans and pump (the owner's
@@ -1052,14 +1052,14 @@ Budget:
         check), newest 50 kept. IPC protocol 13 (`RunDiagnostics`, `DiagnosticRuns`,
         `DiagnosticRun`, `DeleteDiagnostic`).
       - **Exports from one report.**
-        - HTML (self-contained, prints well), JSON, Markdown, and a PDF that Vyro writes
+        - HTML (self-contained, prints well), JSON, Markdown, and a PDF that Clokrix writes
           itself: A4, standard Helvetica, WinAnsi, wrapped with Helvetica's widths, page
           numbers.
         - Citations format the same in Rust and TypeScript (halves round away from zero, as
           `toFixed` does), in °C or °F.
         - Serial numbers (board, drives) are read only for an export that asks for them, and
           never kept.
-        - Saved to `Documents\Vyro Reports\vyro-diagnostics-<date>-<time>.<ext>`; "Show in
+        - Saved to `Documents\Clokrix Reports\vyro-diagnostics-<date>-<time>.<ext>`; "Show in
           folder" opens Explorer on it (files in that folder only).
       - **UI.** The Diagnostics card in Health (loaded on first visit).
         - Run diagnostics.
@@ -1108,8 +1108,8 @@ Defaults chosen at build (2026-10-15). The owner can change them at the field ch
   "Last tab" returns to where you were.
 - **Share cards.** In Hardware, "Share card": 16:9 (1920 × 1080), square (1080 × 1080) or
   story (1080 × 1920), each Full, Minimal or Transparent. CPU, GPU, RAM, board, storage,
-  Windows and the Performance Score, with "Powered by Vyro". A name you type (default "My
-  PC"); no computer name and no serial numbers. Saved as PNG to `Pictures\Vyro` (Show in
+  Windows and the Performance Score, with "Powered by Clokrix". A name you type (default "My
+  PC"); no computer name and no serial numbers. Saved as PNG to `Pictures\Clokrix` (Show in
   folder), or copied to the clipboard. The card uses the current theme and accent.
 
 Budget:
@@ -1157,7 +1157,7 @@ Budget:
           per size; `paint` draws it.
         - Values shrink to 72 % before they are shortened.
         - The PNG goes to the app as raw bytes. `save_share_card` writes only
-          `vyro-card-*.png` names, PNG data, under 16 MB, into `Pictures\Vyro`; "Show in
+          `vyro-card-*.png` names, PNG data, under 16 MB, into `Pictures\Clokrix`; "Show in
           folder" uses the reports' Explorer helper.
         - Copy puts the PNG on the clipboard.
       - **Checks.**
@@ -1179,7 +1179,7 @@ Budget:
       - Each theme looks right in the app, Daylight opens without a dark flash, and the title
         bar follows.
       - The dials change colour with the theme at once.
-      - Vyro opens on the Dashboard from the tray; with "Last tab", where you left it.
+      - Clokrix opens on the Dashboard from the tray; with "Last tab", where you left it.
       - A Critical Health problem pulses the rail four times, then holds.
       - Glass costs no more GPU than Midnight at idle (Task Manager).
       - A saved card opens in Photos at its size, Show in folder finds it, and Copy pastes into
@@ -1223,7 +1223,7 @@ Budget:
 - **Bundle.** The tab loads on first visit; the main bundle grows under 2 kB.
 
 - [x] Built (2026-10-15, branch `v2-p22-devices`, stacked on `v2-p25-themes`):
-      - **Collector (`crates/vyro-core/src/devices/`).**
+      - **Collector (`crates/clokrix-core/src/devices/`).**
         - Device containers and present device nodes come from the device query API
           (`DevGetObjects`, with a present-only filter and a fallback without it), plus
           Windows' Bluetooth battery property on each node.
@@ -1267,7 +1267,7 @@ Budget:
         controller shows a level; a 2.4 GHz receiver shows "—".
       - Sound lists the outputs and inputs and marks the defaults. An empty front jack says
         "nothing plugged in".
-      - With the tab closed, Vyro's CPU in Task Manager is unchanged; the tab opens at once.
+      - With the tab closed, Clokrix's CPU in Task Manager is unchanged; the tab opens at once.
       - The defaults above are what you want.
 
 ### P24 — Custom dashboard builder (M11)
@@ -1304,10 +1304,10 @@ Depth decided at start (2026-10-15; the owner can change it at the field check):
   - Game: FPS, 1 % low and the frame-time graph.
   - Health: the grade and the top findings.
   - Events: the latest health events.
-  - Today's cards: CPU cores, CPU sensors, GPUs, memory, power, board and fans, and Vyro
+  - Today's cards: CPU cores, CPU sensors, GPUs, memory, power, board and fans, and Clokrix
     itself.
 - **Profiles.** The compact profiles (Battery saver) still hide the detail cards (cores,
-  memory, power, board, Vyro itself) in every layout, and say so.
+  memory, power, board, Clokrix itself) in every layout, and say so.
 - **Storage.** `dashboard_layouts` is kept as `dashboard.json` in the app's config folder,
   next to `settings.json` but apart from it, so a damaged layout file can never reset the
   other settings. It is checked on load: sizes clamped, counts capped, ids made unique.
@@ -1364,10 +1364,10 @@ Budget:
 - [x] Field check (MS-7E24, 2026-10-16, test build `vyro-windows-bab8a30`), all passed:
       - The Dashboard looks as before on Default (the tiles are now four to a row).
       - Build a layout: add, move (drag and keyboard), resize (corner and keys), duplicate,
-        remove, change a reading. Press Done, restart Vyro: it is still there.
+        remove, change a reading. Press Done, restart Clokrix: it is still there.
       - Switch between the presets while a game runs (Gaming shows the frame times).
       - Lock a layout: Edit is off until unlocked. Reset puts a preset back.
-      - With 40 widgets on a layout, Vyro's memory and CPU in Task Manager stay near today's.
+      - With 40 widgets on a layout, Clokrix's memory and CPU in Task Manager stay near today's.
       - The depth chosen above (flow grid, layout-level lock) is what you want.
 
 ### P23 — 3-D GPU / My PC / thermal map (M11)
@@ -1383,7 +1383,7 @@ Defaults chosen at build (2026-10-15). The owner can change them at the field ch
     reported) and the RAM sticks in the populated slots;
   - each discrete GPU in a PCIe slot;
   - M.2 drives on the board and SATA drives in the cage;
-  - the case fans Vyro reads, and a PSU.
+  - the case fans Clokrix reads, and a PSU.
   Monitors are listed beside it (they have no temperatures).
 - **GPU model.** Built from a bundled table:
   - The reference designs are keyed by PCI device id: NVIDIA Founders Edition (RTX 20 to
@@ -1465,7 +1465,7 @@ Budget:
       - The GPU looks like your card, or can be corrected and stays corrected after a restart.
       - Fans spin faster under load. The thermal map turns amber or red near the Health limits
         (a stress test or a benchmark).
-      - Task Manager: Vyro's CPU while the tab spins its fans; the WebView's GPU process memory
+      - Task Manager: Clokrix's CPU while the tab spins its fans; the WebView's GPU process memory
         before, while and after the tab (it drops back after leaving it).
       - The 3-D toggle off gives the plan. The defaults above are what you want.
       With P25, P22 and P24 also field-checked, M11 is complete.
@@ -1482,7 +1482,7 @@ Defaults chosen at build (2026-10-15). The owner can change them at the field ch
   - It works with the in-process engine too.
   - The page is the app's own bundled build.
 
-  The cost: the companion answers only while Vyro runs. Running in the tray counts.
+  The cost: the companion answers only while Clokrix runs. Running in the tray counts.
 - **Off by default.** Settings → Remote turns it on, after saying what that means:
   - local network only;
   - not encrypted;
@@ -1510,7 +1510,7 @@ Defaults chosen at build (2026-10-15). The owner can change them at the field ch
   - The device names itself. The name is guessed from its browser and can be edited.
 - **Sessions:**
   - A paired device gets a random 256-bit token in an HttpOnly, SameSite=Strict cookie.
-    Vyro keeps only the token's SHA-256 hash, in `remote.json` in the app's local data
+    Clokrix keeps only the token's SHA-256 hash, in `remote.json` in the app's local data
     folder (not roamed).
   - Sessions end 30 days after pairing (choices: 1, 7, 30 or 90 days). At most 8 devices.
   - Settings lists each device: its name, when it was paired, when it expires, when it was
@@ -1530,7 +1530,7 @@ Defaults chosen at build (2026-10-15). The owner can change them at the field ch
 - **Indicators while on:**
   - a "Remote" chip in the app's header, with the number of devices watching;
   - the tray tooltip says so;
-  - Settings shows the address and the Windows firewall's state for Vyro.
+  - Settings shows the address and the Windows firewall's state for Clokrix.
 
 Budget:
 - **Off.** No socket and no thread.
@@ -1548,7 +1548,7 @@ Budget:
 - **Installer.** Grows under 0.3 MB. `httparse` is already in the tree; `qrcodegen` is new.
 
 - [x] Built (2026-10-15, branch `v2-p26-remote`, stacked on `v2-p23-visual`):
-      - **Core (`crates/vyro-core/src/remote/`):**
+      - **Core (`crates/clokrix-core/src/remote/`):**
         - `view` builds the page's view from each snapshot. A test checks that process names,
           drive ids, adapter names, Health notes and drive letters never reach it.
         - `auth` handles pairing codes (5 bits per character from an alphabet without
@@ -1608,16 +1608,16 @@ Budget:
 - [x] Field check (MS-7E24 and a phone on the same Wi-Fi, 2026-10-16, test build
       `vyro-windows-bab8a30`), all passed:
       - Settings → Remote → Turn on: Windows asks about the firewall; allow Private. The card
-        then says the firewall allows Vyro, and the header chip shows.
+        then says the firewall allows Clokrix, and the header chip shows.
       - Pair a device: scan the QR code with the phone and pair. The tiles update every
-        second, in Vyro's theme and unit, and the chip says "1 watching".
+        second, in Clokrix's theme and unit, and the chip says "1 watching".
       - Type the code by hand from a second device. Five wrong codes spend it.
-      - Sign the phone out in Vyro: its page goes back to pairing within seconds.
+      - Sign the phone out in Clokrix: its page goes back to pairing within seconds.
       - Close the window to the tray: the phone keeps updating every second. Turn the
-        companion off: the phone shows "Can't reach Vyro". Turn it back on: the phone
+        companion off: the phone shows "Can't reach Clokrix". Turn it back on: the phone
         reconnects without pairing again.
       - From a phone on mobile data (not the Wi-Fi), the address does not answer.
-      - Task Manager: Vyro's memory and CPU with the companion off, on, and with a phone
+      - Task Manager: Clokrix's memory and CPU with the companion off, on, and with a phone
         watching.
       - The defaults above are what you want: port, 30 days, plain HTTP, the app rather than
         the service.
@@ -1647,25 +1647,25 @@ Defaults chosen at build (2026-10-16). The owner can change them at the field ch
   - the history: every tier, Health, alert and fan events, and game sessions;
   - the 0.1/0.2 game log.
 
-  Going back to an older version is not supported for the history: an older Vyro leaves a
+  Going back to an older version is not supported for the history: an older Clokrix leaves a
   newer history untouched and runs without one.
 
   This is checked with files written by each release's own code. Each tag was built in a
-  scratch checkout, and a small generator (kept in `crates/vyro-core/tests/fixtures/gen/`) wrote
+  scratch checkout, and a small generator (kept in `crates/clokrix-core/tests/fixtures/gen/`) wrote
   its files. The tests open those files with today's code.
-- **Damaged files.** Every file Vyro keeps follows one rule:
+- **Damaged files.** Every file Clokrix keeps follows one rule:
   - Writes go to a temporary file that is then renamed, so a crash or power cut never leaves
     half a file.
   - A file that cannot be read is set aside as `<name>.bad.<ext>` (only the newest is kept),
     the log says so, and defaults are used. The file is never silently overwritten.
   - Settings load one setting at a time, so a bad value resets only that setting.
 - **A damaged history database** is set aside as `history.bad.sqlite` and a new one is
-  started. A database written by a newer Vyro is left as it is, and history stays off (as now).
+  started. A database written by a newer Clokrix is left as it is, and history stays off (as now).
 - **Fan control after a crash (a fix found in this audit).** At start, a BIOS state left by a
   crash is written back first, as before. Two cases change:
   - **The write-back fails.** The saved state is now kept and used for every later attempt.
-    Before, Vyro's next capture could overwrite it with the settings Vyro itself had left on the
-    chip, so "BIOS control" would have meant Vyro's stale speeds.
+    Before, Clokrix's next capture could overwrite it with the settings Clokrix itself had left on
+    the chip, so "BIOS control" would have meant Clokrix's stale speeds.
   - **The file cannot be read.** The allow-listed headers that the chip has under software
     control go to full speed, which is always safe. The file is kept as `fan-restore.bad.json`,
     and the Cooling log says to restart the PC, which gives the BIOS its settings back.
@@ -1682,10 +1682,10 @@ Defaults chosen at build (2026-10-16). The owner can change them at the field ch
   - CI gates the installer (< 20 MB, as before) and now also what each page loads at start
     (scripts and styles, gzipped): the app's window under 125 kB (118.2 kB now) and the
     companion under 32 kB (29.4 kB now).
-  - CI also installs Vyro on its Windows runner and reports the service's memory and CPU. This
+  - CI also installs Clokrix on its Windows runner and reports the service's memory and CPU. This
     is not gated, because a CI virtual machine has few sensors.
   - The real budget is measured on the owner's PC at the field check.
-- **Clean machine.** CI's Windows runner has never had Vyro installed. CI installs the MSI there
+- **Clean machine.** CI's Windows runner has never had Clokrix installed. CI installs the MSI there
   and checks:
   - the files;
   - the service and its restart-on-failure settings;
@@ -1695,8 +1695,8 @@ Defaults chosen at build (2026-10-16). The owner can change them at the field ch
   clean PC or virtual machine, and upgrades from 0.3.0.
 - **Control safety.** `docs/control-safety.md` lists each rule, the code that enforces it, its
   tests and the field result on MS-7E24, the only writable board (decision 24).
-- **Anti-cheat.** `docs/anti-cheat.md` says what Vyro does that an anti-cheat can see, and what it
-  never does. Compatibility with a given game is a field result, not a promise.
+- **Anti-cheat.** `docs/anti-cheat.md` says what Clokrix does that an anti-cheat can see, and what
+  it never does. Compatibility with a given game is a field result, not a promise.
 - **Version.** It stays 0.3.0 on this branch. 1.0.0 is set when M13 merges into `main`
   (decision 20; set on `v2-prep-1.0.0`, 2026-10-16).
 
@@ -1712,7 +1712,7 @@ Budget:
 - [x] Built (2026-10-16, branch `v2-p27-polish`, stacked on `v2-p26-remote`):
       - **Migration.**
         - Each released tag (0.1.4, 0.2.0, 0.3.0) was built in a scratch checkout. A generator
-          (`crates/vyro-core/tests/fixtures/gen/`) wrote that release's files with its own
+          (`crates/clokrix-core/tests/fixtures/gen/`) wrote that release's files with its own
           code: `settings.json`, `alerts.json`, `fan-control.json`, `fan-profile.json`,
           `games.json` and `history.sqlite`. It also wrote `expect.json`: what that release
           itself read back.
@@ -1726,7 +1726,7 @@ Budget:
           including 0.1's "not detailed" overlay as Minimal mode.
         - No data loss was found.
       - **Crash recovery.**
-        - `vyro_core::files`: atomic writes (flushed to disk, then renamed) and damaged files
+        - `clokrix_core::files`: atomic writes (flushed to disk, then renamed) and damaged files
           set aside as `<name>.bad.<ext>`. Settings, alert rules, fan settings and profile,
           the BIOS fan state, the game log, layouts and paired devices all use it.
         - Before, `settings.json` was written in place and a damaged one silently reset every
@@ -1735,7 +1735,7 @@ Budget:
           newer one is still left untouched.
       - **Fan restore fix (hardware write; field check needed).** A crash's saved BIOS state
         that fails to go back is now kept for every later attempt. Before, the next capture
-        could replace it with Vyro's own leftover speeds. An unreadable one sends the
+        could replace it with Clokrix's own leftover speeds. An unreadable one sends the
         software-driven allow-listed headers to full speed and says to restart.
         - Found in a review after the build: if the fan chip also did not answer at start (it
           gets three tries within about 150 ms), nothing went to full speed and nothing was
@@ -1767,8 +1767,8 @@ Budget:
         a dimmed row is always checked.
       - **Docs.**
         - `docs/control-safety.md`: every safety rule → code → tests → MS-7E24 result.
-        - `docs/anti-cheat.md`: what an anti-cheat sees and what Vyro never does. FACEIT's
-          2025 block of PawnIO's old signature was reported fixed in PawnIO 2.1.0; Vyro ships
+        - `docs/anti-cheat.md`: what an anti-cheat sees and what Clokrix never does. FACEIT's
+          2025 block of PawnIO's old signature was reported fixed in PawnIO 2.1.0; Clokrix ships
           2.2.0.
         - `docs/footprint.md`: every V2 feature's threads and costs, and the 1.0 measurement
           procedure.
@@ -1789,12 +1789,12 @@ Budget:
       - **Upgrade.** Install this build over 0.3.0 (or 0.2.0) as you use it: settings, alert
         rules, fan settings and profile, History (7 days back), Health and alert logs, game
         sessions and replays are all still there.
-      - **Clean machine.** On a PC or virtual machine that never had Vyro:
+      - **Clean machine.** On a PC or virtual machine that never had Clokrix:
         - install, run, and accept PawnIO;
         - the app shows readings within 2 s;
-        - uninstall: the service and program files go, and `%ProgramData%\Vyro` stays.
+        - uninstall: the service and program files go, and `%ProgramData%\Clokrix` stays.
       - **Damaged files.**
-        - Quit Vyro, put `{` in `%APPDATA%\app.vyro.monitor\settings.json`, start: defaults,
+        - Quit Clokrix, put `{` in `%APPDATA%\app.vyro.monitor\settings.json`, start: defaults,
           and `settings.bad.json` is beside it.
         - Put `"temperatureUnit": "k"` in a good file: only the unit resets.
       - **Fan restore after a crash** (fan control on; a hardware write):
@@ -1802,9 +1802,9 @@ Budget:
           (as in P12).
         - Then the damaged case. In an administrator prompt, pause the automatic restart
           (`sc failure VyroService reset= 0 actions= ""`) and kill the service again. Replace
-          `%ProgramData%\Vyro\fan-restore.json` with `{` and run `sc start VyroService`.
+          `%ProgramData%\Clokrix\fan-restore.json` with `{` and run `sc start VyroService`.
           Expected:
-          - the fans Vyro drove go to full speed;
+          - the fans Clokrix drove go to full speed;
           - Cooling says to restart the PC;
           - `fan-restore.bad.json` exists.
 
@@ -1814,7 +1814,7 @@ Budget:
       - **Control-safety matrix.** Confirm every MS-7E24 row of `docs/control-safety.md`
         still holds on this build, including the P18 boost row.
       - **Anti-cheat.** Play the games you have with anti-cheat (at least one each of what you
-        own: Easy Anti-Cheat, BattlEye, Vanguard, FACEIT) with Vyro running, the overlay on
+        own: Easy Anti-Cheat, BattlEye, Vanguard, FACEIT) with Clokrix running, the overlay on
         and fan control on. Fill in the table in `docs/anti-cheat.md`.
       - **Footprint.** Follow "Field measurement for 1.0" in `docs/footprint.md`; the results
         go into the README's Performance table.
@@ -1877,7 +1877,7 @@ scene stay loaded on first use. Footprint as 1.0, plus what P29 and P30 measure 
 #### P28 — the frame and the design system
 - [x] Built (2026-10-16):
       - **Navigation.** A sidebar (`components/shell/Sidebar.svelte`) with the views in four
-        groups (Overview, Performance, This PC, Vyro), Lucide icons (`@lucide/svelte`, ISC, one
+        groups (Overview, Performance, This PC, Clokrix), Lucide icons (`@lucide/svelte`, ISC, one
         file per icon) and a highlight that slides to the chosen view; it folds to a rail of
         icons (remembered) and folds by itself below 1100 px. Still the tabs pattern, vertical,
         with the same `tab-<id>` ids, so links, "last tab" and the accessibility sweep keep
@@ -1911,7 +1911,7 @@ scene stay loaded on first use. Footprint as 1.0, plus what P29 and P30 measure 
         system battery as the fallback when the firmware says nothing; Settings → My PC → Model
         (Automatic, Desktop, Laptop) for firmware that says wrong. Old files and services read
         as unknown; the P19 fingerprint does not include it, so no "hardware changed".
-      - **The laptop** (`pcmodel.buildLaptop`): the lid open at 110° with Vyro on its screen
+      - **The laptop** (`pcmodel.buildLaptop`): the lid open at 110° with Clokrix on its screen
         (CPU and GPU temperature, use, memory and a minute of CPU use, redrawn each reading), a
         keyboard deck you can see through ("See inside", remembered), the board with the CPU and
         GPU chips, copper heat pipes to two blower fans and their fins at the back vents,
@@ -1944,7 +1944,7 @@ scene stay loaded on first use. Footprint as 1.0, plus what P29 and P30 measure 
         reading the Dashboard has. Each has a size (50–200 %), a background strength, a style
         (the app's card, glass, or solid), a layer ("Behind windows", the default, or "On top")
         and a lock.
-      - **The Widgets page** (sidebar, under Vyro; loaded on first use): a gallery of the five
+      - **The Widgets page** (sidebar, under Clokrix; loaded on first use): a gallery of the five
         kinds with live previews over a bit of wallpaper, "Add", then each widget's readings,
         size, background, style, layer and lock, with its preview beside them; "Show on the
         desktop" and "Lock all" / "Unlock all to arrange". In the browser preview the widgets
@@ -1957,7 +1957,7 @@ scene stay loaded on first use. Footprint as 1.0, plus what P29 and P30 measure 
         moving, and the page's older copy never overrides it. A new widget goes down the right
         edge of the first monitor; a saved place off every connected monitor comes back there.
         Right-click: Lock or Unlock, Edit… (opens the Widgets page), Remove. The windows follow
-        the theme, accent and animation level, and come back when Vyro starts in the tray.
+        the theme, accent and animation level, and come back when Clokrix starts in the tray.
       - **Data.** Each snapshot also goes to the widget windows (`widget-sensors`) while any
         widget shows, and they keep the profile's polling rate with the main window in the tray
         (`Engine::set_widgets`, as the overlay does). Tray: "Desktop widgets" shows or hides them
@@ -1986,7 +1986,7 @@ scene stay loaded on first use. Footprint as 1.0, plus what P29 and P30 measure 
         fixed.**
         1. Widgets added on the Widgets page never appeared.
         2. Hardware and Sensors kept waiting for data.
-        3. "Quit Vyro" in the tray did nothing.
+        3. "Quit Clokrix" in the tray did nothing.
 
         One cause for all three: `set_widgets` was a synchronous command, so it ran on the main
         thread inside WebView2's message callback. Its window work was run at once there
@@ -2038,11 +2038,11 @@ hid widgets set behind windows (decision 30).
         - Show desktop lifts the window holding the desktop icons (`SHELLDLL_DefView`'s
           parent: Progman on Windows 11 24H2, a WorkerW before) above every window that is not
           always-on-top.
-        - Vyro keeps a hidden, disabled tool window, the probe, just above the icons' window.
+        - Clokrix keeps a hidden, disabled tool window, the probe, just above the icons' window.
           When the icons' window rises above the probe with the desktop in front, Show desktop
           is on.
         - Widgets behind windows then go on top. They go back under windows when an app comes
-          forward (Vyro's own main window counts as one), or when the desktop drops back (Win+D
+          forward (Clokrix's own main window counts as one), or when the desktop drops back (Win+D
           again).
         - Clicking the desktop doesn't lift it, so widgets don't jump over open windows.
           Through Start, the taskbar, task switching or a click on a widget, the state holds.
@@ -2051,19 +2051,19 @@ hid widgets set behind windows (decision 30).
         a little after). While the desktop shows, it checks every 100 ms. Nothing polls
         otherwise.
       - **Nothing is put inside Explorer's windows.** A cross-process parent shares input
-        between the two, so a busy Vyro could freeze the desktop.
+        between the two, so a busy Clokrix could freeze the desktop.
       - **Layers:** `widgets::stacking` turns the layer and the state into always-on-top or
         always-on-bottom. One flag is cleared before the other is set, because tao keeps an
         always-on-bottom window at the bottom of every move.
       - **CI's smoke test** presses Show desktop through Explorer
         (`IShellDispatch4::ToggleDesktop`) and checks that the widget stays visible and on top.
-        Then it brings Vyro's main window forward, as a click on an app in the taskbar would,
+        Then it brings Clokrix's main window forward, as a click on an app in the taskbar would,
         and checks that the widget goes back. Each failure says what the check saw (desktop
         lifted, what is in front). On a runner with no desktop to show, it reports "skipped" in
         the step summary instead of failing.
         - The first runs found two faults. The widget vanished as it went on top (see "Also
           fixed" below). It also stayed on top after Show desktop was pressed again: the check
-          still saw the desktop lifted, and Vyro's main window, which could have ended it,
+          still saw the desktop lifted, and Clokrix's main window, which could have ended it,
           counted as a widget. The probe now sits just above the icons' window, not at the
           bottom of the stack.
       - **Also fixed (from 1.1.0):** switching a widget between "Behind windows" and "On top"
@@ -2272,7 +2272,7 @@ two ship together as one release (the owner's choice).
         - Wide cards set pairs side by side, as many as fit at 13rem or more. This replaces
           finding 3's two or three a row, which left values far from their labels.
         - Everywhere else the lists are unchanged: the Hardware page compares pixel for pixel.
-        - Vyro itself's budget limits keep together when a label wraps ("(< 1.5%)").
+        - Clokrix itself's budget limits keep together when a label wraps ("(< 1.5%)").
       - Checks:
         - every card kind 3 columns wide, at 920 and 1100 px;
         - on that layout and the owner's: text stays inside every card, and no word is split
@@ -2297,7 +2297,7 @@ the phone app in 1.4), Connect and Disconnect for all Bluetooth devices, and an 
 auto-adjusts for text. Their devices: Bluetooth audio, a Logitech receiver, a game controller,
 another maker's dongle, and a USB condenser microphone.
 - [x] Built (2026-10-17):
-      - **Names** (the owner: "Settings shows the names, Vyro says Unknown device").
+      - **Names** (the owner: "Settings shows the names, Clokrix says Unknown device").
         - Cause, shown by a new Windows test on CI's runner before the fix: 45 of 58 present
           devices lost their name. The device query was asked for unlocalized properties, so
           descriptions came back as unresolved indirect strings (type 25), friendly names came
@@ -2317,11 +2317,11 @@ another maker's dongle, and a USB condenser microphone.
           connected directly. Each device paired to a receiver gets its own row ("Through USB
           Receiver") with its own name, kind and battery: Unified Battery, Battery Status, or
           Battery Voltage on Solaar's curve. One that answered earlier and sleeps now is listed
-          as "Asleep or off". Requests carry Vyro's software id; replies are read from both of
+          as "Asleep or off". Requests carry Clokrix's software id; replies are read from both of
           the receiver's HID++ collections, since its errors come back as short reports.
         - PlayStation controllers: DualSense and DualShock 4 report their battery in their input
           report over USB; over Bluetooth only once something else (Steam) has switched them to
-          the full report. Vyro never switches it: that breaks some games' input.
+          the full report. Clokrix never switches it: that breaks some games' input.
         - The standard HID Battery Strength value, from a feature report.
         - Windows' own reading is also taken from the container and the paired entry.
         - XInput slots match their controller by vendor and product (XInput 1.4's capabilities
@@ -2382,9 +2382,9 @@ another maker's dongle, and a USB condenser microphone.
       1.3 is not released on its own: it shipped in 1.4.0 (2026-10-18, decision 35).
 
 ### 1.4.0 — the phone app, from anywhere
-The owner's request after 1.2.0 (2026-10-17): "a Vyro app for the phone, Android and iOS, to
+The owner's request after 1.2.0 (2026-10-17): "a Clokrix app for the phone, Android and iOS, to
 check the PC from anywhere, whatever network it is on". Their choices: an installable web app (no
-app stores), through a Vyro relay on Cloudflare Workers in their free account, end to end
+app stores), through a Clokrix relay on Cloudflare Workers in their free account, end to end
 encrypted (decision 34); built on its own branch, `claude/vyro-1.4`, while 1.3 waits for its
 field check; the relay built into releases for everyone, any other relay allowed.
 - [x] Built (2026-10-17):
@@ -2417,7 +2417,7 @@ field check; the relay built into releases for everyone, any other relay allowed
         own, which replaces the link's, so the link works once; the phone keeps both until the
         PC confirms. The PC shows a link only once the relay has the phone's key (the end-to-end
         test found a phone that scanned at once refused).
-      - **PC** (`vyro_core::remote::relay`): one thread with tungstenite over rustls and the
+      - **PC** (`clokrix_core::remote::relay`): one thread with tungstenite over rustls and the
         Windows certificate store (rustls, ring and the platform verifier were already in the
         app through the updater); keepalive every 30 s, dead after 75 s, reconnects 1 s to 60 s
         with jitter, 5 minutes after the relay refused the PC's key. Views go only to phones
@@ -2560,7 +2560,7 @@ first) and 1.7 (the PC's screen on the phone), each with its own field check.
       and Settings → Remote reads the status again on each change: while it showed, the two kept
       each other going, and each later change (Pair, a phone joining or watching) started one
       more round. Every read asks Windows for the network adapters, which goes through its DNS
-      Client service: the owner saw that service take 23 % of the CPU on opening Vyro (it opened
+      Client service: the owner saw that service take 23 % of the CPU on opening Clokrix (it opened
       on Settings), 50 % while pairing and 85 % with the phone paired, and all of it stop when
       the window went to the tray. A read now only reads; the installed-app smoke test calls it
       and fails if it announces a change (and if saving a widget is not heard, so silence means
@@ -2630,15 +2630,15 @@ show on the phone).
       only look (the default) or also change the PC, and the paired list changes it; the phone
       hears at once. What phones changed (the last 50) shows under "Recent from your phones",
       in `phone-actions.json`.
-- [x] **End task** (`vyro_core::actions::process`), in the Processes view too: Windows' own
-      processes, Explorer and Vyro are never ended; the process is named again just before, so a
+- [x] **End task** (`clokrix_core::actions::process`), in the Processes view too: Windows' own
+      processes, Explorer and Clokrix are never ended; the process is named again just before, so a
       reused number is left alone; one that runs as administrator says so.
 - [x] **Power** (`actions::power`): shut down and restart wait 30 s (or now), close apps with
       unsaved work only if asked, and are full shutdowns; sleep, hibernate (when Windows allows
       them), lock, sign out, cancel. The PC shows a notification and a banner with Cancel on
       every view while a shutdown waits.
 - [x] **Wake** (`actions::wake`): with "Wake from phone" on, phones are told the PC's wired
-      address, sealed (never the LAN page); another Vyro PC on the same network sends the wake
+      address, sealed (never the LAN page); another Clokrix PC on the same network sends the wake
       packet when the phone asks (from More, or "Wake <PC>" on a PC that is asleep). Settings
       shows the readiness Windows can tell: the wired adapter, its "Wake on Magic Packet", Fast
       Startup, and that the BIOS setting cannot be read.
@@ -2688,11 +2688,11 @@ show on the phone).
       see-through, as a mesh case does. A test checks that every case and radiator fan the
       model can place sits behind one of these openings.
 - [x] **CPU use as this PC's Task Manager shows it; readings go out as soon as they are
-      read** (1.5 field check, 2026-10-21: Vyro's numbers differed from Task Manager's, and the
+      read** (1.5 field check, 2026-10-21: Clokrix's numbers differed from Task Manager's, and the
       gauges lagged it). Windows 11 24H2's update of May 2025 moved Task Manager to the
-      standard `% Processor Time` on every page; Vyro read `% Processor Utility`, what Task
+      standard `% Processor Time` on every page; Clokrix read `% Processor Utility`, what Task
       Manager showed before, which counts a processor boosting above its base clock as busier,
-      so on a laptop Vyro read well above Task Manager. Vyro now reads the counter this
+      so on a laptop Clokrix read well above Task Manager. Clokrix now reads the counter this
       build's Task Manager shows: processor time from build 26100, utility before it (a test
       covers the choice; the log names the counter). Each snapshot went out only after every
       provider had read, and the CPU was read first, so the sensor chips, the SMBus, the
@@ -2701,14 +2701,14 @@ show on the phone).
       whose read takes over 250 ms is logged (at most every 5 minutes), to find what else
       holds a reading up. Memory, GPU, disk and network already use Task Manager's own sources
       and sums.
-- [x] **What's new** (the owner, 2026-10-21): the first time Vyro starts after an update, the
-      window shows what the new version brings, once ("What's new in Vyro 1.5", "Got it");
+- [x] **What's new** (the owner, 2026-10-21): the first time Clokrix starts after an update, the
+      window shows what the new version brings, once ("What's new in Clokrix 1.5", "Got it");
       Settings → Updates and the palette (Ctrl+K → What's new) open it again. Started in the
       tray, a notification says so. The notes are `src/whatsnew.ts`, one entry per version,
       newest first, written for the owner, those for the phone marked; a test fails when the
       version being built has none, so no release goes out without its notes. The version last
       shown is kept in `version.json` beside the settings, not in them (the window saves its
-      settings whole and would write over it). Vyro before 1.5 kept no version, so an update
+      settings whole and would write over it). Clokrix before 1.5 kept no version, so an update
       from it is told from a new install by its saved settings (settings, dashboard, widgets,
       remote, alert rules) or a WebView or log folder made before this start; a new install
       shows nothing and keeps its version. An update over several versions shows each one's
@@ -2731,7 +2731,7 @@ The owner, 2026-10-18: overclocking with presets "based on the GPU installed" an
 settings, tested on an NVIDIA desktop card and a laptop GPU (decision 37). Built on
 `claude/vyro-1.6`, from 1.5 (a phone may switch presets).
 
-- [x] **Core** (`vyro_core::gpu_tune`): settings are a core offset, a memory offset (MHz, as the
+- [x] **Core** (`clokrix_core::gpu_tune`): settings are a core offset, a memory offset (MHz, as the
       driver counts them) and a power limit (% of the card's default). The driver's ranges decide
       what may change: offsets through NVML's per-P-state calls (driver R555 and later), the
       power limit through its constraints; a setting without a range stays stock. Families:
@@ -2815,7 +2815,7 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       the start, the start and end in Settings → Remote's record. It ends after 10 minutes with
       no input and the phone not showing it (the phone says it is there every 30 s while it
       does); "Lock this PC when a phone's session ends" is an option. Nothing captures without a
-      session. Media Foundation is looked up in System32 when a session starts, so Vyro still
+      session. Media Foundation is looked up in System32 when a session starts, so Clokrix still
       starts on a Windows "N" edition without the Media Feature Pack (only the direct view is
       missing there, and the phone uses the slow view).
 - [x] **The slow view**: if the phone has no direct path in 15 s, or plays no H.264, it asks for
@@ -2827,7 +2827,7 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       click, drag, two fingers to scroll, pinch to zoom here, a pointer dot; a key bar with Ctrl,
       Alt, Shift and Win held until the next key (so held Ctrl and "c" is Ctrl+C), a box to type
       into, a choice of monitor; connecting, live, slow view, secure screen and ended states.
-      Hidden for a PC whose Vyro has no screen; says how to allow it for a phone that may not.
+      Hidden for a PC whose Clokrix has no screen; says how to allow it for a phone that may not.
 - [x] **Tests**: STUN, input messages and their checks, positions across monitors, the frame
       helpers, the loopback session (also with a hidden address), the Screen permission (kept,
       off by default, separate from control, refused without it), the idle rule, the slow
@@ -2879,7 +2879,7 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       39243700043), so the phone app has the screen fixes below: "Reconnecting…", asking for a
       whole picture when it stops, and the "Receiving…" line.
 - [x] **Field result: the CPU while pairing** (2026-10-19). On the test build of 603270c the
-      owner saw Vyro and Windows' DNS Client stay low while pairing and with a phone paired
+      owner saw Clokrix and Windows' DNS Client stay low while pairing and with a phone paired
       (1.4.1's fix to Settings → Remote, merged here); an earlier 1.7 build had shown 60 %.
 - [x] **The screen shows on the phone** (field check, 2026-10-19: on Android the PC's screen
       showed for a second, blurred, then went black; on the iPhone it stayed black). No test had
@@ -3063,15 +3063,15 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       1.7 it pairs and reads, shows the tabs each one offers (none on 1.4.1, readings only),
       fits at 320 and 390 px with the footer on every screen and the list of PCs, and shows a
       PC that went away as asleep. One thing was wrong: the phone's What's new told a phone
-      whose PC is still on 1.4.1 "What's new in Vyro 1.7" (the PC's screen, HD/SD, voice),
-      which that PC cannot do yet. It now tells only what the open PC's Vyro has, and the rest
+      whose PC is still on 1.4.1 "What's new in Clokrix 1.7" (the PC's screen, HD/SD, voice),
+      which that PC cannot do yet. It now tells only what the open PC's Clokrix has, and the rest
       once the PC is updated (a unit test with older PCs; the end-to-end test shows it once to
       a phone that used an older app, and not again). CI green on 263354e (run 40002227086),
       every job, the end-to-end test at 129 checks. The PC's test build stays
       `vyro-windows-688110f` (the PC app's only change since is this list of notes).
 - [x] **The relay deployed again** from this branch at dac433f (2026-10-24, at the owner's go;
       Actions run 40094510901, its tests first), so phones get the What's new that tells only
-      what the open PC's Vyro has the next time they open the app.
+      what the open PC's Clokrix has the next time they open the app.
 - [x] **The default microphone put back after a crash, at sign-in** (2026-10-24, a review of
       the phone's voice on the PC): the restore at the next start read Windows' defaults, and a
       failed read looked like the owner having chosen other microphones, so the restore was
@@ -3118,12 +3118,12 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
 
 Fixes on `claude/vyro-1.7` after 1.7.0's release; 1.7.1 on the owner's go (2026-10-26).
 
-- [x] **What's new after an update from 1.4.1** (2026-10-26, a review after the release): Vyro
+- [x] **What's new after an update from 1.4.1** (2026-10-26, a review after the release): Clokrix
       before 1.5 kept no version, and an update from it showed only the new version's notes, a
       rule made when 1.5 was to be released on its own. 1.5 and 1.6 came out only within 1.7.0,
       so a PC updated from 1.4.1 showed 1.7's notes alone (its screen on the phone, not GPU
       tuning or control from the phone), and a phone that used the app before 1.7 likewise. An
-      update from a Vyro that kept no version now shows every version's notes up to the new
+      update from a Clokrix that kept no version now shows every version's notes up to the new
       one: the PC's window opens the newest with the others folded below, and the phone lists
       them (a unit test with 1.7.0 over 1.4.1; the end-to-end test opens the app as a phone
       that used an older app and finds 1.5's notes). The phone's side reaches phones with the
@@ -3174,7 +3174,7 @@ Fixes on `claude/vyro-1.7` after 1.7.1's release; 1.7.2 on the owner's go (2026-
       before stayed on, the marker of a tuned card was removed, and the check every 5 s passed
       over the card as at stock: a driver that refuses the memory offset (field check 1.6 asks
       whether NVML takes offsets on GeForce at all) left a raised power limit and core offset
-      on with Vyro showing stock. What the card runs is now taken as not known, so stock is
+      on with Clokrix showing stock. What the card runs is now taken as not known, so stock is
       written next, and the marker stays until stock is on; a return to stock that fails keeps
       it too, so the next start gives the card stock. Tests: a simulated card that refuses the
       memory offset after the power limit and core offset ends at stock with no marker; a
@@ -3182,14 +3182,14 @@ Fixes on `claude/vyro-1.7` after 1.7.1's release; 1.7.2 on the owner's go (2026-
       40311241489), every job. Test build `vyro-windows-4a88621` (numbered 1.7.1).
 - [x] **Updates from a phone: refused while the PC is locked, and confirmed first**
       (2026-10-26, a review of 1.7's phone controls): Install on the phone's Updates page
-      started the installer at once. Windows asks someone at the PC to allow it, and Vyro
+      started the installer at once. Windows asks someone at the PC to allow it, and Clokrix
       closes as it starts, so on a locked PC the prompt waited for someone to unlock it and the
       phone lost the PC until then, with "The PC went to sleep or off." as the only word. The PC
       now refuses it while it is locked ("The PC is locked, and Windows asks someone at it to
       allow the update: install it there."), from what Windows says of the session; the phone
-      asks first ("Install Vyro <version> on <PC>?", saying someone at the PC must allow it and that
-      the phone cannot reach the PC until Vyro has started again), and once it starts says so
-      rather than that the PC went to sleep. The phone's part needs a relay deploy; an older
+      asks first ("Install Clokrix <version> on <PC>?", saying someone at the PC must allow it and
+      that the phone cannot reach the PC until Clokrix has started again), and once it starts says
+      so rather than that the PC went to sleep. The phone's part needs a relay deploy; an older
       phone app already gets the PC's refusal. Relay check: the confirmation opens, passes the
       accessibility check, and Install reaches the PC. CI green on 8e93b8a (run 40330207767),
       every job. Test build `vyro-windows-8e93b8a` (numbered 1.7.1).
@@ -3339,14 +3339,14 @@ Fixes on `claude/vyro-1.7` after 1.7.5's release, gathered for one release when 
       The PC's alone: no relay deploy. Field check 1.7, step 12.
 - [x] **An update ends a screen session as quitting does** (2026-10-26, a review of 1.7's
       update from the phone): on Windows the updater starts the installer and ends the process
-      at once, so Vyro's own exit never ran. A phone's session was left as it was: keys and a
+      at once, so Clokrix's own exit never ran. A phone's session was left as it was: keys and a
       drag it held stayed down after the update (what 1.7.3 fixed for a session that ends), the
       phone heard only that the connection was lost, and the default microphone came back only
-      once Vyro started again. A benchmark's run under way was not kept, and a GPU stability
+      once Clokrix started again. A benchmark's run under way was not kept, and a GPU stability
       test's trial ended half a minute later. The update now runs what quitting ends first:
-      the session (the phone told "Vyro is installing an update" if the note goes out before
+      the session (the phone told "Clokrix is installing an update" if the note goes out before
       the process ends), the benchmark and the GPU test; the relay and the engine are left to
-      the process's end, so an installer that did not start leaves Vyro working. Clippy clean
+      the process's end, so an installer that did not start leaves Clokrix working. Clippy clean
       for Windows here; CI green on 210a6bb (run 40415227849, every job). The PC's alone: no
       relay deploy. Field check 1.7, step 6.
 - [x] **Version 1.7.6** (the owner, 2026-10-27: "release 1.7.6"): `scripts/set-version.py
@@ -3386,9 +3386,9 @@ Fixes on `claude/vyro-1.7` after 1.7.6's release, gathered for one release when 
       and big in 1.7.7"). The PC's:
       - **No microphone after a session's end:** a frame of the phone's microphone the
         connection still delivered after its session ended started the cable again, Windows'
-        default microphone for 10 s (and until Vyro's next start, had it quit meanwhile). The end
+        default microphone for 10 s (and until Clokrix's next start, had it quit meanwhile). The end
         marks the session ended before it turns the microphone off, and a frame checks that
-        under the microphone's lock; Vyro turns off a microphone left playing as it quits too.
+        under the microphone's lock; Clokrix turns off a microphone left playing as it quits too.
         Field check 1.7, step 12.
       - **Notes for the phone:** the session kept one note, so two told within milliseconds
         (the microphone starting as the resolution changed) reached the phone as the second
@@ -3413,8 +3413,8 @@ Fixes on `claude/vyro-1.7` after 1.7.6's release, gathered for one release when 
         slow view. A request now says whether the connection failed it (never sent, or its
         answer lost) or the PC; the slow view asks again for up to 45 s, saying it is
         reconnecting, and input that never left goes once the connection is back. A request
-        made while reconnecting said "Update Vyro on the PC."; that is now said only of a PC
-        whose Vyro gives no session. Test: how a failed request is told. Field check 1.7, step 4.
+        made while reconnecting said "Update Clokrix on the PC."; that is now said only of a PC
+        whose Clokrix gives no session. Test: how a failed request is told. Field check 1.7, step 4.
       - **A clip whose sheet closed:** it went on sending, landed on the PC later, and through
         the relay its pieces and the next clip's spoiled both. Closing the sheet, or its new
         Cancel, stops it. End to end: a sheet closed while its clip goes stops sending it. Field
@@ -3557,7 +3557,7 @@ branch `claude/vyro-2.0` from 1.7.8's records.
       a `Keys` Durable Object, migration `v2`; `/push/key`), only to the browsers' push services,
       for phones the PC has, 24 at once, one every 5 s after that, 300 a day. The PC's will
       ("stopped answering", sealed ahead) is sent when its connection ends or its pings stop
-      without its `leaving`, after two minutes; when it is back, the phones hear that too. Vyro
+      without its `leaving`, after two minutes; when it is back, the phones hear that too. Clokrix
       says `leaving` as it quits (and so as Windows shuts down, restarts or signs out) and as
       Windows suspends (`PowerRegisterSuspendResumeNotification`). Alerts as the phone's list
       has them; a battery that just ran low (or lower); a captured game's summary (5 minutes or
@@ -3615,7 +3615,7 @@ branch `claude/vyro-2.0` from 1.7.8's records.
       the next time they open it; Notifications shows in More only for a PC that offers
       `push.state`, so a PC on 1.7.8 or older shows the phone as before. The relay still speaks
       `vyro.1` and the sealed messages' version 2, and checks pings only in a room whose PC left
-      a will, which no released Vyro does, so every released app still talks to it. Cloudflare
+      a will, which no released Clokrix does, so every released app still talks to it. Cloudflare
       took 21 new or changed files; the 19 hashed scripts and styles among them carry the same
       names as a local build of 5f73267. The live relay can't be reached from here.
 - [ ] Field check 2.0 ([`docs/field-check-2.0.md`](docs/field-check-2.0.md)): notifications on
@@ -3655,12 +3655,12 @@ any time constraint?". On `claude/vyro-2.0`; 2.0.1 and the relay deploy on the o
 - [x] **Disconnect on a phone drops the phone.** A phone with a hands-free audio connection was
       disconnected through its audio, as headphones are: that ended its calls' connection only,
       and Windows (Phone Link) kept it connected, so Disconnect seemed to do nothing. A phone
-      now has the link's Connect and Disconnect (the Vyro service drops its link at the radio),
+      now has the link's Connect and Disconnect (the Clokrix service drops its link at the radio),
       and an iPhone is a phone by its name, not a headset by its audio.
 - [x] **A battery to the percent before one in steps.** A phone's hands-free connection gives
       its battery in steps of 10 or 20 % (an iPhone at 56 % showed 60 %), and Windows' first
       reading on any node came first. Now: Windows' reading from the device's Battery Service
-      (an LE node or entry), then Vyro's own read of the Battery Service (now also made when
+      (an LE node or entry), then Clokrix's own read of the Battery Service (now also made when
       Windows has only a reading in steps), then the paired entry's, the container's and the
       other nodes'. Tests: both orders of the two entries, the iPhone's readings, a phone's
       control (each fails before).
@@ -3691,7 +3691,7 @@ any time constraint?". On `claude/vyro-2.0`; 2.0.1 and the relay deploy on the o
       2.0.1`; What's new in 2.0.1 (the screen through a TURN server, for the phone app too;
       Disconnect that shows; a phone's battery to the percent) came with the fixes.
 - PIN after waking from the phone: not built. The sign-in screen is Windows' secure desktop,
-  which Vyro can neither see nor type on (as with administrator prompts, left out of 2.0).
+  which Clokrix can neither see nor type on (as with administrator prompts, left out of 2.0).
   After sleep, Windows can skip it: Settings → Accounts → Sign-in options → "If you've been
   away, when should Windows require you to sign in again?" → Never.
 - [x] **The relay deployed** from this branch at 8c53592 (2026-10-28, at the owner's go: "deploy
@@ -3725,7 +3725,7 @@ owner's go (2026-10-29: "release 2.0.2").
 
 - [x] **A low battery told once.** A phone that wanted battery notifications heard again at
       every change of a device's level, a higher one too: a mouse on its charger going from
-      critical to low, a reading going back and forth across a line (since 2.0.1 Vyro's own read
+      critical to low, a reading going back and forth across a line (since 2.0.1 Clokrix's own read
       of a phone's battery comes first, and Windows' in steps of 10 % when that read fails), and
       headphones each time they came out of their case. Now a battery is told when it runs low,
       and again when it runs lower, and not again until it has been charged (to 30 %, or
@@ -3820,7 +3820,7 @@ again; columns and order chosen to fill; each card down to the next.
       one straight last line. Planned when a view shows, 150 ms after the window stops resizing
       with room for more or fewer columns, when a card comes or goes and when one's data
       arrives; never because a card someone is using grew. At the window size where the owner
-      last moved a card, the cards are exactly as left (`vyro.cards.at`); at other sizes Vyro
+      last moved a card, the cards are exactly as left (`vyro.cards.at`); at other sizes Clokrix
       starts from that order. In the preview at 2000 px (the screenshot's width), the share of
       the grid the cards' content covers, before with gaps and now without any: Settings 4
       columns, 89 → 99 % (1,355 → 1,244 px tall); Storage 5 → 2 columns, 35 → 88 %; Network
@@ -3896,7 +3896,7 @@ owner's go (2026-10-30: "release 2.0.3").
       (`updates::due`; test: due daily by the clock, again after a failure, and after the clock
       went back). And a check's request has 30 s to be answered (the installer's download is not
       limited): one left hanging, as one under way when the PC goes to sleep can be, would have
-      held every later check, and "Check now", until Vyro restarted.
+      held every later check, and "Check now", until Clokrix restarted.
 - [x] **Wording:** the README said "Alerts are not sent to phones yet" (they are, since 2.0) and
       nothing of 2.0.2's cards (now a paragraph in Looks, layouts and your PC); Ctrl K described
       Remote as "Phone companion on the LAN" (the phone app reaches the PC from anywhere since
@@ -3916,7 +3916,7 @@ owner's go (2026-10-30: "release 2.0.3").
       among them). On Windows, 59 tests of the app's own, `checks_are_due_daily_by_the_clock`
       among them. 47c8a9a's run was cancelled by the push of 860ab08.
 - [x] **Field check (the owner, on Windows), passed** (2026-10-30: "everything is working"): just
-      after Vyro starts, Ctrl K → Units, and the top bar's Remote chip: the card at the top of
+      after Clokrix starts, Ctrl K → Units, and the top bar's Remote chip: the card at the top of
       the window; Ctrl K → Alerts: Health at its alerts.
 - [ ] Over the next days: Settings → Updates' last check never more than a day old, after nights
       asleep too (no night had passed with the build at the field check).
@@ -3937,8 +3937,8 @@ owner's go (2026-10-30: "release 2.0.3").
       commit's differ only in 2.0.2's and 2.0.3's notes (none for the phone), the Dashboard's
       `--cols` in the shared theme and the service worker's file list; the relay only in its
       burst test.
-- [x] Found while releasing, left for after 2.0.3: the top bar's "Vyro … is available" chip, whose
-      title says "Open Settings → Updates", opens Settings without going to Updates. Fixed in
+- [x] Found while releasing, left for after 2.0.3: the top bar's "Clokrix … is available" chip,
+      whose title says "Open Settings → Updates", opens Settings without going to Updates. Fixed in
       2.0.4's review (below).
 
 ### 2.0.4 — after 2.0.3
@@ -3946,7 +3946,7 @@ owner's go (2026-10-30: "release 2.0.3").
 The owner's "continue" after 2.0.3 (2026-10-31): a review. On `claude/vyro-2.0`; 2.0.4 on the
 owner's go (2026-10-31: "Release 2.0.4 first", asked before 2.1's hardware support began).
 
-- [x] **Links land on what they name.** The top bar's "Vyro … is available" (titled "Open
+- [x] **Links land on what they name.** The top bar's "Clokrix … is available" (titled "Open
       Settings → Updates"), the Dashboard's "Change profile" (under the Gaming and Silent
       profiles, whose Dashboard leaves the detail cards out), Gaming's "Turn it on in Settings"
       (frame rates not measured) and an alert's toast opened their view wherever the window was
@@ -3966,7 +3966,7 @@ owner's go (2026-10-31: "Release 2.0.4 first", asked before 2.1's hardware suppo
       view as it was left.
 - [x] **An update's download that stalls ends.** The installer's download has no overall limit,
       and one that stalled (the network gone, the PC asleep mid-download) never ended: Settings →
-      Updates stayed installing, Install and "Check now" held, until Vyro restarted. Now it ends
+      Updates stayed installing, Install and "Check now" held, until Clokrix restarted. Now it ends
       after 60 s without a byte (`STALL_TIMEOUT`: the HTTP client's read timeout, which a slow
       download keeps resetting), and Settings says "could not reach GitHub; check the internet
       connection" rather than the client's own words.
@@ -3994,7 +3994,7 @@ owner's go (2026-10-31: "Release 2.0.4 first", asked before 2.1's hardware suppo
 The owner's "continue" (2026-10-31), after asking what was left: the wrong reasons found while
 answering, and others like them.
 
-- [x] **A CPU Vyro does not read says so.** Vyro reads a CPU's temperature and power on AMD
+- [x] **A CPU Clokrix does not read says so.** Clokrix reads a CPU's temperature and power on AMD
       Ryzen only, through PawnIO. On any other (an Intel one), with PawnIO installed, as the MSI
       installs it: the Dashboard's CPU sensors and Power cards said "needs PawnIO", and the
       Power card where to get it; Health said "CPU temperature not available (needs PawnIO)";
@@ -4003,7 +4003,7 @@ answering, and others like them.
       CPU reader's own test; an older service answers without it, as before). Without PawnIO,
       its banner names only the board's sensors there. With PawnIO installed, a CPU reading
       still missing is "not reported" on those cards, as on the tiles, and Health's board notes
-      say "Vyro does not read this board's sensor chip", not "needs PawnIO and a supported
+      say "Clokrix does not read this board's sensor chip", not "needs PawnIO and a supported
       sensor chip". The README's Install now says which CPUs, boards and memory PawnIO serves.
 - [x] **Drives without health data.** Health said "Some drives do not report health (run as
       administrator)", but the service reads drive health with every right it takes. Such a
@@ -4017,7 +4017,7 @@ answering, and others like them.
       removed the marker, and the test looked in between. The marker now goes first, so whoever
       sees stock finds it gone. With a pause put in that gap here, the old order failed the
       test and the new one passed.
-- [x] **Checked:** unit tests for Health's notes in each case, Diagnostics' check on a CPU Vyro
+- [x] **Checked:** unit tests for Health's notes in each case, Diagnostics' check on a CPU Clokrix
       does not read, and the Dashboard's reasons. The preview's PawnIO and CPU are simulated
       and read, so it shows none of these lines.
 - [x] **Locally:** types, 286 frontend tests, 806 core tests and the service's, the
@@ -4168,12 +4168,12 @@ the field check below ran it on the Intel PC, without its raw registers kept.
 - Hardware acceptance criteria require real machines from the §9 test matrix; CI can only prove
   compilation and unit tests.
 - Anti-cheat: FACEIT refused to run with PawnIO loaded over its old signing certificate;
-  PawnIO's author reports that fixed in 2.1.0 (Vyro ships 2.2.0), and FACEIT has not been seen
+  PawnIO's author reports that fixed in 2.1.0 (Clokrix ships 2.2.0), and FACEIT has not been seen
   confirming it. Valorant (Vanguard) runs with it. PawnIO has its own entry in Installed apps,
-  so anyone whose game refuses it can remove it; Vyro then runs without the low-level sensors
+  so anyone whose game refuses it can remove it; Clokrix then runs without the low-level sensors
   and says so. [`docs/anti-cheat.md`](docs/anti-cheat.md) has the details and the P27 field
   table.
-- PawnIO has a single upstream maintainer; module ABI or signing changes need a Vyro update.
+- PawnIO has a single upstream maintainer; module ABI or signing changes need a Clokrix update.
 - AMD and Intel tuning (2.0) have run on no real card: the layouts are checked against the
   makers' headers, but whether ADLX and Intel's library work from the LocalSystem service, and
   how each driver answers, only a card shows. Until then, a card whose interface does not start
@@ -4184,5 +4184,5 @@ the field check below ran it on the Intel PC, without its raw registers kept.
 - SignPath / Certum OSS require a public repo with an OSI license and a verifiable build.
 - Fan control (P12): some boards' fans are owned by the embedded controller and cannot be
   driven safely, pump headers are easy to mislabel, and another tool (MSI Center, FanControl)
-  writing the same EC fights Vyro. Mitigations: allow-list, owner-confirmed pump header,
+  writing the same EC fights Clokrix. Mitigations: allow-list, owner-confirmed pump header,
   readback on every write, restore on any fault, and the EC's free/busy page handshake.

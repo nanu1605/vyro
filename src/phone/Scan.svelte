@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Scans the pairing code shown in Vyro on the PC (1.4). Loaded only when opened. Uses the
+  // Scans the pairing code shown in Clokrix on the PC (1.4). Loaded only when opened. Uses the
   // browser's own QR reader where there is one (Android), else jsQR on camera frames (iPhone).
   import { onMount } from 'svelte';
 
@@ -86,7 +86,7 @@
 </script>
 
 <section class="panel scan" aria-labelledby="scan-title">
-  <h1 id="scan-title">Scan the code in Vyro</h1>
+  <h1 id="scan-title">Scan the code in Clokrix</h1>
   <p>On the PC: Settings → Remote → From anywhere → <b>Pair a phone</b>.</p>
   <div class="frame">
     <!-- svelte-ignore a11y_media_has_caption -->

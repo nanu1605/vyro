@@ -52,6 +52,6 @@ healthNotes: Array<string>, tempC: number | null, tempWarnC: number | null, temp
  */
 smart: Array<SmartAttribute>, 
 /**
- * Why SMART / health data is missing, e.g. "… needs the Vyro sensor service".
+ * Why SMART / health data is missing, e.g. "… needs the Clokrix sensor service".
  */
 smartError: string | null, };

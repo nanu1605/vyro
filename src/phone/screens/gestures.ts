@@ -3,7 +3,7 @@
 // of the PC's monitor, so the phone never needs its size. No DOM here: the Screen tab feeds it
 // pointer events and sends what comes out.
 
-/** One message for the PC (`vyro_core::screen::input`). */
+/** One message for the PC (`clokrix_core::screen::input`). */
 export type Input =
   | { t: 'move'; x: number; y: number }
   | { t: 'button'; b: 'left' | 'right' | 'middle'; down: boolean }

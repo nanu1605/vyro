@@ -1,6 +1,6 @@
-# Vyro Benchmark: method v1
+# Clokrix Benchmark: method v1
 
-Status: **defaults chosen at build (2026-10-15)**. Decision 23 settles the direction: Vyro's own
+Status: **defaults chosen at build (2026-10-15)**. Decision 23 settles the direction: Clokrix's own
 workloads, results compared only with this PC's earlier runs, and the variance always reported. The
 owner can change the areas, durations and limits below at the P20 field check. After the first
 release that carries them, any change to a workload, a duration or a metric becomes method v2.
@@ -14,12 +14,12 @@ are before and after a driver, BIOS, cooling or RAM change, after cleaning the d
 the PC feels slow.
 
 - **Not cross-tool.** The numbers are not comparable with 3DMark, Cinebench or another PC. Points
-  are Vyro's own units.
+  are Clokrix's own units.
 - **Variance is part of the result.** Windows background work, temperatures and power plans make
   single runs noisy. So every area runs 3 measured passes, and a result shows the median and the
   spread. A comparison counts a difference only beyond that noise.
 - **Watched.** Every area records peak temperatures and power, throttled seconds and the clocks,
-  from the same sensors as the rest of Vyro.
+  from the same sensors as the rest of Clokrix.
 
 ## Modes
 
@@ -28,18 +28,18 @@ the PC feels slow.
 | **Quick** | CPU single-thread, CPU multi-thread, memory, storage, GPU compute, graphics | about 3 minutes |
 | **Full** | Quick, plus Sustained (10 minutes of CPU and GPU load together) | about 13 minutes |
 
-While a run is going on, Vyro switches to the **Benchmark** profile: readings twice a second and
+While a run is going on, Clokrix switches to the **Benchmark** profile: readings twice a second and
 quiet alerts, plus that profile's own fan settings if the owner gave it any. It switches back when
 the run ends. As with games, a profile the owner picks during the run wins.
 
 ## Before a run
 
-**Vyro refuses to start:**
+**Clokrix refuses to start:**
 - while a game runs;
 - while a temperature is already at Health's warning level;
 - while another run is going on.
 
-**Vyro starts but notes it in the result:**
+**Clokrix starts but notes it in the result:**
 - **Busy PC.** Background CPU use was above 10 % while the run settled for its first 3 seconds,
   before any load. The result is marked *busy*, because its numbers are likely low.
 - **No CPU temperature.** The CPU temperature is not read (no PawnIO). The run then cannot stop
@@ -53,7 +53,7 @@ the run ends. As with games, a profile the owner picks during the run wins.
 - **Result:** the median of the 3 passes.
 - **Spread:** (highest − lowest) ÷ median.
 - **Load:** all CPU work runs at normal priority with Windows' power throttling (EcoQoS) turned off
-  for the run, so a minimised Vyro is not slowed down.
+  for the run, so a minimised Clokrix is not slowed down.
 
 | # | Area | Metric | Unit | Better |
 |---|---|---|---|---|
@@ -182,13 +182,13 @@ them: an unstable overclock or undervolt, memory, or heat.
 - the RAM size and speed
 - the board and BIOS version
 - the Windows build and the power plan
-- the Vyro profile and fan profile in force
+- the Clokrix profile and fan profile in force
 - the storage drive tested
 - the background CPU use before the start
 
 ## Stopping
-**Vyro stops a run, ending all load, when:**
-- the owner presses Stop, closes the Vyro window (also when it hides to the tray) or quits;
+**Clokrix stops a run, ending all load, when:**
+- the owner presses Stop, closes the Clokrix window (also when it hides to the tray) or quits;
 - a temperature reaches Health's problem limit (CPU 99 °C, GPU 92 °C) on 2 readings in a row;
 - Health reports a new problem with the CPU, GPU, fans or board thermals;
 - no sensor reading arrives for 10 s, because then the run cannot watch the temperatures;

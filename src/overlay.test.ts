@@ -12,7 +12,7 @@ describe('readings shown', () => {
 
 describe('window size (mirrors the Rust layout)', () => {
   it('matches the Rust numbers and grows with what it shows', () => {
-    // Same figures as vyro_core::gaming::overlay::size for these inputs.
+    // Same figures as clokrix_core::gaming::overlay::size for these inputs.
     expect(overlaySize('minimal', ['fps'], false, false, 100)).toEqual([130, 46]);
     expect(overlaySize('performance', shownMetrics('performance', []), true, false, 100)).toEqual([268, 162]);
     expect(overlaySize('performance', shownMetrics('performance', []), false, true, 150)).toEqual([354, 144]);

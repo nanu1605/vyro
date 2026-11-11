@@ -81,7 +81,7 @@
 <section class="panel">
   <div class="bar">
     <p class="note">
-      Every sensor Vyro reads, with minimum, maximum and average since start{tree ? ` · ${live} of ${total} reporting` : ''}.
+      Every sensor Clokrix reads, with minimum, maximum and average since start{tree ? ` · ${live} of ${total} reporting` : ''}.
     </p>
     <div class="tools">
       <input type="search" placeholder="Filter sensors" aria-label="Filter sensors" bind:value={filter} />
@@ -96,7 +96,7 @@
   </div>
 
   {#if error}
-    <p class="empty" role="alert">Sensor list unavailable: {error}. Vyro keeps trying every reading.</p>
+    <p class="empty" role="alert">Sensor list unavailable: {error}. Clokrix keeps trying every reading.</p>
   {:else if !tree}
     <p class="empty" role="status">Waiting for the first reading…</p>
   {:else if groups.length === 0}

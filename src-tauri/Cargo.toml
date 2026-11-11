@@ -1,6 +1,6 @@
 [package]
-name = "vyro"
-description = "Vyro hardware monitor"
+name = "clokrix"
+description = "Clokrix hardware monitor"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -19,7 +19,7 @@ tauri-plugin-log = "2.9.2"
 tauri-plugin-notification = "2.4.0"
 tauri-plugin-single-instance = "2.4.5"
 tauri-plugin-updater = "2"
-vyro-core = { path = "../crates/vyro-core" }
+clokrix-core = { path = "../crates/clokrix-core" }
 
 [lints]
 workspace = true

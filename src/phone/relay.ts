@@ -19,7 +19,7 @@ export const REQUEST_MS = 30_000;
 export type LinkState =
   | 'connecting'
   | 'online'
-  /** Connected to the relay; the PC is not (asleep, off, or Vyro not running). */
+  /** Connected to the relay; the PC is not (asleep, off, or Clokrix not running). */
   | 'asleep'
   /** The relay is out of reach; trying again. */
   | 'unreachable'
@@ -29,7 +29,7 @@ export type LinkState =
   | 'expired'
   /** The same PC is open in another window of this app. */
   | 'elsewhere'
-  /** The PC's Vyro is older than this app. */
+  /** The PC's Clokrix is older than this app. */
   | 'tooOld';
 
 export type PhoneInfo = RemoteInfo & {
@@ -119,7 +119,7 @@ export class PcLink {
   private aadOut: Bytes = new Uint8Array(0);
   /** Connected with the phone's own secret, before the PC confirmed taking it. */
   private onNext = false;
-  /** The PC's info gave no session: its Vyro is older than 1.5, and takes no requests. */
+  /** The PC's info gave no session: its Clokrix is older than 1.5, and takes no requests. */
   private oldPc = false;
   private stopped = true;
   private wait = WAIT_MIN;
@@ -197,7 +197,7 @@ export class PcLink {
       // Online with no session: an older PC, or one saying hello again.
       return Promise.reject(
         this.current === 'online' && this.oldPc
-          ? new RequestError('Update Vyro on the PC.')
+          ? new RequestError('Update Clokrix on the PC.')
           : new RequestError('Not connected to the PC.', 'unsent'),
       );
     }
@@ -279,6 +279,7 @@ export class PcLink {
     this.aadIn = aad(room, phone, 'toPhone');
     this.aadOut = aad(room, phone, 'toPc');
     const url = `${this.opts.base.replace(/^http/, 'ws')}/phone/${pc.room}/${pc.phone}`;
+    // `vyro.1`: the relay's socket protocol, named before the rename to Clokrix (rules.ts).
     const protocols = ['vyro.1', `k.${b64url(keys.auth)}`];
     let ws: WebSocket;
     try {

@@ -37,7 +37,7 @@ health: HealthReport,
  */
 alerts: Array<AlertFired>, 
 /**
- * Whether Vyro drives fans (P12), for the header chip and the tray.
+ * Whether Clokrix drives fans (P12), for the header chip and the tray.
  */
 fanControl: FanBrief, 
 /**

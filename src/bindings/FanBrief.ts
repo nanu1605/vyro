@@ -6,7 +6,7 @@
  */
 export type FanBrief = { 
 /**
- * Vyro drives at least one header.
+ * Clokrix drives at least one header.
  */
 active: boolean, 
 /**

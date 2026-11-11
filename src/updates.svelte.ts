@@ -19,7 +19,7 @@ export async function checkNow(): Promise<void> {
   update.status = await checkForUpdates();
 }
 
-/** On success Vyro exits and the installer takes over; errors arrive in the status too. */
+/** On success Clokrix exits and the installer takes over; errors arrive in the status too. */
 export async function install(): Promise<void> {
   await installUpdate();
 }

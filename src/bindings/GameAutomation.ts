@@ -3,7 +3,7 @@ import type { GameRule } from "./GameRule";
 import type { Profile } from "./Profile";
 
 /**
- * How Vyro follows games: kept with the app's settings.
+ * How Clokrix follows games: kept with the app's settings.
  */
 export type GameAutomation = { 
 /**

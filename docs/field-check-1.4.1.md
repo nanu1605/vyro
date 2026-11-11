@@ -23,7 +23,7 @@ Bluetooth mouse or keyboard, and a wireless device whose battery is under 20 %.
   Windows Settings → Bluetooth & devices.
 - Turn the speaker off: within a few seconds its row says **Not connected** and offers
   **Connect**. Turn it on: **Connected**, and **Disconnect**.
-- Disconnect the headphones in Windows Settings: Vyro follows within a few seconds.
+- Disconnect the headphones in Windows Settings: Clokrix follows within a few seconds.
 - A device that shows **Paired** is one Windows says nothing about: it offers both Connect and
   Disconnect. Note which device, if any.
 
@@ -45,18 +45,18 @@ If a step fails: note the message on the row, then send the app's log from
 
 ## 3. Low battery
 
-- With a wireless device under 20 % (not charging): within about half a minute of starting Vyro,
+- With a wireless device under 20 % (not charging): within about half a minute of starting Clokrix,
   or at once when Devices is opened, the Dashboard shows **Low battery: <device> <n>%** and
   Devices has an amber dot (red under 10 %). The strip opens Devices.
 - Put it on its charger, or let it pass 20 %: the strip and the dot go.
 
 ## 4. Nothing else changed
 
-- Task Manager: Vyro's CPU and memory when idle are as with 1.4.0 (the device list is now read
+- Task Manager: Clokrix's CPU and memory when idle are as with 1.4.0 (the device list is now read
   in the background every 5 minutes).
 - The phone app (Settings → Remote → From anywhere) still shows readings.
 - Settings → Remote stays quiet: with it open, pair a phone and open the phone app. In Task
-  Manager, neither Vyro nor "Service Host: Network Service" (DNS Client) stays above a few
+  Manager, neither Clokrix nor "Service Host: Network Service" (DNS Client) stays above a few
   percent (1.7's field check saw 23 % on opening, 85 % with a phone paired, fixed here).
 
 ## Results

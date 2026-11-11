@@ -1,5 +1,5 @@
-// Generated from vyro_core::display::sample() (two EDID fixtures run through the real merge).
-// Regenerate: cargo run -p vyro-core --example inventory -- --no-wait (non-Windows), copy "displays".
+// Generated from clokrix_core::display::sample() (two EDID fixtures run through the real merge).
+// Regenerate: cargo run -p clokrix-core --example inventory -- --no-wait (non-Windows), copy "displays".
 
 import type { DisplayInfo } from './types';
 

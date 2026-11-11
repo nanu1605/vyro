@@ -39,7 +39,7 @@ export async function onSensors(cb: (s: SensorSnapshot) => void): Promise<() => 
   return unlisten;
 }
 
-/** Where sensor data comes from: the Vyro service, or the app itself without it. `null` in the
+/** Where sensor data comes from: the Clokrix service, or the app itself without it. `null` in the
  * browser preview. */
 export async function getBackendStatus(): Promise<BackendStatus | null> {
   if (!inTauri) return null;
@@ -163,7 +163,7 @@ export async function setFanConfig(config: FanConfig): Promise<void> {
   if (!inTauri) {
     const lists = [config.headers, ...Object.values(config.profiles).filter((l) => l != null)];
     if (lists.some((l) => l.some((h) => h.index === 1 && h.mode.mode !== 'bios')) && !config.pumps.includes(1)) {
-      throw new Error('confirm that Pump Fan drives your pump before Vyro controls it');
+      throw new Error('confirm that Pump Fan drives your pump before Clokrix controls it');
     }
     if (!browserFans.enabled && config.enabled) simFanEvent('on', 'Fan control turned on');
     if (browserFans.enabled && !config.enabled) simFanEvent('off', 'Fan control turned off');
@@ -224,7 +224,7 @@ export async function deleteDiagnostic(id: number): Promise<boolean> {
   return invoke<boolean>('delete_diagnostic', { id });
 }
 
-/** Writes an export to Documents\Vyro Reports; returns its path. */
+/** Writes an export to Documents\Clokrix Reports; returns its path. */
 export async function exportDiagnostics(
   id: number,
   format: 'pdf' | 'html' | 'md' | 'json',
@@ -233,7 +233,7 @@ export async function exportDiagnostics(
   when: string,
   stamp: string,
 ): Promise<string> {
-  if (!inTauri) return `C:\\Users\\owner\\Documents\\Vyro Reports\\vyro-diagnostics-${stamp}.${format}`;
+  if (!inTauri) return `C:\\Users\\owner\\Documents\\Clokrix Reports\\clokrix-diagnostics-${stamp}.${format}`;
   return invoke<string>('export_diagnostics', { id, format, serialNumbers, unit, when, stamp });
 }
 
@@ -243,7 +243,7 @@ export async function revealReport(path: string): Promise<void> {
   return invoke('reveal_report', { path });
 }
 
-/** Saves a share card PNG to `Pictures\Vyro` and returns its path; in a browser, downloads it. */
+/** Saves a share card PNG to `Pictures\Clokrix` and returns its path; in a browser, downloads it. */
 export async function saveShareCard(png: Uint8Array, name: string): Promise<string> {
   if (!inTauri) {
     const url = URL.createObjectURL(new Blob([png as BlobPart], { type: 'image/png' }));
@@ -362,7 +362,7 @@ export async function getAlertUsual(sensor: string): Promise<number | null> {
 }
 
 export interface AppSettings {
-  /** Closing the window keeps Vyro running in the tray. */
+  /** Closing the window keeps Clokrix running in the tray. */
   closeToTray: boolean;
   /** How temperatures are shown; the engine always works in °C. */
   temperatureUnit: TempUnit;
@@ -433,7 +433,7 @@ export async function onSettingsChanged(cb: (s: AppSettings) => void): Promise<(
   return listen<AppSettings>('settings-changed', (e) => cb(e.payload));
 }
 
-// Browser preview: mirrors `vyro_core::profiles`.
+// Browser preview: mirrors `clokrix_core::profiles`.
 const BROWSER_PROFILES: ProfileSpec[] = [
   { id: 'desktop', name: 'Desktop', description: 'Everyday use: live gauges every second, every alert.', pollMs: 1000, notifications: 'all', motion: 'full', dashboard: 'full' },
   { id: 'gaming', name: 'Gaming', description: 'Light while you play: readings every 2 s, only hardware problems notify.', pollMs: 2000, notifications: 'critical', motion: 'reduced', dashboard: 'compact' },
@@ -569,7 +569,7 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
   return invoke<UpdateStatus>('check_for_updates');
 }
 
-/** Downloads and runs the installer; Vyro exits and the installer starts it again. */
+/** Downloads and runs the installer; Clokrix exits and the installer starts it again. */
 export async function installUpdate(): Promise<void> {
   if (!inTauri) throw new Error('not available in the browser preview');
   await invoke('install_update');
@@ -577,9 +577,9 @@ export async function installUpdate(): Promise<void> {
 
 /** What's new (1.5): the notes waiting to be shown after an update, or null. */
 export interface WhatsNewAnswer {
-  /** This Vyro's version. */
+  /** This Clokrix's version. */
   current: string;
-  /** The version updated from; null: a Vyro before 1.5. */
+  /** The version updated from; null: a Clokrix before 1.5. */
   from: string | null;
 }
 
@@ -607,7 +607,7 @@ export async function whatsNewSeen(): Promise<void> {
 
 let browserAutostart = false;
 
-/** Whether Vyro starts (in the tray) at sign-in. */
+/** Whether Clokrix starts (in the tray) at sign-in. */
 export async function getAutostart(): Promise<boolean> {
   if (!inTauri) return browserAutostart;
   return invoke<boolean>('get_autostart');
@@ -637,7 +637,7 @@ export async function getHardwareId(): Promise<HardwareId> {
     const { sampleHardware, sampleLaptop } = await import('./sample');
     let form: string | null = null;
     try {
-      form = localStorage.getItem('vyro.sim.form');
+      form = localStorage.getItem('clokrix.sim.form');
     } catch {
       /* the desktop sample */
     }
@@ -730,7 +730,7 @@ export async function onDevicesRead(cb: (devices: Devices) => void): Promise<() 
 export async function getDashboard(): Promise<Dashboard | null> {
   if (!inTauri) {
     try {
-      const t = localStorage.getItem('vyro.dashboard');
+      const t = localStorage.getItem('clokrix.dashboard');
       return t ? (JSON.parse(t) as Dashboard) : null;
     } catch {
       return null;
@@ -743,7 +743,7 @@ export async function getDashboard(): Promise<Dashboard | null> {
 export async function setDashboard(dashboard: Dashboard): Promise<Dashboard> {
   if (!inTauri) {
     try {
-      localStorage.setItem('vyro.dashboard', JSON.stringify(dashboard));
+      localStorage.setItem('clokrix.dashboard', JSON.stringify(dashboard));
     } catch {
       /* storage unavailable: kept for this page only */
     }
@@ -858,7 +858,7 @@ export async function setRelayEnabled(enabled: boolean): Promise<RemoteStatus> {
   return invoke<RemoteStatus>('set_relay_enabled', { enabled });
 }
 
-/** The owner's own relay; `null` or empty: the one built into Vyro. Phones paired through the
+/** The owner's own relay; `null` or empty: the one built into Clokrix. Phones paired through the
  * old relay are signed out. */
 export async function setRelayUrl(url: string | null): Promise<RemoteStatus> {
   if (!inTauri) return (await import('./sim-remote')).simRelayUrl(url);
@@ -957,7 +957,7 @@ export async function onPowerPending(cb: (s: PowerState) => void): Promise<() =>
   return listen<PowerState>('power-pending', (e) => cb(e.payload));
 }
 
-/** Ends a process (1.5); Windows' own and Vyro's are refused. */
+/** Ends a process (1.5); Windows' own and Clokrix's are refused. */
 export async function endProcess(pid: number, name: string): Promise<void> {
   if (!inTauri) {
     await new Promise((r) => setTimeout(r, 300));
@@ -984,7 +984,7 @@ export async function resetRelay(): Promise<RemoteStatus> {
 /** The browser preview keeps widgets in this page's storage (they cannot open windows here). */
 function browserWidgets(): Widgets {
   try {
-    const t = localStorage.getItem('vyro.widgets');
+    const t = localStorage.getItem('clokrix.widgets');
     return t ? (JSON.parse(t) as Widgets) : { ...NO_WIDGETS };
   } catch {
     return { ...NO_WIDGETS };
@@ -1001,7 +1001,7 @@ export async function getWidgets(): Promise<Widgets> {
 export async function setWidgets(widgets: Widgets): Promise<Widgets> {
   if (!inTauri) {
     try {
-      localStorage.setItem('vyro.widgets', JSON.stringify(widgets));
+      localStorage.setItem('clokrix.widgets', JSON.stringify(widgets));
     } catch {
       /* not kept */
     }

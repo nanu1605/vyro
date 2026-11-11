@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Continue'
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
-public static class VyroDisplay {
+public static class ClokrixDisplay {
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct DEVMODE {
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
@@ -39,15 +39,15 @@ public static class VyroDisplay {
 '@
 
 if ($Reset) {
-    $r = [VyroDisplay]::ChangeDisplaySettingsNone([IntPtr]::Zero, 0)
+    $r = [ClokrixDisplay]::ChangeDisplaySettingsNone([IntPtr]::Zero, 0)
     Write-Host "Back to the stored size: result $r (0 is done)"
     exit 0
 }
 
 $modes = @()
 for ($i = 0; ; $i++) {
-    $dm = [VyroDisplay]::Blank()
-    if (-not [VyroDisplay]::EnumDisplaySettings([NullString]::Value, $i, [ref]$dm)) { break }
+    $dm = [ClokrixDisplay]::Blank()
+    if (-not [ClokrixDisplay]::EnumDisplaySettings([NullString]::Value, $i, [ref]$dm)) { break }
     if ($dm.dmBitsPerPel -eq 32) { $modes += $dm }
 }
 $sizes = $modes | ForEach-Object { "$($_.dmPelsWidth)x$($_.dmPelsHeight)" } | Sort-Object -Unique
@@ -59,12 +59,12 @@ $best = $modes |
     Select-Object -First 1
 if ($best) {
     # 0: change now, for this session only.
-    $r = [VyroDisplay]::ChangeDisplaySettings([ref]$best, 0)
+    $r = [ClokrixDisplay]::ChangeDisplaySettings([ref]$best, 0)
     Write-Host "Asked for $($best.dmPelsWidth)x$($best.dmPelsHeight): result $r (0 is done)"
 }
 
-$now = [VyroDisplay]::Blank()
+$now = [ClokrixDisplay]::Blank()
 # -1: the size in use now.
-[void][VyroDisplay]::EnumDisplaySettings([NullString]::Value, -1, [ref]$now)
+[void][ClokrixDisplay]::EnumDisplaySettings([NullString]::Value, -1, [ref]$now)
 Write-Host "::notice title=Desktop size::$($now.dmPelsWidth)x$($now.dmPelsHeight) (on offer: $($sizes -join ', '))"
 exit 0

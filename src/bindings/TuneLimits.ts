@@ -2,7 +2,7 @@
 import type { TuneRange } from "./TuneRange";
 
 /**
- * What the driver lets Vyro change on this card. A setting without a range stays at stock.
+ * What the driver lets Clokrix change on this card. A setting without a range stays at stock.
  */
 export type TuneLimits = { 
 /**

@@ -1,9 +1,9 @@
 // Automatic game profiles (P13) on the window's side: the saved games shown in the Gaming tab
-// and, for the browser preview, the same decisions as `vyro_core::gaming::auto::Switcher`.
+// and, for the browser preview, the same decisions as `clokrix_core::gaming::auto::Switcher`.
 
 import type { Effective, GameAutomation, GameRule, GameSession, Profile } from './types';
 
-/** Update rates a game can ask for, ms (`vyro_core::gaming::auto::POLL_CHOICES`). */
+/** Update rates a game can ask for, ms (`clokrix_core::gaming::auto::POLL_CHOICES`). */
 export const POLL_CHOICES = [500, 1000, 2000, 5000] as const;
 
 export const DEFAULT_GAMES: GameAutomation = { enabled: true, defaultProfile: 'gaming', loadTrigger: false, rules: [] };

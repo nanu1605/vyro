@@ -42,7 +42,7 @@
   let open = $state(true);
 </script>
 
-<Sheet {open} title="What’s new in Vyro {shortVersion(upTo)}" onclose={() => ((open = false), onclose(upTo))}>
+<Sheet {open} title="What’s new in Clokrix {shortVersion(upTo)}" onclose={() => ((open = false), onclose(upTo))}>
   <ul class="items">
     {#each items as item, i (item.title)}
       {@const Icon = ICONS[item.icon]}

@@ -1,5 +1,5 @@
 # Downloads the official, Intel-signed PresentMon console app that the MSI installs next to
-# vyro-service.exe (see src-tauri/wix/vyro.wxs); the service runs it to measure game frame
+# clokrix-service.exe (see src-tauri/wix/clokrix.wxs); the service runs it to measure game frame
 # rates. The file is not committed; the pinned SHA-256 below guarantees every build ships
 # exactly this release.
 #

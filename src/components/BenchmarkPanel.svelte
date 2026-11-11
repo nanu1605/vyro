@@ -227,7 +227,7 @@
   <header class="intro">
     <h2 id="bench-title">Benchmark</h2>
     <p class="fine">
-      Runs Vyro's own workloads and compares the result with this PC's earlier runs. Each area runs three passes; a
+      Runs Clokrix's own workloads and compares the result with this PC's earlier runs. Each area runs three passes; a
       difference counts only beyond their spread. The numbers are not comparable with other tools or other PCs.
     </p>
   </header>
@@ -256,7 +256,7 @@
         <span style="transform: scaleX({Math.max(0, Math.min(1, progress.done))})"></span>
       </div>
       <p class="fine">
-        The CPU and GPU run at full load. Closing the Vyro window or quitting stops the run; so does any temperature
+        The CPU and GPU run at full load. Closing the Clokrix window or quitting stops the run; so does any temperature
         reaching Health's problem limit.
       </p>
       {#if progress.finished.length}

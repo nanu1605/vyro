@@ -29,7 +29,7 @@
 
   function savedRange(): HistoryRange {
     try {
-      const r = localStorage.getItem('vyro.historyRange');
+      const r = localStorage.getItem('clokrix.historyRange');
       return RANGES.some((x) => x.id === r) ? (r as HistoryRange) : '30m';
     } catch {
       return '30m';
@@ -46,7 +46,7 @@
   function pick(r: HistoryRange): void {
     range = r;
     try {
-      localStorage.setItem('vyro.historyRange', r);
+      localStorage.setItem('clokrix.historyRange', r);
     } catch {
       /* not remembered */
     }
@@ -148,7 +148,7 @@
   </div>
 
   {#if error}
-    <p class="empty" role="alert">History unavailable: {error}. Vyro tries again shortly.</p>
+    <p class="empty" role="alert">History unavailable: {error}. Clokrix tries again shortly.</p>
   {:else if tree && charts.length === 0}
     <p class="empty" role="status">
       No history-tracked sensors yet{prefs.hiddenSensors.length ? ' (hidden sensors are left out; see Settings)' : ''}.

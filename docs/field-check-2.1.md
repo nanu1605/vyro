@@ -8,14 +8,14 @@ yet, a field difference may need a fix, and `vyro-live.json` holds what that fix
 
 Install the test build `vyro-windows-<commit>` of the latest green CI run on `claude/vyro-2.0`
 (or 2.1.0 once it is out) over 2.0.4. The same artifact has `vyro-live.exe`. Have
-[HWiNFO](https://www.hwinfo.com/) in sensors-only mode open beside Vyro to compare.
+[HWiNFO](https://www.hwinfo.com/) in sensors-only mode open beside Clokrix to compare.
 
 About 20 minutes.
 
 ## 0. What the PC is, and its raw registers
 
 1. Note the CPU, the board (Hardware → Motherboard) and the memory kit.
-2. Right-click `vyro-live.exe` → **Run as administrator** (Vyro may stay open: they share the
+2. Right-click `vyro-live.exe` → **Run as administrator** (Clokrix may stay open: they share the
    buses' locks). It prints a few samples and saves `vyro-live.json` beside itself: keep it. It
    holds the raw registers (`intelRaw`, `sioRaw`, `ramRaw`) to set a decoding right against
    HWiNFO.
@@ -46,20 +46,20 @@ About 20 minutes.
    is which header and which input or AUXTIN reads what HWiNFO calls VRM, PCH, DRAM and so on:
    that names them for this board.
 3. Cooling: the fans are shown read-only ("fan control is not validated on this motherboard");
-   nothing Vyro does changes a fan.
+   nothing Clokrix does changes a fan.
 4. In `vyro-live.json`, `sioRaw.ioLocked` true means the firmware set the lock on the monitor's
    ports. If `vendor` then reads other than `0x5ca3`, nothing can be read until it is cleared:
-   Vyro's service clears that one bit when it starts, as Linux and LibreHardwareMonitor do, and
+   Clokrix's service clears that one bit when it starts, as Linux and LibreHardwareMonitor do, and
    makes no other write to the chip (`vyro-live` itself never clears it).
 
 ## 3. DDR4
 
 1. Memory card → **Timings**: CL-tRCD-tRP-tRAS @ MT/s as HWiNFO's memory section or CPU-Z's
    Memory tab gives them (the data rate is twice the DRAM frequency they show). Only those four
-   show: Intel's controller registers Vyro reads give no others.
+   show: Intel's controller registers Clokrix reads give no others.
 2. **Module temperatures**: only on modules with a thermal sensor, which many DDR4 kits lack. If
    HWiNFO lists "DIMM[n]" temperatures, the Memory card lists the same slots, within 0.5 °C. If
-   it lists none, Vyro shows none either.
+   it lists none, Clokrix shows none either.
 
 ## Report
 

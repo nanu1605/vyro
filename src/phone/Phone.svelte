@@ -1,8 +1,8 @@
 <script lang="ts">
-  // The phone app (1.4): a PC's readings from anywhere, through the Vyro relay, sealed end to
+  // The phone app (1.4): a PC's readings from anywhere, through the Clokrix relay, sealed end to
   // end. Installable from the browser (no app store). From 1.5 it also shows what runs on the
   // PC, its devices and Health, and, on a phone the owner allowed on the PC, changes it: ends a
-  // process, shuts it down, wakes another PC, and the rest Vyro does (screens/). Redesigned in
+  // process, shuts it down, wakes another PC, and the rest Clokrix does (screens/). Redesigned in
   // 1.7: a bar at the top, tabs at the bottom, sheets for choices, toasts for results, and views
   // that move in from the side they are on.
   import { onMount } from 'svelte';
@@ -28,7 +28,7 @@
   import Toasts from './ui/Toasts.svelte';
 
   type Screen = 'home' | 'pc' | 'scan' | 'install';
-  /** A PC's tabs (1.5); only Live for a PC whose Vyro is older, Screen from 1.7. Devices sit
+  /** A PC's tabs (1.5); only Live for a PC whose Clokrix is older, Screen from 1.7. Devices sit
    * at the top of More (1.7). */
   type Tab = 'live' | 'processes' | 'screen' | 'health' | 'more';
   const TABS: Array<{ id: Tab; label: string; icon: typeof Activity }> = [
@@ -42,7 +42,7 @@
   const BATTERY_MS = 120_000;
   /** How long a PC's link stays, once let go of, for its screen session's Stop to be answered. */
   const STOP_WAIT_MS = 3000;
-  const NEWS_KEY = 'vyro.phone.news';
+  const NEWS_KEY = 'clokrix.phone.news';
 
   /** Chrome's install prompt (Android, desktop). */
   interface InstallPrompt extends Event {
@@ -114,7 +114,7 @@
     signedOut: 'Signed out',
     expired: 'Pairing expired',
     elsewhere: 'Open in another window',
-    tooOld: 'Update Vyro on the PC',
+    tooOld: 'Update Clokrix on the PC',
   };
   const navOn = $derived(screen === 'pc' && linkState === 'online' && asks && !immersive);
   /** The Screen tab stays while its session is on, though the connection to the relay drops
@@ -123,7 +123,7 @@
   const keepScreen = $derived(screen === 'pc' && tab === 'screen' && sharing);
 
   $effect(() => {
-    document.title = screen === 'pc' ? pageTitle(pc?.name ?? '', view) : 'Vyro';
+    document.title = screen === 'pc' ? pageTitle(pc?.name ?? '', view) : 'Clokrix';
   });
 
   // Low batteries on the PC: asked now and then while a PC is open, for the dot on More.
@@ -273,7 +273,7 @@
     history.replaceState(null, '', location.pathname);
     const l = parseLink(hash);
     if (!l) {
-      if (hash.startsWith('#p=')) notice = 'This pairing link is incomplete. Scan the code in Vyro again.';
+      if (hash.startsWith('#p=')) notice = 'This pairing link is incomplete. Scan the code in Clokrix again.';
       return;
     }
     if (ios && !standalone) {
@@ -287,8 +287,8 @@
 
   function fromText(text: string): void {
     const l = linkFrom(text, location.origin);
-    if (l === 'elsewhere') notice = 'That code is for another Vyro relay. Open it with the camera app instead.';
-    else if (!l) notice = 'That is not a Vyro pairing link. In Vyro, open Settings → Remote → Pair a phone.';
+    if (l === 'elsewhere') notice = 'That code is for another Clokrix relay. Open it with the camera app instead.';
+    else if (!l) notice = 'That is not a Clokrix pairing link. In Clokrix, open Settings → Remote → Pair a phone.';
     else pairWith(l);
   }
 
@@ -388,7 +388,7 @@
   }
 
   /** The phone's What's new: once after the app changed, for a phone already in use, and only
-   * what the open PC's Vyro (`pc`) has too; the rest once the PC is updated. */
+   * what the open PC's Clokrix (`pc`) has too; the rest once the PC is updated. */
   async function checkNews(pc: string): Promise<void> {
     let seen: string | null = null;
     try {
@@ -400,7 +400,7 @@
     const newest = NOTES[0]?.version ?? '';
     if (seen === newest) return;
     const { upTo, items } = phoneNotes(seen, pc, NOTES);
-    // A phone new to Vyro has nothing to compare with: it starts from here.
+    // A phone new to Clokrix has nothing to compare with: it starts from here.
     if (!pairedBefore) return seen ? undefined : remember(upTo);
     if (items.length) news = { from: seen, upTo };
     else if (upTo === newest) remember(newest);
@@ -417,7 +417,7 @@
     void keepUp(ask).catch(() => (keptUp = ''));
   });
 
-  // Asked once the open PC says which Vyro it runs.
+  // Asked once the open PC says which Clokrix it runs.
   let newsFor = '';
   $effect(() => {
     const pc = info?.version;
@@ -528,12 +528,12 @@
       <div class="view" style:--dx="{dir * 18}px" style:--dy="{dir ? 0 : 8}px">
         {#if screen === 'install' && held}
           <section class="panel rise" aria-labelledby="install-title">
-            <h1 id="install-title">Add Vyro to your Home Screen first</h1>
+            <h1 id="install-title">Add Clokrix to your Home Screen first</h1>
             <p>On iPhone, an app on the Home Screen keeps its own pairing, apart from Safari’s. So pair it there:</p>
             <ol class="list">
               <li>Tap <b>Share</b> at the bottom of Safari, then <b>Add to Home Screen</b>.</li>
-              <li>Open <b>Vyro</b> from your Home Screen.</li>
-              <li>Tap <b>Scan the code</b> and point it at the code in Vyro on your PC (it lasts 10 minutes).</li>
+              <li>Open <b>Clokrix</b> from your Home Screen.</li>
+              <li>Tap <b>Scan the code</b> and point it at the code in Clokrix on your PC (it lasts 10 minutes).</li>
             </ol>
             <div class="actions">
               <button type="button" class="ghost" onclick={() => held && pairWith(held)}>Use it in Safari instead</button>
@@ -584,7 +584,7 @@
             <LiveView {view} {unit} pc={pc.name} {now} />
             {#if info}
               <section class="panel link-card" aria-label="This phone and {pc.name}">
-                <p class="muted small">{info.device} · paired until {fmtDate(info.expires)}, renewed each time you open it · Vyro {info.version} on the PC</p>
+                <p class="muted small">{info.device} · paired until {fmtDate(info.expires)}, renewed each time you open it · Clokrix {info.version} on the PC</p>
                 <button type="button" class="ghost" onclick={() => void leave()}>Sign out of this PC</button>
               </section>
             {/if}

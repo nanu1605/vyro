@@ -42,7 +42,7 @@
   }
 
   const firstDimm = $derived(mem?.dimms[0] ?? null);
-  // The cards, in Vyro's order (2.0.2; the owner can drag them into theirs): one per GPU.
+  // The cards, in Clokrix's order (2.0.2; the owner can drag them into theirs): one per GPU.
   const cards = $derived<CardItem[]>([
     { id: 'hw-changes', title: 'PC changes', w: 2 },
     { id: 'hw-cpu', title: 'Processor', w: 2 },

@@ -1,4 +1,4 @@
-// Diagnostics (P21) in words. Mirrors `vyro_core::diag` (`fmt_citation`, `fmt_ago`, the labels),
+// Diagnostics (P21) in words. Mirrors `clokrix_core::diag` (`fmt_citation`, `fmt_ago`, the labels),
 // so the report on screen reads exactly like its exports.
 
 import type { CheckId, CheckStatus, Citation, DiagReport, Origin, TempUnit } from './types';
@@ -36,7 +36,7 @@ export const ORIGIN: Record<Origin, string> = {
   live: 'live reading',
   insights: 'Insights',
   inventory: 'inventory',
-  service: 'Vyro',
+  service: 'Clokrix',
 };
 
 /** "17 °C", "61%", "0.4%", "good"; temperatures in `unit` (a difference without the offset). */

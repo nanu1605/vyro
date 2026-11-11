@@ -1,7 +1,8 @@
 // The relay's rules (1.4), kept free of the Workers runtime so they are tested as is: the
 // addresses, the key a socket shows, the PC's control messages, sizes and rates.
 
-/** The protocol a client must offer and the relay answers with. */
+/** The protocol a client must offer and the relay answers with (named before the rename to
+ * Clokrix; kept, as PCs and phones speak it). */
 export const PROTOCOL = 'vyro.1';
 /** Phones a PC may register (as many as pair with it on the local network). */
 export const MAX_PHONES = 8;

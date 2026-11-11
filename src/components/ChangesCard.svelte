@@ -60,7 +60,7 @@
   {:else if !list}
     <p class="note" role="status">Loading…</p>
   {:else if list.length === 0}
-    <p class="note">Vyro has not checked this PC yet; the first check runs shortly after it starts.</p>
+    <p class="note">Clokrix has not checked this PC yet; the first check runs shortly after it starts.</p>
   {:else if changes.length === 0}
     <p class="note">
       No changes since {fmtDate(since)}. New or swapped parts, BIOS, driver and Windows updates and firmware settings will

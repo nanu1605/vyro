@@ -57,7 +57,7 @@ describe('the paired PCs', () => {
     const b: PairedPc = { ...a, room: 'f'.repeat(32), name: 'B', used: 5 };
     savePcs([a, b, { ...a, room: 'nope' } as PairedPc], store);
     expect(loadPcs(store).map((p) => p.name)).toEqual(['B', 'A']);
-    store.setItem('vyro.pcs', '{broken');
+    store.setItem('clokrix.pcs', '{broken');
     expect(loadPcs(store)).toEqual([]);
   });
 
@@ -80,7 +80,7 @@ describe('the paired PCs', () => {
     list = updatePc(list, ROOM, { wake: undefined });
     expect(list[0]).not.toHaveProperty('wake');
     // A stored address that does not look like one drops the entry.
-    store.set('vyro.pcs', JSON.stringify([{ ...a, wake: 'not a mac' }]));
+    store.set('clokrix.pcs', JSON.stringify([{ ...a, wake: 'not a mac' }]));
     expect(loadPcs({ getItem: (k) => store.get(k) ?? null })).toEqual([]);
   });
 });

@@ -26,8 +26,8 @@ export function onMobileData(c: Connection | null | undefined): boolean | null {
 }
 
 /** Where a choice is remembered: per PC, and one for mobile data. */
-export const KEY_MOBILE = 'vyro.quality.mobile';
-export const keyFor = (pc: string) => `vyro.quality.${pc}`;
+export const KEY_MOBILE = 'clokrix.quality.mobile';
+export const keyFor = (pc: string) => `clokrix.quality.${pc}`;
 
 export function readQuality(v: string | null): Quality | null {
   return v === 'hd' || v === 'sd' ? v : null;

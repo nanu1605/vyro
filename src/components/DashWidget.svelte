@@ -38,7 +38,7 @@
 </script>
 
 {#if !isKind(widget.kind)}
-  <div class="panel box muted">This widget comes from a newer version of Vyro.</div>
+  <div class="panel box muted">This widget comes from a newer version of Clokrix.</div>
 {:else if widget.kind === 'gauge'}
   {#if gpuIndex == null}
     <GaugePanel

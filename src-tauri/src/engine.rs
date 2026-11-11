@@ -1,18 +1,18 @@
-//! Connects the app to the sensor engine: the Vyro service when it runs (the app itself stays
+//! Connects the app to the sensor engine: the Clokrix service when it runs (the app itself stays
 //! unelevated), else an in-process engine without the privileged sensors.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Emitter, Manager};
-use tauri_plugin_notification::NotificationExt;
-use vyro_core::alerts::AlertFired;
-use vyro_core::engine::{
+use clokrix_core::alerts::AlertFired;
+use clokrix_core::engine::{
     BackendMode, BackendStatus, ClientPids, EngineApi, EngineConfig, LocalEngine,
 };
-use vyro_core::ipc::{RemoteEngine, RemoteStatus};
-use vyro_core::{lock, Inventory, PollerConfig, SensorSnapshot};
+use clokrix_core::ipc::{RemoteEngine, RemoteStatus};
+use clokrix_core::{lock, Inventory, PollerConfig, SensorSnapshot};
+use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_notification::NotificationExt;
 
 /// Event carrying each [`SensorSnapshot`] (spec §4.1).
 pub const SENSORS_EVENT: &str = "sensors";
@@ -30,7 +30,7 @@ pub fn watch_devices(app: &AppHandle) {
         static STARTED: std::sync::Once = std::sync::Once::new();
         STARTED.call_once(|| {
             let app = app.clone();
-            vyro_core::devices::watch(move || crate::device_watch::poke(&app));
+            clokrix_core::devices::watch(move || crate::device_watch::poke(&app));
         });
     }
     #[cfg(not(windows))]
@@ -69,11 +69,13 @@ impl Engine {
         let inventory = Arc::new(Inventory::new());
         let warm = Arc::clone(&inventory);
         std::thread::Builder::new()
-            .name("vyro-inventory".into())
+            .name("clokrix-inventory".into())
             .spawn(move || warm.warm())?;
 
         #[cfg(windows)]
-        if let Err(e) = vyro_core::alerts::register_toast_app(&app.config().identifier, "Vyro") {
+        if let Err(e) =
+            clokrix_core::alerts::register_toast_app(&app.config().identifier, "Clokrix")
+        {
             log::warn!("alerts: could not register for notifications: {e}");
         }
 
@@ -81,7 +83,7 @@ impl Engine {
         let shown = Arc::new(AtomicBool::new(visible));
         let api: Arc<dyn EngineApi> = match connect_service(app, visible, &status, &shown) {
             Ok(remote) => {
-                log::info!("sensors: from the Vyro service");
+                log::info!("sensors: from the Clokrix service");
                 let remote: Arc<dyn EngineApi> = Arc::new(remote);
                 migrate_alert_rules(app, &remote);
                 remote
@@ -104,7 +106,7 @@ impl Engine {
         #[cfg(windows)]
         {
             let app = app.clone();
-            vyro_core::display::watch(move || {
+            clokrix_core::display::watch(move || {
                 if let Err(e) = app.emit(DISPLAYS_EVENT, ()) {
                     log::debug!("emit {DISPLAYS_EVENT}: {e}");
                 }
@@ -255,32 +257,32 @@ fn env_is(name: &str) -> bool {
     std::env::var_os(name).is_some_and(|v| v == "1")
 }
 
-/// The service, unless `VYRO_LOCAL=1`. On Windows waits a little for a service that is still
-/// starting; elsewhere only tries when `VYRO_SOCKET` names one (development).
+/// The service, unless `CLOKRIX_LOCAL=1`. On Windows waits a little for a service that is still
+/// starting; elsewhere only tries when `CLOKRIX_SOCKET` names one (development).
 fn connect_service(
     app: &AppHandle,
     visible: bool,
     status: &Arc<Mutex<BackendStatus>>,
     shown: &Arc<AtomicBool>,
 ) -> Result<RemoteEngine, String> {
-    use vyro_core::ipc::transport::{service_state, ServiceState};
+    use clokrix_core::ipc::transport::{service_state, ServiceState};
 
-    if env_is("VYRO_LOCAL") {
-        return Err("VYRO_LOCAL=1".into());
+    if env_is("CLOKRIX_LOCAL") {
+        return Err("CLOKRIX_LOCAL=1".into());
     }
-    let dev_socket = std::env::var_os("VYRO_SOCKET").is_some();
+    let dev_socket = std::env::var_os("CLOKRIX_SOCKET").is_some();
     if !cfg!(windows) && !dev_socket {
         return Err("no sensor service on this platform".into());
     }
-    let endpoint = vyro_core::ipc::default_endpoint();
+    let endpoint = clokrix_core::ipc::default_endpoint();
     let deadline = Instant::now() + SERVICE_WAIT;
     loop {
-        if cfg!(windows) && !env_is("VYRO_DEV_PIPE") {
+        if cfg!(windows) && !env_is("CLOKRIX_DEV_PIPE") {
             match service_state() {
                 ServiceState::NotInstalled => {
-                    return Err("the Vyro service is not installed".into())
+                    return Err("the Clokrix service is not installed".into())
                 }
-                ServiceState::Stopped => return Err("the Vyro service is stopped".into()),
+                ServiceState::Stopped => return Err("the Clokrix service is stopped".into()),
                 ServiceState::Starting | ServiceState::Running | ServiceState::Other => {}
             }
         }
@@ -348,11 +350,11 @@ fn start_local(app: &AppHandle, shown: &Arc<AtomicBool>) -> std::io::Result<Loca
 /// first time the app meets a service still on the default rules, it hands them over (once;
 /// a marker file remembers).
 fn migrate_alert_rules(app: &AppHandle, api: &Arc<dyn EngineApi>) {
-    use vyro_core::alerts;
+    use clokrix_core::alerts;
     let Ok(dir) = app.path().app_data_dir() else {
         return;
     };
-    let path = dir.join(vyro_core::engine::ALERTS_FILE);
+    let path = dir.join(clokrix_core::engine::ALERTS_FILE);
     let marker = dir.join("alerts.migrated");
     if !path.exists() || marker.exists() {
         return;
@@ -410,8 +412,8 @@ pub fn show_notification(app: &AppHandle, alert: &AlertFired, always: bool) {
         return;
     };
     let unit = settings.temperature_unit;
-    let title = vyro_core::units::temps_in(&alert.title, unit);
-    let body = vyro_core::units::temps_in(&alert.message, unit);
+    let title = clokrix_core::units::temps_in(&alert.title, unit);
+    let body = clokrix_core::units::temps_in(&alert.message, unit);
     let mut n = app.notification().builder().title(&title).body(&body);
     if sound {
         n = n.sound("Default");

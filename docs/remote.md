@@ -1,6 +1,6 @@
 # Remote: the phone companion and reach from anywhere
 
-Vyro shows a PC's readings on other devices in two ways. Both are off until turned on in
+Clokrix shows a PC's readings on other devices in two ways. Both are off until turned on in
 Settings → Remote, and both run in the app, as the signed-in user, never in the LocalSystem
 service. The page on this network is read-only. A phone paired from anywhere only looks too,
 unless the owner lets it change the PC (1.5, [below](#control-from-the-phone-15)).
@@ -8,7 +8,7 @@ unless the owner lets it change the PC (1.5, [below](#control-from-the-phone-15)
 | | On this network (1.0) | From anywhere (1.4) |
 |---|---|---|
 | Where the phone is | the same local network | any network |
-| How it connects | to the PC: plain HTTP on port 8976 | to the Vyro relay, which the PC also connects to |
+| How it connects | to the PC: plain HTTP on port 8976 | to the Clokrix relay, which the PC also connects to |
 | What listens on the PC | a port, private addresses only | nothing: the PC connects out |
 | Encryption | none (a network you trust) | end to end, PC ↔ phone |
 | Pairing | QR code, or an 8-character code typed in | QR code (or its link), once |
@@ -19,7 +19,7 @@ unless the owner lets it change the PC (1.5, [below](#control-from-the-phone-15)
 ### How it works
 
 - **The relay** is a Cloudflare Worker (`relay/` in this repository) with one Durable Object per
-  PC, in the Vyro owner's Cloudflare account, deployed only by `.github/workflows/relay.yml`. It
+  PC, in the Clokrix owner's Cloudflare account, deployed only by `.github/workflows/relay.yml`. It
   also serves the phone app (`phone.html`, `src/phone/`).
 - **The PC** (Settings → Remote → From anywhere) keeps one WebSocket to its room on the relay,
   `wss://<relay>/pc/<room>`. The room is 128 random bits. The PC shows the relay a 256-bit key;
@@ -56,9 +56,9 @@ connection at once. A phone can also sign itself out.
 - A sealed frame is `1 | nonce (12 random bytes) | ciphertext | tag (16)`. Its associated data
   is `"vyro1" | room | phone | direction`, so a frame cannot be moved to another phone or room,
   or reflected back to its sender.
-- The PC is `vyro_core::remote::relay::seal` (RustCrypto `aes-gcm`, `hkdf`); the phone is
+- The PC is `clokrix_core::remote::relay::seal` (RustCrypto `aes-gcm`, `hkdf`); the phone is
   `src/phone/seal.ts` (WebCrypto). Both are checked against the same vectors
-  (`crates/vyro-core/src/remote/relay/vectors.json`), which were also checked against OpenSSL.
+  (`crates/clokrix-core/src/remote/relay/vectors.json`), which were also checked against OpenSSL.
 - On the PC, the relay key and the phones' secrets are sealed with DPAPI to the Windows account,
   so a copy of `remote.json` opens on no other account or PC.
 
@@ -80,7 +80,7 @@ deleted 90 days after the PC was last seen.
 - **Off for each phone until the owner allows it, on the PC.** When pairing, Settings asks whether
   the phone may only look or also change the PC; the paired list changes it later. The phone
   cannot give itself permission: the PC checks every request against it.
-- **What a phone may do** is a fixed list (`vyro_core::remote::relay::api`). Any paired phone may
+- **What a phone may do** is a fixed list (`clokrix_core::remote::relay::api`). Any paired phone may
   read: processes, devices, Health, Insights, the Performance Score, alerts, fans, profiles,
   benchmark and diagnostics results, PC changes, updates and power state. A phone allowed to
   control the PC may also: switch or keep a profile, give the fans back to the BIOS, turn alert
@@ -97,8 +97,8 @@ deleted 90 days after the PC was last seen.
   last 50, in `phone-actions.json` in the app's data folder). Ending a process and shutting down
   or restarting also show a notification on the PC, and a waiting shutdown shows a banner with
   Cancel on every view.
-- **Ending a process** never touches Windows' own processes, Explorer or Vyro, and checks the
-  process is still the one named; a process that runs as administrator cannot be ended (Vyro is
+- **Ending a process** never touches Windows' own processes, Explorer or Clokrix, and checks the
+  process is still the one named; a process that runs as administrator cannot be ended (Clokrix is
   not elevated).
 - **Power.** Shut down and Restart wait 30 seconds unless asked for "now", can close apps with
   unsaved work only if asked, and are full shutdowns (not Fast Startup's), which a wake signal can
@@ -106,7 +106,7 @@ deleted 90 days after the PC was last seen.
   "asleep or off" until someone signs in.
 - **Waking a PC.** A phone's browser cannot send the wake signal (web pages cannot send UDP).
   With "Wake from phone" on, a PC tells its phones, sealed, its wired adapter's address; another
-  Vyro PC on the same network, paired with the same phone and allowing it, sends the signal
+  Clokrix PC on the same network, paired with the same phone and allowing it, sends the signal
   when asked. Settings shows what Windows says about the adapter's wake setting and Fast
   Startup; the BIOS setting cannot be read. A router's own Wake-on-LAN page, or a smart plug with
   the BIOS set to power on after power loss, are other ways.
@@ -136,11 +136,11 @@ deleted 90 days after the PC was last seen.
 - **The slow view.** Where no path exists at all, the phone asks for one picture at a time
   through the relay, sealed like everything else: JPEG, at most 2 a second, 20 minutes a day per
   PC. Its "Why the slow view?" gives the PC's room on the relay, for the owner's TURN list.
-- **What it cannot do.** Vyro runs as the signed-in user: Windows' sign-in, lock and
+- **What it cannot do.** Clokrix runs as the signed-in user: Windows' sign-in, lock and
   administrator prompts are a secure screen it can neither see nor use (the phone says so), a
   window running as administrator can be seen but not used, and Ctrl+Alt+Del cannot be sent.
 - **Voice (1.7, decision 39).** Under the same permission and only during a session: a clip
-  recorded on the phone is kept on the PC in `Phone clips` (named by Vyro, never the phone; 5
+  recorded on the phone is kept on the PC in `Phone clips` (named by Clokrix, never the phone; 5
   minutes at most; checked as 16 kHz mono PCM before it is kept; deleted after 7 days) and put on
   the clipboard as a file, only when the phone sends one; the PC records each. The phone's live
   microphone (direct connection only) plays into a virtual cable the owner installed; while it
@@ -165,7 +165,8 @@ deleted 90 days after the PC was last seen.
 - **On the PC:** each notification is a small JSON object (the PC's room, a title, a text, a tag
   and a time) sealed for the phone's browser with RFC 8291 (`aes128gcm`: a one-time ECDH key,
   HKDF-SHA256 with the browser's secret, AES-128-GCM), then handed to the relay as
-  `{"t":"push",…}`. `vyro_core::remote::relay::push` has it, checked against the RFC's own example.
+  `{"t":"push",…}`. `clokrix_core::remote::relay::push` has it, checked against the RFC's own
+  example.
 - **On the relay:** it makes a P-256 key the first time one is needed and keeps it in a Durable
   Object of its own (`Keys`); phones subscribe with its public half (`/push/key`). It posts each
   notification to the phone's push service with a VAPID token (RFC 8292) signed with that key,
@@ -175,11 +176,11 @@ deleted 90 days after the PC was last seen.
   again the next time it opens that PC.
 - **"Stopped answering":** the PC seals that notification ahead of time for each phone that
   wants it and leaves the list (its will) with the relay. The relay sends it when the PC's
-  connection ends without the PC's `{"t":"leaving"}` (sent as Vyro quits and as Windows goes to
+  connection ends without the PC's `{"t":"leaving"}` (sent as Clokrix quits and as Windows goes to
   sleep; shutting down, restarting and signing out end the app, which says it too), or when the
   PC's 30-second `ping`s stop (a room with a will looks every two minutes; the runtime answers
   the pings without waking it and notes when), and the PC is not back within two minutes. So
-  the phones hear two minutes after a connection that ended (Vyro crashed), and four to six
+  the phones hear two minutes after a connection that ended (Clokrix crashed), and four to six
   minutes after the last ping of a PC that lost its power or its network. When it is back, the
   relay tells the PC since when it was quiet, and the PC tells those phones.
 - **What the relay learns:** when a PC sends a notification, to which phone and which push
@@ -221,7 +222,7 @@ deleted 90 days after the PC was last seen.
 1. A free Cloudflare account, with its workers.dev subdomain chosen.
 2. In a clone of this repository: `pnpm install`, `pnpm build:phone`, `pnpm --dir relay install`,
    then `pnpm --dir relay exec wrangler login` and `pnpm --dir relay exec wrangler deploy`.
-3. In Vyro: Settings → Remote → Options → **Relay address**: the address `wrangler deploy`
+3. In Clokrix: Settings → Remote → Options → **Relay address**: the address `wrangler deploy`
    printed. Phones paired through another relay are signed out when it changes.
 
 A relay set up before 2.0 sends no notifications until it is deployed again from this
@@ -237,11 +238,11 @@ about 2 GB an hour. It is off until all three secrets below are set:
 
 1. In the Cloudflare dashboard: **Realtime → TURN Server → Create**. Note the key's **Turn Token
    ID** and **API Token**.
-2. **Workers & Pages → vyro-relay → Settings → Variables and Secrets → Add**, each as a
+2. **Workers & Pages → clokrix-relay → Settings → Variables and Secrets → Add**, each as a
    **Secret**: `TURN_KEY_ID` (the Turn Token ID), `TURN_KEY_API_TOKEN` (the API Token), and
    `TURN_ROOMS`: the rooms that may use it, comma-separated. A PC's room is in the phone app:
    Screen → "Why the slow view?" (or the `?pc=` in its address). `*` lets every room on the relay
-   use it, and anyone who installs Vyro uses this relay: list your own.
+   use it, and anyone who installs Clokrix uses this relay: list your own.
 3. Phones get it the next time they connect; no deploy is needed (secrets stay through deploys).
 
 The relay asks Cloudflare for credentials that last a day, with the key, only when a phone of a
@@ -249,7 +250,7 @@ listed room starts a screen session, and gives them to that phone; it hands the 
 while half their day is left. The key never leaves the relay.
 
 To try it on one computer: `pnpm --dir relay dev` runs the relay at `http://127.0.0.1:8787`, and
-`cargo run -p vyro-core --example companion -- --relay http://127.0.0.1:8787` plays a PC with
+`cargo run -p clokrix-core --example companion -- --relay http://127.0.0.1:8787` plays a PC with
 simulated readings and prints a pairing link. `scripts/relay-e2e.mjs` does both and drives the
 phone app in Chromium (CI runs it).
 

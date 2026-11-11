@@ -1,4 +1,4 @@
-// Health's thermal limits in the page (Rust: `vyro_core::health`), shared by My PC's thermal map
+// Health's thermal limits in the page (Rust: `clokrix_core::health`), shared by My PC's thermal map
 // and the remote companion, so the companion page does not load the 3-D model's code.
 
 /** Health's limits, °C: [warning, problem]. */

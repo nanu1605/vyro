@@ -137,7 +137,7 @@ export async function capture(onBlock: (pcm: Int16Array) => void): Promise<Captu
   try {
     await ctx.audioWorklet.addModule(WORKLET);
     const source = ctx.createMediaStreamSource(stream);
-    const tap = new AudioWorkletNode(ctx, 'vyro-tap');
+    const tap = new AudioWorkletNode(ctx, 'clokrix-tap');
     const resampler = new Resampler(ctx.sampleRate);
     tap.port.onmessage = (e: MessageEvent<Float32Array>) => {
       const pcm = resampler.push(e.data);

@@ -1,5 +1,5 @@
-// Generated from vyro_core::devices::sample() (raw containers run through the real build).
-// Regenerate: cargo run -p vyro-core --example inventory -- --no-wait (non-Windows), copy "devices".
+// Generated from clokrix_core::devices::sample() (raw containers run through the real build).
+// Regenerate: cargo run -p clokrix-core --example inventory -- --no-wait (non-Windows), copy "devices".
 
 import type { Devices } from './types';
 

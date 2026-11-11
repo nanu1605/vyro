@@ -92,15 +92,15 @@
 <section class="panel" aria-labelledby="push-title">
   <h1 id="push-title">Notifications</h1>
   {#if can === 'homeScreen'}
-    <p>On iPhone, notifications come only to Vyro on the Home Screen:</p>
+    <p>On iPhone, notifications come only to Clokrix on the Home Screen:</p>
     <ol class="list">
       <li>Tap <b>Share</b> at the bottom of Safari, then <b>Add to Home Screen</b>.</li>
-      <li>Open <b>Vyro</b> from your Home Screen, and pair it with {pc} there.</li>
+      <li>Open <b>Clokrix</b> from your Home Screen, and pair it with {pc} there.</li>
     </ol>
   {:else if can === 'no'}
     <p class="note warn" role="status">This browser can’t show notifications from a closed app. Chrome, Edge, Firefox and Samsung Internet can, and Safari on iPhone from the Home Screen.</p>
   {:else}
-    <p class="muted">From {pc}, even with Vyro closed. Sealed for this phone on the PC: the relay passes them on and can’t read them.</p>
+    <p class="muted">From {pc}, even with Clokrix closed. Sealed for this phone on the PC: the relay passes them on and can’t read them.</p>
     {#if error}<p class="error" role="alert">{error}</p>{/if}
     {#if blocked}
       <p class="note warn" role="status">{BLOCKED}</p>
@@ -108,7 +108,7 @@
     {#if !st}
       {#if !error}<div class="skeleton" role="status" aria-label="Reading…"><span></span><span></span></div>{/if}
     {:else if !st.relay}
-      <p class="note warn" role="status">This relay can’t send notifications yet. Update the relay, or use Vyro’s own.</p>
+      <p class="note warn" role="status">This relay can’t send notifications yet. Update the relay, or use Clokrix’s own.</p>
     {:else}
       <div class="actions">
         {#if st.on}

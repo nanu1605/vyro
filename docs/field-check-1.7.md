@@ -12,7 +12,7 @@ row below is the same on both. Or the artifact of any later green run on `claude
 this branch deploys (or the branch's own relay; see `docs/remote.md` → Running your own relay).
 The relay was last deployed from 48a4432 (1.7.8's records; run 40549284059, 2026-10-27, at the
 owner's go), so the phone app it serves has every fix through 1.7.8: the SD offer in full screen,
-the phone's What's new telling only what the open PC's Vyro has, no microphone left on when
+the phone's What's new telling only what the open PC's Clokrix has, no microphone left on when
 Record or Mic is tapped twice or the clip sheet closes as it starts recording, and 1.7.8's
 signing out of a PC with its screen shown among them. Reload the phone app once to get it.
 About 60 minutes, with an Android phone (Chrome) and an iPhone (Safari, the Home Screen app).
@@ -45,7 +45,7 @@ through the relay where it cannot.
   comes out black on the phone. Screenshot both lines on each phone, picture or not. The PC shows the **Your screen is shared** banner on every view, a notification, and
   the tray menu has **Stop sharing the screen with *phone***.
 - Move a window around on the PC: the phone follows. Note the delay (a stopwatch on the PC's
-  screen, filmed beside the phone, or by eye) and the PC's CPU in Task Manager for Vyro.
+  screen, filmed beside the phone, or by eye) and the PC's CPU in Task Manager for Clokrix.
 - **Tap** an icon: it is clicked where the pointer dot shows. **Hold** on the desktop: the
   right-click menu opens. **Drag** a window by its title bar. **Two fingers** up and down in a
   browser page: it scrolls. **Pinch**: the picture zooms on the phone only; two fingers pan it;
@@ -129,7 +129,7 @@ through the relay where it cannot.
   is not left dragging.
 - From 1.7.6, with an update offered (the next version, when there is one): tap **Ctrl** on
   the phone's key bar, then at the PC Settings → Updates → **Install and restart**. The session
-  ends (the phone says "Vyro is installing an update", or that the connection was lost), and
+  ends (the phone says "Clokrix is installing an update", or that the connection was lost), and
   while the installer runs and after, the PC's keyboard types letters, not shortcuts.
 - With a session on, start one from the iPhone (also allowed): it is told the screen is already
   shared with the Android phone.
@@ -224,7 +224,7 @@ relay deployed from 2e42a83 (run 39298073589).
 | Check | Android | iPhone | Notes |
 |---|---|---|---|
 | Permission | works | works | "permission and admin window both work" |
-| Direct on Wi-Fi: picture, delay, CPU | works | works | a delay of milliseconds; Vyro at 10 % CPU at most |
+| Direct on Wi-Fi: picture, delay, CPU | works | works | a delay of milliseconds; Clokrix at 10 % CPU at most |
 | Taps, hold, drag, scroll, zoom | works | works | "everything working" |
 | Typing, Ctrl+A, Alt+Tab, Win | works | works | |
 | Two monitors | works | works | 2560×1440 (HDR) and 3840×2160 |

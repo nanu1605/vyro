@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sets Vyro's version everywhere it is written down, or checks that they agree.
+"""Sets Clokrix's version everywhere it is written down, or checks that they agree.
 
     scripts/set-version.py 0.2.0     # before tagging a release
     scripts/set-version.py --check   # prints the version; fails if the files disagree
@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-CRATES = ("vyro", "vyro-core", "vyro-service")
+CRATES = ("clokrix", "clokrix-core", "clokrix-service")
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 
 

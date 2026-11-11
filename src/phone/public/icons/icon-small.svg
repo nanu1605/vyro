@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="CLOKRIX pixel icon">
+  <!-- The app icon for 16-32 px (tray, title bar, taskbar, browser tab): the same X, colours and
+       offsets drawn to fill the tile, without the pixel scatter (approved by the owner, 2026-11-11).
+       From 48 px up the icon is clokrix-icon.svg as drawn. -->
+  <title>CLOKRIX pixel icon</title>
+  <rect width="512" height="512" rx="96" fill="#0B0B16"/>
+  <g transform="translate(256,256)">
+    <g transform="translate(-22,-15)" opacity=".85">
+      <path d="M-104,-104 L104,104 M104,-104 L-104,104" fill="none" stroke="#FF2E93" stroke-width="64"/>
+    </g>
+    <g transform="translate(22,15)" opacity=".85">
+      <path d="M-104,-104 L104,104 M104,-104 L-104,104" fill="none" stroke="#22D3EE" stroke-width="64"/>
+    </g>
+    <path d="M-104,-104 L104,104 M104,-104 L-104,104" fill="none" stroke="#FFFFFF" stroke-width="64"/>
+  </g>
+</svg>

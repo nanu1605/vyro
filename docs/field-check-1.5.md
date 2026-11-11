@@ -8,7 +8,7 @@ from the phone works, and Shut down shuts the laptop down). Test build now:
 and step 7's What's new (before it, `vyro-windows-cbbaddb`). 1.5's own build is not tried by
 itself. About 45 minutes.
 
-1.5 answers the owner's request to check and run anything Vyro does from the phone, shut the PC
+1.5 answers the owner's request to check and run anything Clokrix does from the phone, shut the PC
 down from it, wake it, and see what runs on it (ROADMAP → 1.5.0, decision 36,
 [`remote.md`](remote.md)). The PC's screen on the phone comes in 1.7.
 
@@ -18,8 +18,8 @@ between Health and More. (For 1.5's own build, deploy the relay from this branch
 workflow, `ref`: `claude/vyro-1.5`.) Pull to refresh (or close and reopen the app) so it loads
 the new version. A phone on the old app still shows readings.
 
-Have at hand: the PC with Vyro and Reach from anywhere on, a phone already paired (from 1.4),
-and, for waking, a second PC with Vyro on the same wired network, if you have one.
+Have at hand: the PC with Clokrix and Reach from anywhere on, a phone already paired (from 1.4),
+and, for waking, a second PC with Clokrix on the same wired network, if you have one.
 
 ## 1. The new tabs
 
@@ -60,7 +60,7 @@ and, for waking, a second PC with Vyro on the same wired network, if you have on
   phone shows "asleep or off" until you sign in, then the readings come back.
 - **Shut down:** More → Shut down… → untick "In 30 seconds" → Shut down: the PC shuts down.
 
-## 4. Waking it (needs a second PC with Vyro on the same wired network)
+## 4. Waking it (needs a second PC with Clokrix on the same wired network)
 
 - On the PC to wake: Settings → Remote → **Wake from phone** on. Check what it says about the
   adapter and Fast Startup, and turn on "Wake on LAN" in the BIOS if needed.
@@ -72,7 +72,7 @@ and, for waking, a second PC with Vyro on the same wired network, if you have on
 ## 5. Nothing else changed
 
 - The LAN page (Settings → Remote → On this network) still only shows readings.
-- Task Manager: Vyro's idle CPU and memory as with 1.4.1.
+- Task Manager: Clokrix's idle CPU and memory as with 1.4.1.
 
 ## 6. Found during this check (2026-10-21)
 
@@ -80,9 +80,9 @@ and, for waking, a second PC with Vyro on the same wired network, if you have on
   mesh front, the rear fan through its round grille, and with an AIO the radiator's fans
   through the top. From the glass side nothing changed.
 - **Readings against Task Manager:** profile Desktop (the tray shows it; Gaming and Work read
-  every 2 s, Silent every 5 s, by design). Task Manager → Performance next to Vyro's
-  Dashboard: CPU utilization within a few percent of Vyro's CPU gauge, both moving at the
-  same moments; Memory's "used/total (%)" the same as Vyro's Memory. Run something heavy for
+  every 2 s, Silent every 5 s, by design). Task Manager → Performance next to Clokrix's
+  Dashboard: CPU utilization within a few percent of Clokrix's CPU gauge, both moving at the
+  same moments; Memory's "used/total (%)" the same as Clokrix's Memory. Run something heavy for
   a few seconds (a benchmark, a game loading) and watch both climb together.
 - The app log (`%LOCALAPPDATA%\app.vyro.monitor\logs`) says `cpu: usage from % Processor
   Time` on Windows 11 24H2 or later (`% Processor Utility` before). Note any line
@@ -90,15 +90,15 @@ and, for waking, a second PC with Vyro on the same wired network, if you have on
 
 ## 7. What's new (added 2026-10-21)
 
-- Install this build over the one installed now, as an update does (Vyro's settings stay). On
-  its first start the window shows **What's new in Vyro 1.7** (the test build is 1.7.0; 1.5's own
+- Install this build over the one installed now, as an update does (Clokrix's settings stay). On
+  its first start the window shows **What's new in Clokrix 1.7** (the test build is 1.7.0; 1.5's own
   build says 1.5), once; **Got it** closes it. Over 1.4.1, 1.7.0 shows 1.7's notes alone;
   from 1.7.1, 1.6's and 1.5's are folded below them (ROADMAP, 1.7.1).
-  Started in the tray instead, a notification says Vyro was updated.
-- Quit Vyro from the tray and start it again: it does not show.
+  Started in the tray instead, a notification says Clokrix was updated.
+- Quit Clokrix from the tray and start it again: it does not show.
 - Settings → Updates → **What's new in 1.7**, or Ctrl+K → What's new, opens it again, with
   1.6 and 1.5 folded below.
-- If there is a PC that never had Vyro: a new install there does not show it.
+- If there is a PC that never had Clokrix: a new install there does not show it.
 
 ## Results
 

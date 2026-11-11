@@ -1,5 +1,5 @@
 // Temperature display units. The engine measures and stores °C; °F is only how it is shown.
-// Mirrors `vyro_core::units` (toasts are converted there).
+// Mirrors `clokrix_core::units` (toasts are converted there).
 
 import type { TempUnit } from './types';
 

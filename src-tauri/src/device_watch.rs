@@ -6,10 +6,10 @@
 use std::sync::{mpsc, Mutex};
 use std::time::Duration;
 
+use clokrix_core::devices::{DeviceInfo, Devices};
+use clokrix_core::lock;
+use clokrix_core::remote::relay::push::{LowTold, Note};
 use tauri::{AppHandle, Emitter, Manager, State};
-use vyro_core::devices::{DeviceInfo, Devices};
-use vyro_core::lock;
-use vyro_core::remote::relay::push::{LowTold, Note};
 
 /// Emitted with the devices whose battery is low (empty when none) whenever that list changes.
 pub const LOW_BATTERY_EVENT: &str = "low-battery";
@@ -42,7 +42,7 @@ pub fn start(app: &AppHandle) {
     crate::engine::watch_devices(app);
     let app = app.clone();
     let spawned = std::thread::Builder::new()
-        .name("vyro-devices".into())
+        .name("clokrix-devices".into())
         .spawn(move || {
             let mut wait = FIRST;
             let mut changed = false;
@@ -94,7 +94,7 @@ pub fn store(app: &AppHandle, devices: &Devices) {
     let Some(w) = app.try_state::<DeviceWatch>() else {
         return;
     };
-    let now = vyro_core::unix_now();
+    let now = clokrix_core::unix_now();
     let notes: Vec<Note> = lock(&w.told)
         .news(&devices.devices)
         .into_iter()

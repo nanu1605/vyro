@@ -81,7 +81,7 @@
     </ul>
     <p class="muted small foot">
       The busiest programs, every 3 seconds.{can('process.end')
-        ? ' Ending one loses its unsaved work. Windows’ own processes and Vyro are never ended.'
+        ? ' Ending one loses its unsaved work. Windows’ own processes and Clokrix are never ended.'
         : ''}
     </p>
   {/if}
@@ -89,7 +89,7 @@
 
 <Sheet open={asking != null} title={asking ? `End ${asking.name}?` : ''} onclose={() => (asking = null)}>
   {#if asking}
-    <p class="muted">Its unsaved work is lost. Windows’ own processes and Vyro are never ended.</p>
+    <p class="muted">Its unsaved work is lost. Windows’ own processes and Clokrix are never ended.</p>
     <div class="actions sheet-actions">
       <button type="button" disabled={busy} onclick={() => asking && void end(asking)} aria-label="End {asking.name} now">End</button>
       <button type="button" class="ghost" onclick={() => (asking = null)}>Keep</button>

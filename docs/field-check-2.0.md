@@ -41,9 +41,9 @@ app, iOS 16.4 or later); 20 minutes per card for tuning.
      Plug it back: within a minute or so, "*PC* is back", after about as many minutes as it was
      unplugged.
    - End `vyro.exe` in Task Manager's Details tab: "stopped answering" about two minutes later.
-     Start Vyro: "is back".
+     Start Clokrix: "is back".
    - Optional, if you can: switch the PC off at the wall while it runs. As with the cable.
-8. **iPhone.** In Safari, More → Notifications says to add Vyro to the Home Screen. Do so, open
+8. **iPhone.** In Safari, More → Notifications says to add Clokrix to the Home Screen. Do so, open
    it there, pair it, and repeat steps 1–3. iOS asks to allow notifications on the tap.
 9. **Off.** Turn off on one phone: tests and alerts stop for that phone only; Settings → Remote no
    longer lists it as getting them. Sign the other out from the PC: its notifications stop too.
@@ -54,13 +54,13 @@ app, iOS 16.4 or later); 20 minutes per card for tuning.
    The Custom sliders show a core range around 0 (down to −500), memory (on desktop cards) and
    a power limit (often 90–115 %). Note the ranges.
 2. **Turn on, apply Performance**, then open AMD Software → Performance → Tuning: its manual
-   tuning shows the higher max frequency, VRAM max frequency and power limit Vyro set.
-3. **Return to stock:** AMD Software shows its defaults again (Vyro uses AMD's own reset).
+   tuning shows the higher max frequency, VRAM max frequency and power limit Clokrix set.
+3. **Return to stock:** AMD Software shows its defaults again (Clokrix uses AMD's own reset).
 4. **Test this setting** on Performance: passes or fails as on an NVIDIA card; the log says so.
 5. **Find my best:** its steps say "Core +95 MHz" and so on, memory in 25 MHz steps.
 6. **The guards:** reboot with Apply at start on and a tested preset: it is applied again.
-   Change the max frequency in AMD Software while Vyro's preset is on: Vyro writes it back, and
-   stops tuning if that keeps happening.
+   Change the max frequency in AMD Software while Clokrix's preset is on: Clokrix writes it back,
+   and stops tuning if that keeps happening.
 
 ## Intel tuning (an Arc A- or B-series card)
 
@@ -77,4 +77,4 @@ app, iOS 16.4 or later); 20 minutes per card for tuning.
 - Record each card's model, driver and ranges in ROADMAP's 2.0 section, and whether ADLX or the
   Intel library ran in the service (the GPU tuning view says "not available" with a reason when
   it did not).
-- A card that misbehaves: Return to stock, turn tuning off, and send `%ProgramData%\Vyro\service.log`.
+- A card that misbehaves: Return to stock, turn tuning off, and send `%ProgramData%\Clokrix\service.log`.

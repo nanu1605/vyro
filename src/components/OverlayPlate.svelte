@@ -14,7 +14,7 @@
   const low = $derived(data.rows.find((r) => r.metric === 'low1') ?? null);
   const rest = $derived(data.rows.filter((r) => r.metric !== 'fps' && r.metric !== 'low1'));
   const show = (r: (typeof data.rows)[number]) => formatRow(r, (c) => fmtTemp(c));
-  // Inner widths match the window sizes in `vyro_core::gaming::overlay::size`.
+  // Inner widths match the window sizes in `clokrix_core::gaming::overlay::size`.
   const graphW = $derived(
     data.mode === 'graph' ? 284 : data.mode === 'full' ? (data.compact ? 230 : 264) : data.compact ? 206 : 232,
   );

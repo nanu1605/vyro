@@ -2,17 +2,17 @@
 //! signed MSI in the repository's latest GitHub release (`latest.json`). Other builds (CI
 //! artifacts, local builds) have no updater configured and never check. A check fetches only
 //! that file; installing runs the MSI (`msiexec /passive`, one UAC prompt), which replaces app
-//! and service and starts Vyro again.
+//! and service and starts Clokrix again.
 
 use std::sync::Mutex;
 use std::time::Duration;
 
+use clokrix_core::profiles::NotifyPolicy;
+use clokrix_core::{lock, unix_now};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_updater::{Update, UpdaterExt};
-use vyro_core::profiles::NotifyPolicy;
-use vyro_core::{lock, unix_now};
 
 use crate::tray::SettingsStore;
 
@@ -28,12 +28,12 @@ const DAY: i64 = 24 * 3600;
 const TICK: Duration = Duration::from_secs(3600);
 /// How long the update server has to answer a check (2.0.3; not the download, see below). A
 /// request left hanging (one under way as the PC goes to sleep can) would hold every later check
-/// until Vyro restarted, and "Check now" with it.
+/// until Clokrix restarted, and "Check now" with it.
 const CHECK_TIMEOUT: Duration = Duration::from_secs(30);
 /// How long the installer's download may go without a byte (2.0.4). It has no overall limit (a
 /// slow connection takes its time), and one that stalled, the network gone or the PC asleep
 /// mid-download, never ended: Settings stayed "installing", Install and "Check now" held, until
-/// Vyro restarted. Now it fails, and says so.
+/// Clokrix restarted. Now it fails, and says so.
 const STALL_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Whether an automatic check is due: none has succeeded yet, the last one was a day ago, or the
@@ -133,7 +133,7 @@ pub(crate) async fn check(app: &AppHandle, auto: bool) -> UpdateStatus {
         // Each read, the download's too: the `Update` a check finds keeps this client.
         .configure_client(|c| c.read_timeout(STALL_TIMEOUT))
         .on_before_exit(move || {
-            crate::wind_down(&handle, "Vyro is installing an update");
+            crate::wind_down(&handle, "Clokrix is installing an update");
             handle.cleanup_before_exit();
         })
         .build();
@@ -159,7 +159,7 @@ pub(crate) async fn check(app: &AppHandle, auto: bool) -> UpdateStatus {
     let status = state.change(app, |s| {
         s.checking = false;
         s.error = error;
-        // A failed check says nothing about whether Vyro is up to date.
+        // A failed check says nothing about whether Clokrix is up to date.
         if s.error.is_none() {
             s.last_check = Some(unix_now());
             s.available = available.clone();
@@ -203,8 +203,8 @@ fn notify(app: &AppHandle, state: &Updates, version: &str) {
     let shown = app
         .notification()
         .builder()
-        .title(format!("Vyro {version} is available"))
-        .body("Open Vyro → Settings → Updates to install it.")
+        .title(format!("Clokrix {version} is available"))
+        .body("Open Clokrix → Settings → Updates to install it.")
         .show();
     if let Err(e) = shown {
         log::warn!("update notification failed: {e}");
@@ -218,7 +218,7 @@ pub fn watch(app: &AppHandle) {
     }
     let app = app.clone();
     let spawned = std::thread::Builder::new()
-        .name("vyro-updates".into())
+        .name("clokrix-updates".into())
         .spawn(move || {
             std::thread::sleep(FIRST_CHECK);
             loop {
@@ -247,7 +247,7 @@ pub async fn check_for_updates(app: AppHandle) -> Result<UpdateStatus, String> {
     Ok(check(&app, false).await)
 }
 
-/// Downloads, verifies and runs the installer. On success the installer takes over and Vyro
+/// Downloads, verifies and runs the installer. On success the installer takes over and Clokrix
 /// exits (the MSI starts it again).
 #[tauri::command]
 pub async fn install_update(app: AppHandle) -> Result<(), String> {
@@ -259,7 +259,7 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
         s.installing = true;
         s.error = None;
     });
-    log::info!("installing Vyro {}", update.version);
+    log::info!("installing Clokrix {}", update.version);
     let result = update
         .download_and_install(|_, _| {}, || {})
         .await
@@ -281,7 +281,7 @@ mod tests {
 
     fn config(plugins: serde_json::Value) -> tauri::Config {
         let mut c: tauri::Config = serde_json::from_value(serde_json::json!({
-            "identifier": "app.vyro.test"
+            "identifier": "app.clokrix.test"
         }))
         .unwrap();
         c.plugins = serde_json::from_value(plugins).unwrap();

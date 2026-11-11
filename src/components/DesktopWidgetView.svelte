@@ -58,7 +58,7 @@
   const down = $derived(rate(net?.downMbps));
   const up = $derived(rate(net?.upMbps));
 
-  // Game: while Vyro measures one.
+  // Game: while Clokrix measures one.
   const game = $derived(snap?.game && snap.game.state === 'capturing' ? snap.game : null);
 
   // Top processes.
@@ -146,7 +146,7 @@
     {:else}
       <span class="label">Game FPS</span>
       <span class="value na"><b>—</b></span>
-      <span class="sub">No game running. Its frame rate shows here while Vyro measures it.</span>
+      <span class="sub">No game running. Its frame rate shows here while Clokrix measures it.</span>
     {/if}
   {:else if w.kind === 'top'}
     <span class="label">Top processes · {PROC_SORTS.find((s) => s.id === by)?.name}</span>

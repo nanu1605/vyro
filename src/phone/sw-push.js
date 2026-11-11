@@ -5,7 +5,7 @@
 
 /** What a push says, as `showNotification` takes it. A push that does not read still shows
  * something: a browser takes notifications away from a site whose pushes show nothing. */
-function vyroNote(text) {
+function clokrixNote(text) {
   let n = null;
   try {
     n = JSON.parse(text);
@@ -17,9 +17,9 @@ function vyroNote(text) {
   const pc = ok && /^[0-9a-f]{32}$/.test(n.pc) ? n.pc : null;
   const tag = ok ? str(n.tag, 64) : '';
   return {
-    title: (ok && str(n.title, 120)) || 'Vyro',
+    title: (ok && str(n.title, 120)) || 'Clokrix',
     options: {
-      body: ok ? str(n.body, 300) : 'Open Vyro to see what your PC said.',
+      body: ok ? str(n.body, 300) : 'Open Clokrix to see what your PC said.',
       // A newer one about the same thing (a battery, the PC going quiet) replaces the older.
       tag: pc && tag ? `${pc}:${tag}` : undefined,
       renotify: Boolean(pc && tag),
@@ -33,12 +33,12 @@ function vyroNote(text) {
 }
 
 self.addEventListener('push', (e) => {
-  const note = vyroNote(e.data ? e.data.text() : '');
+  const note = clokrixNote(e.data ? e.data.text() : '');
   e.waitUntil(self.registration.showNotification(note.title, note.options));
 });
 
 /** The app on PC `pc`: a window already open is brought forward and told; otherwise one opens. */
-async function vyroOpen(pc) {
+async function clokrixOpen(pc) {
   const url = pc ? `/?pc=${pc}` : '/';
   const open = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
   const win = open.find((c) => new URL(c.url).origin === self.location.origin);
@@ -52,5 +52,5 @@ async function vyroOpen(pc) {
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
-  e.waitUntil(vyroOpen(e.notification.data && e.notification.data.pc));
+  e.waitUntil(clokrixOpen(e.notification.data && e.notification.data.pc));
 });

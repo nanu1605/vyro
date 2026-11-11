@@ -6,8 +6,8 @@
 // exactly as left, and at other sizes card-layout.ts starts from the order. The sums are pure, so
 // they are unit-tested.
 
-const KEY = 'vyro.cards';
-const AT = 'vyro.cards.at';
+const KEY = 'clokrix.cards';
+const AT = 'clokrix.cards.at';
 /** Cards gone away remembered per view, at most: drives and displays come and go for years. */
 const KEEP_GONE = 32;
 
@@ -107,7 +107,7 @@ export function saveOrder(view: string, order: readonly string[], at?: MovedAt):
   keep();
 }
 
-/** Every view's cards back where Vyro puts them. */
+/** Every view's cards back where Clokrix puts them. */
 export function resetOrder(): void {
   cards.views = {};
   cards.at = {};

@@ -43,7 +43,7 @@
   ];
   function remembered(): View {
     try {
-      const v = localStorage.getItem('vyro.mypc.view');
+      const v = localStorage.getItem('clokrix.mypc.view');
       return v === 'gpu' || v === 'thermal' ? v : 'pc';
     } catch {
       return 'pc';
@@ -57,7 +57,7 @@
     picked = v;
     selected = null;
     try {
-      localStorage.setItem('vyro.mypc.view', v);
+      localStorage.setItem('clokrix.mypc.view', v);
     } catch {
       /* not remembered */
     }
@@ -154,11 +154,11 @@
       /* not remembered */
     }
   }
-  let airflow = $state(flag('vyro.mypc.airflow', true));
-  let xray = $state(flag('vyro.mypc.xray', true));
+  let airflow = $state(flag('clokrix.mypc.airflow', true));
+  let xray = $state(flag('clokrix.mypc.xray', true));
   let explode = $state(false);
-  $effect(() => remember('vyro.mypc.airflow', airflow));
-  $effect(() => remember('vyro.mypc.xray', xray));
+  $effect(() => remember('clokrix.mypc.airflow', airflow));
+  $effect(() => remember('clokrix.mypc.xray', xray));
   async function setForm(f: 'auto' | 'desktop' | 'laptop'): Promise<void> {
     try {
       await savePrefs({ myPc: { ...DEFAULT_MY_PC, ...prefs.myPc, form: f } });

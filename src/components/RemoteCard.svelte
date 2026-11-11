@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Settings → Remote (P26, 1.4): reach this PC from anywhere through the Vyro relay, or from
+  // Settings → Remote (P26, 1.4): reach this PC from anywhere through the Clokrix relay, or from
   // this network through the local companion; pairs phones and devices with a QR code (or a
   // typed code on this network), and lists them with a way to sign each out at once.
   import { untrack } from 'svelte';
@@ -200,14 +200,14 @@
   const RELAY_STATE: Record<string, string> = {
     online: 'Connected to the relay.',
     connecting: 'Connecting to the relay…',
-    unreachable: 'Can’t reach the relay right now; Vyro keeps trying.',
+    unreachable: 'Can’t reach the relay right now; Clokrix keeps trying.',
     off: 'Not connected.',
   };
   const FIREWALL: Record<string, string> = {
     ask: 'Windows will ask the first time a device connects: allow Private networks only.',
-    allowed: 'Windows Firewall lets devices on this network reach Vyro.',
+    allowed: 'Windows Firewall lets devices on this network reach Clokrix.',
     blocked:
-      'Windows Firewall blocks Vyro on this network. Allow it in Windows Security → Firewall & network protection → Allow an app through firewall (Private only).',
+      'Windows Firewall blocks Clokrix on this network. Allow it in Windows Security → Firewall & network protection → Allow an app through firewall (Private only).',
     off: 'Windows Firewall is off for this network.',
   };
 
@@ -252,7 +252,7 @@
       <section class="part" aria-labelledby="remote-anywhere">
         <h3 id="remote-anywhere">From anywhere</h3>
         {#if !relayOn}
-          <p>See this PC’s readings on your phone from any network, in the Vyro app for Android and iPhone.</p>
+          <p>See this PC’s readings on your phone from any network, in the Clokrix app for Android and iPhone.</p>
           {#if !confirmingRelay}
             <div class="actions">
               <button type="button" onclick={() => (confirmingRelay = true)}>Turn on reach from anywhere…</button>
@@ -263,7 +263,7 @@
               <p id="relay-before"><b>Before you turn it on</b></p>
               <ul>
                 <li>
-                  This PC keeps one connection to the Vyro relay, a small service on Cloudflare, and your phones reach it
+                  This PC keeps one connection to the Clokrix relay, a small service on Cloudflare, and your phones reach it
                   there. Nothing on this PC listens to the network for it.
                 </li>
                 <li>
@@ -276,7 +276,7 @@
               {#if status.relay.url}
                 <p class="note">Relay: <code>{status.relay.url}</code></p>
               {:else}
-                <p class="note warn">This build of Vyro has no relay built in. Enter your relay’s address under Options first.</p>
+                <p class="note warn">This build of Clokrix has no relay built in. Enter your relay’s address under Options first.</p>
               {/if}
               <div class="actions">
                 <button type="button" class="primary" disabled={busy || !status.relay.url} onclick={() => void turnOnRelay()}>
@@ -311,7 +311,7 @@
               <div>
                 <p id="relay-code"><b>Scan it with your phone’s camera</b></p>
                 <p class="note">
-                  It opens the Vyro app in the phone’s browser and pairs it. On iPhone, add the app to the Home Screen when
+                  It opens the Clokrix app in the phone’s browser and pairs it. On iPhone, add the app to the Home Screen when
                   it asks, then scan again from there. The code works once and ends in <span role="timer">{relayLeft}</span>.
                 </p>
                 <div class="actions">
@@ -371,8 +371,8 @@
                   The connection is not encrypted: someone on the same network could watch the readings go by. Use it at
                   home, not on public Wi-Fi.
                 </li>
-                <li>Windows will ask whether Vyro may accept connections. Allow <b>Private networks</b> only.</li>
-                <li>It answers while Vyro runs, in the tray too.</li>
+                <li>Windows will ask whether Clokrix may accept connections. Allow <b>Private networks</b> only.</li>
+                <li>It answers while Clokrix runs, in the tray too.</li>
               </ul>
               <div class="actions">
                 <button type="button" class="primary" disabled={busy} onclick={() => void turnOn()}>Turn on</button>
@@ -506,7 +506,7 @@
               disabled={busy}
               onchange={(e) => void run(() => setWakeFromPhone(e.currentTarget.checked))}
             />
-            Let a phone have another Vyro PC on this network wake this one
+            Let a phone have another Clokrix PC on this network wake this one
           </label>
           <p class="note">
             A phone cannot send the wake signal itself; another PC that is on, on the same network and paired with the phone
@@ -529,7 +529,7 @@
               {#if readiness.fastStartup}
                 <li class="bad">Fast Startup is on: some PCs then wake only from sleep. Turn it off in Control Panel → Power Options.</li>
               {/if}
-              <li>Turn on “Wake on LAN” (or “Power on by PCI-E”) in the BIOS: Vyro cannot see it.</li>
+              <li>Turn on “Wake on LAN” (or “Power on by PCI-E”) in the BIOS: Clokrix cannot see it.</li>
               {#if readiness.laptop}<li>Laptops mostly wake only from sleep, on a cable and plugged in.</li>{/if}
             </ul>
           {/if}
@@ -644,11 +644,11 @@
           </label>
           <button type="button" disabled={busy || relayDraft == null} onclick={() => void saveRelay(relayDraft)}>Save</button>
           {#if status.relay.custom}
-            <button type="button" disabled={busy} onclick={() => void saveRelay(null)}>Use Vyro’s relay</button>
+            <button type="button" disabled={busy} onclick={() => void saveRelay(null)}>Use Clokrix’s relay</button>
           {/if}
         </div>
         <p class="note">
-          Empty: Vyro’s own relay{status.relay.url && !status.relay.custom ? ` (${status.relay.url})` : ''}. To run your own,
+          Empty: Clokrix’s own relay{status.relay.url && !status.relay.custom ? ` (${status.relay.url})` : ''}. To run your own,
           see docs/remote.md. Phones paired through another relay are signed out when it changes.
         </p>
         {#if relayOn || phones}

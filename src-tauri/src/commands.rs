@@ -3,16 +3,16 @@
 
 use std::sync::Arc;
 
-use tauri::State;
-use vyro_core::alerts::{AlertFired, AlertRule};
-use vyro_core::devices::{Control, Devices, LinkState};
-use vyro_core::engine::{BackendStatus, EngineApi};
-use vyro_core::health::HealthEvent;
-use vyro_core::info::{
+use clokrix_core::alerts::{AlertFired, AlertRule};
+use clokrix_core::devices::{Control, Devices, LinkState};
+use clokrix_core::engine::{BackendStatus, EngineApi};
+use clokrix_core::health::HealthEvent;
+use clokrix_core::info::{
     DisplayInfo, DriveInfo, HardwareId, HealthReport, NetAdapterInfo, PawnIoStatus, SystemInfo,
 };
-use vyro_core::snapshot::AppSnapshot;
-use vyro_core::{unix_now, HistoryRange, HistorySeries, SensorSnapshot, SensorTree};
+use clokrix_core::snapshot::AppSnapshot;
+use clokrix_core::{unix_now, HistoryRange, HistorySeries, SensorSnapshot, SensorTree};
+use tauri::State;
 
 use crate::engine::Engine;
 
@@ -106,15 +106,15 @@ pub async fn get_displays() -> Result<Vec<DisplayInfo>, String> {
 
 #[cfg(windows)]
 pub(crate) fn collect_displays() -> Vec<DisplayInfo> {
-    if std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1") {
-        return vyro_core::display::sample();
+    if std::env::var_os("CLOKRIX_SIM").is_some_and(|v| v == "1") {
+        return clokrix_core::display::sample();
     }
-    vyro_core::display::collect()
+    clokrix_core::display::collect()
 }
 
 #[cfg(not(windows))]
 pub(crate) fn collect_displays() -> Vec<DisplayInfo> {
-    vyro_core::display::sample()
+    clokrix_core::display::sample()
 }
 
 /// Peripherals, wireless battery and sound devices (P22), read fresh on every call: when the
@@ -132,15 +132,15 @@ pub async fn get_devices(app: tauri::AppHandle) -> Result<Devices, String> {
 
 #[cfg(windows)]
 pub(crate) fn collect_devices() -> Devices {
-    if std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1") {
-        return vyro_core::devices::sample();
+    if std::env::var_os("CLOKRIX_SIM").is_some_and(|v| v == "1") {
+        return clokrix_core::devices::sample();
     }
-    vyro_core::devices::collect()
+    clokrix_core::devices::collect()
 }
 
 #[cfg(not(windows))]
 pub(crate) fn collect_devices() -> Devices {
-    vyro_core::devices::sample()
+    clokrix_core::devices::sample()
 }
 
 /// Connects or disconnects a paired Bluetooth device (1.3), by the id and control the device
@@ -175,7 +175,7 @@ pub(crate) fn device_action(
 
 #[cfg(windows)]
 fn simulated() -> bool {
-    std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1")
+    std::env::var_os("CLOKRIX_SIM").is_some_and(|v| v == "1")
 }
 
 #[cfg(windows)]
@@ -184,8 +184,8 @@ fn device_control(id: &str, control: Control, connect: bool) -> Result<(), Strin
         return Ok(());
     }
     match control {
-        Control::Audio => vyro_core::devices::audio_connection(id, connect),
-        Control::Link => vyro_core::devices::reach(id),
+        Control::Audio => clokrix_core::devices::audio_connection(id, connect),
+        Control::Link => clokrix_core::devices::reach(id),
     }
 }
 
@@ -199,7 +199,7 @@ fn device_control(_id: &str, _control: Control, _connect: bool) -> Result<(), St
 fn device_settle(id: &str, connect: bool) -> LinkState {
     #[cfg(windows)]
     if !simulated() {
-        return vyro_core::devices::settle(id, connect);
+        return clokrix_core::devices::settle(id, connect);
     }
     let _ = id;
     if connect {
@@ -210,10 +210,10 @@ fn device_settle(id: &str, connect: bool) -> LinkState {
 }
 
 /// Ends a process from the Processes view (1.5), if it is still the one named; Windows' own
-/// and Vyro's are never ended.
+/// and Clokrix's are never ended.
 #[tauri::command]
 pub async fn end_process(pid: u32, name: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || vyro_core::actions::process::end(pid, &name))
+    tauri::async_runtime::spawn_blocking(move || clokrix_core::actions::process::end(pid, &name))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -235,15 +235,15 @@ pub async fn get_network() -> Result<Vec<NetAdapterInfo>, String> {
 
 #[cfg(windows)]
 pub(crate) fn collect_network() -> Vec<NetAdapterInfo> {
-    if std::env::var_os("VYRO_SIM").is_some_and(|v| v == "1") {
-        return vyro_core::network::sample();
+    if std::env::var_os("CLOKRIX_SIM").is_some_and(|v| v == "1") {
+        return clokrix_core::network::sample();
     }
-    vyro_core::network::collect()
+    clokrix_core::network::collect()
 }
 
 #[cfg(not(windows))]
 pub(crate) fn collect_network() -> Vec<NetAdapterInfo> {
-    vyro_core::network::sample()
+    clokrix_core::network::sample()
 }
 
 /// Changes the ping target (IPv4 address or host name).
@@ -288,7 +288,7 @@ pub async fn get_alert_usual(
     with_engine(&engine, move |e| e.alert_usual(&sensor)).await
 }
 
-/// Sends a sample notification so the user can check Windows lets Vyro notify.
+/// Sends a sample notification so the user can check Windows lets Clokrix notify.
 #[tauri::command]
 pub fn test_alert(app: tauri::AppHandle, sound: bool) {
     crate::engine::show_notification(
@@ -296,7 +296,7 @@ pub fn test_alert(app: tauri::AppHandle, sound: bool) {
         &AlertFired::new(
             unix_now(),
             "test",
-            "Vyro test alert".into(),
+            "Clokrix test alert".into(),
             "Alerts will look like this.".into(),
             sound,
         ),
@@ -312,7 +312,9 @@ pub async fn get_health_events(engine: State<'_, Engine>) -> Result<Vec<HealthEv
 
 /// The intelligence engine's findings and vital signs (P16).
 #[tauri::command]
-pub async fn get_insights(engine: State<'_, Engine>) -> Result<vyro_core::intel::Insights, String> {
+pub async fn get_insights(
+    engine: State<'_, Engine>,
+) -> Result<clokrix_core::intel::Insights, String> {
     with_engine(&engine, |e| e.insights()).await
 }
 
@@ -320,7 +322,7 @@ pub async fn get_insights(engine: State<'_, Engine>) -> Result<vyro_core::intel:
 #[tauri::command]
 pub async fn get_performance_score(
     engine: State<'_, Engine>,
-) -> Result<vyro_core::score::ScoreReport, String> {
+) -> Result<clokrix_core::score::ScoreReport, String> {
     with_engine(&engine, |e| e.performance_score()).await
 }
 
@@ -343,18 +345,18 @@ pub fn set_settings(app: tauri::AppHandle, settings: crate::tray::Settings) -> R
 
 /// The profile presets (the chosen one is in the settings).
 #[tauri::command]
-pub fn get_profiles() -> Vec<vyro_core::profiles::ProfileSpec> {
-    vyro_core::profiles::Profile::ALL
+pub fn get_profiles() -> Vec<clokrix_core::profiles::ProfileSpec> {
+    clokrix_core::profiles::Profile::ALL
         .iter()
         .map(|p| p.spec())
         .collect()
 }
 
-/// Whether Vyro starts (in the tray) at sign-in.
+/// Whether Clokrix starts (in the tray) at sign-in.
 #[tauri::command]
 pub async fn get_autostart() -> bool {
     #[cfg(windows)]
-    return tauri::async_runtime::spawn_blocking(vyro_core::autostart::is_enabled)
+    return tauri::async_runtime::spawn_blocking(clokrix_core::autostart::is_enabled)
         .await
         .unwrap_or(false);
     #[cfg(not(windows))]
@@ -366,9 +368,9 @@ pub async fn set_autostart(enabled: bool) -> Result<(), String> {
     #[cfg(windows)]
     return tauri::async_runtime::spawn_blocking(move || {
         if enabled {
-            vyro_core::autostart::enable()
+            clokrix_core::autostart::enable()
         } else {
-            vyro_core::autostart::disable()
+            clokrix_core::autostart::disable()
         }
     })
     .await
@@ -384,14 +386,14 @@ pub async fn set_autostart(enabled: bool) -> Result<(), String> {
 #[tauri::command]
 pub async fn get_fan_status(
     engine: State<'_, Engine>,
-) -> Result<vyro_core::fan::FanStatus, String> {
+) -> Result<clokrix_core::fan::FanStatus, String> {
     with_engine(&engine, |e| e.fan_status()).await
 }
 
 #[tauri::command]
 pub async fn set_fan_config(
     engine: State<'_, Engine>,
-    config: vyro_core::fan::FanConfig,
+    config: clokrix_core::fan::FanConfig,
 ) -> Result<(), String> {
     with_engine(&engine, move |e| e.set_fan_config(config)).await
 }
@@ -406,6 +408,6 @@ pub async fn restore_fans(engine: State<'_, Engine>) -> Result<(), String> {
 #[tauri::command]
 pub async fn get_fan_events(
     engine: State<'_, Engine>,
-) -> Result<Vec<vyro_core::fan::FanEvent>, String> {
+) -> Result<Vec<clokrix_core::fan::FanEvent>, String> {
     with_engine(&engine, |e| e.fan_events()).await
 }

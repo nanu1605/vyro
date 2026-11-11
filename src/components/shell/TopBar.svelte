@@ -36,7 +36,7 @@
     {#if update}
       <button type="button" class="chip update" onclick={onupdate} title="Open Settings → Updates">
         <span class="led" aria-hidden="true"></span>
-        Vyro {update} is available
+        Clokrix {update} is available
       </button>
     {/if}
     {#if remote?.running}

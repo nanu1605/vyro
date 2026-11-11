@@ -110,7 +110,7 @@ export function thinHistory(secs: number): string | null {
   if (secs >= 3 * 86_400) return null;
   const days = Math.floor(secs / 86_400);
   const have = days === 0 ? 'less than a day' : days === 1 ? '1 day' : `${days} days`;
-  return `Insights improve over the first few days of history; Vyro has ${have} so far.`;
+  return `Insights improve over the first few days of history; Clokrix has ${have} so far.`;
 }
 
 /** Keys of findings worth a look that have not been shown yet. */
@@ -118,7 +118,7 @@ export function unseen(attention: string[], seen: string[]): string[] {
   return attention.filter((k) => !seen.includes(k));
 }
 
-const SEEN_KEY = 'vyro.insightsSeen';
+const SEEN_KEY = 'clokrix.insightsSeen';
 /** Keys remembered, newest last. */
 const MAX_SEEN = 100;
 

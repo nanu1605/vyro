@@ -5,7 +5,7 @@
 
 import type { FramePoint } from './types';
 
-/** One point per 100 ms (`vyro_core::gaming::stats::BUCKET_MS`). */
+/** One point per 100 ms (`clokrix_core::gaming::stats::BUCKET_MS`). */
 export const POINT_MS = 100;
 /** Furthest the line runs behind the newest point, in points: the slowest update rate (2 s)
  * plus slack for a late tick. */

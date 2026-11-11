@@ -1,5 +1,5 @@
 // CI smoke test (src-tauri/src/smoke.rs): injected into the main window once its page has
-// loaded, only when VYRO_SMOKE is set. Calls what the pages call, through the real IPC, then
+// loaded, only when CLOKRIX_SMOKE is set. Calls what the pages call, through the real IPC, then
 // saves one widget as the Widgets page does and hands the steps to `smoke_report`.
 (async () => {
   const invoke = window.__TAURI_INTERNALS__.invoke;

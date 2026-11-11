@@ -1,4 +1,4 @@
-# Vyro Performance Score: formula v1
+# Clokrix Performance Score: formula v1
 
 Status: **signed off by the owner on 2026-10-15** (decision 22), with Stability counting hardware
 errors and the score shown at the top of Insights. This formula is now fixed: any change to an
@@ -11,7 +11,7 @@ scores stay comparable.
 hardware is.** A budget PC in good shape scores high. A top-end PC that throttles, runs hot for its
 load, has a failing drive or keeps crashing scores low.
 
-- **Observed:** it uses only what Vyro already records while the PC is used normally. It runs no
+- **Observed:** it uses only what Clokrix already records while the PC is used normally. It runs no
   benchmark and adds no load (benchmarks are P20).
 - **Self-relative:** clocks and temperatures are judged against the PC's own limits and its own
   history, never against other PCs or a hardware database.
@@ -60,7 +60,7 @@ or the GPU averaged at least 50 % load.
 **Input.** The headroom: the device's limit minus its median temperature in loaded minutes. The
 median is used rather than the peak, so a brief boost spike costs nothing.
 - **CPU limit.** This is the CPU's design maximum: 95 °C for AMD Ryzen 7000/9000 (which run up to
-  it by design), 100 °C for Intel Core, and 95 °C when Vyro cannot tell.
+  it by design), 100 °C for Intel Core, and 95 °C when Clokrix cannot tell.
 - **GPU limit.** This is the edge temperature at which Health warns, 85 °C.
 
 | Headroom | ≥ 25 °C | 15 °C | 10 °C | 5 °C | 0 °C | < 0 °C |
@@ -162,7 +162,7 @@ counts.
 ### 8. Stability (15)
 **Inputs.** These come from the Windows System event log over the last 30 days:
 - **Unexpected shutdowns.** Kernel-Power 41: the PC stopped without shutting down, from a crash, a
-  hang or a power cut. Vyro already reads this for System's power history.
+  hang or a power cut. Clokrix already reads this for System's power history.
 - **Hardware errors.** WHEA-Logger events: fatal ones (18), and corrected ones (17, 19 and 47). These
   are machine-check and memory errors that the CPU or the chipset reported. This is new: the same
   event log query, one more provider.

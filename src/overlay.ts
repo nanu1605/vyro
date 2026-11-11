@@ -1,6 +1,6 @@
 // Overlay 2.0 (P14) on the window's side: formatting the rows the app sends, and, for the
 // browser preview and the Settings preview, the same rows and window size as
-// `vyro_core::gaming::overlay` and `src-tauri/src/overlay.rs`.
+// `clokrix_core::gaming::overlay` and `src-tauri/src/overlay.rs`.
 
 import { fmt } from './format';
 import { isHex } from './color';
@@ -112,7 +112,7 @@ export function shownMetrics(mode: OverlayMode, custom: OverlayMetric[]): Overla
 export const graphShown = (s: Pick<OverlaySettings, 'mode' | 'graph'>): boolean =>
   s.mode === 'graph' || (s.graph && s.mode !== 'minimal');
 
-/** Room the overlay window needs, logical px (mirrors `vyro_core::gaming::overlay::size`). */
+/** Room the overlay window needs, logical px (mirrors `clokrix_core::gaming::overlay::size`). */
 export function overlaySize(mode: OverlayMode, shown: OverlayMetric[], graph: boolean, compact: boolean, scale: number): [number, number] {
   const rest = shown.filter((m) => m !== 'fps' && m !== 'low1').length;
   const [row, pad] = compact ? [17, 10] : [21, 16];
@@ -136,7 +136,7 @@ export function overlaySize(mode: OverlayMode, shown: OverlayMetric[], graph: bo
   return [Math.ceil(w * s), Math.ceil(h * s)];
 }
 
-/** Rows from a snapshot (mirrors `vyro_core::gaming::overlay::rows`). */
+/** Rows from a snapshot (mirrors `clokrix_core::gaming::overlay::rows`). */
 export function overlayRows(shown: OverlayMetric[], snap: SensorSnapshot, game: GameSnapshot): OverlayRow[] {
   const live = game.state === 'capturing';
   const frames = (v: number | null) => (live ? v : null);

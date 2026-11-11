@@ -3,7 +3,7 @@ import type { FanKind } from "./FanKind";
 
 export type HeaderStatus = { index: number, name: string, kind: FanKind, 
 /**
- * Lowest speed Vyro sets on this header (marking it as a pump raises it to
+ * Lowest speed Clokrix sets on this header (marking it as a pump raises it to
  * [`FanStatus::pump_min_pct`]).
  */
 minPct: number, 
@@ -17,11 +17,11 @@ controllable: boolean, rpm: number | null,
  */
 dutyPct: number | null, 
 /**
- * Under Vyro's control (else the BIOS curve).
+ * Under Clokrix's control (else the BIOS curve).
  */
 software: boolean, 
 /**
- * What Vyro asked for.
+ * What Clokrix asked for.
  */
 targetPct: number | null, 
 /**

@@ -25,7 +25,7 @@ if (process.platform !== 'win32') {
   process.exit(0);
 }
 
-const built = spawnSync('cargo', ['build', '-q', '-p', 'vyro-core', '--example', 'clip_check'], { cwd: root, stdio: 'inherit', shell: true });
+const built = spawnSync('cargo', ['build', '-q', '-p', 'clokrix-core', '--example', 'clip_check'], { cwd: root, stdio: 'inherit', shell: true });
 if (built.status !== 0) process.exit(1);
 const pc = spawn(`${root}/target/debug/examples/clip_check.exe`, { cwd: root, stdio: ['pipe', 'pipe', 'inherit'] });
 const waiting = [];

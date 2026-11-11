@@ -1,20 +1,20 @@
 //! Diagnostics (P21), app side: the app adds what only it knows (how it reaches the engine,
 //! the PC summary and the GPU drivers from its inventory), the engine works out and keeps the
-//! report, and the app writes the exports to `Documents\Vyro Reports`. Serial numbers are read
+//! report, and the app writes the exports to `Documents\Clokrix Reports`. Serial numbers are read
 //! only for an export that asks for them, and never kept.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use clokrix_core::diag::export::{self, ExportOptions};
+use clokrix_core::diag::{pdf, DiagAppInfo, DiagReport, DiagSummary, Field, GpuDriver};
+use clokrix_core::engine::BackendMode;
+use clokrix_core::units::TempUnit;
 use tauri::{AppHandle, Manager, State};
-use vyro_core::diag::export::{self, ExportOptions};
-use vyro_core::diag::{pdf, DiagAppInfo, DiagReport, DiagSummary, Field, GpuDriver};
-use vyro_core::engine::BackendMode;
-use vyro_core::units::TempUnit;
 
 use crate::engine::Engine;
 
-const FOLDER: &str = "Vyro Reports";
+const FOLDER: &str = "Clokrix Reports";
 
 fn join(parts: &[Option<&str>]) -> Option<String> {
     let s = parts
@@ -179,7 +179,7 @@ fn clean_stamp(stamp: &str) -> String {
         .take(20)
         .collect();
     if s.is_empty() {
-        vyro_core::unix_now().to_string()
+        clokrix_core::unix_now().to_string()
     } else {
         s
     }
@@ -220,7 +220,7 @@ pub async fn export_diagnostics(
         };
         let dir = reports_dir(&app)?;
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        let path = dir.join(format!("vyro-diagnostics-{}.{ext}", clean_stamp(&stamp)));
+        let path = dir.join(format!("clokrix-diagnostics-{}.{ext}", clean_stamp(&stamp)));
         std::fs::write(&path, bytes).map_err(|e| format!("{}: {e}", path.display()))?;
         log::info!("diagnostics: exported {}", path.display());
         Ok(path.display().to_string())
@@ -232,7 +232,7 @@ pub async fn export_diagnostics(
 /// Shows an exported report in Explorer; only files in the reports folder.
 #[tauri::command]
 pub fn reveal_report(app: AppHandle, path: String) -> Result<(), String> {
-    reveal_in(&reports_dir(&app)?, &path).map_err(|()| "Not a Vyro report.".into())
+    reveal_in(&reports_dir(&app)?, &path).map_err(|()| "Not a Clokrix report.".into())
 }
 
 /// Opens Explorer on a file, only when it sits directly in `dir`.

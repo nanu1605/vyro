@@ -1,5 +1,5 @@
 //! A smoke test of the installed app, for CI's Windows runner (after 1.1's first field check,
-//! where adding a widget hung the app). Armed only by `VYRO_SMOKE=<result file>`; otherwise
+//! where adding a widget hung the app). Armed only by `CLOKRIX_SMOKE=<result file>`; otherwise
 //! nothing here runs and [`smoke_report`] refuses.
 //!
 //! Once the main page has loaded, `smoke.js` calls the commands the pages call (hardware,
@@ -11,7 +11,7 @@
 //! desktop through Show desktop (`pin.rs`; skipped where the runner has no desktop to show),
 //! snaps when dragged with the mouse near the screen's corner and follows the pointer out again
 //! (`snap.rs`), and lets clicks through when locked so.
-//! Then it writes the result and quits the way the tray's "Quit Vyro" does. A watchdog writes a
+//! Then it writes the result and quits the way the tray's "Quit Clokrix" does. A watchdog writes a
 //! failure and ends the process if any of that hangs, so CI fails rather than waits.
 
 use std::path::PathBuf;
@@ -26,7 +26,7 @@ use tauri::{AppHandle, Manager, Webview};
 
 use crate::widgets::PREFIX;
 
-const ENV: &str = "VYRO_SMOKE";
+const ENV: &str = "CLOKRIX_SMOKE";
 /// The widget `smoke.js` saves.
 pub const WIDGET: &str = "smoke1";
 /// The commands `smoke.js` must report, in order. `set_device_connected` passes when it refuses
@@ -183,7 +183,7 @@ pub fn start() {
     }
     log::info!("smoke: armed");
     let spawned = std::thread::Builder::new()
-        .name("vyro-smoke".into())
+        .name("clokrix-smoke".into())
         .spawn(|| {
             std::thread::sleep(DEADLINE);
             write(&failed(if REPORTED.load(Ordering::SeqCst) {
@@ -209,7 +209,7 @@ pub fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
         // A moment for the page's own start (settings, first snapshot).
         let webview = webview.clone();
         let _ = std::thread::Builder::new()
-            .name("vyro-smoke-run".into())
+            .name("clokrix-smoke-run".into())
             .spawn(move || {
                 std::thread::sleep(Duration::from_secs(3));
                 if let Err(e) = webview.eval(SCRIPT) {
@@ -229,7 +229,7 @@ pub async fn smoke_report(app: AppHandle, steps: Value) -> Result<(), String> {
     }
     REPORTED.store(true, Ordering::SeqCst);
     std::thread::Builder::new()
-        .name("vyro-smoke-report".into())
+        .name("clokrix-smoke-report".into())
         .spawn(move || {
             let label = format!("{PREFIX}{WIDGET}");
             let since = Instant::now();

@@ -186,6 +186,6 @@ describe('layout edits', () => {
     expect(t('gauge', 'gpu.0')).toBe('GPU 1 gauge');
     expect(t('reading', 'cpu.temp')).toBe('Reading: CPU package');
     expect(t('card', 'board')).toBe('Board and fans card');
-    expect(t('hologram', null)).toBe('Widget from a newer Vyro');
+    expect(t('hologram', null)).toBe('Widget from a newer Clokrix');
   });
 });

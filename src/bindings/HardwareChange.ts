@@ -12,7 +12,7 @@ export type HardwareChange = {
  */
 id: number, 
 /**
- * Unix time, seconds: when Vyro noticed it.
+ * Unix time, seconds: when Clokrix noticed it.
  */
 ts: number, category: ChangeCategory, kind: ChangeKind, 
 /**

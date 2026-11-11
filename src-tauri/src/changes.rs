@@ -1,5 +1,5 @@
 //! PC change history (P19), app side: the app sees the PC's hardware, Windows, monitors and
-//! network adapters, so it builds the fingerprint (`vyro_core::changes::fingerprint`) and hands
+//! network adapters, so it builds the fingerprint (`clokrix_core::changes::fingerprint`) and hands
 //! it to the engine, which compares it with the last one and keeps the changes. Checked once
 //! after start, and again when monitors or drives come or go. Each check runs on a short-lived
 //! thread; checks asked for meanwhile are folded into one more.
@@ -7,11 +7,11 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+use clokrix_core::changes::{self, HardwareChange};
+use clokrix_core::engine::BackendMode;
+use clokrix_core::info::DisplayInfo;
+use clokrix_core::lock;
 use tauri::{AppHandle, Emitter, Manager, State};
-use vyro_core::changes::{self, HardwareChange};
-use vyro_core::engine::BackendMode;
-use vyro_core::info::DisplayInfo;
-use vyro_core::lock;
 
 use crate::engine::Engine;
 
@@ -44,7 +44,7 @@ pub fn check(app: &AppHandle, reason: Reason) {
     }
     let app = app.clone();
     let spawned = std::thread::Builder::new()
-        .name("vyro-changes".into())
+        .name("clokrix-changes".into())
         .spawn(move || {
             loop {
                 AGAIN.store(false, Ordering::SeqCst);

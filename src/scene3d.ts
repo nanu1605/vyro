@@ -171,7 +171,7 @@ function boardTexture(base: string): THREE.CanvasTexture {
     ctx.fillText('M.2_1', 220, 270);
     ctx.fillText('CPU_FAN', 300, 40);
     ctx.font = '700 22px sans-serif';
-    ctx.fillText('VYRO', 380, 600);
+    ctx.fillText('CLOKRIX', 380, 600);
   });
 }
 

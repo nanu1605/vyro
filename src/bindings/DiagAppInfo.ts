@@ -7,7 +7,7 @@ import type { GpuDriver } from "./GpuDriver";
  */
 export type DiagAppInfo = { appVersion: string, 
 /**
- * The app reaches the engine through the Vyro service (`false`: its own engine).
+ * The app reaches the engine through the Clokrix service (`false`: its own engine).
  */
 service: boolean, 
 /**

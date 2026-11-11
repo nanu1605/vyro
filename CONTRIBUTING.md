@@ -1,6 +1,6 @@
-# Contributing to Vyro
+# Contributing to Clokrix
 
-Thanks for helping. Vyro is a Windows hardware monitor, and most of what it does can be built
+Thanks for helping. Clokrix is a Windows hardware monitor, and most of what it does can be built
 and tested on any OS. Setup, layout and the check commands are in the
 [README](README.md#development); what to build next is in [`ROADMAP.md`](ROADMAP.md).
 
@@ -11,9 +11,9 @@ Run what CI runs:
 ```sh
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo clippy -p vyro-core --target x86_64-pc-windows-gnu --all-targets -- -D warnings  # Windows code, from Linux
-cargo test -p vyro-core                  # also regenerates src/bindings: commit any changes
-cargo test -p vyro-service
+cargo clippy -p clokrix-core --target x86_64-pc-windows-gnu --all-targets -- -D warnings  # Windows code, from Linux
+cargo test -p clokrix-core                  # also regenerates src/bindings: commit any changes
+cargo test -p clokrix-service
 pnpm check && pnpm test && pnpm build
 python3 scripts/bundle_budget.py --check # what each page loads at start, gzipped
 pnpm a11y                                # axe-core on every tab, theme and width
@@ -22,9 +22,9 @@ python3 scripts/third_party.py --check   # after adding or updating a dependency
 
 `pnpm a11y` drives the browser preview with Playwright; install its browser once with
 `pnpm exec playwright install chromium`. A change that stores something new in a state file
-goes through `vyro_core::files` (atomic writes, damaged files set aside). If it changes a
+goes through `clokrix_core::files` (atomic writes, damaged files set aside). If it changes a
 file's format, it gets a migration test with a file from the last release
-(`crates/vyro-core/tests/migration.rs`, `tests/fixtures/gen/`).
+(`crates/clokrix-core/tests/migration.rs`, `tests/fixtures/gen/`).
 
 If you add or update a Rust crate or a UI package, run `python3 scripts/third_party.py` and
 commit the regenerated `THIRD_PARTY_NOTICES.md` and `THIRD_PARTY_LICENSES.md`. Dependencies
@@ -49,14 +49,14 @@ must have licenses compatible with MIT OR Apache-2.0 distribution.
 ## Hardware access rules
 
 Low-level reads go through the [PawnIO](https://github.com/namazso/PawnIO) driver with its
-signed, unmodified modules (`crates/vyro-core/pawnio/`, hashes checked by a test).
+signed, unmodified modules (`crates/clokrix-core/pawnio/`, hashes checked by a test).
 
-- **Read-only.** Vyro never writes to Super-I/O, embedded-controller, SMBus or memory-controller
+- **Read-only.** Clokrix never writes to Super-I/O, embedded-controller, SMBus or memory-controller
   registers beyond the index/bank selects a read needs. Fan control and other write paths are
   out of scope for v1.
 - **Share the buses.** Take the global `Access_PCI`, `Access_ISABUS.HTP.Method` and
   `Access_SMBUS.HTP.Method` mutexes around the matching accesses (`pawnio::BusLock`), with a
-  short timeout, so Vyro coexists with HWiNFO, LibreHardwareMonitor and vendor tools.
+  short timeout, so Clokrix coexists with HWiNFO, LibreHardwareMonitor and vendor tools.
 - **No copied GPL code.** Register layouts may be learned from public documentation and other
   projects, but write the code yourself; say where a layout came from in a comment.
 
@@ -64,13 +64,13 @@ signed, unmodified modules (`crates/vyro-core/pawnio/`, hashes checked by a test
 
 Serial numbers (board, drives, monitors, memory modules), MAC addresses, Wi-Fi SSID/BSSID and
 global IPv6 addresses may be shown locally but are never logged, persisted, or sent anywhere.
-Diagnostic dumps (`vyro-live.json`, `vyro-inventory.json`) leave them out or redact them by
+Diagnostic dumps (`clokrix-live.json`, `clokrix-inventory.json`) leave them out or redact them by
 default. Do not attach raw SPD EEPROM dumps to issues: they contain module serial numbers.
 
 ## Reporting hardware results
 
-For a new CPU, board, GPU or memory kit, run `vyro-live.exe` from a CI artifact (Actions → run
-→ Artifacts) and attach `vyro-live.json` together with an HWiNFO or HWMonitor report taken at
+For a new CPU, board, GPU or memory kit, run `clokrix-live.exe` from a CI artifact (Actions → run
+→ Artifacts) and attach `clokrix-live.json` together with an HWiNFO or HWMonitor report taken at
 the same time. Say which readings look wrong.
 
 ## License
@@ -83,10 +83,10 @@ same terms as the project, without additional terms or conditions.
 Releases are built by `.github/workflows/release.yml`, never on a developer machine.
 
 1. Once per repository: create the update signing key with `pnpm tauri signer generate -w
-   vyro-updater.key` (keep the file and password safe; losing them means installed copies can
+   clokrix-updater.key` (keep the file and password safe; losing them means installed copies can
    no longer update). In Settings → Secrets and variables → Actions, add the secrets
    `TAURI_SIGNING_PRIVATE_KEY` (the key file's contents) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`,
-   and the variable `UPDATER_PUBKEY` (the contents of `vyro-updater.key.pub`).
+   and the variable `UPDATER_PUBKEY` (the contents of `clokrix-updater.key.pub`).
 2. Raise the version with `python3 scripts/set-version.py X.Y.Z` and commit (CI checks the
    manifests agree).
 3. Run the Release workflow from the Actions tab on `main` (or push the tag `vX.Y.Z` on a

@@ -8,6 +8,6 @@ export type DiagReport = {
  */
 id: number, ts: number, version: number, appVersion: string, 
 /**
- * "Vyro service 0.4.0" or "the app's own engine".
+ * "Clokrix service 0.4.0" or "the app's own engine".
  */
 engine: string, pc: Array<Field>, checks: Array<DiagCheck>, };

@@ -1,5 +1,5 @@
 // Data contracts shared with the Rust core. The bindings are generated from the Rust structs by
-// ts-rs (`cargo test -p vyro-core`); never edit them by hand.
+// ts-rs (`cargo test -p clokrix-core`); never edit them by hand.
 export type { AppSnapshot } from './bindings/AppSnapshot';
 export type { BackendMode } from './bindings/BackendMode';
 export type { BackendStatus } from './bindings/BackendStatus';

@@ -36,7 +36,7 @@ export function support(has: { push: boolean; worker: boolean; notification: boo
   return ios && !standalone ? 'homeScreen' : 'no';
 }
 
-export const BLOCKED = 'Notifications are blocked for Vyro. Allow them in the browser’s settings for this site (on iPhone: Settings → Notifications → Vyro).';
+export const BLOCKED = 'Notifications are blocked for Clokrix. Allow them in the browser’s settings for this site (on iPhone: Settings → Notifications → Clokrix).';
 const NO_WORKER = 'The app’s background part is not running. Reload the app and try again.';
 const WORKER_MS = 10_000;
 

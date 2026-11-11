@@ -10,7 +10,7 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     watch: { ignored: ['**/src-tauri/**', '**/crates/**', '**/target/**'] },
-    // The remote companion page (/remote.html) against `cargo run -p vyro-core --example companion`.
+    // The remote companion page (/remote.html) against `cargo run -p clokrix-core --example companion`.
     proxy: { '/api': 'http://127.0.0.1:8976' },
   },
   build: {

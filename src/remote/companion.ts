@@ -9,7 +9,7 @@ import { tempSymbol, toUnit } from '../units';
 const ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
 /** What someone typed, canonical (upper case, no dashes or spaces); `null` if it cannot be a
- * code. Mirrors `vyro_core::remote::auth::parse`. */
+ * code. Mirrors `clokrix_core::remote::auth::parse`. */
 export function canonCode(typed: string): string | null {
   const s = typed.replace(/[\s‐-―-]/g, '').toUpperCase();
   return s.length === 8 && [...s].every((c) => ALPHABET.includes(c)) ? s : null;
@@ -240,7 +240,7 @@ export function notices(v: RemoteView): Notice[] {
 /** The tab's title: the PC's name, with the number of alerts first. */
 export function pageTitle(pc: string, v: RemoteView | null): string {
   const n = v ? v.alerts.length : 0;
-  return `${n ? `(${n}) ` : ''}${pc ? `${pc} · Vyro` : 'Vyro'}`;
+  return `${n ? `(${n}) ` : ''}${pc ? `${pc} · Clokrix` : 'Clokrix'}`;
 }
 
 /** Seconds since the last reading, past which the page says it is waiting. */

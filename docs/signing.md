@@ -6,7 +6,7 @@ quickly), and Windows names the publisher in the install prompt. Decision 11 pic
 certificate for open-source projects: **SignPath Foundation** (or Certum Open Source).
 
 The release workflow (`.github/workflows/release.yml`) is ready: once four settings are in the
-repository, every release signs `vyro.exe` and `vyro-service.exe` before they go into the MSI,
+repository, every release signs `clokrix.exe` and `clokrix-service.exe` before they go into the MSI,
 then signs the MSI, then makes the updater's signature for the signed MSI (the updater checks
 that signature before it installs anything). Without the settings, releases build unsigned, as
 before.
@@ -24,7 +24,7 @@ SignPath Foundation signs only open-source projects whose builds it can trace to
    project (a real, maintained open-source project with a release history) and that the build
    runs on GitHub's own runners from a workflow in the repository. Approval takes a few weeks.
 3. **In SignPath, once approved:**
-   - the project's slug (use `vyro`) and a signing policy (`release-signing`);
+   - the project's slug (use `clokrix`) and a signing policy (`release-signing`);
    - the GitHub integration: the trusted build system "GitHub.com", linked to this repository;
    - two artifact configurations (below), with the slugs `programs` and `installer`;
    - a CI user, and its API token.
@@ -33,7 +33,7 @@ SignPath Foundation signs only open-source projects whose builds it can trace to
    | Kind     | Name                          | Value                              |
    |----------|-------------------------------|------------------------------------|
    | variable | `SIGNPATH_ORGANIZATION_ID`    | the organization's id in SignPath  |
-   | variable | `SIGNPATH_PROJECT_SLUG`       | `vyro`                             |
+   | variable | `SIGNPATH_PROJECT_SLUG`       | `clokrix`                             |
    | variable | `SIGNPATH_SIGNING_POLICY_SLUG`| `release-signing`                  |
    | secret   | `SIGNPATH_API_TOKEN`          | the CI user's API token            |
 
@@ -50,10 +50,10 @@ What the workflow uploads is a zip with the files at its top level.
 <?xml version="1.0" encoding="utf-8"?>
 <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
   <zip-file>
-    <pe-file path="vyro.exe">
+    <pe-file path="clokrix.exe">
       <authenticode-sign />
     </pe-file>
-    <pe-file path="vyro-service.exe">
+    <pe-file path="clokrix-service.exe">
       <authenticode-sign />
     </pe-file>
   </zip-file>
@@ -66,7 +66,7 @@ What the workflow uploads is a zip with the files at its top level.
 <?xml version="1.0" encoding="utf-8"?>
 <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
   <zip-file>
-    <msi-file path="Vyro_*_x64_en-US.msi">
+    <msi-file path="Clokrix_*_x64_en-US.msi">
       <authenticode-sign />
     </msi-file>
   </zip-file>
@@ -79,10 +79,10 @@ by Intel) as they come: they are not signed again.
 ## Checking a signed release
 
 On Windows, right-click the MSI → Properties → Digital Signatures: the signer is SignPath
-Foundation's certificate for Vyro. Or in PowerShell:
+Foundation's certificate for Clokrix. Or in PowerShell:
 
 ```powershell
-Get-AuthenticodeSignature .\Vyro_2.0.0_x64_en-US.msi | Format-List Status, SignerCertificate
+Get-AuthenticodeSignature .\Clokrix_2.0.0_x64_en-US.msi | Format-List Status, SignerCertificate
 ```
 
-`Status` is `Valid`. The same for `C:\Program Files\Vyro\vyro.exe` once installed.
+`Status` is `Valid`. The same for `C:\Program Files\Clokrix\clokrix.exe` once installed.

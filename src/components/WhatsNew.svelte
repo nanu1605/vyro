@@ -15,7 +15,7 @@
   import { compareVersions, NOTES, notesSince, shortVersion, type NoteIcon } from '../whatsnew';
 
   interface Props {
-    /** This Vyro's version ('' when not known yet: the newest notes). */
+    /** This Clokrix's version ('' when not known yet: the newest notes). */
     current: string;
     /** The version updated from; null: every version's notes (or an update from before 1.5). */
     from: string | null;
@@ -54,7 +54,7 @@
   <header>
     <span class="badge" aria-hidden="true"><Sparkles size={22} /></span>
     <div>
-      <h2 id="whatsnew-title">What’s new in Vyro {shortVersion(first?.version ?? version)}</h2>
+      <h2 id="whatsnew-title">What’s new in Clokrix {shortVersion(first?.version ?? version)}</h2>
       {#if from && !all}<p class="sub">Updated from {shortVersion(from)}</p>{/if}
     </div>
   </header>
@@ -78,7 +78,7 @@
 
   {#each rest as r (r.version)}
     <details>
-      <summary>Vyro {shortVersion(r.version)}</summary>
+      <summary>Clokrix {shortVersion(r.version)}</summary>
       <ul class="items small">
         {#each r.items as item (item.title)}
           {@const Icon = ICONS[item.icon]}

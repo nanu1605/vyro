@@ -31,7 +31,7 @@ export interface Link {
 }
 
 export const MAX_PCS = 8;
-const KEY = 'vyro.pcs';
+const KEY = 'clokrix.pcs';
 
 const ROOM = /^[0-9a-f]{32}$/;
 const PHONE = /^[0-9a-f]{8}$/;

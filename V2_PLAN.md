@@ -1,8 +1,8 @@
-# Vyro — V2 Plan & Decision Log (consolidated)
+# Clokrix — V2 Plan & Decision Log (consolidated)
 
-Planning doc for **Vyro V2**. It consolidates two inputs — the "Vyro V2 — Product Roadmap & Feature
-Specification" (the Observe → Understand → Control → Optimize vision) and the earlier three ideas
-(3-D GPU model, devices + battery, open-on-dashboard) — into one ordered, executable plan that
+Planning doc for **Clokrix V2**. It consolidates two inputs — the "Clokrix V2 — Product Roadmap &
+Feature Specification" (the Observe → Understand → Control → Optimize vision) and the earlier three
+ideas (3-D GPU model, devices + battery, open-on-dashboard) — into one ordered, executable plan that
 follows the conventions of [`PROJECT_PLAN.md`](PROJECT_PLAN.md) (the build spec) and
 [`ROADMAP.md`](ROADMAP.md) (the execution tracker).
 
@@ -90,9 +90,9 @@ git switch -c v2 && git push -u origin v2
 
 **Footprint stays the gate (roadmap §25).** V1 sits at ~120 MB avg / 132 MB peak (P9a). Every V2
 feature declares a measured CPU/GPU/RAM/disk/poll budget *before* implementation and is re-measured
-in the "Vyro itself" card. Specific watch-items: the WebGL model (P23), the dashboard builder (P24),
-Overlay 2.0 graphs (P14), and the remote server (P26) each threaten the budget — all must render
-on-demand, suspend when hidden, and stay off the 1 Hz tick.
+in the "Clokrix itself" card. Specific watch-items: the WebGL model (P23), the dashboard builder
+(P24), Overlay 2.0 graphs (P14), and the remote server (P26) each threaten the budget — all must
+render on-demand, suspend when hidden, and stay off the 1 Hz tick.
 
 **Hardware-control safety (roadmap §4.5/§26) is non-negotiable and gates M7.**
 - Read-only remains the default; a writable controller must be **positively detected**, never
@@ -167,19 +167,19 @@ matches history at that timestamp.
 
 ### M9 — Intelligence & Diagnostics  → v0.4 "Intelligence"
 
-**P16 — Vyro Intelligence engine.** Layered (roadmap §23): derived metrics (thermal headroom, load-
-normalized temp, fan response, power efficiency, stability) → baselines (recent / same load / same
-game / same profile / previous benchmark) → event detection → **explanation** with **cause chains**
-and a **correlation engine**; bottleneck detection (CPU/GPU); every finding tagged measured-vs-
-inferred + confidence + evidence. **Acceptance:** on induced conditions (load, thermal, background
-interference) it produces correct findings with evidence; no weak correlation shown as cause;
-measured vs inferred always visually distinct.
+**P16 — Clokrix Intelligence engine.** Layered (roadmap §23): derived metrics (thermal headroom,
+load- normalized temp, fan response, power efficiency, stability) → baselines (recent / same load /
+same game / same profile / previous benchmark) → event detection → **explanation** with **cause
+chains** and a **correlation engine**; bottleneck detection (CPU/GPU); every finding tagged
+measured-vs- inferred + confidence + evidence. **Acceptance:** on induced conditions (load, thermal,
+background interference) it produces correct findings with evidence; no weak correlation shown as
+cause; measured vs inferred always visually distinct.
 
-**P17 — Vyro Performance Score.** Observed-condition score (thermals, sustained clocks, throttling,
-cooling, storage health, memory pressure, network quality, stability, historical deviation) with a
-**versioned formula** stored per result and a visible input breakdown. **Acceptance:** score is
-reproducible on a stable machine, moves sensibly under degraded conditions, and shows its inputs;
-formula version recorded so past scores stay comparable.
+**P17 — Clokrix Performance Score.** Observed-condition score (thermals, sustained clocks,
+throttling, cooling, storage health, memory pressure, network quality, stability, historical
+deviation) with a **versioned formula** stored per result and a visible input breakdown.
+**Acceptance:** score is reproducible on a stable machine, moves sensibly under degraded conditions,
+and shows its inputs; formula version recorded so past scores stay comparable.
 
 **P18 — Smart compound alerts.** Multi-condition rules (AND/OR, rate-of-change, FOR-duration,
 baseline-relative) with actions: notify/toast/sound/tray, **switch profile**, **raise fan curve
@@ -236,13 +236,13 @@ widgets show live data, and layout edits stay within the footprint budget.
 **P25 — Themes, dynamic states, open-on-dashboard, shareable cards.** Multi-theme + accent (contrast/
 accessibility preserved, warning states consistent); dynamic UI states (idle/gaming/warning/critical)
 within the animation budget; **open-on-Dashboard default** + "Open on" setting; **shareable PC cards**
-(16:9 / 1:1 / story / minimal / transparent, "Powered by Vyro", specs + score, serials off).
+(16:9 / 1:1 / story / minimal / transparent, "Powered by Clokrix", specs + score, serials off).
 **Acceptance:** themes/accent persist and pass axe-core in every theme; app lands on Dashboard unless
 "Last tab" chosen; exported cards render at each size with no serials.
 
 ### M12 — Remote  → v0.5 "Command Center"  *(largest new attack surface — do last)*
 
-**P26 — Remote Vyro + mobile/web companion.** Read-only LAN dashboard served by `VyroService`
+**P26 — Remote Clokrix + mobile/web companion.** Read-only LAN dashboard served by `ClokrixService`
 (CPU/GPU/RAM/storage/fans/temps/power/FPS/network/health/alerts) with a mobile-friendly view + remote
 alerts. **Security is the feature:** LAN-only, **opt-in, off by default**, token auth + pairing (QR),
 session expiration, no public-internet exposure, explicit firewall prompt, one-click revoke/disable.

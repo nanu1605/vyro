@@ -20,7 +20,7 @@ a step that fails can crash a game, the driver or the PC, which is part of the c
 - **Custom**: note the three ranges (core, memory, power) the sliders allow.
 - On the laptop, expect offsets but often no power limit.
 - If **core and memory offsets are missing on the desktop card**, NVML does not offer them on
-  GeForce under Windows with this driver: write down the driver version. Vyro then needs NVIDIA's
+  GeForce under Windows with this driver: write down the driver version. Clokrix then needs NVIDIA's
   other interface (NVAPI) for offsets, the next step after this check. The power limit and
   the rest of this sheet can still be checked.
 
@@ -58,10 +58,10 @@ a step that fails can crash a game, the driver or the PC, which is part of the c
   power button). After starting again: the card is at stock, the page says what happened, and
   Apply at start is off.
 - **Another program**: with a preset applied, open MSI Afterburner and change the core clock
-  three times within two minutes: Vyro writes its values back twice, then stops tuning and says
+  three times within two minutes: Clokrix writes its values back twice, then stops tuning and says
   another program keeps changing them.
 - **Sleep**: with a preset applied, sleep and wake the PC: the preset is on again afterwards.
-- **Heat** (optional, if the card can reach it): Vyro returns it to stock at 90 °C or 105 °C
+- **Heat** (optional, if the card can reach it): Clokrix returns it to stock at 90 °C or 105 °C
   hotspot.
 
 ## 6. From the phone
@@ -73,8 +73,8 @@ a step that fails can crash a game, the driver or the PC, which is part of the c
 ## 7. Nothing else changed
 
 - With GPU tuning off, no NVIDIA setting changes (Now shows stock values throughout).
-- Task Manager: Vyro's idle CPU and memory as with 1.5.
-- Installed over 1.5, the first start shows **What's new in Vyro 1.6** once (GPU tuning); over
+- Task Manager: Clokrix's idle CPU and memory as with 1.5.
+- Installed over 1.5, the first start shows **What's new in Clokrix 1.6** once (GPU tuning); over
   1.4.1 it shows 1.6, with 1.5 folded below it.
 
 ## Results

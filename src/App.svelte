@@ -35,7 +35,7 @@
 
   function lastTab(): Tab {
     try {
-      const t = localStorage.getItem('vyro.tab');
+      const t = localStorage.getItem('clokrix.tab');
       return isTab(t) ? t : 'dashboard';
     } catch {
       return 'dashboard';
@@ -99,7 +99,7 @@
     tab = t;
     visited[t] = true;
     try {
-      localStorage.setItem('vyro.tab', t);
+      localStorage.setItem('clokrix.tab', t);
     } catch {
       /* storage unavailable: tab just isn't remembered */
     }
@@ -166,7 +166,7 @@
   // Why a CPU or board reading is missing (2.0.4: an Intel CPU's said "needs PawnIO", installed).
   const needs = $derived(needsFor(pawnio));
 
-  // Fan control (P12): the header shows whenever Vyro drives fans, from any tab. Each snapshot
+  // Fan control (P12): the header shows whenever Clokrix drives fans, from any tab. Each snapshot
   // says so; nothing is polled.
   const fans = $derived(snap?.fanControl ?? null);
   async function fansToBios(): Promise<void> {
@@ -241,7 +241,7 @@
   }
 
   // The live rail beside the Dashboard's widgets on a wide window (P28), unless folded away.
-  const RAIL_KEY = 'vyro.rail';
+  const RAIL_KEY = 'clokrix.rail';
   let wide = $state(false);
   let railWanted = $state(
     (() => {
@@ -461,7 +461,7 @@
             <ServiceBanner status={backend} />
             {#if !snap}
               <p class="waiting" role="status">
-                {backend && !backend.connected ? 'Connecting to the Vyro Sensor Service…' : 'Waiting for the first reading…'}
+                {backend && !backend.connected ? 'Connecting to the Clokrix Sensor Service…' : 'Waiting for the first reading…'}
               </p>
             {/if}
             <PawnIoBanner status={pawnioShown} />

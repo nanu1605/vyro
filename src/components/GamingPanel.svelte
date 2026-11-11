@@ -95,7 +95,7 @@
     const rule = ruleFor(prefs.games, exe) ?? newRule(exe, game?.app ?? exe);
     return savePrefs({ games: withRule(prefs.games, { ...rule, ignore: true }) });
   }
-  // The game's cards, in Vyro's order or the owner's (2.0.2).
+  // The game's cards, in Clokrix's order or the owner's (2.0.2).
   const CARDS: CardItem[] = [
     { id: 'game-frames', title: 'Frame times', w: 2 },
     { id: 'game-limits', title: 'What limits the frame rate' },
@@ -123,11 +123,11 @@
         </p>
       {:else}
         <p>
-          Start a game in fullscreen or borderless mode and Vyro measures it automatically: FPS, 1% and 0.1% lows, frame
+          Start a game in fullscreen or borderless mode and Clokrix measures it automatically: FPS, 1% and 0.1% lows, frame
           times, what limits the frame rate, and a summary when you stop playing.
         </p>
         {#if backend?.mode === 'local'}
-          <p class="note">Measuring needs the Vyro sensor service, which is not running.</p>
+          <p class="note">Measuring needs the Clokrix sensor service, which is not running.</p>
         {/if}
       {/if}
     </div>
@@ -136,10 +136,10 @@
       <h2>{game.app}: frame rate not available</h2>
       <p>{game.detail ?? 'Frame capture did not start.'}</p>
       <p class="note">
-        Vyro measures frames with Intel PresentMon, run by the Vyro sensor service.
+        Clokrix measures frames with Intel PresentMon, run by the Clokrix sensor service.
         {backend?.mode === 'local'
-          ? 'The service is not running, so capture lacks the rights it needs: reinstall Vyro or start “Vyro Sensor Service” in Services.'
-          : 'If this persists, reinstalling Vyro restores PresentMon.'}
+          ? 'The service is not running, so capture lacks the rights it needs: reinstall Clokrix or start “Clokrix Sensor Service” in Services.'
+          : 'If this persists, reinstalling Clokrix restores PresentMon.'}
       </p>
     </div>
   {:else}

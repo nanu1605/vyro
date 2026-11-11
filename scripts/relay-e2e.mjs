@@ -27,7 +27,7 @@ import { chromium } from 'playwright';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const require = createRequire(import.meta.url);
 const AXE = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
-/** Vyro's version, the example PC's too. */
+/** Clokrix's version, the example PC's too. */
 const VERSION = JSON.parse(readFileSync(`${root}package.json`, 'utf8')).version;
 const PORT = 8787;
 const RELAY = `http://127.0.0.1:${PORT}`;
@@ -133,7 +133,7 @@ async function relayUp() {
 
 /** A PC (the companion example) on the relay; its pairing links and states come on stdout. */
 function startPc(theme = 'midnight') {
-  const child = run('cargo', ['run', '-q', '-p', 'vyro-core', '--example', 'companion', '--', '--relay', RELAY, '--theme', theme]);
+  const child = run('cargo', ['run', '-q', '-p', 'clokrix-core', '--example', 'companion', '--', '--relay', RELAY, '--theme', theme]);
   return { child, out: lines(child, 'pc'), say: (s) => child.stdin.write(`${s}\n`) };
 }
 
@@ -507,12 +507,12 @@ async function main() {
       () => ok('Lock reaches the PC'),
       (e) => problem('lock', e.message),
     );
-    // An update from the phone: it says first that someone at the PC must allow it, as Vyro
+    // An update from the phone: it says first that someone at the PC must allow it, as Clokrix
     // closes there until then.
     await a.page.getByRole('button', { name: 'More', exact: true }).first().click();
     await a.page.getByRole('button', { name: /^Updates/ }).click({ timeout: 10_000 });
     await a.page.getByRole('button', { name: /^Install \d/ }).click();
-    const installing = a.page.getByRole('dialog', { name: /^Install Vyro / });
+    const installing = a.page.getByRole('dialog', { name: /^Install Clokrix / });
     await installing.waitFor({ timeout: 5000 });
     if (await installing.getByText(/asks someone at .+ to allow it/).count()) ok('installing from the phone says first that someone at the PC must allow it');
     else problem('update', 'the confirmation does not say that someone at the PC must allow it');
@@ -592,17 +592,17 @@ async function main() {
     else ok('the relay never cut the phone off for asking too fast');
 
     // The phone's What's new (1.7): none for a phone that paired just now; once for one that
-    // used an older app, up to the PC's Vyro (this one here; an older PC's is a unit test). That
+    // used an older app, up to the PC's Clokrix (this one here; an older PC's is a unit test). That
     // app showed none, so 1.5's notes too: they came only within 1.7.
-    const news = a.page.getByRole('dialog', { name: /^What’s new in Vyro/ });
+    const news = a.page.getByRole('dialog', { name: /^What’s new in Clokrix/ });
     if (await news.count()) problem('phone news', 'shows to a phone that paired just now');
-    await a.page.evaluate(() => localStorage.removeItem('vyro.phone.news'));
+    await a.page.evaluate(() => localStorage.removeItem('clokrix.phone.news'));
     await a.page.reload();
     await news.waitFor({ timeout: 10_000 }).then(
       async () => {
         const title = await news.getByRole('heading').first().innerText();
         const older = await news.getByText('Control this PC from your phone').count();
-        if (title === `What’s new in Vyro ${VERSION.replace(/\.0$/, '')}` && older) ok("a phone that used an older app hears what's new once, 1.5's too");
+        if (title === `What’s new in Clokrix ${VERSION.replace(/\.0$/, '')}` && older) ok("a phone that used an older app hears what's new once, 1.5's too");
         else problem('phone news', `titled "${title}"${older ? '' : ", without 1.5's notes"}`);
       },
       (e) => problem('phone news', `not shown to a phone that used an older app: ${e.message}`),

@@ -11,7 +11,7 @@ export type RelayStatus = { enabled: boolean,
  */
 url: string, 
 /**
- * The owner gave this address (otherwise it is the one built into Vyro).
+ * The owner gave this address (otherwise it is the one built into Clokrix).
  */
 custom: boolean, state: RelayState, error: string | null, pairing: RelayPairing | null, 
 /**

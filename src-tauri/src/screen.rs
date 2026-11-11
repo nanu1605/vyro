@@ -1,7 +1,7 @@
 //! The PC's screen on a phone (1.7). A phone the owner allowed to (Settings → Remote, per phone)
 //! sends its WebRTC offer through the relay, sealed; the session runs here in the app, as the
 //! signed-in user: the picture goes straight to the phone and its taps and typing come back as
-//! Windows input (`vyro_core::screen`). Where no direct path exists the phone asks for one
+//! Windows input (`clokrix_core::screen`). Where no direct path exists the phone asks for one
 //! picture at a time through the relay instead (the slow view, 20 minutes a day). One phone at a
 //! time; while it lasts the PC shows a banner and a tray item, both with Stop. Nothing captures
 //! unless a session is on.
@@ -14,13 +14,13 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use clokrix_core::remote::relay::Request;
+use clokrix_core::screen::share::{self, ScreenShare, ScreenStatus, SlowAllowance};
+use clokrix_core::{files, lock, unix_now};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
-use vyro_core::remote::relay::Request;
-use vyro_core::screen::share::{self, ScreenShare, ScreenStatus, SlowAllowance};
-use vyro_core::{files, lock, unix_now};
 
 /// Emitted with the [`ScreenStatus`] when a session starts or ends, or the settings change.
 pub const SCREEN_EVENT: &str = "screen-share";
@@ -43,7 +43,7 @@ const SAVE_EVERY: Duration = Duration::from_secs(30);
 /// not told again that the screen is shared.
 const NEXT_WITHIN: Duration = Duration::from_secs(10);
 #[cfg(not(windows))]
-const ONLY_WINDOWS: &str = "Only Vyro on Windows shares its screen.";
+const ONLY_WINDOWS: &str = "Only Clokrix on Windows shares its screen.";
 
 /// `screen.json`.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -103,27 +103,27 @@ struct Live {
     /// When the phone last showed it is there: input, its "here", a picture asked for.
     used: Arc<Mutex<Instant>>,
     /// The keys and buttons its input holds down, let go when it ends.
-    held: Arc<Mutex<vyro_core::screen::input::Held>>,
+    held: Arc<Mutex<clokrix_core::screen::input::Held>>,
     #[cfg(windows)]
     kind: Kind,
 }
 
 #[cfg(windows)]
 enum Kind {
-    Direct(Arc<vyro_core::screen::rtc::Session>),
+    Direct(Arc<clokrix_core::screen::rtc::Session>),
     Slow(Box<Slow>),
 }
 
 /// The slow view: the monitor, and the picture last taken.
 #[cfg(windows)]
 struct Slow {
-    capture: vyro_core::screen::capture::Capture,
-    last: Option<vyro_core::screen::capture::Picture>,
+    capture: clokrix_core::screen::capture::Capture,
+    last: Option<clokrix_core::screen::capture::Picture>,
     /// A newer picture than the phone has.
     fresh: bool,
     /// HD or SD, as the last picture went: one asked for the other is sent again, though the
     /// screen did not change.
-    sent: Option<vyro_core::screen::producer::Quality>,
+    sent: Option<clokrix_core::screen::producer::Quality>,
     asked: Option<Instant>,
     /// Milliseconds used and not yet counted against today's allowance.
     pending_ms: u64,
@@ -251,7 +251,7 @@ pub fn handle(app: &AppHandle, r: &Request) -> Result<Value, String> {
 #[cfg(windows)]
 fn claim(app: &AppHandle, r: &Request) -> Result<(), String> {
     let Some(state) = state(app) else {
-        return Err("Vyro is starting.".into());
+        return Err("Clokrix is starting.".into());
     };
     let current = lock(&state.live)
         .as_ref()
@@ -271,7 +271,7 @@ fn claim(app: &AppHandle, r: &Request) -> Result<(), String> {
 /// Keeps a session that just started, tells the owner, and watches it.
 #[cfg(windows)]
 fn begin(app: &AppHandle, live: Live) -> Result<(), String> {
-    let state = state(app).ok_or("Vyro is starting.")?;
+    let state = state(app).ok_or("Clokrix is starting.")?;
     let (serial, phone, slow) = (live.serial, live.share.phone.clone(), live.share.slow);
     let (stop, used) = (Arc::clone(&live.stop), Arc::clone(&live.used));
     let goes_on = state.goes_on(&live.share.id);
@@ -307,7 +307,7 @@ fn begin(app: &AppHandle, live: Live) -> Result<(), String> {
             .builder()
             .title("Your screen is shared")
             .body(format!(
-                "{phone} sees this screen and can use it. Stop it from Vyro's window or its tray \
+                "{phone} sees this screen and can use it. Stop it from Clokrix's window or its tray \
                  icon."
             ))
             .show()
@@ -331,7 +331,7 @@ fn watch(
 ) {
     let app = app.clone();
     let spawned = std::thread::Builder::new()
-        .name("vyro-screen-idle".into())
+        .name("clokrix-screen-idle".into())
         .spawn(move || loop {
             std::thread::sleep(Duration::from_secs(2));
             if stop.load(Ordering::SeqCst) {
@@ -374,7 +374,7 @@ fn end(app: &AppHandle, serial: u64, why: &str, by: By) {
     }
     live.stop.store(true, Ordering::SeqCst);
     #[cfg(windows)]
-    vyro_core::screen::inject::let_go(&lock(&live.held).end());
+    clokrix_core::screen::inject::let_go(&lock(&live.held).end());
     crate::voice::session_ended(app, why);
     #[cfg(windows)]
     if let Kind::Direct(s) = &live.kind {
@@ -392,14 +392,14 @@ fn end(app: &AppHandle, serial: u64, why: &str, by: By) {
     announce(app);
     // Dropping a session waits for its thread, which may be the one calling here.
     let _ = std::thread::Builder::new()
-        .name("vyro-screen-end".into())
+        .name("clokrix-screen-end".into())
         .spawn(move || drop(live));
     match by {
         By::Phone if lock(&state.stored).lock_on_end => lock_pc(),
         By::Stopped if lock(&state.stored).lock_on_end => {
             let (app, begun) = (app.clone(), state.begun.load(Ordering::SeqCst));
             let spawned = std::thread::Builder::new()
-                .name("vyro-screen-lock".into())
+                .name("clokrix-screen-lock".into())
                 .spawn(move || {
                     std::thread::sleep(NEXT_WITHIN);
                     match app.try_state::<ScreenState>() {
@@ -418,12 +418,12 @@ fn end(app: &AppHandle, serial: u64, why: &str, by: By) {
 
 /// "Lock this PC when a phone's session ends".
 fn lock_pc() {
-    let lock_pc = vyro_core::actions::power::PowerRequest {
-        action: vyro_core::actions::power::PowerAction::Lock,
+    let lock_pc = clokrix_core::actions::power::PowerRequest {
+        action: clokrix_core::actions::power::PowerAction::Lock,
         wait: 0,
         force: false,
     };
-    if let Err(e) = vyro_core::actions::power::act(&lock_pc, "the end of a screen session") {
+    if let Err(e) = clokrix_core::actions::power::act(&lock_pc, "the end of a screen session") {
         log::warn!("screen: lock: {e}");
     }
 }
@@ -459,7 +459,7 @@ pub fn end_unpaired(app: &AppHandle, paired: &[String], why: &str) {
     }
 }
 
-/// Ends any session (the relay turned off, Vyro closing, Stop at the PC).
+/// Ends any session (the relay turned off, Clokrix closing, Stop at the PC).
 pub fn end_all(app: &AppHandle, why: &str) {
     let serial = state(app).and_then(|s| lock(&s.live).as_ref().map(|l| l.serial));
     if let Some(serial) = serial {
@@ -471,12 +471,12 @@ pub fn end_all(app: &AppHandle, why: &str) {
 mod win {
     use std::net::IpAddr;
 
+    use clokrix_core::remote::relay::proto::b64url;
+    use clokrix_core::screen::capture::{self, Capture, CaptureError};
+    use clokrix_core::screen::rtc::{self, SessionEvent};
+    use clokrix_core::screen::share::{MonitorChoice, Note, SLOW_INTERVAL, SLOW_SPENT};
+    use clokrix_core::screen::{frames, inject, input, jpeg, producer};
     use serde_json::json;
-    use vyro_core::remote::relay::proto::b64url;
-    use vyro_core::screen::capture::{self, Capture, CaptureError};
-    use vyro_core::screen::rtc::{self, SessionEvent};
-    use vyro_core::screen::share::{MonitorChoice, Note, SLOW_INTERVAL, SLOW_SPENT};
-    use vyro_core::screen::{frames, inject, input, jpeg, producer};
 
     use super::*;
 
@@ -496,7 +496,7 @@ mod win {
                 "cable": crate::voice::cable_name()?,
                 "switchDefault": mic_switch(app),
             })),
-            _ => Err(vyro_core::remote::relay::api::UNKNOWN.into()),
+            _ => Err(clokrix_core::remote::relay::api::UNKNOWN.into()),
         }
     }
 
@@ -595,7 +595,7 @@ mod win {
                     let (app, phone) = (app.clone(), phone.clone());
                     // Encoding takes a moment; the session's own thread goes on.
                     let spawned = std::thread::Builder::new()
-                        .name("vyro-phone-clip".into())
+                        .name("clokrix-phone-clip".into())
                         .spawn(move || {
                             let saved = crate::voice::save_clip(&app, &phone, &wav);
                             if let Err(e) = &saved {
@@ -637,7 +637,7 @@ mod win {
         )?;
         let owner = app.clone();
         let spawned = std::thread::Builder::new()
-            .name("vyro-screen".into())
+            .name("clokrix-screen".into())
             .spawn(move || {
                 let settings = producer::Settings {
                     monitor,
@@ -682,7 +682,7 @@ mod win {
     /// changed, `{same: true, left}` when it did not, `{secure: true, left}` when Windows shows
     /// its secure desktop. The first ask starts the session.
     fn slow(app: &AppHandle, r: &Request) -> Result<Value, String> {
-        let state = state(app).ok_or("Vyro is starting.")?;
+        let state = state(app).ok_or("Clokrix is starting.")?;
         let now = unix_now();
         if lock(&state.stored).slow.left(now) == 0 {
             return Err(SLOW_SPENT.into());
@@ -803,10 +803,10 @@ mod win {
             .zip(number("n"))
             .ok_or("The request needs \"i\" and \"n\".")?;
         let piece = text("d")
-            .and_then(vyro_core::remote::relay::proto::unb64url)
+            .and_then(clokrix_core::remote::relay::proto::unb64url)
             .ok_or("The request needs \"d\", in base64url.")?;
         {
-            let state = state(app).ok_or("Vyro is starting.")?;
+            let state = state(app).ok_or("Clokrix is starting.")?;
             let current = lock(&state.live);
             let live = current
                 .as_ref()
@@ -841,7 +841,7 @@ mod win {
                     .ok()
             })
             .collect();
-        let state = state(app).ok_or("Vyro is starting.")?;
+        let state = state(app).ok_or("Clokrix is starting.")?;
         let (on, held) = {
             let current = lock(&state.live);
             let live = current

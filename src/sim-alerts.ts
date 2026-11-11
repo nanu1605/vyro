@@ -93,7 +93,7 @@ export function simAlertLog(now: number): AlertFired[] {
       },
     }),
     fired(190, 'hot-under-load', 'Hot under load', 'CPU (Tdie) at 83.1 °C (above 80.0 °C) and GPU #0 Usage at 97.0% (above 90.0%) for 30 s', {
-      actions: ['Fans Vyro drives +15 % while it holds', 'Shown in the tray while it holds'],
+      actions: ['Fans Clokrix drives +15 % while it holds', 'Shown in the tray while it holds'],
       diagnostic: {
         readings: [
           { id: 'cpu.temp.package', name: 'CPU (Tdie)', value: 83.1, unit: '°C' },

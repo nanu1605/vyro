@@ -1,6 +1,6 @@
 // The relay as the tests run it: the same Worker, with a stand-in for the phone app's files.
 {
-  "name": "vyro-relay-test",
+  "name": "clokrix-relay-test",
   "main": "../src/index.ts",
   "compatibility_date": "2026-09-01",
   "durable_objects": {

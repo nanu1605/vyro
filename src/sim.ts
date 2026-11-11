@@ -65,7 +65,7 @@ const SIM_PROCS: Array<[string, number, number, number, number]> = [
   ['MsMpEng.exe', 3120, 0.03, 290, 0],
   ['dwm.exe', 1308, 0.02, 95, 0.03],
   ['explorer.exe', 6020, 0.01, 180, 0],
-  ['vyro.exe', 8800, 0.004, 42, 0.001],
+  ['clokrix.exe', 8800, 0.004, 42, 0.001],
 ];
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -230,15 +230,15 @@ export function nextSnapshot(st: SimState, ts: number, pollHz: number, rand: () 
   s.app.startupMs = 850;
   s.app.parts = [
     { name: 'msedgewebview2.exe', count: 5, cpuPct: s.app.cpuPct * 0.6, ramMB: 62 },
-    { name: 'vyro-service.exe', count: 1, cpuPct: s.app.cpuPct * 0.3, ramMB: 22 },
-    { name: 'vyro.exe', count: 1, cpuPct: s.app.cpuPct * 0.1, ramMB: s.app.ramMB - 84 },
+    { name: 'clokrix-service.exe', count: 1, cpuPct: s.app.cpuPct * 0.3, ramMB: 22 },
+    { name: 'clokrix.exe', count: 1, cpuPct: s.app.cpuPct * 0.1, ramMB: s.app.ramMB - 84 },
   ];
   s.game = simGame(ts, st.gpu, rand);
   s.health = simHealth(s);
   return s;
 }
 
-/** A small subset of the engine's health rules (`vyro_core::health`), for the browser preview. */
+/** A small subset of the engine's health rules (`clokrix_core::health`), for the browser preview. */
 export function simHealth(s: SensorSnapshot): HealthReport {
   const sub = (name: string, monitored: boolean, findings: Array<[Status, string]>): SubsystemHealth => ({
     name,

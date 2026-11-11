@@ -105,5 +105,5 @@ export function fmtUnit(value: number | null | undefined, unit: string): string 
 /** Sensor Explorer / History group headings. */
 export const GROUP_LABEL: Record<string, string> = {
   cpu: 'CPU', gpu: 'GPU', memory: 'Memory', storage: 'Storage', board: 'Motherboard', fans: 'Fans',
-  voltages: 'Voltages', network: 'Network', power: 'Power', system: 'System', game: 'Game', app: 'Vyro',
+  voltages: 'Voltages', network: 'Network', power: 'Power', system: 'System', game: 'Game', app: 'Clokrix',
 };

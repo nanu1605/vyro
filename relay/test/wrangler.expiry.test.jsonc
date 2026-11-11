@@ -1,6 +1,6 @@
 // The relay as the room-expiry test runs it: rooms live 3 s after their PC was last connected.
 {
-  "name": "vyro-relay-expiry-test",
+  "name": "clokrix-relay-expiry-test",
   "main": "../src/index.ts",
   "compatibility_date": "2026-09-01",
   "durable_objects": {

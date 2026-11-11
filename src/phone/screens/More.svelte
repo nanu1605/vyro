@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Everything else Vyro does, from the phone (1.5): shut down, restart, sleep or lock the PC,
+  // Everything else Clokrix does, from the phone (1.5): shut down, restart, sleep or lock the PC,
   // its profile and fans, GPU tuning (1.6), a benchmark, diagnostics, updates, waking another PC,
   // (1.7) its devices and (2.0) notifications. A tile for each says how it is; a tap opens it.
   // What changes the PC shows only to a phone the owner allowed to control it.
@@ -123,19 +123,19 @@
   const delayed = (a: PowerAction | null) => a === 'shutDown' || a === 'restart';
   const label = (a: PowerAction) => POWER.find((p) => p.id === a)?.label ?? a;
   const AFTER: Partial<Record<PowerAction, string>> = {
-    restart: 'Vyro answers again once someone signs in on the PC.',
-    signOut: 'Vyro answers again once someone signs in on the PC.',
-    shutDown: 'Wake it from here only through another Vyro PC on its network.',
-    sleep: 'Wake it from here only through another Vyro PC on its network.',
-    hibernate: 'Wake it from here only through another Vyro PC on its network.',
+    restart: 'Clokrix answers again once someone signs in on the PC.',
+    signOut: 'Clokrix answers again once someone signs in on the PC.',
+    shutDown: 'Wake it from here only through another Clokrix PC on its network.',
+    sleep: 'Wake it from here only through another Clokrix PC on its network.',
+    hibernate: 'Wake it from here only through another Clokrix PC on its network.',
   };
 
-  /** Vyro closes on the PC as the installer starts, before it answers: the PC leaving is the
+  /** Clokrix closes on the PC as the installer starts, before it answers: the PC leaving is the
    * installer starting, and only another answer says why it did not. */
   async function install(): Promise<void> {
     confirmInstall = false;
     busy = true;
-    toast(`Installing: once someone at ${pc} allows it, Vyro starts again there.`);
+    toast(`Installing: once someone at ${pc} allows it, Clokrix starts again there.`);
     try {
       await ask('updates.install');
     } catch (e) {
@@ -161,10 +161,10 @@
       { id: 'power' as const, label: 'Power', icon: Power, status: power?.pending ? `${label(power.pending.action)} pending` : 'Shut down, restart, sleep, lock', tone: power?.pending ? 'warn' : '', show: can('power') },
       { id: 'gpu' as const, label: 'GPU tuning', icon: Cpu, status: gpu ? runningText(gpu) : '', tone: '', show: gpuOn },
       { id: 'profile' as const, label: 'Profile', icon: Sliders, status: profileName ? `${profileName}${profiles?.state.game ? ` for ${profiles.state.game}` : ''}` : '', tone: '', show: profiles != null },
-      { id: 'fans' as const, label: 'Fans', icon: Fan, status: fans ? (fans.active ? `Vyro, ${fans.profile}` : 'The BIOS') : '', tone: '', show: fans != null },
+      { id: 'fans' as const, label: 'Fans', icon: Fan, status: fans ? (fans.active ? `Clokrix, ${fans.profile}` : 'The BIOS') : '', tone: '', show: fans != null },
       { id: 'bench' as const, label: 'Benchmark', icon: Gauge, status: bench?.progress ? `${fmt(bench.progress.done * 100)} %` : runs[0] ? `Last ${fmtDateTime(runs[0].ts)}` : 'Quick or full', tone: bench?.progress ? 'ok' : '', show: bench != null },
       { id: 'diag' as const, label: 'Diagnostics', icon: Stethoscope, status: diags[0] ? `${diags[0].attention} to look at` : 'Check this PC', tone: diags[0]?.attention ? 'warn' : '', show: true },
-      { id: 'updates' as const, label: 'Updates', icon: Download, status: updates ? (updates.available ? `${updates.available.version} available` : `Vyro ${updates.current}`) : '', tone: updates?.available ? 'ok' : '', show: updates != null },
+      { id: 'updates' as const, label: 'Updates', icon: Download, status: updates ? (updates.available ? `${updates.available.version} available` : `Clokrix ${updates.current}`) : '', tone: updates?.available ? 'ok' : '', show: updates != null },
       { id: 'wake' as const, label: 'Wake another PC', icon: Sunrise, status: sleepers.map((s) => s.name).join(', '), tone: '', show: sleepers.length > 0 && can('wake') },
     ].filter((t) => t.show),
   );
@@ -281,7 +281,7 @@
       <section class="panel" aria-labelledby="fans-title">
         <h1 id="fans-title">Fans</h1>
         <p>
-          {fans.active ? `Vyro drives the fans (${fans.profile} settings).` : 'The BIOS drives the fans.'}
+          {fans.active ? `Clokrix drives the fans (${fans.profile} settings).` : 'The BIOS drives the fans.'}
           {fans.overrideReason ?? ''}
         </p>
         {#if fans.active && can('fans.bios')}
@@ -336,7 +336,7 @@
       <section class="panel" aria-labelledby="updates-title">
         <h1 id="updates-title">Updates</h1>
         <p>
-          Vyro {updates.current} on the PC.{updates.available ? ` ${updates.available.version} is available.` : ''}
+          Clokrix {updates.current} on the PC.{updates.available ? ` ${updates.available.version} is available.` : ''}
           {updates.error ?? ''}
         </p>
         {#if updates.configured}
@@ -372,10 +372,10 @@
   {/if}
 </Sheet>
 
-<Sheet open={confirmInstall} title="Install Vyro {updates?.available?.version ?? ''} on {pc}?" onclose={() => (confirmInstall = false)}>
+<Sheet open={confirmInstall} title="Install Clokrix {updates?.available?.version ?? ''} on {pc}?" onclose={() => (confirmInstall = false)}>
   <p class="muted small">
-    Windows asks someone at {pc} to allow it. Vyro closes there as the installer starts, so this phone cannot reach {pc} until
-    it is allowed and Vyro has started again.
+    Windows asks someone at {pc} to allow it. Clokrix closes there as the installer starts, so this phone cannot reach {pc} until
+    it is allowed and Clokrix has started again.
   </p>
   <div class="actions sheet-actions">
     <button type="button" disabled={busy} onclick={() => void install()}>Install</button>

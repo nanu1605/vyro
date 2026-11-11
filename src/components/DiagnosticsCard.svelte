@@ -97,7 +97,7 @@
     <div>
       <h2 id="diag-title">Diagnostics</h2>
       <p class="fine">
-        A check-up from what Vyro already records: the past week, the Health log, drive health and the event log. No load,
+        A check-up from what Clokrix already records: the past week, the Health log, drive health and the event log. No load,
         about a second.
       </p>
     </div>
@@ -184,7 +184,7 @@
       </p>
     {/if}
     <p class="fine">
-      {report.engine} · Vyro {report.appVersion} · checks v{report.version}. Serial numbers are never kept with a report;
+      {report.engine} · Clokrix {report.appVersion} · checks v{report.version}. Serial numbers are never kept with a report;
       an export adds them only when ticked.
     </p>
   {:else if !running}

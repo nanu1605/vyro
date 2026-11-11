@@ -672,6 +672,67 @@ dependencies = [
 ]
 
 [[package]]
+name = "clokrix"
+version = "2.1.0"
+dependencies = [
+ "clokrix-core",
+ "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-log",
+ "tauri-plugin-notification",
+ "tauri-plugin-single-instance",
+ "tauri-plugin-updater",
+ "webview2-com",
+ "windows 0.61.3",
+ "windows-core 0.61.2",
+]
+
+[[package]]
+name = "clokrix-core"
+version = "2.1.0"
+dependencies = [
+ "aes-gcm",
+ "base64 0.22.1",
+ "fastrand",
+ "getrandom 0.3.4",
+ "hkdf",
+ "httparse",
+ "indexmap 2.14.2",
+ "log",
+ "nvml-wrapper",
+ "openh264",
+ "p256",
+ "qrcodegen",
+ "rusqlite",
+ "rustls",
+ "rustls-platform-verifier",
+ "serde",
+ "serde_json",
+ "sha2",
+ "str0m",
+ "tempfile",
+ "thiserror 2.0.21",
+ "ts-rs",
+ "tungstenite",
+ "windows 0.62.2",
+ "windows-future 0.3.2",
+ "wmi",
+]
+
+[[package]]
+name = "clokrix-service"
+version = "2.1.0"
+dependencies = [
+ "clokrix-core",
+ "log",
+ "tempfile",
+ "windows 0.62.2",
+]
+
+[[package]]
 name = "cmake"
 version = "0.1.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5696,67 +5757,6 @@ checksum = "fb067e4cbd1ff067d1df46c9194b5de0e98efd2810bbc95c5d5e5f25a3231150"
 dependencies = [
  "cc",
  "libc",
-]
-
-[[package]]
-name = "vyro"
-version = "2.1.0"
-dependencies = [
- "log",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-log",
- "tauri-plugin-notification",
- "tauri-plugin-single-instance",
- "tauri-plugin-updater",
- "vyro-core",
- "webview2-com",
- "windows 0.61.3",
- "windows-core 0.61.2",
-]
-
-[[package]]
-name = "vyro-core"
-version = "2.1.0"
-dependencies = [
- "aes-gcm",
- "base64 0.22.1",
- "fastrand",
- "getrandom 0.3.4",
- "hkdf",
- "httparse",
- "indexmap 2.14.2",
- "log",
- "nvml-wrapper",
- "openh264",
- "p256",
- "qrcodegen",
- "rusqlite",
- "rustls",
- "rustls-platform-verifier",
- "serde",
- "serde_json",
- "sha2",
- "str0m",
- "tempfile",
- "thiserror 2.0.21",
- "ts-rs",
- "tungstenite",
- "windows 0.62.2",
- "windows-future 0.3.2",
- "wmi",
-]
-
-[[package]]
-name = "vyro-service"
-version = "2.1.0"
-dependencies = [
- "log",
- "tempfile",
- "vyro-core",
- "windows 0.62.2",
 ]
 
 [[package]]

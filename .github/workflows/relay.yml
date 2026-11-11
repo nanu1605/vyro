@@ -1,8 +1,8 @@
 name: Relay
 
-# Deploys the Vyro relay (relay/: a Cloudflare Worker with one Durable Object per PC) and the
+# Deploys the Clokrix relay (relay/: a Cloudflare Worker with one Durable Object per PC) and the
 # phone app it serves (phone.html, built into relay/public) to the owner's Cloudflare account.
-# By hand only, on the owner's go: the relay is shared by every installed Vyro that reaches its PC
+# By hand only, on the owner's go: the relay is shared by every installed Clokrix that reaches its PC
 # from anywhere. Two ways to start it:
 #   - Actions → Relay → Run workflow, with the ref to deploy (GitHub offers this only for a file
 #     on the default branch, main, so this file is on main ahead of the release that needs it);
@@ -14,7 +14,7 @@ name: Relay
 # Needs, in the repository settings (Secrets and variables → Actions):
 #   secret   CLOUDFLARE_API_TOKEN    a token from the "Edit Cloudflare Workers" template
 #   secret   CLOUDFLARE_ACCOUNT_ID   the account's id (Workers & Pages → Overview, right side)
-# After the first deploy, set the variable VYRO_RELAY_URL to the address it prints, so builds
+# After the first deploy, set the variable CLOKRIX_RELAY_URL to the address it prints, so builds
 # carry it (ci.yml, release.yml).
 
 on:
@@ -85,6 +85,6 @@ jobs:
               echo
               echo "Address: $url"
               echo
-              echo "Builds carry it once the repository variable VYRO_RELAY_URL is set to it."
+              echo "Builds carry it once the repository variable CLOKRIX_RELAY_URL is set to it."
             fi
           } >> "$GITHUB_STEP_SUMMARY"

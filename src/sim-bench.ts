@@ -32,7 +32,7 @@ const derived = (key: string, label: string, unit: string, better: Better, value
 });
 
 const SETUP: BenchSetup = {
-  vyro: '0.4.0',
+  clokrix: '0.4.0',
   cpu: 'AMD Ryzen 7 9700X 8-Core Processor',
   cores: 8,
   threads: 16,

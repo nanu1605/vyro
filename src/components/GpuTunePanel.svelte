@@ -219,7 +219,7 @@
     void save({ ...status.config, applyAtStart: v }, false);
   }
   const w = (pct: number) => (limits?.powerDefaultW != null ? ` (${fmt((limits.powerDefaultW * pct) / 100, 0)} W)` : '');
-  // The cards, in Vyro's order or the owner's (2.0.2).
+  // The cards, in Clokrix's order or the owner's (2.0.2).
   const CARDS: CardItem[] = [
     { id: 'gpu-now', title: 'Now' },
     { id: 'gpu-presets', title: 'Presets', w: 2 },
@@ -239,10 +239,10 @@
       <h2>GPU tuning is not available</h2>
       <p>{status.capability.state !== 'writable' ? status.capability.reason : ''}.</p>
       {#if backend?.mode === 'local'}
-        <p class="note">GPU tuning runs in the Vyro sensor service, which is not running.</p>
+        <p class="note">GPU tuning runs in the Clokrix sensor service, which is not running.</p>
       {:else}
         <p class="note">
-          Vyro tunes NVIDIA RTX 20 to RTX 50, AMD Radeon RX 6000 to RX 9000 and Intel Arc A- and B-series cards, desktop and
+          Clokrix tunes NVIDIA RTX 20 to RTX 50, AMD Radeon RX 6000 to RX 9000 and Intel Arc A- and B-series cards, desktop and
           laptop, each through its maker's own driver interface. Graphics built into a processor are not tuned.
         </p>
       {/if}
@@ -303,7 +303,7 @@
           </div>
           <progress max="1" value={progress.done} aria-label="Test progress">{Math.round(progress.done * 100)} %</progress>
           <p class="note">
-            The card runs {describe(progress.settings)} while Vyro checks every result. Leave the PC alone; if the screen goes
+            The card runs {describe(progress.settings)} while Clokrix checks every result. Leave the PC alone; if the screen goes
             black for a moment, the driver reset and the settings failed.
           </p>
         </div>
@@ -367,7 +367,7 @@
               </ul>
               <p class="note">
                 “Test” runs the stability test for about 5 minutes: full load with every result checked. Settings that pass are
-                marked tested, and only tested settings are applied when Vyro starts.
+                marked tested, and only tested settings are applied when Clokrix starts.
               </p>
             </Card>
           {:else if id === 'gpu-custom'}
@@ -448,8 +448,8 @@
               <ul class="safety">
                 <li>The card goes back to stock at 90 °C, or 105 °C at its hotspot, until you apply a preset again.</li>
                 <li>After a crash or a display driver reset while tuned, it starts at stock and “Apply at start” is turned off.</li>
-                <li>Stock before sleep, when the Vyro service stops and when Vyro is uninstalled.</li>
-                <li>Vyro reads the values back every 5 seconds; if another program keeps changing them, Vyro stops tuning.</li>
+                <li>Stock before sleep, when the Clokrix service stops and when Clokrix is uninstalled.</li>
+                <li>Clokrix reads the values back every 5 seconds; if another program keeps changing them, Clokrix stops tuning.</li>
                 <li>From a phone, only Stock and tested presets can be applied.</li>
               </ul>
             </Card>
@@ -475,7 +475,7 @@
 
     <dialog bind:this={confirm} aria-labelledby="gpu-confirm-title">
       <h2 id="gpu-confirm-title">Turn on GPU tuning?</h2>
-      <p>Vyro will change the {status.gpu?.name}'s clocks and power limit when you apply a preset.</p>
+      <p>Clokrix will change the {status.gpu?.name}'s clocks and power limit when you apply a preset.</p>
       <ul>
         <li>Higher clocks can crash games or the PC, or show glitches. Test settings before you rely on them.</li>
         {#if status.gpu?.vendor === 'intel'}
@@ -487,10 +487,10 @@
           <li>Raising clocks may affect your card's warranty, as with any tuning tool.</li>
         {/if}
         <li>
-          Some games' anti-cheat checks tuning tools. Vyro uses only {INTERFACE[status.gpu?.vendor ?? 'nvidia']}; see the
-          anti-cheat notes in Vyro's documentation.
+          Some games' anti-cheat checks tuning tools. Clokrix uses only {INTERFACE[status.gpu?.vendor ?? 'nvidia']}; see the
+          anti-cheat notes in Clokrix's documentation.
         </li>
-        <li>After a crash or a driver reset Vyro starts the card at stock. Closing the window does not end tuning; use “Return to stock”.</li>
+        <li>After a crash or a driver reset Clokrix starts the card at stock. Closing the window does not end tuning; use “Return to stock”.</li>
         <li>
           Close MSI Afterburner, AMD Software's own tuning and other tuning tools first: two programs setting the same clocks
           fight.

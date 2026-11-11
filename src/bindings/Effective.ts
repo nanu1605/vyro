@@ -19,7 +19,7 @@ profile: Profile,
  */
 fans: Profile, 
 /**
- * Vyro's update rate, ms.
+ * Clokrix's update rate, ms.
  */
 pollMs: number, 
 /**

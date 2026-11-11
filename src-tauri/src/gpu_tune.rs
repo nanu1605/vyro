@@ -9,14 +9,14 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, State};
-use vyro_core::engine::EngineApi;
-use vyro_core::gpu_tune::search::{Next, Search, CONFIRM_SECS};
-use vyro_core::gpu_tune::{
+use clokrix_core::engine::EngineApi;
+use clokrix_core::gpu_tune::search::{Next, Search, CONFIRM_SECS};
+use clokrix_core::gpu_tune::{
     self, describe, find, stress, PresetKind, Settings, Trial, TuneConfig, TuneEvent, TuneStatus,
 };
-use vyro_core::lock;
+use clokrix_core::lock;
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::engine::Engine;
 
@@ -176,7 +176,7 @@ pub(crate) fn start(
     if let Some(b) = crate::bench::preflight_now(app, &bench).blockers.first() {
         return Err(b.clone());
     }
-    if vyro_core::bench::gpu::factory().is_none() {
+    if clokrix_core::bench::gpu::factory().is_none() {
         return Err("No Direct3D 11 GPU found to test with.".into());
     }
     let state = app.state::<TuneTest>();
@@ -201,7 +201,7 @@ pub(crate) fn start(
         let limits = status.limits;
         let vendor = status.gpu.as_ref().map(|g| g.vendor).unwrap_or_default();
         std::thread::Builder::new()
-            .name("vyro-gpu-test".into())
+            .name("clokrix-gpu-test".into())
             .spawn(move || {
                 let api = Arc::clone(&app.state::<Engine>().api);
                 let report = |p: TestProgress| {
@@ -294,7 +294,7 @@ fn trial(
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-    let factory = vyro_core::bench::gpu::factory().ok_or("No Direct3D 11 GPU found.")?;
+    let factory = clokrix_core::bench::gpu::factory().ok_or("No Direct3D 11 GPU found.")?;
     let mut gpu = factory().map_err(|e| e.to_string())?;
     let mut renewed = Instant::now();
     let mut renew_error = None;

@@ -47,7 +47,7 @@
     const subs = health?.subsystems ?? [];
     const bad = subs.filter((s) => s.status === 'warn' || s.status === 'fail');
     if (!subs.length) return 'Waiting for data…';
-    if (!bad.length) return 'Everything Vyro monitors is within normal limits.';
+    if (!bad.length) return 'Everything Clokrix monitors is within normal limits.';
     return `${bad.length} ${bad.length === 1 ? 'area needs' : 'areas need'} attention: ${bad.map((s) => s.name).join(', ')}.`;
   });
   /** "85 °C / 92 °C" in the chosen unit. */
@@ -105,7 +105,7 @@
       {/each}
     </ol>
   {:else}
-    <p class="fine">No thermal limits, throttling, stopped fans or rail problems since Vyro started.</p>
+    <p class="fine">No thermal limits, throttling, stopped fans or rail problems since Clokrix started.</p>
   {/if}
   <p class="note">
     Limits (warning / problem): CPU {lim(90, 99)} (Ryzen 7000/9000 run at {fmtTemp(95)} under full load by design), GPU

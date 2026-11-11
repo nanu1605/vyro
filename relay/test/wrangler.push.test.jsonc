@@ -1,7 +1,7 @@
 // The relay as the notification tests run it (2.0): the tests' own push service on this computer,
 // and short waits for a PC that went quiet.
 {
-  "name": "vyro-relay-push-test",
+  "name": "clokrix-relay-push-test",
   "main": "../src/index.ts",
   "compatibility_date": "2026-09-01",
   "durable_objects": {

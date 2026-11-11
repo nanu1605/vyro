@@ -114,7 +114,7 @@
   {:else if ids.length === 0}
     <p class="note">No history-tracked sensors to show.</p>
   {:else if gone}
-    <p class="note">Vyro keeps sensor history for 7 days; this moment is older, so only the game's own readings remain.</p>
+    <p class="note">Clokrix keeps sensor history for 7 days; this moment is older, so only the game's own readings remain.</p>
   {:else}
     <p class="note">{resolution}</p>
     <div class="charts">

@@ -105,7 +105,7 @@
     busy = false;
   }
 
-  // The cards, in Vyro's order; the owner can drag them into theirs (2.0.2). Overlay and Remote
+  // The cards, in Clokrix's order; the owner can drag them into theirs (2.0.2). Overlay and Remote
   // take two columns when there are three or more: Remote's parts then sit side by side.
   const CARDS: CardItem[] = [
     { id: 'appearance', title: 'Appearance' },
@@ -217,7 +217,7 @@
             <legend>Open on</legend>
             <label class="check">
               <input type="radio" name="open-on" checked={prefs.openOn === 'dashboard'} onchange={() => void save('Open on', () => savePrefs({ openOn: 'dashboard' }))} />
-              <span>Dashboard<small>When Vyro starts and when you open it from the tray.</small></span>
+              <span>Dashboard<small>When Clokrix starts and when you open it from the tray.</small></span>
             </label>
             <label class="check">
               <input type="radio" name="open-on" checked={prefs.openOn === 'last'} onchange={() => void save('Open on', () => savePrefs({ openOn: 'last' }))} />
@@ -228,7 +228,7 @@
             <legend>Cards</legend>
             <p class="note">
               Drag a card by its grip to move it, or focus the grip and use the arrow keys. Every view keeps its own
-              order; at another window size Vyro moves cards to close gaps, starting from yours.
+              order; at another window size Clokrix moves cards to close gaps, starting from yours.
             </p>
             <div class="actions">
               <button type="button" disabled={!rearranged} onclick={resetOrder}>Put cards back</button>
@@ -276,7 +276,7 @@
               checked={prefs.closeToTray}
               onchange={(e) => void save('Tray', () => savePrefs({ closeToTray: (e.currentTarget as HTMLInputElement).checked }))}
             />
-            <span>Keep running in the tray when the window is closed<small>Alerts need Vyro running; quit from the tray icon.</small></span>
+            <span>Keep running in the tray when the window is closed<small>Alerts need Clokrix running; quit from the tray icon.</small></span>
           </label>
           <label class="check">
             <input
@@ -476,7 +476,7 @@
                 {/if}
               </details>
               <p class="note">
-                The overlay refreshes at most as often as Vyro reads sensors: every {pollLabel(game.state?.pollMs ?? 1000)} right
+                The overlay refreshes at most as often as Clokrix reads sensors: every {pollLabel(game.state?.pollMs ?? 1000)} right
                 now.
               </p>
             </div>
@@ -507,7 +507,7 @@
               </label>
             {/each}
           </fieldset>
-          <p class="note">Everywhere, including limits, history and notifications. Vyro measures and compares in °C.</p>
+          <p class="note">Everywhere, including limits, history and notifications. Clokrix measures and compares in °C.</p>
         </Card>
       {:else if id === 'hidden-sensors'}
         <Card title="Hidden sensors" id="hidden-sensors" subtitle={prefs.hiddenSensors.length ? `${prefs.hiddenSensors.length} hidden` : null}>
@@ -538,14 +538,14 @@
               {backend.connected ? 'Connected' : 'Reconnecting…'}{backend.serviceVersion ? ` · version ${backend.serviceVersion}` : ''}
             </p>
             <p class="note">
-              The Vyro Sensor Service reads the sensors and keeps history and alert rules in <code>%ProgramData%\Vyro</code>
+              The Clokrix Sensor Service reads the sensors and keeps history and alert rules in <code>%ProgramData%\Clokrix</code>
               (log: <code>service.log</code>), also while this window is closed.
             </p>
           {:else}
             <p>Not in use{backend.detail ? `: ${backend.detail}` : ''}</p>
             <p class="note">
-              Vyro reads what it can itself; CPU temperature and power, board sensors, RAM temperatures and drive health need
-              the service. Reinstall Vyro, or start “Vyro Sensor Service” in Services.
+              Clokrix reads what it can itself; CPU temperature and power, board sensors, RAM temperatures and drive health need
+              the service. Reinstall Clokrix, or start “Clokrix Sensor Service” in Services.
             </p>
           {/if}
         </Card>
@@ -574,17 +574,17 @@
             </label>
             <div role="status" class="upd">
               {#if upd.installing}
-                <p>Starting the installer… Vyro closes and opens again when it is done.</p>
+                <p>Starting the installer… Clokrix closes and opens again when it is done.</p>
               {:else if upd.checking}
                 <p>Checking…</p>
               {:else if upd.available}
-                <p><b>Vyro {upd.available.version} is available.</b></p>
+                <p><b>Clokrix {upd.available.version} is available.</b></p>
                 {#if upd.available.notes}<p class="note notes">{upd.available.notes}</p>{/if}
                 {#if upd.error}<p class="err">Update failed: {upd.error}</p>{/if}
               {:else if upd.error}
                 <p class="err">Check failed: {upd.error}</p>
               {:else if upd.lastCheck}
-                <p>Vyro is up to date <span class="note">(checked {fmtDateTime(upd.lastCheck)})</span></p>
+                <p>Clokrix is up to date <span class="note">(checked {fmtDateTime(upd.lastCheck)})</span></p>
               {/if}
             </div>
             <div class="actions">

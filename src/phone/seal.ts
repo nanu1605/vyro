@@ -1,9 +1,11 @@
 // End-to-end sealing with the PC (1.4), in WebCrypto: the same keys and frames as
-// `vyro_core::remote::relay::seal`, checked against the same vectors (`seal.test.ts`). The relay
+// `clokrix_core::remote::relay::seal`, checked against the same vectors (`seal.test.ts`). The relay
 // sees the auth key; the seal key never leaves this device.
 
 export type Bytes = Uint8Array<ArrayBuffer>;
 
+// The salt and the frames' tag (`aad`) were named before the rename to Clokrix and are kept: the
+// PC seals with the same ones.
 export const SALT: Bytes = new TextEncoder().encode('vyro-relay-1');
 export const VERSION = 1;
 export const NONCE_LEN = 12;

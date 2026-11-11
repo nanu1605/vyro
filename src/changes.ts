@@ -97,7 +97,7 @@ export function describe(c: HardwareChange & { count?: number }): Described {
   const none = { device: null, from: null, to: null, label: null, note: null };
   switch (c.kind) {
     case 'tracking':
-      return { ...none, title: 'Tracking started', note: "Vyro started keeping track of this PC's hardware." };
+      return { ...none, title: 'Tracking started', note: "Clokrix started keeping track of this PC's hardware." };
     case 'added':
       return { ...none, title: `${cls} added`, device: `${at}${c.name}` };
     case 'removed':
@@ -158,7 +158,7 @@ export function newestId(list: HardwareChange[]): number {
   return list.reduce((m, c) => (c.kind === 'tracking' ? m : Math.max(m, c.id)), 0);
 }
 
-const SEEN_KEY = 'vyro.changesSeen';
+const SEEN_KEY = 'clokrix.changesSeen';
 
 /** The newest change id the Hardware tab has shown. */
 export function loadSeen(): number {

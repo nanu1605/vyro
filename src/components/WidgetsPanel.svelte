@@ -111,7 +111,7 @@
   /** What a widget with nothing to pick shows. */
   const FIXED: Partial<Record<DeskKind, string>> = {
     network: "The connected network's download and upload, and their last minute.",
-    game: 'The frame rate of the game Vyro measures (see Gaming), and its last minute; "No game running" otherwise.',
+    game: 'The frame rate of the game Clokrix measures (see Gaming), and its last minute; "No game running" otherwise.',
   };
 
   function setSource(w: DesktopWidget, i: number, id: string): void {

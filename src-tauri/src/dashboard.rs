@@ -5,9 +5,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use clokrix_core::dashboard::{sanitize, Dashboard};
+use clokrix_core::{files, lock};
 use tauri::{AppHandle, Manager, State};
-use vyro_core::dashboard::{sanitize, Dashboard};
-use vyro_core::{files, lock};
 
 pub struct DashboardStore {
     path: Option<PathBuf>,
@@ -16,7 +16,7 @@ pub struct DashboardStore {
 }
 
 /// Reads a layout file; one that does not parse is set aside as `dashboard.bad.json` (see
-/// `vyro_core::files`).
+/// `clokrix_core::files`).
 fn read(path: &Path) -> Option<Dashboard> {
     match files::read_json::<Dashboard>(path, |_| Ok(())) {
         Ok(d) => d.map(sanitize),
@@ -72,11 +72,11 @@ pub fn set_dashboard(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vyro_core::dashboard::{Layout, Widget};
+    use clokrix_core::dashboard::{Layout, Widget};
 
     #[test]
     fn saves_and_sets_a_damaged_file_aside() {
-        let dir = std::env::temp_dir().join(format!("vyro-dash-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("clokrix-dash-{}", std::process::id()));
         let path = dir.join("dashboard.json");
         let d = Dashboard {
             version: 1,

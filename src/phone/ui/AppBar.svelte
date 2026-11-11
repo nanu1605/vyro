@@ -3,7 +3,7 @@
 </script>
 
 <script lang="ts">
-  // The phone app's bar (1.7): Vyro, the PC open now (a tap shows every PC), how the link to it
+  // The phone app's bar (1.7): Clokrix, the PC open now (a tap shows every PC), how the link to it
   // is, and what this phone may do. It stays at the top, over the content scrolling beneath.
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
@@ -33,7 +33,7 @@
     {:else}
       <span class="brand">
         <img src="/icons/icon.svg" alt="" width="26" height="26" />
-        <span class="word">VYRO</span>
+        <span class="word">CLOKRIX</span>
       </span>
     {/if}
     {#if chip}

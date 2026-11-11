@@ -1,5 +1,5 @@
-// Generated from vyro_core::storage::sample() (synthetic NVMe + SATA sectors run through the real
-// decoders). Regenerate: cargo run -p vyro-core --example inventory -- --no-wait (non-Windows),
+// Generated from clokrix_core::storage::sample() (synthetic NVMe + SATA sectors run through the real
+// decoders). Regenerate: cargo run -p clokrix-core --example inventory -- --no-wait (non-Windows),
 // copy "drives".
 
 import type { DriveInfo } from './types';

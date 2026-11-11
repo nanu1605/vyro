@@ -31,7 +31,7 @@ use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 use engine::Engine;
 
 fn main() {
-    vyro_core::process_start();
+    clokrix_core::process_start();
     let log = tauri_plugin_log::Builder::new()
         .targets([
             Target::new(TargetKind::Stdout),
@@ -49,7 +49,7 @@ fn main() {
     let version = current.clone();
 
     let mut builder = tauri::Builder::default()
-        // First: a second launch (Start menu while Vyro sits in the tray) shows the running
+        // First: a second launch (Start menu while Clokrix sits in the tray) shows the running
         // copy instead of starting another engine.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             tray::show_main(app);
@@ -63,8 +63,8 @@ fn main() {
         .setup(move |app| {
             // The window starts hidden (tauri.conf.json); autostart passes --minimized to stay
             // in the tray.
-            let minimized = std::env::args().any(|a| a == vyro_core::autostart::MINIMIZED_ARG);
-            // First: it looks for an earlier Vyro's files before this start writes any.
+            let minimized = std::env::args().any(|a| a == clokrix_core::autostart::MINIMIZED_ARG);
+            // First: it looks for an earlier Clokrix's files before this start writes any.
             app.manage(whats_new::WhatsNew::load(app.handle(), &version));
             let engine = Engine::start(app.handle(), !minimized)?;
             app.manage(overlay::Overlay::default());
@@ -88,11 +88,11 @@ fn main() {
             gaming::watch(app.handle());
             app.state::<remote::Remote>().resume(app.handle());
             changes::check(app.handle(), changes::Reason::Start);
-            // Desktop widgets come back with Vyro, also when it starts in the tray.
+            // Desktop widgets come back with Clokrix, also when it starts in the tray.
             widgets::sync(app.handle());
             updates::watch(app.handle());
             device_watch::start(app.handle());
-            // CI's smoke test of the installed app (only with VYRO_SMOKE set).
+            // CI's smoke test of the installed app (only with CLOKRIX_SMOKE set).
             smoke::start();
             whats_new::announce(app.handle(), minimized);
             if minimized {
@@ -214,7 +214,7 @@ fn main() {
 
     app.run(|handle, event| {
         if let tauri::RunEvent::Exit = event {
-            wind_down(handle, "Vyro closed");
+            wind_down(handle, "Clokrix closed");
             if let Some(remote) = handle.try_state::<remote::Remote>() {
                 remote.stop();
                 remote.stop_relay();
@@ -226,12 +226,12 @@ fn main() {
     });
 }
 
-/// Ends what would go on, or stay, after Vyro: as it quits, and before an update's installer,
+/// Ends what would go on, or stay, after Clokrix: as it quits, and before an update's installer,
 /// which ends the process at once (Windows) without the app's own exit. A screen session ends
 /// saying `why`.
 pub(crate) fn wind_down(handle: &tauri::AppHandle, why: &str) {
     // Ends a benchmark's load and keeps the stopped run before the engine goes.
-    bench::stop_and_wait(handle, "Vyro quit.", std::time::Duration::from_secs(3));
+    bench::stop_and_wait(handle, "Clokrix quit.", std::time::Duration::from_secs(3));
     // Ends a GPU stability test, so its trial ends now rather than in half a minute.
     gpu_tune::stop_and_wait(handle, std::time::Duration::from_secs(3));
     // Lets go of keys a phone holds, and puts the default microphone back.

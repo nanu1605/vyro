@@ -1,7 +1,7 @@
 // The phone's microphone on the audio thread (1.7): its samples handed over about every 20 ms
 // (the audio thread works 128 at a time). Loaded by voice.ts as a file of the app's own.
 registerProcessor(
-  'vyro-tap',
+  'clokrix-tap',
   class extends AudioWorkletProcessor {
     constructor() {
       super();

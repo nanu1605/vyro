@@ -346,7 +346,7 @@ describe('a phone and its PC through the relay', () => {
     await until(() => expect(t.infos).toHaveLength(1));
     expect(t.states.at(-1)).toBe('online');
     expect(await pc1.read((await sent(s, 2))[1]!)).toEqual({ t: 'watch' });
-    await expect(t.link.request('processes')).rejects.toThrow('Update Vyro on the PC');
+    await expect(t.link.request('processes')).rejects.toThrow('Update Clokrix on the PC');
     t.link.stop();
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import raw from '../../crates/vyro-core/src/remote/relay/vectors.json?raw';
+import raw from '../../crates/clokrix-core/src/remote/relay/vectors.json?raw';
 import { aad, authHash, b64url, deriveKeys, hex, hkdf, open, OVERHEAD, seal, unb64url, unhex, type Bytes, type Dir } from './seal';
 
 interface Vectors {

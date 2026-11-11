@@ -35,7 +35,7 @@ overlay: boolean | null,
  */
 overlayMode: OverlayMode | null, 
 /**
- * Vyro's update rate while it runs, ms; `None`: the profile's.
+ * Clokrix's update rate while it runs, ms; `None`: the profile's.
  */
 pollMs: number | null, 
 /**

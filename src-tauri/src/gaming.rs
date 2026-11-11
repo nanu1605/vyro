@@ -8,14 +8,14 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
-use tauri::{AppHandle, Emitter, Manager};
-use vyro_core::alerts::AlertBrief;
-use vyro_core::gaming::auto::{Effective, Switcher};
-use vyro_core::gaming::GameContext;
-use vyro_core::profiles::Profile;
+use clokrix_core::alerts::AlertBrief;
+use clokrix_core::gaming::auto::{Effective, Switcher};
+use clokrix_core::gaming::GameContext;
+use clokrix_core::profiles::Profile;
 #[cfg(windows)]
-use vyro_core::remote::relay::push::Note;
-use vyro_core::{lock, SensorSnapshot};
+use clokrix_core::remote::relay::push::Note;
+use clokrix_core::{lock, SensorSnapshot};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::engine::Engine;
 use crate::tray::SettingsStore;
@@ -99,7 +99,7 @@ pub fn overlay_wanted(app: &AppHandle, setting: bool) -> bool {
 }
 
 /// The game's own overlay mode, if it has one.
-pub fn overlay_mode(app: &AppHandle) -> Option<vyro_core::gaming::overlay::OverlayMode> {
+pub fn overlay_mode(app: &AppHandle) -> Option<clokrix_core::gaming::overlay::OverlayMode> {
     app.try_state::<GameState>()
         .and_then(|s| lock(&s.applied).as_ref().and_then(|e| e.overlay_mode))
 }
@@ -179,7 +179,7 @@ pub fn watch(app: &AppHandle) {
     {
         let app = app.clone();
         let spawned = std::thread::Builder::new()
-            .name("vyro-game-watch".into())
+            .name("clokrix-game-watch".into())
             .spawn(move || run(&app));
         if let Err(e) = spawned {
             log::warn!("gaming: watcher not started: {e}");
@@ -191,8 +191,8 @@ pub fn watch(app: &AppHandle) {
 
 #[cfg(windows)]
 fn run(app: &AppHandle) {
-    use vyro_core::gaming::auto::LoadWatch;
-    use vyro_core::gaming::foreground::{
+    use clokrix_core::gaming::auto::LoadWatch;
+    use clokrix_core::gaming::foreground::{
         alive, foreground, is_candidate, Foreground, Known, Watcher,
     };
 
@@ -258,7 +258,7 @@ fn run(app: &AppHandle) {
         if capture.as_ref().map(|t| t.pid) != captured {
             if captured.is_some() {
                 summary = Some((
-                    vyro_core::unix_now(),
+                    clokrix_core::unix_now(),
                     std::time::Instant::now() + std::time::Duration::from_secs(30),
                 ));
             }
@@ -278,7 +278,7 @@ fn run(app: &AppHandle) {
                 if let Some(g) = logged {
                     summary = None;
                     let unit = store.unit();
-                    if let Some(note) = Note::game(&g, unit, vyro_core::unix_now()) {
+                    if let Some(note) = Note::game(&g, unit, clokrix_core::unix_now()) {
                         crate::remote::notify(app, note);
                     }
                 }
@@ -292,7 +292,7 @@ fn run(app: &AppHandle) {
 #[tauri::command]
 pub async fn get_game_sessions(
     engine: tauri::State<'_, Engine>,
-) -> Result<Vec<vyro_core::gaming::GameSession>, String> {
+) -> Result<Vec<clokrix_core::gaming::GameSession>, String> {
     let api = std::sync::Arc::clone(&engine.api);
     tauri::async_runtime::spawn_blocking(move || api.game_sessions())
         .await
@@ -304,7 +304,7 @@ pub async fn get_game_sessions(
 pub async fn get_game_timeline(
     engine: tauri::State<'_, Engine>,
     id: i64,
-) -> Result<Option<vyro_core::gaming::replay::GameTimeline>, String> {
+) -> Result<Option<clokrix_core::gaming::replay::GameTimeline>, String> {
     let api = std::sync::Arc::clone(&engine.api);
     tauri::async_runtime::spawn_blocking(move || api.game_timeline(id))
         .await
@@ -318,7 +318,7 @@ pub async fn get_history_window(
     metrics: Vec<String>,
     from: i64,
     to: i64,
-) -> Result<Vec<vyro_core::history::WindowSeries>, String> {
+) -> Result<Vec<clokrix_core::history::WindowSeries>, String> {
     let api = std::sync::Arc::clone(&engine.api);
     tauri::async_runtime::spawn_blocking(move || api.history_window(&metrics, from, to))
         .await

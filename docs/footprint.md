@@ -18,12 +18,12 @@ timer, animation or WebGL runs; the engine keeps polling at the tray rate (5 s).
 
 | Feature | Threads | Per tick | While hidden | Declared budget | Verified |
 |---|---|---|---|---|---|
-| Fan control (P12) | `vyro-fans` (service; only on the allow-listed board) | The decision in the poller; writes off the tick | Keeps driving, at most every 2 s | — | P12 field: 125 MB, 0.46 % CPU |
-| Game profiles (P13) | None (the app's `vyro-game-watch`, from P10) | One check a second | The game's or the profile's rate | ±2 MB | P13 field |
+| Fan control (P12) | `clokrix-fans` (service; only on the allow-listed board) | The decision in the poller; writes off the tick | Keeps driving, at most every 2 s | — | P12 field: 125 MB, 0.46 % CPU |
+| Game profiles (P13) | None (the app's `clokrix-game-watch`, from P10) | One check a second | The game's or the profile's rate | ±2 MB | P13 field |
 | Overlay 2.0 (P14) | None (the overlay window only while a captured game is in front) | Redraw ≤ 2 Hz | n/a | A few MB, only while shown | P14 field |
 | Session replay (P15) | None | One row a second while a game runs | Same | Inside the 200 MB history cap | Tests |
-| Hardware changes (P19) | `vyro-changes` (app, once at start and on device changes) | None | None | — | P19 field |
-| Insights (P16) | `vyro-intel`: short-lived, at most every 10 min | The minute digest, under 0.1 ms | Same | +2 MB, under 250 ms a pass | Tests and timing |
+| Hardware changes (P19) | `clokrix-changes` (app, once at start and on device changes) | None | None | — | P19 field |
+| Insights (P16) | `clokrix-intel`: short-lived, at most every 10 min | The minute digest, under 0.1 ms | Same | +2 MB, under 250 ms a pass | Tests and timing |
 | Compound alerts (P18) | None | Rules × conditions; rate buffers ≤ 10 min | Same | +1 MB | Tests |
 | Performance Score (P17) | In the intel pass, once a day | None | Same | Under 300 ms a day | Tests and timing |
 | Benchmark (P20) | Only during a run, all joined after it | None | None | Nothing when idle | P20 build |
@@ -32,8 +32,8 @@ timer, animation or WebGL runs; the engine keeps polling at the tray rate (5 s).
 | Devices (P22) | One parked thread waiting for device changes | None | None (reads only while the tab is open) | Main bundle +2 kB | P22 build |
 | Dashboard builder (P24) | None | Widgets use the tick's snapshot | Suspended | +1 MB with 40 widgets | P24 build |
 | My PC 3-D (P23) | None (WebGL in the page) | None | Context freed; nothing runs | ≤ 30 fps while shown, GPU process +40 MB | P23 build |
-| Remote companion (P26) | `vyro-companion` (on only) and one per connection | One shared view per reading | 1 Hz while a phone watches | Under 1 MB on, nobody watching | P26 build |
-| Screen on the phone (1.7) | Only during a session: `vyro-screen-rtc`, `vyro-screen` (capture and H.264), `vyro-screen-idle` | None | Same | Nothing without a session; during one, measured at field check 1.7 | Tests; field check 1.7 |
+| Remote companion (P26) | `clokrix-companion` (on only) and one per connection | One shared view per reading | 1 Hz while a phone watches | Under 1 MB on, nobody watching | P26 build |
+| Screen on the phone (1.7) | Only during a session: `clokrix-screen-rtc`, `clokrix-screen` (capture and H.264), `clokrix-screen-idle` | None | Same | Nothing without a session; during one, measured at field check 1.7 | Tests; field check 1.7 |
 
 The frontend's repeating timers were audited too:
 - History, Insights, Score, the Dashboard's history and events widgets, Devices, Benchmark,
@@ -48,13 +48,13 @@ The frontend's repeating timers were audited too:
   125 kB gzipped (118.2 kB at P27; 200 kB from 1.1) and the phone companion under 32 kB
   (29.2 kB). Lazy chunks (the 3-D scene, Benchmark, the dashboard editor, …) are listed but not
   budgeted.
-- **The installed service** on CI's Windows runner (`vyro-probe`): its CPU and memory over 30 s
+- **The installed service** on CI's Windows runner (`clokrix-probe`): its CPU and memory over 30 s
   go to the run's summary. They are reported, not gated, because a CI virtual machine has few
   sensors.
 
 ## Field measurement for 1.0
 
-On the reference PC, Desktop profile, after a restart. Use the "Vyro itself" card, with Task
+On the reference PC, Desktop profile, after a restart. Use the "Clokrix itself" card, with Task
 Manager to cross-check:
 
 1. **Idle.** Window visible on the Dashboard for 5 minutes: average CPU, memory, startup.

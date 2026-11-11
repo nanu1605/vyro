@@ -15,12 +15,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use clokrix_core::{files, lock, SensorSnapshot};
 use serde::{Deserialize, Serialize};
 use tauri::{
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, State, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, Window, WindowEvent,
 };
-use vyro_core::{files, lock, SensorSnapshot};
 
 use crate::engine::Engine;
 
@@ -37,8 +37,8 @@ pub const KINDS: [&str; 8] = [
 ];
 /// What a "top" widget ranks processes by (its one source).
 pub const PROC_SORTS: [&str; 3] = ["proc.cpu", "proc.ram", "proc.gpu"];
-/// Every widget window's title (`pin.rs` tells widgets from Vyro's other windows by it).
-pub const TITLE: &str = "Vyro widget";
+/// Every widget window's title (`pin.rs` tells widgets from Clokrix's other windows by it).
+pub const TITLE: &str = "Clokrix widget";
 
 /// How a widget's card looks: the app's theme, see-through dark, or solid.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -235,7 +235,7 @@ pub struct Area {
 /// A widget's place on the desktop, logical px: left, top, width, height.
 pub type Spot = (f64, f64, f64, f64);
 
-/// The space kept between widgets Vyro places, as when they snap (`snap.rs`).
+/// The space kept between widgets Clokrix places, as when they snap (`snap.rs`).
 const SPACING: f64 = 8.0;
 
 /// Where a widget goes: its saved place while that is on a connected monitor (its middle at
@@ -391,7 +391,7 @@ pub fn sync(app: &AppHandle) {
     }
     let handle = app.clone();
     let queued = std::thread::Builder::new()
-        .name("vyro-widgets".into())
+        .name("clokrix-widgets".into())
         .spawn(move || {
             let app = handle.clone();
             if let Err(e) = handle.run_on_main_thread(move || apply(&app)) {
@@ -556,7 +556,7 @@ pub fn restack(app: &AppHandle) {
     }
 }
 
-/// A widget window moved (dragged, or put back by Vyro): its place is saved once it has been
+/// A widget window moved (dragged, or put back by Clokrix): its place is saved once it has been
 /// still for a moment.
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
     let Some(id) = window.label().strip_prefix(PREFIX) else {
@@ -920,12 +920,12 @@ mod tests {
             ),
             (500, 600, 40)
         );
-        assert!(!next.widgets[1].placed, "a new widget is placed by Vyro");
+        assert!(!next.widgets[1].placed, "a new widget is placed by Clokrix");
     }
 
     #[test]
     fn saves_and_sets_a_damaged_file_aside() {
-        let dir = std::env::temp_dir().join(format!("vyro-widgets-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("clokrix-widgets-{}", std::process::id()));
         let path = dir.join("widgets.json");
         let w = Widgets {
             widgets: vec![widget("a", "graph", &["cpu.usage"])],

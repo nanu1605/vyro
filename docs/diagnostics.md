@@ -1,4 +1,4 @@
-# Vyro Diagnostics: checks v1
+# Clokrix Diagnostics: checks v1
 
 Status: **defaults chosen at build (2026-10-15)**; the owner can change the checks and limits at
 the P21 field check. A change to a check or a limit after release becomes checks v2, and every
@@ -7,7 +7,7 @@ stored report keeps its version.
 ## What it is for
 
 **"Run diagnostics" answers one question in about a second: is anything about this PC worth a
-look, and what shows it?** It adds no load (the Benchmark does that). It reads what Vyro already
+look, and what shows it?** It adds no load (the Benchmark does that). It reads what Clokrix already
 records:
 - the week of history and the minute digests
 - the Health log and the Windows event log
@@ -40,7 +40,7 @@ History view can open it. Explanations stay apart from measurements, as in P16.
 | 10 | Changes from usual | P16's warnings now, with their evidence | any warning |
 | 11 | Drivers | each GPU's driver version and date; the Windows build | never: Info |
 | 12 | Sensors | PawnIO, and which readings arrive: CPU temperature and power, board fans and voltages, RAM temperatures, drive health | no CPU temperature (most checks then lack data) |
-| 13 | Service | how the app reaches the engine: the Vyro service, or the app's own engine without the privileged sensors; versions | the app runs without the service, or the two versions differ |
+| 13 | Service | how the app reaches the engine: the Clokrix service, or the app's own engine without the privileged sensors; versions | the app runs without the service, or the two versions differ |
 
 **When a check passes.** A check passes when it has data and nothing reaches its limit. It is
 **Unavailable** when the data is missing, for example with too little history, no long full-load
@@ -50,7 +50,7 @@ stretch, or ping off. Each check's citations are shown either way.
 
 **What it holds:**
 - the time and the checks version
-- the Vyro version and how the app reached the engine
+- the Clokrix version and how the app reached the engine
 - a summary of the PC: CPU, GPUs, board, BIOS, RAM, Windows
 - every check with its status, summary, citations and, for Attention, advice
 
@@ -63,7 +63,7 @@ JSON and `diagnostic_findings` holds one row per check. The newest 50 reports ar
 - **HTML:** one self-contained page that prints well.
 - **JSON:** the report as stored.
 - **Markdown.**
-- **PDF:** written by Vyro itself, with no browser or printer involved.
+- **PDF:** written by Clokrix itself, with no browser or printer involved.
 
 **Same values as on screen.** All four are made from the same report, with the same formatting,
 in the temperature unit chosen in Settings.
@@ -71,5 +71,5 @@ in the temperature unit chosen in Settings.
 **Serial numbers.** These are never stored with a report. They are left out of exports by
 default, and an export includes them only when "Include serial numbers" is ticked.
 
-**Where exports go.** Exports go to `Documents\Vyro Reports`, named
-`vyro-diagnostics-<date>-<time>.<ext>`, and Vyro shows the file in Explorer.
+**Where exports go.** Exports go to `Documents\Clokrix Reports`, named
+`clokrix-diagnostics-<date>-<time>.<ext>`, and Clokrix shows the file in Explorer.

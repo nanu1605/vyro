@@ -18,7 +18,7 @@
   }
   let { value, theme, onpreview, oncommit }: Props = $props();
 
-  const RECENT_KEY = 'vyro.accent.recent';
+  const RECENT_KEY = 'clokrix.accent.recent';
   const SIZE = 168;
 
   let hsv = $state<Hsv>(toHsv('#4cc9f0'));

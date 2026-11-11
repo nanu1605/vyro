@@ -9,12 +9,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use clokrix_core::gaming::foreground::Rect;
+use clokrix_core::gaming::overlay::{self as layout, OverlayMetric, OverlayMode, OverlayRow};
+use clokrix_core::gaming::{CaptureState, FramePoint, GameSnapshot};
+use clokrix_core::{lock, SensorSnapshot};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
-use vyro_core::gaming::foreground::Rect;
-use vyro_core::gaming::overlay::{self as layout, OverlayMetric, OverlayMode, OverlayRow};
-use vyro_core::gaming::{CaptureState, FramePoint, GameSnapshot};
-use vyro_core::{lock, SensorSnapshot};
 
 use crate::engine::Engine;
 use crate::tray::SettingsStore;
@@ -347,7 +347,7 @@ fn show(app: &AppHandle, monitor: Rect, settings: &OverlaySettings) {
                     LABEL,
                     WebviewUrl::App("index.html#overlay".into()),
                 )
-                .title("Vyro overlay")
+                .title("Clokrix overlay")
                 .additional_browser_args(WEBVIEW_ARGS)
                 .transparent(true)
                 .decorations(false)

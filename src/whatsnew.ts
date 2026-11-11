@@ -1,4 +1,4 @@
-// What's new (1.5): each version's notes, newest first. The app shows them once after Vyro was
+// What's new (1.5): each version's notes, newest first. The app shows them once after Clokrix was
 // updated (src-tauri/src/whats_new.rs decides when); the phone app shows the ones marked
 // `phone` after it changes, up to the open PC's version. Every version gets an entry before it
 // is released (a test checks package.json's version has one).
@@ -26,7 +26,7 @@ export const NOTES: Release[] = [
       {
         icon: 'gauge',
         title: 'Intel CPUs read',
-        text: 'On Intel Core CPUs Vyro now reads the package’s and each core’s temperature, the package, cores and graphics power, the core voltage and the effective clock, and says when heat or the power limit holds the CPU back. Cores are named P-core and E-core.',
+        text: 'On Intel Core CPUs Clokrix now reads the package’s and each core’s temperature, the package, cores and graphics power, the core voltage and the effective clock, and says when heat or the power limit holds the CPU back. Cores are named P-core and E-core.',
       },
       {
         icon: 'fan',
@@ -56,12 +56,12 @@ export const NOTES: Release[] = [
       {
         icon: 'gauge',
         title: 'Missing readings say why',
-        text: 'On a CPU Vyro doesn’t read, which today is any Intel CPU, the CPU and Power cards, Health and Diagnostics say “not read on this CPU” instead of asking for PawnIO, which is already installed. Health’s notes on boards and drives give the real reason too.',
+        text: 'On a CPU Clokrix doesn’t read, which today is any Intel CPU, the CPU and Power cards, Health and Diagnostics say “not read on this CPU” instead of asking for PawnIO, which is already installed. Health’s notes on boards and drives give the real reason too.',
       },
       {
         icon: 'end',
         title: 'An update that stalls ends',
-        text: 'An update’s download that stops getting data now ends after a minute and says to check the internet connection, instead of holding Settings → Updates until Vyro restarts.',
+        text: 'An update’s download that stops getting data now ends after a minute and says to check the internet connection, instead of holding Settings → Updates until Clokrix restarts.',
       },
       {
         icon: 'sparkles',
@@ -76,12 +76,12 @@ export const NOTES: Release[] = [
       {
         icon: 'sparkles',
         title: 'Ctrl K lands on the card',
-        text: 'Going to a part of Settings with Ctrl K, or to Remote by its chip in the top bar, now lands on that card, even just after Vyro starts while the cards are still being placed. Ctrl K’s Alerts and Diagnostics go to their part of Health.',
+        text: 'Going to a part of Settings with Ctrl K, or to Remote by its chip in the top bar, now lands on that card, even just after Clokrix starts while the cards are still being placed. Ctrl K’s Alerts and Diagnostics go to their part of Health.',
       },
       {
         icon: 'wake',
         title: 'Updates looked for every day',
-        text: 'Vyro now looks for updates once a day by the clock, so a PC that sleeps at night no longer goes days without looking. A look that fails, or gets no answer, is tried again within the hour.',
+        text: 'Clokrix now looks for updates once a day by the clock, so a PC that sleeps at night no longer goes days without looking. A look that fails, or gets no answer, is tried again within the hour.',
       },
     ],
   },
@@ -101,7 +101,7 @@ export const NOTES: Release[] = [
       {
         icon: 'screen',
         title: 'No sideways scrolling',
-        text: 'Narrowing the window could leave a card squeezed at its right edge and the window scrolling sideways. Nothing in Vyro scrolls sideways now, and tables fit, down to the narrowest window.',
+        text: 'Narrowing the window could leave a card squeezed at its right edge and the window scrolling sideways. Nothing in Clokrix scrolls sideways now, and tables fit, down to the narrowest window.',
       },
       {
         icon: 'gauge',
@@ -219,7 +219,7 @@ export const NOTES: Release[] = [
       {
         icon: 'mic',
         title: 'Your phone’s microphone ends with its session',
-        text: 'A session’s end no longer leaves your phone’s microphone as Windows’ default for a few seconds after, and Vyro puts yours back as it closes.',
+        text: 'A session’s end no longer leaves your phone’s microphone as Windows’ default for a few seconds after, and Clokrix puts yours back as it closes.',
       },
       {
         icon: 'mic',
@@ -246,7 +246,7 @@ export const NOTES: Release[] = [
       {
         icon: 'screen',
         title: 'Updates end a phone session first',
-        text: 'Installing an update while your phone shows this PC’s screen now lets go of keys the phone held, and puts your default microphone back, before Vyro closes for the installer.',
+        text: 'Installing an update while your phone shows this PC’s screen now lets go of keys the phone held, and puts your default microphone back, before Clokrix closes for the installer.',
       },
     ],
   },
@@ -291,12 +291,12 @@ export const NOTES: Release[] = [
       {
         icon: 'gpu',
         title: 'Back to stock when the driver refuses a setting',
-        text: 'If the driver takes some of a tuning’s settings but refuses the next, the card now goes back to stock, rather than keeping those it took while Vyro showed Stock.',
+        text: 'If the driver takes some of a tuning’s settings but refuses the next, the card now goes back to stock, rather than keeping those it took while Clokrix showed Stock.',
       },
       {
         icon: 'phone',
         title: 'Updates from your phone ask first',
-        text: 'Someone at this PC must allow an update, and Vyro closes here while it installs, so your phone now asks before it starts one. While this PC is locked, install it here.',
+        text: 'Someone at this PC must allow an update, and Clokrix closes here while it installs, so your phone now asks before it starts one. While this PC is locked, install it here.',
       },
     ],
   },
@@ -306,7 +306,7 @@ export const NOTES: Release[] = [
       {
         icon: 'sparkles',
         title: 'What 1.5 and 1.6 brought',
-        text: 'After an update from Vyro 1.4, 1.7.0 showed only its own news. What’s new now shows every version’s, and Settings → Updates → What’s new lists them all.',
+        text: 'After an update from Clokrix 1.4, 1.7.0 showed only its own news. What’s new now shows every version’s, and Settings → Updates → What’s new lists them all.',
       },
       {
         icon: 'mic',
@@ -412,7 +412,7 @@ export const NOTES: Release[] = [
       {
         icon: 'wake',
         title: 'Wake a PC from your phone',
-        text: 'Another Vyro PC on the same network sends the wake signal. Turn on Wake from phone in Settings → Remote.',
+        text: 'Another Clokrix PC on the same network sends the wake signal. Turn on Wake from phone in Settings → Remote.',
         phone: true,
       },
       {
@@ -445,7 +445,7 @@ export function compareVersions(a: string, b: string): number {
 }
 
 /** The notes to show after an update from `from` to `current`, newest first. `from` null: a
- * Vyro before 1.5, which kept no version, so every version's notes up to `current` (they begin
+ * Clokrix before 1.5, which kept no version, so every version's notes up to `current` (they begin
  * at 1.5, and 1.5 and 1.6 were released only within 1.7). */
 export function notesSince(from: string | null, current: string, notes: Release[] = NOTES): Release[] {
   const upTo = notes.filter((r) => compareVersions(r.version, current) <= 0);
@@ -453,9 +453,9 @@ export function notesSince(from: string | null, current: string, notes: Release[
   return upTo.filter((r) => compareVersions(r.version, from) > 0);
 }
 
-/** The phone's notes (1.7) for a PC whose Vyro is `pc`, after those it showed up to `seen`:
+/** The phone's notes (1.7) for a PC whose Clokrix is `pc`, after those it showed up to `seen`:
  * only up to the PC's version, since the phone app is newer than a PC not yet updated (the relay
- * serves it to every phone) and what it brings needs the PC's Vyro too. `upTo`: the version to
+ * serves it to every phone) and what it brings needs the PC's Clokrix too. `upTo`: the version to
  * remember once shown, so the rest shows when the PC is updated. */
 export function phoneNotes(seen: string | null, pc: string, notes: Release[] = NOTES): { upTo: string; items: NoteItem[] } {
   const newest = notes[0]?.version ?? '';

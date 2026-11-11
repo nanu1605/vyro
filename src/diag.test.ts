@@ -6,7 +6,7 @@ const num = (value: number, unit: string, digits: number, extra: Partial<Citatio
   label: 'x', value, unit, difference: false, digits, text: null, source: 'history', metric: null, ago: null, ...extra,
 });
 
-describe('diagnostics text (same cases as vyro_core::diag)', () => {
+describe('diagnostics text (same cases as clokrix_core::diag)', () => {
   it('formats citations like the exports', () => {
     expect(fmtCitation(num(78, '°C', 0), 'c')).toBe('78 °C');
     expect(fmtCitation(num(78, '°C', 0), 'f')).toBe('172 °F');
@@ -24,7 +24,7 @@ describe('diagnostics text (same cases as vyro_core::diag)', () => {
 
   it('counts and orders checks', () => {
     const r: DiagReport = {
-      id: 1, ts: 0, version: 1, appVersion: '0.4.0', engine: 'Vyro service 0.4.0', pc: [],
+      id: 1, ts: 0, version: 1, appVersion: '0.4.0', engine: 'Clokrix service 0.4.0', pc: [],
       checks: [
         { id: 'thermals', status: 'pass', summary: '', advice: null, citations: [] },
         { id: 'memory', status: 'attention', summary: '', advice: null, citations: [] },

@@ -9,7 +9,7 @@ and how each one is met:
 
 A board is added to the allow-list only after it gets its own copy of the field column.
 
-Paths are under `crates/vyro-core/src/`. Unless another file is named, tests are in the file
+Paths are under `crates/clokrix-core/src/`. Unless another file is named, tests are in the file
 named in the "Enforced in" column. "P12" field results are recorded in the ROADMAP's P12
 section.
 
@@ -20,7 +20,7 @@ section.
 | **Read-only by default.** Control is off until the owner turns it on and confirms. | `fan::FanConfig::default` (`enabled: false`); the Cooling tab's confirmation | `nothing_is_driven_when_off_or_on_bios` (`fan/mod.rs`) | Not recorded as its own step; every P12 check started by turning control on |
 | **Positive detection only.** A board must match the allow-list by maker, board, chip and revision; anything else is read-only with a reason. | `sio::control::capability`, `fan::win::open_device` | `only_the_reference_board_and_revision_are_writable` (`sio/control.rs`) | P12a: chip 0xD5 rev 0x92 at 0xA20 detected and allow-listed |
 | **Only the service writes.** The app's own engine (no service) never drives fans. | `engine::LocalEngine::start_fans` (`fan_control: false` in the app) | `invalid_configs_are_refused_and_a_bad_file_means_off` (an unavailable controller refuses settings) | Covered by the tests |
-| **Known registers only.** Writes go to the mode, request and duty registers of allow-listed headers through PawnIO's `LpcIO` module. There are no raw writes, and a busy EC is never forced. | `sio::control::{write_ec, set_duty, release, restore}` | `write_ec_is_one_released_transaction`, `a_busy_ec_is_never_forced`, `set_duty_takes_one_header_and_follows_the_handshake`, `pump_and_unlisted_headers_are_protected` | P12a: `vyro-fans --try 0 100` and `--try 0 30` changed header 0 only |
+| **Known registers only.** Writes go to the mode, request and duty registers of allow-listed headers through PawnIO's `LpcIO` module. There are no raw writes, and a busy EC is never forced. | `sio::control::{write_ec, set_duty, release, restore}` | `write_ec_is_one_released_transaction`, `a_busy_ec_is_never_forced`, `set_duty_takes_one_header_and_follows_the_handshake`, `pump_and_unlisted_headers_are_protected` | P12a: `clokrix-fans --try 0 100` and `--try 0 30` changed header 0 only |
 | **Every write is read back.** | `sio::control::write_checked` | `a_register_that_does_not_keep_the_write_is_reported_and_the_request_closed` | P12a: readback 255 at 100 %, 77 at 30 % |
 | **Pump headers need confirmation.** A pump is driven only after the owner confirms it, and it never goes below 60 %. | `fan::FanConfig::{may_drive, floor}`, `sio::control::duty` | `confirmed_pumps_are_driven_never_below_the_pump_floor`, `fixed_speeds_respect_the_floor_and_pumps_are_skipped`, `duty_is_bounded_by_the_header_floor` | P12c: Quiet 60 % → about 3,300 RPM and held; Full → about 4,400 RPM |
 | **Settings are checked before use.** Bad limits, points, headers or names are refused. A saved file that fails the check means control off, and the file is kept as `fan-control.bad.json` (P27). | `fan::validate`, `fan::controller::load_config` | `validation_guards_every_field`, `invalid_configs_are_refused_and_a_bad_file_means_off`, `header_names_are_checked` | — |
@@ -29,11 +29,11 @@ section.
 
 | Rule | Enforced in | Tests | MS-7E24 field result |
 |---|---|---|---|
-| **Floors.** Fans stay at or above 20 % and pumps at or above 60 %. A request Vyro cannot place gets 100 %. | `sio::control::duty`, `fan::Runtime::decide` | `duty_is_bounded_by_the_header_floor`, `fixed_speeds_respect_the_floor_and_pumps_are_skipped` | Covered by the tests (30 % was the lowest tried on hardware) |
+| **Floors.** Fans stay at or above 20 % and pumps at or above 60 %. A request Clokrix cannot place gets 100 %. | `sio::control::duty`, `fan::Runtime::decide` | `duty_is_bounded_by_the_header_floor`, `fixed_speeds_respect_the_floor_and_pumps_are_skipped` | Covered by the tests (30 % was the lowest tried on hardware) |
 | **Emergency limit.** CPU or GPU at its limit → every driven header at 100 %. | `fan::Runtime::decide` | `emergency_limits_force_full_speed_everywhere` | P12b: limit lowered to 50 °C under load → every driven fan at 100 % |
 | **A curve whose sensor stops reading** → that header at 100 %. | `fan::Runtime::decide` | `a_missing_source_runs_that_header_at_full_speed` | Covered by the tests (not forced on hardware) |
 | **A pump that stops** (below 300 RPM on 3 ticks after spinning) → control ends, and the BIOS gets every header. | `fan::Runtime::decide`, `controller::Worker::fail` | `a_pump_that_stops_reporting_a_speed_ends_control`, `a_stopped_pump_hands_everything_back` | Covered by the tests (not stalled on hardware) |
-| **An alert's fan boost** (P18) raises only headers Vyro drives, only while control is on, and never past 100 %. | `fan::Runtime::decide`, `FanControl::set_boost` | `an_alert_boost_raises_driven_headers_only`, `an_alert_boost_is_written_recorded_and_ends` | **Pending** the P18 field check |
+| **An alert's fan boost** (P18) raises only headers Clokrix drives, only while control is on, and never past 100 %. | `fan::Runtime::decide`, `FanControl::set_boost` | `an_alert_boost_raises_driven_headers_only`, `an_alert_boost_is_written_recorded_and_ends` | **Pending** the P18 field check |
 
 ## What hands cooling back to the BIOS
 
@@ -47,8 +47,8 @@ section.
 | **Another program fighting over the fans.** A lost setting is written again; 3 rewrites in 2 minutes end control. | `controller::Worker` (drift reads) | `a_setting_the_chip_lost_is_written_again`, `another_program_fighting_over_the_fans_ends_control` | Not run (MSI Center), covered by the tests |
 | **Sleep → BIOS; after waking, the state is captured afresh.** | `controller::FanControl::set_suspended`, the service's power events | `sleep_hands_back_to_the_bios_and_waking_captures_afresh` | P12d: sleep and wake with control on |
 | **Service stop, shutdown or uninstall → BIOS.** | `controller::Worker::run` (`Step::Stop`), the MSI's service stop | `shutdown_hands_back_to_the_bios` | P12d: reboot and uninstall with control on |
-| **Crash.** At the next start the saved state is written back before anything else (the MSI restarts the service). | `controller::recover` | `a_state_left_by_a_crash_is_restored_before_anything_else` | P12b: killing `vyro-service.exe` brought the BIOS curve back |
-| **Crash, then the write-back fails (P27 fix).** The saved state is kept and used for every later attempt. It is never replaced by a capture of the chip as Vyro left it. | `controller::recover` (`Recovery::Failed`), `FanControl::start_with` | `a_failed_restore_at_start_keeps_the_saved_state_for_later_attempts` | **Pending** the P27 field check |
+| **Crash.** At the next start the saved state is written back before anything else (the MSI restarts the service). | `controller::recover` | `a_state_left_by_a_crash_is_restored_before_anything_else` | P12b: killing `clokrix-service.exe` brought the BIOS curve back |
+| **Crash, then the write-back fails (P27 fix).** The saved state is kept and used for every later attempt. It is never replaced by a capture of the chip as Clokrix left it. | `controller::recover` (`Recovery::Failed`), `FanControl::start_with` | `a_failed_restore_at_start_keeps_the_saved_state_for_later_attempts` | **Pending** the P27 field check |
 | **Crash, then the saved state cannot be read (P27 fix).** The allow-listed headers under software control go to 100 %. The file is kept as `fan-restore.bad.json`, and the Cooling log says to restart the PC. | `controller::recover` (`Recovery::Unreadable`), `full_speed_where_driven` | `an_unreadable_saved_state_sets_driven_fans_to_full_speed_once` | **Pending** the P27 field check |
 | **…and the chip does not answer at start (P27 fix).** Nothing captures the chip or drives a fan until it answers; then full speed comes first. The file stays until then, so a restart meanwhile tries again. | `controller::recover` (`Recovery::Unanswered`), `Worker::full_speed_after_crash` | `a_silent_chip_after_an_unreadable_saved_state_gets_full_speed_before_anything_else` | Covered by the tests (a silent chip cannot be forced on hardware) |
 
@@ -65,10 +65,10 @@ section.
 |---|---|---|
 | MSI B650M GAMING PLUS WIFI (MS-7E24) | NCT6687D rev 0x92 | **Writable.** Field-checked in P12, plus the pending P18 and P27 checks above |
 | Any other board, or another revision of the chip | — | **Read-only**, with the reason shown in the Cooling tab |
-| ASUS and other boards with a Nuvoton NCT6791D–NCT6799D (2.1) | NCT679x | **Read-only.** The one write Vyro makes to such a chip: when the firmware locked the monitor's I/O ports (Super-I/O register 0x28, bit 4) so that nothing reads, that bit is cleared, as Linux `nct6775` and LibreHardwareMonitor do (`sio::win::unlock_monitor`); never a fan register |
+| ASUS and other boards with a Nuvoton NCT6791D–NCT6799D (2.1) | NCT679x | **Read-only.** The one write Clokrix makes to such a chip: when the firmware locked the monitor's I/O ports (Super-I/O register 0x28, bit 4) so that nothing reads, that bit is cleared, as Linux `nct6775` and LibreHardwareMonitor do (`sio::win::unlock_monitor`); never a fan register |
 
 To add a board:
-1. Make a read-only dump with `vyro-fans` and get a supervised `--try` on each header.
+1. Make a read-only dump with `clokrix-fans` and get a supervised `--try` on each header.
 2. Add an allow-list entry with that board's headers and floors.
 3. Run the whole field column of this matrix on that board.
 
@@ -81,8 +81,8 @@ card and a laptop.
 | Rule | Enforced in | Tests | Field result |
 |---|---|---|---|
 | **Off by default**, turned on only after a confirmation that names the risks. | `gpu_tune::TuneConfig::default` (`enabled: false`); the GPU tuning view's dialog | `validation` | **Pending** |
-| **Only the service writes**, through NVML loaded from System32 or NVIDIA's folder (never the search path). The app's own engine never tunes. | `engine::LocalEngine::start_tune` (`gpu_tune: false` in the app), `gpu_tune::nvidia::load_nvml` | `cards_vyro_does_not_tune` (an unavailable controller refuses settings) | **Pending** |
-| **Positive detection.** Only RTX 20 to RTX 50 cards, and only settings the driver gives a range for; others stay stock. | `gpu_tune::nvidia::open_device`, `Limits::clamp`, `validate` | `family_and_laptop_from_the_driver`, `suggestions_are_scaled_to_the_driver`, `cards_vyro_does_not_tune` | **Pending** |
+| **Only the service writes**, through NVML loaded from System32 or NVIDIA's folder (never the search path). The app's own engine never tunes. | `engine::LocalEngine::start_tune` (`gpu_tune: false` in the app), `gpu_tune::nvidia::load_nvml` | `cards_clokrix_does_not_tune` (an unavailable controller refuses settings) | **Pending** |
+| **Positive detection.** Only RTX 20 to RTX 50 cards, and only settings the driver gives a range for; others stay stock. | `gpu_tune::nvidia::open_device`, `Limits::clamp`, `validate` | `family_and_laptop_from_the_driver`, `suggestions_are_scaled_to_the_driver`, `cards_clokrix_does_not_tune` | **Pending** |
 | **Every write is read back.** A value the driver does not keep holds the card at stock. | `controller::Worker::write` | `a_failed_write_holds_at_stock` | **Pending** |
 | **Heat.** 90 °C edge or 105 °C hotspot on two readings in a row → stock until a preset is applied again. | `TempGuard`, `TuneControl::on_tick` | `temperature_guard_needs_two_readings`, `heat_holds_the_card_at_stock` | **Pending** |
 | **Another program.** Values that change are written again; three times in two minutes → stock. | `controller::Worker::check` | `another_program_changing_the_card_ends_tuning`, `drift_compares_only_what_the_driver_allows` | **Pending** (MSI Afterburner) |

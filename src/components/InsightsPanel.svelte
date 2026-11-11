@@ -124,7 +124,7 @@
     <h2 class="section">Findings</h2>
     {#if data.findings.length === 0}
       <p class="fine">
-        Nothing unusual: temperatures, fans, clocks and games match how this PC usually behaves. Vyro compares the last
+        Nothing unusual: temperatures, fans, clocks and games match how this PC usually behaves. Clokrix compares the last
         hours with the past week and checks again every ten minutes.
       </p>
     {:else}

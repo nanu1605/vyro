@@ -84,7 +84,7 @@
       ...(fansActive ? [{ key: 'bios', label: 'Return fans to BIOS', hint: 'Hand every fan back', kind: 'Action', run: onbios }] : []),
       { key: 'whatsnew', label: 'What’s new', hint: 'This version’s notes', kind: 'Action', run: onwhatsnew },
       ...(Object.keys(cards.views).length
-        ? [{ key: 'cards', label: 'Put cards back', hint: 'Every view’s cards in Vyro’s order', kind: 'Action', run: resetOrder }]
+        ? [{ key: 'cards', label: 'Put cards back', hint: 'Every view’s cards in Clokrix’s order', kind: 'Action', run: resetOrder }]
         : []),
       ...SECTIONS.map(([t, id, label, hint]) => ({ key: `sec:${id}`, label, hint, kind: t === 'settings' ? 'Settings' : 'Health', run: () => onsection(t, id) })),
       ...THEMES.map((t) => ({
@@ -156,7 +156,7 @@
   }
 </script>
 
-<dialog class="palette" bind:this={dialog} onclose={() => (open = false)} aria-label="Search Vyro" onclick={(e) => e.target === dialog && (open = false)}>
+<dialog class="palette" bind:this={dialog} onclose={() => (open = false)} aria-label="Search Clokrix" onclick={(e) => e.target === dialog && (open = false)}>
   <div class="box">
     <div class="field">
       <Search size={17} aria-hidden="true" />

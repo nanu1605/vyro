@@ -9,16 +9,16 @@
   const message = $derived.by(() => {
     switch (status?.state) {
       case 'notInstalled':
-        // Not the CPU's readings on a CPU Vyro does not read (2.0.4): PawnIO would not bring them.
+        // Not the CPU's readings on a CPU Clokrix does not read (2.0.4): PawnIO would not bring them.
         return status.cpuUnread
           ? 'PawnIO is not installed. The board’s fans, temperatures and voltages need it.'
           : 'PawnIO is not installed. CPU temperature, CPU power and board fans need it.';
       case 'outdated':
-        return `PawnIO ${status.version ?? ''} is too old for Vyro. Install the current version.`;
+        return `PawnIO ${status.version ?? ''} is too old for Clokrix. Install the current version.`;
       case 'notRunning':
         return 'PawnIO is installed but its driver is not running. Restart Windows or reinstall PawnIO.';
       case 'noAccess':
-        return 'Vyro could not open PawnIO. Restart the Vyro sensor service (or Windows).';
+        return 'Clokrix could not open PawnIO. Restart the Clokrix sensor service (or Windows).';
       case 'error':
         return `PawnIO could not be used${status.detail ? `: ${status.detail}` : '.'}`;
       default:

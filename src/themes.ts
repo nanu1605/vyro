@@ -310,7 +310,7 @@ export function tokens(themeId: string, accent: string): Record<string, string> 
   };
 }
 
-const LOOK_KEY = 'vyro.look';
+const LOOK_KEY = 'clokrix.look';
 
 export interface Look {
   theme: ThemeId;
@@ -361,7 +361,7 @@ export function applyLook(look: Look, root: HTMLElement = document.documentEleme
   window.dispatchEvent(new Event(THEME_EVENT));
 }
 
-const THEME_EVENT = 'vyro-theme';
+const THEME_EVENT = 'clokrix-theme';
 
 /** Calls `cb` after each theme change (canvases cache colours). */
 export function onTheme(cb: () => void): () => void {

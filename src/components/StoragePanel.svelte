@@ -46,7 +46,7 @@
   });
 
   const byId = $derived(new Map(live.map((s) => [s.id, s])));
-  // One card per drive, in Vyro's order or the owner's (2.0.2); a drive plugged in again goes back to its place.
+  // One card per drive, in Clokrix's order or the owner's (2.0.2); a drive plugged in again goes back to its place.
   const cards = $derived<CardItem[]>((drives ?? []).map((d) => ({ id: `drive:${d.id}`, title: `Disk ${d.index}: ${d.model}` })));
   const needsAdmin = $derived(drives?.some((d) => d.smartError?.startsWith('SMART / health data needs')) ?? false);
 
@@ -96,8 +96,8 @@
   </div>
   {#if needsAdmin}
     <p class="notice" role="status">
-      The Vyro sensor service is not running, so SMART health, drive history counters and some temperatures are
-      hidden. Reinstall Vyro or start <b>Vyro Sensor Service</b> in Services, then restart Vyro.
+      The Clokrix sensor service is not running, so SMART health, drive history counters and some temperatures are
+      hidden. Reinstall Clokrix or start <b>Clokrix Sensor Service</b> in Services, then restart Clokrix.
     </p>
   {/if}
 

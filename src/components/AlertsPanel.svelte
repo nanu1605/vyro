@@ -370,7 +370,7 @@
               checked={d.actions.fanBoost != null}
               onchange={(e) => (d.actions.fanBoost = (e.currentTarget as HTMLInputElement).checked ? 15 : null)}
             />
-            Raise the fans Vyro drives while it holds
+            Raise the fans Clokrix drives while it holds
           </label>
           {#if d.actions.fanBoost != null}
             <label class="inline">
@@ -379,7 +379,7 @@
             </label>
             <p class="hint">
               {#if fansOn}
-                Only headers Vyro drives, never past 100 %; safety full speed still comes first.
+                Only headers Clokrix drives, never past 100 %; safety full speed still comes first.
               {:else}
                 Fan control is off, so this changes nothing until you turn it on in Cooling.
               {/if}
@@ -410,7 +410,7 @@
     </div>
   </div>
   <p class="note">
-    Windows notifications while Vyro is running, including from the tray (Settings: keep running in the tray, start
+    Windows notifications while Clokrix is running, including from the tray (Settings: keep running in the tray, start
     with Windows). A rule can watch several sensors at once, and can also switch the profile, raise the fans or keep a
     record while it holds. Rules are saved on this PC.
   </p>
@@ -488,7 +488,7 @@
       {/each}
     </ol>
   {:else}
-    <p class="note">None since Vyro started.</p>
+    <p class="note">None since Clokrix started.</p>
   {/if}
 </section>
 

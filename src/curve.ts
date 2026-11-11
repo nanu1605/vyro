@@ -1,5 +1,5 @@
 // Pure helpers for the fan-curve editor (P12b): the same interpolation the engine uses
-// (crates/vyro-core/src/fan/mod.rs `evaluate`), chart geometry, and point edits that keep a
+// (crates/clokrix-core/src/fan/mod.rs `evaluate`), chart geometry, and point edits that keep a
 // curve valid (2–8 points, temperatures rising, 0–100 %).
 
 import type { CurvePoint, FanCurve } from './types';

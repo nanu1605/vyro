@@ -1,5 +1,5 @@
 // My PC (P23, P29): a stylized ATX tower with its side off, or a laptop seen through its keyboard
-// deck, laid out from what Vyro knows about this PC, and the thermal map's colours. Pure, so it is
+// deck, laid out from what Clokrix knows about this PC, and the thermal map's colours. Pure, so it is
 // unit-tested; the 3-D scene and the 2-D plan both draw these parts.
 //
 // Units are millimetres. Tower: x runs from the back of the case (0) to the front (460), y from

@@ -1,9 +1,9 @@
 //! Remote companion (P26) in the app: the owner's choices and the paired devices in
 //! `remote.json` (local app data, never roamed), the server's life, and the Settings commands.
-//! The server itself is `vyro_core::remote`; it runs here, as the signed-in user, never in the
+//! The server itself is `clokrix_core::remote`; it runs here, as the signed-in user, never in the
 //! LocalSystem service.
 //!
-//! Reach from anywhere (1.4): the relay connection (`vyro_core::remote::relay`) runs here too,
+//! Reach from anywhere (1.4): the relay connection (`clokrix_core::remote::relay`) runs here too,
 //! with the phones paired through it kept in the same file (their secrets sealed with DPAPI).
 //! Notifications (2.0) go out through it ([`notify`]); as the PC goes to sleep the relay is told
 //! it is leaving, so its phones do not hear that it stopped answering.
@@ -14,21 +14,21 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager};
-use vyro_core::actions::wake::WakeReadiness;
-use vyro_core::remote::auth::{hex, Auth, Stored, STORED_VERSION};
-use vyro_core::remote::relay::proto::{pairing_link, relay_base};
-use vyro_core::remote::relay::push::Note;
-use vyro_core::remote::relay::suspend::{on_suspend, SuspendWatch};
-use vyro_core::remote::relay::{
+use clokrix_core::actions::wake::WakeReadiness;
+use clokrix_core::remote::auth::{hex, Auth, Stored, STORED_VERSION};
+use clokrix_core::remote::relay::proto::{pairing_link, relay_base};
+use clokrix_core::remote::relay::push::Note;
+use clokrix_core::remote::relay::suspend::{on_suspend, SuspendWatch};
+use clokrix_core::remote::relay::{
     Phones, RelayClient, RelayHooks, RelayPairing, RelayState, RelayStatus, StoredRelay,
 };
-use vyro_core::remote::{
+use clokrix_core::remote::{
     firewall, net, qr, random, FirewallState, Hooks, RemoteBrief, RemoteInfo, RemoteServer,
     RemoteSettings, RemoteStatus, ServerConfig, DAY_CHOICES, FILE, MIN_PORT,
 };
-use vyro_core::{files, lock, unix_now, SensorSnapshot};
+use clokrix_core::{files, lock, unix_now, SensorSnapshot};
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::tray::SettingsStore;
 
@@ -36,9 +36,9 @@ use crate::tray::SettingsStore;
 /// closes, or the paired devices change.
 pub const REMOTE_EVENT: &str = "remote-status";
 
-/// The relay built into this build (`VYRO_RELAY_URL` when it was built), if any.
+/// The relay built into this build (`CLOKRIX_RELAY_URL` when it was built), if any.
 fn built_in_relay() -> Option<String> {
-    option_env!("VYRO_RELAY_URL")
+    option_env!("CLOKRIX_RELAY_URL")
         .filter(|u| !u.trim().is_empty())
         .and_then(|u| relay_base(u).ok())
 }
@@ -75,7 +75,7 @@ pub struct Remote {
 }
 
 /// Reads `remote.json`; one that does not parse is set aside as `remote.bad.json` (see
-/// `vyro_core::files`) and the companion stays off.
+/// `clokrix_core::files`) and the companion stays off.
 fn read(path: &Path) -> Stored {
     match files::read_json::<Stored>(path, |_| Ok(())) {
         Ok(s) => s.unwrap_or_default(),
@@ -175,8 +175,8 @@ fn hooks(app: &AppHandle) -> Hooks {
 /// The wired adapter another PC would wake this one through, while "Wake from phone" is on.
 /// Read at most every few minutes: a phone's `info` asks for it while the relay connection
 /// holds its phones.
-fn wake_target(app: &AppHandle) -> Option<vyro_core::actions::wake::WakeTarget> {
-    use vyro_core::actions::wake::{mac_text, parse_mac, WakeTarget};
+fn wake_target(app: &AppHandle) -> Option<clokrix_core::actions::wake::WakeTarget> {
+    use clokrix_core::actions::wake::{mac_text, parse_mac, WakeTarget};
     type Cached = Option<(std::time::Instant, Option<WakeTarget>)>;
     static CACHE: Mutex<Cached> = Mutex::new(None);
     const FRESH: Duration = Duration::from_secs(300);
@@ -202,11 +202,11 @@ fn wake_target(app: &AppHandle) -> Option<vyro_core::actions::wake::WakeTarget> 
 }
 
 /// This PC's wired, physical adapter, a connected one first.
-fn wired_adapter() -> Option<vyro_core::info::NetAdapterInfo> {
+fn wired_adapter() -> Option<clokrix_core::info::NetAdapterInfo> {
     let mut wired: Vec<_> = crate::commands::collect_network()
         .into_iter()
         .filter(|a| {
-            a.kind == vyro_core::snapshot::NetKind::Ethernet
+            a.kind == clokrix_core::snapshot::NetKind::Ethernet
                 && !a.virtual_adapter
                 && a.mac.is_some()
         })
@@ -443,7 +443,7 @@ impl Remote {
         if !self.running() {
             return Err("Turn the companion on first.".into());
         }
-        let code = vyro_core::remote::random().ok_or("No randomness available.")?;
+        let code = clokrix_core::remote::random().ok_or("No randomness available.")?;
         lock(&self.auth).start_pairing(unix_now(), code);
         Ok(())
     }
@@ -490,7 +490,8 @@ impl Remote {
         }
         let Some(base) = self.relay_url() else {
             *lock(&self.relay_error) = Some(
-                "This build of Vyro has no relay. Enter your relay's address under Options.".into(),
+                "This build of Clokrix has no relay. Enter your relay's address under Options."
+                    .into(),
             );
             return;
         };
@@ -669,7 +670,7 @@ impl Remote {
         }
     }
 
-    fn relay_status(&self, now: i64) -> (RelayStatus, Vec<vyro_core::remote::RemoteDevice>) {
+    fn relay_status(&self, now: i64) -> (RelayStatus, Vec<clokrix_core::remote::RemoteDevice>) {
         let choice = lock(&self.relay).clone();
         let url = self.relay_url().unwrap_or_default();
         let (state, error) = self.relay_state();
@@ -898,7 +899,7 @@ pub async fn set_relay_enabled(app: AppHandle, enabled: bool) -> Result<RemoteSt
     .await
 }
 
-/// `url`: the owner's own relay; none or empty: the one built into Vyro.
+/// `url`: the owner's own relay; none or empty: the one built into Clokrix.
 #[tauri::command]
 pub async fn set_relay_url(app: AppHandle, url: Option<String>) -> Result<RemoteStatus, String> {
     change(app, move |app, r| r.set_relay_url(app, url.as_deref())).await
@@ -953,14 +954,14 @@ pub async fn get_wake_readiness(app: AppHandle) -> Result<WakeReadiness, String>
     tauri::async_runtime::spawn_blocking(move || {
         let adapter = wired_adapter();
         let laptop = app.try_state::<crate::engine::Engine>().is_some_and(|e| {
-            e.inventory.hardware().board.form_factor == vyro_core::info::FormFactor::Laptop
+            e.inventory.hardware().board.form_factor == clokrix_core::info::FormFactor::Laptop
         });
         WakeReadiness {
             magic_packet: adapter
                 .as_ref()
-                .and_then(|a| vyro_core::actions::wake::magic_packet_setting(&a.description)),
+                .and_then(|a| clokrix_core::actions::wake::magic_packet_setting(&a.description)),
             adapter: adapter.map(|a| a.name),
-            fast_startup: vyro_core::actions::wake::fast_startup(),
+            fast_startup: clokrix_core::actions::wake::fast_startup(),
             laptop,
         }
     })
@@ -992,7 +993,7 @@ mod tests {
 
     #[test]
     fn a_damaged_file_turns_the_companion_off_and_is_kept() {
-        let dir = std::env::temp_dir().join(format!("vyro-remote-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("clokrix-remote-{}", std::process::id()));
         let path = dir.join(FILE);
         let stored = Stored {
             version: STORED_VERSION,

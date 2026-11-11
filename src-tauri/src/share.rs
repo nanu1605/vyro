@@ -1,13 +1,13 @@
 //! Share cards (P25): the page draws the PNG (`src/card.ts`) and the app saves it to
-//! `Pictures\Vyro`. The bytes come as the raw request body; the file name comes in a header and
-//! is checked, so a page can only write Vyro card PNGs into that folder.
+//! `Pictures\Clokrix`. The bytes come as the raw request body; the file name comes in a header and
+//! is checked, so a page can only write Clokrix card PNGs into that folder.
 
 use std::path::PathBuf;
 
 use tauri::ipc::{InvokeBody, Request};
 use tauri::{AppHandle, Manager};
 
-const FOLDER: &str = "Vyro";
+const FOLDER: &str = "Clokrix";
 /// A 1080 × 1920 card is about 1 MB; anything far bigger is not a card.
 const MAX_BYTES: usize = 16 * 1024 * 1024;
 const PNG: &[u8] = b"\x89PNG\r\n\x1a\n";
@@ -17,10 +17,10 @@ fn cards_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(pictures.join(FOLDER))
 }
 
-/// "vyro-card-20261015-1024-16x9.png": lower-case letters, digits and dashes only.
+/// "clokrix-card-20261015-1024-16x9.png": lower-case letters, digits and dashes only.
 fn valid_name(name: &str) -> bool {
     name.len() <= 80
-        && name.starts_with("vyro-card-")
+        && name.starts_with("clokrix-card-")
         && name.strip_suffix(".png").is_some_and(|stem| {
             stem.chars()
                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
@@ -66,7 +66,7 @@ pub async fn save_share_card(app: AppHandle, request: Request<'_>) -> Result<Str
 /// Shows a saved card in Explorer; only files in the cards folder.
 #[tauri::command]
 pub fn reveal_card(app: AppHandle, path: String) -> Result<(), String> {
-    crate::diag::reveal_in(&cards_dir(&app)?, &path).map_err(|()| "Not a Vyro card.".into())
+    crate::diag::reveal_in(&cards_dir(&app)?, &path).map_err(|()| "Not a Clokrix card.".into())
 }
 
 #[cfg(test)]
@@ -76,13 +76,13 @@ mod tests {
     #[test]
     fn only_card_pngs_are_written() {
         let png = [PNG, b"rest"].concat();
-        assert!(checked("vyro-card-20261015-1024-16x9.png", &png).is_ok());
-        assert!(checked("vyro-card-20261015-1024-story-transparent.png", &png).is_ok());
-        assert!(checked("../vyro-card-1.png", &png).is_err());
-        assert!(checked("vyro-card-1.exe", &png).is_err());
-        assert!(checked("vyro-card-1/x.png", &png).is_err());
+        assert!(checked("clokrix-card-20261015-1024-16x9.png", &png).is_ok());
+        assert!(checked("clokrix-card-20261015-1024-story-transparent.png", &png).is_ok());
+        assert!(checked("../clokrix-card-1.png", &png).is_err());
+        assert!(checked("clokrix-card-1.exe", &png).is_err());
+        assert!(checked("clokrix-card-1/x.png", &png).is_err());
         assert!(checked("other.png", &png).is_err());
-        assert!(checked("vyro-card-1.png", b"GIF89a").is_err());
-        assert!(checked(&format!("vyro-card-{}.png", "1".repeat(80)), &png).is_err());
+        assert!(checked("clokrix-card-1.png", b"GIF89a").is_err());
+        assert!(checked(&format!("clokrix-card-{}.png", "1".repeat(80)), &png).is_err());
     }
 }

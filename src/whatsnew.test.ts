@@ -51,9 +51,9 @@ describe('what’s new', () => {
       const n = phoneNotes(seen, pc, notes);
       return [n.upTo, n.items.map((i) => i.title)];
     };
-    // A PC on the newest Vyro: everything after what the phone showed, phone items only.
+    // A PC on the newest Clokrix: everything after what the phone showed, phone items only.
     expect(titles('1.5.0', '1.7.0')).toEqual(['1.7.0', ['Screen', 'Presets']]);
-    // The app from before 1.7 showed none: every phone item up to the PC's Vyro.
+    // The app from before 1.7 showed none: every phone item up to the PC's Clokrix.
     expect(titles(null, '1.7.0')).toEqual(['1.7.0', ['Screen', 'Presets', 'Control']]);
     // A PC not yet updated: nothing from its future, and the rest is kept for when it is.
     expect(titles(null, '1.4.1')).toEqual(['1.4.1', []]);

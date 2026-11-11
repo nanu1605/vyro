@@ -7,7 +7,7 @@ import type { Profile } from "./Profile";
 
 export type FanStatus = { capability: FanCapability, config: FanConfig, 
 /**
- * Vyro is driving at least one header right now.
+ * Clokrix is driving at least one header right now.
  */
 active: boolean, 
 /**

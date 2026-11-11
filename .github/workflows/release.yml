@@ -17,14 +17,14 @@ name: Release
 #                                                (owner/name, created with a README)
 #   secret   RELEASES_TOKEN                      fine-grained token: Contents read and write on it
 # and, for reach from anywhere (1.4):
-#   variable VYRO_RELAY_URL                      the relay built into the app (relay.yml deploys it)
+#   variable CLOKRIX_RELAY_URL                      the relay built into the app (relay.yml deploys it)
 # and, to sign the app and its installer (2.0, decision 11; docs/signing.md), all four:
-#   variable SIGNPATH_ORGANIZATION_ID            SignPath's organization id for Vyro
-#   variable SIGNPATH_PROJECT_SLUG               its project (normally "vyro")
+#   variable SIGNPATH_ORGANIZATION_ID            SignPath's organization id for Clokrix
+#   variable SIGNPATH_PROJECT_SLUG               its project (normally "clokrix")
 #   variable SIGNPATH_SIGNING_POLICY_SLUG        its signing policy ("release-signing")
 #   secret   SIGNPATH_API_TOKEN                  a CI user's API token there
 # Without them the build is unsigned, as before (SmartScreen warns on install). With them,
-# vyro.exe and vyro-service.exe are signed before the MSI is made from them, then the MSI, and
+# clokrix.exe and clokrix-service.exe are signed before the MSI is made from them, then the MSI, and
 # the updater's signature is made for the signed MSI.
 # With RELEASES_REPO the installer and `latest.json` are also published there and installed
 # copies update from it (release downloads of a private repository need a sign-in); without
@@ -133,7 +133,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # The relay built into the app (1.4): Settings → Remote → From anywhere.
-          VYRO_RELAY_URL: ${{ vars.VYRO_RELAY_URL }}
+          CLOKRIX_RELAY_URL: ${{ vars.CLOKRIX_RELAY_URL }}
         run: pnpm tauri build --config src-tauri/tauri.release.conf.json
 
       # Signed (2.0): the programs first, so the MSI carries signed ones; then the MSI.
@@ -151,7 +151,7 @@ jobs:
       - name: Build the app (to be signed)
         if: vars.SIGNPATH_ORGANIZATION_ID != ''
         env:
-          VYRO_RELAY_URL: ${{ vars.VYRO_RELAY_URL }}
+          CLOKRIX_RELAY_URL: ${{ vars.CLOKRIX_RELAY_URL }}
         run: pnpm tauri build --no-bundle --config src-tauri/tauri.release.conf.json
       - name: The programs, for signing
         id: programs
@@ -160,8 +160,8 @@ jobs:
         with:
           name: programs-unsigned
           path: |
-            target/release/vyro.exe
-            target/release/vyro-service.exe
+            target/release/clokrix.exe
+            target/release/clokrix-service.exe
           if-no-files-found: error
           retention-days: 1
       - name: Sign the programs
@@ -183,7 +183,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          foreach ($name in 'vyro.exe', 'vyro-service.exe') {
+          foreach ($name in 'clokrix.exe', 'clokrix-service.exe') {
             $signed = Get-Item "signed/programs/$name"
             $sig = Get-AuthenticodeSignature $signed.FullName
             if ($sig.Status -ne 'Valid') { throw "$name came back from signing as $($sig.Status)" }
@@ -233,16 +233,16 @@ jobs:
       - name: The relay address built in (1.4)
         shell: pwsh
         env:
-          VYRO_RELAY_URL: ${{ vars.VYRO_RELAY_URL }}
+          CLOKRIX_RELAY_URL: ${{ vars.CLOKRIX_RELAY_URL }}
         run: |
-          $url = $env:VYRO_RELAY_URL
+          $url = $env:CLOKRIX_RELAY_URL
           if (-not $url) {
-            "Relay built in: none (the variable VYRO_RELAY_URL is not set)" |
+            "Relay built in: none (the variable CLOKRIX_RELAY_URL is not set)" |
               Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
             exit 0
           }
-          $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes('target\release\vyro.exe'))
-          if (-not $text.Contains($url)) { throw "vyro.exe does not carry the relay address $url" }
+          $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes('target\release\clokrix.exe'))
+          if (-not $text.Contains($url)) { throw "clokrix.exe does not carry the relay address $url" }
           "Relay built in: $url" | Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
 
       - name: Installer, update manifest and checksums
@@ -262,7 +262,7 @@ jobs:
           $platform = @{ signature = $sig; url = $url }
           @{
             version = $env:VERSION
-            notes = "Vyro $env:VERSION"
+            notes = "Clokrix $env:VERSION"
             pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
             platforms = @{ 'windows-x86_64' = $platform; 'windows-x86_64-msi' = $platform }
           } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 release\latest.json
@@ -284,7 +284,7 @@ jobs:
         run: |
           $extra = @($env:PRERELEASE | Where-Object { $_ })
           gh release create $env:TAG (Get-ChildItem release -File).FullName --repo $env:HOST_REPO @extra `
-            --title "Vyro $($env:TAG.Substring(1))" --notes "Vyro $env:VERSION for Windows 10/11 (x64). Install the MSI; installed copies update themselves."
+            --title "Clokrix $($env:TAG.Substring(1))" --notes "Clokrix $env:VERSION for Windows 10/11 (x64). Install the MSI; installed copies update themselves."
           if ($LASTEXITCODE -ne 0) { throw "publishing to $env:HOST_REPO failed (does it exist with a README, and may RELEASES_TOKEN write to it?)" }
 
       - name: Publish the release
@@ -297,5 +297,5 @@ jobs:
         run: |
           $extra = @($env:PRERELEASE | Where-Object { $_ })
           gh release create $env:TAG (Get-ChildItem release -File).FullName @extra `
-            --title "Vyro $($env:TAG.Substring(1))" --generate-notes --target $env:GITHUB_SHA
+            --title "Clokrix $($env:TAG.Substring(1))" --generate-notes --target $env:GITHUB_SHA
           if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }

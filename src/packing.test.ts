@@ -14,7 +14,7 @@ describe('Dashboard packing', () => {
 
   it('moves the next card up into the room a short one leaves', () => {
     // The owner's Dashboard: CPU sensors (short), GPUs (two of them, tall) and Memory side by
-    // side, then Power, Board and Vyro itself.
+    // side, then Power, Board and Clokrix itself.
     const at = skyline(
       [
         { w: 4, rows: 50 }, // CPU sensors
@@ -22,7 +22,7 @@ describe('Dashboard packing', () => {
         { w: 4, rows: 140 }, // Memory
         { w: 4, rows: 45 }, // Power
         { w: 4, rows: 85 }, // Board
-        { w: 4, rows: 110 }, // Vyro itself
+        { w: 4, rows: 110 }, // Clokrix itself
       ],
       12,
       3,

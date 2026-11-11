@@ -1,19 +1,19 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Vyro",
+  "productName": "Clokrix",
   "version": "2.1.0",
-  "identifier": "app.vyro.monitor",
+  "identifier": "app.clokrix.monitor",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build && cargo build --release -p vyro-service",
+    "beforeBuildCommand": "pnpm build && cargo build --release -p clokrix-service",
     "frontendDist": "../dist"
   },
   "app": {
     "windows": [
       {
         "label": "main",
-        "title": "Vyro",
+        "title": "Clokrix",
         "width": 1100,
         "height": 760,
         "minWidth": 480,
@@ -38,26 +38,28 @@
       "icons/128x128@2x.png",
       "icons/icon.ico"
     ],
-    "publisher": "Vyro",
-    "copyright": "Vyro contributors, MIT OR Apache-2.0",
+    "publisher": "Clokrix",
+    "copyright": "Clokrix contributors, MIT OR Apache-2.0",
     "license": "MIT OR Apache-2.0",
     "resources": {
       "../LICENSE-MIT": "LICENSE-MIT",
       "../LICENSE-APACHE": "LICENSE-APACHE",
       "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
       "../THIRD_PARTY_LICENSES.md": "THIRD_PARTY_LICENSES.md",
-      "../crates/vyro-core/pawnio/COPYING": "COPYING-PawnIO-modules"
+      "../crates/clokrix-core/pawnio/COPYING": "COPYING-PawnIO-modules"
     },
     "windows": {
       "wix": {
         "upgradeCode": "4462867d-695d-5f78-bb13-262590559da4",
+        "bannerPath": "wix/banner.bmp",
+        "dialogImagePath": "wix/dialog.bmp",
         "fragmentPaths": [
-          "wix/vyro.wxs"
+          "wix/clokrix.wxs"
         ],
         "componentRefs": [
           "PawnIOSetup",
           "PresentMon",
-          "VyroService"
+          "ClokrixService"
         ]
       }
     }

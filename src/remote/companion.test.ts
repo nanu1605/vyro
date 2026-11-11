@@ -116,7 +116,7 @@ describe('readings', () => {
       { level: 'hot', text: 'CPU: Package at 92 °C' },
       { level: 'warn', text: 'Storage: warning' },
     ]);
-    expect(pageTitle('GAMING-PC', VIEW)).toBe('(1) GAMING-PC · Vyro');
-    expect(pageTitle('', null)).toBe('Vyro');
+    expect(pageTitle('GAMING-PC', VIEW)).toBe('(1) GAMING-PC · Clokrix');
+    expect(pageTitle('', null)).toBe('Clokrix');
   });
 });

@@ -21,18 +21,18 @@ pass and the owner says go.
 - Fan control on, as you use it.
 - Task Manager.
 - A game you play with the overlay on.
-- A laptop, if you have one (Vyro installed on it the same way).
+- A laptop, if you have one (Clokrix installed on it the same way).
 - A second monitor, if you have one.
 
 ## 0. Install over 1.0.1 (5 min)
 
 - The installer is under 60 MB (decision 28).
 - Settings, the Dashboard layouts, alert rules and fan curves are as before.
-- Vyro opens on the Dashboard, or on the last view if that was your choice.
+- Clokrix opens on the Dashboard, or on the last view if that was your choice.
 
 ## 1. The new look (P28, 20 min)
 
-- **Sidebar.** Four groups (Overview, Performance, This PC, Vyro). The highlight slides to the
+- **Sidebar.** Four groups (Overview, Performance, This PC, Clokrix). The highlight slides to the
   chosen view. Folding it to icons is remembered after a restart, and a narrow window
   (under 1100 px) folds it by itself. Health, Insights and Hardware keep their dots. After a
   small window is made full screen, or the sidebar is expanded, the highlight sits on the
@@ -74,7 +74,7 @@ pass and the owner says go.
 
 - **Adding.** Add one of each kind from the Widgets page. Each appears down the right edge of
   your main monitor without taking focus from what you were typing in.
-- **Moving.** Drag each one somewhere else and close Vyro to the tray. Then quit and start it
+- **Moving.** Drag each one somewhere else and close Clokrix to the tray. Then quit and start it
   again: they are where you left them. Locked, a widget no longer moves when dragged.
 - **Right-click.** Lock or Unlock, Edit… (opens the Widgets page on the main window), Remove.
 - **Settings.** Size, background, style and readings change the widget on the desktop within
@@ -83,7 +83,7 @@ pass and the owner says go.
   ones come back. The README says they can hide until you switch to a window.
 - **The tray.** "Desktop widgets" hides and shows them all. With the main window in the tray,
   they still update every second (Desktop profile).
-- **Sign out and in** (with "Start with Windows" on): the widgets come back with Vyro in the
+- **Sign out and in** (with "Start with Windows" on): the widgets come back with Clokrix in the
   tray.
 - **Look.** A theme or accent change reaches the widgets. Glass reads well on your wallpaper.
 - **Second monitor**, if you have one: put a widget on it, then unplug the monitor. The widget

@@ -65,7 +65,7 @@ These retest check 1's findings 1 and 2.
 - **Far away.** A widget across the screen does not pull.
 - **Shift.** Hold Shift while dragging: no snapping, and it goes exactly where you leave it.
 - **Second monitor** (if you have one): the same against that screen's edges.
-- **Kept.** Quit Vyro from the tray and start it again: each widget is back where you left it.
+- **Kept.** Quit Clokrix from the tray and start it again: each widget is back where you left it.
 
 ## 3. Clicks pass through
 
@@ -80,7 +80,7 @@ These retest check 1's findings 1 and 2.
 Add one of each from the gallery.
 - **Network:** during a download, the down figure and its line rise, with the adapter's name
   above them. With the cable unplugged or Wi-Fi off, it shows "Not connected".
-- **Game FPS:** in a game Vyro measures, it shows the game's name, FPS, 1% low and frame time.
+- **Game FPS:** in a game Clokrix measures, it shows the game's name, FPS, 1% low and frame time.
   With no game, it shows "No game running".
 - **Top processes:** a browser shows as one row with "×N". "Busiest by" switches between CPU,
   Memory and GPU.
@@ -125,21 +125,21 @@ maximised.
   in even rows on a narrow one. On CPU sensors, the per-core power reads 4 and 4.
 - **No blank cards:** each card is as tall as what it shows.
   - CPU sensors is short, and Power and Board sit right under it.
-  - Memory's card ends after its timings, and Vyro itself sits under it.
+  - Memory's card ends after its timings, and Clokrix itself sits under it.
   - A row of reading tiles, or the two gauges, stays in line.
 - **GPUs:** the AMD graphics' card shows what it reports, then one line "Not reported: …"
   instead of rows of "—". Made 8 or 12 columns wide, the two GPUs sit side by side, and a card's
   lists run in columns, each value near its label.
 - **Narrow cards** (the 0760929 finding): make the window about half the screen, so cards 3
-  columns wide get narrow. In CPU sensors, Vyro itself, Power and Board, every label and value
+  columns wide get narrow. In CPU sensors, Clokrix itself, Power and Board, every label and value
   reads in whole words. A value that doesn't fit beside its label sits under it, on the right.
 - **Editing:** "Edit layout" shows the same arrangement. Resize a card taller: it keeps that
   height and the cards under it move down. Move a card: the others close the gap.
 
 ## 7. Footprint
 
-- With widgets showing and Vyro in the tray, Task Manager's CPU for Vyro at rest is the same as
-  with 1.1. Snapping only runs during a drag.
+- With widgets showing and Clokrix in the tray, Task Manager's CPU for Clokrix at rest is the same
+  as with 1.1. Snapping only runs during a drag.
 - On My PC with Airflow on, the app's CPU is no higher than in 1.1. The lines are drawn on the
   graphics card; each frame only moves them.
 

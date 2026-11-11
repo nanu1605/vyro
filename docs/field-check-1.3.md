@@ -20,11 +20,11 @@ minutes.
 
 - Have your devices on: the Bluetooth headphones or earbuds, the Logitech mouse or keyboard
   (and its receiver plugged in), the controller, the other dongle, the USB microphone.
-- Open Windows Settings → Bluetooth & devices → Devices beside Vyro's Devices tab.
+- Open Windows Settings → Bluetooth & devices → Devices beside Clokrix's Devices tab.
 
 ## 1. Names
 
-- Every device in Vyro's Devices tab has the name Settings shows. No row says "Unknown device".
+- Every device in Clokrix's Devices tab has the name Settings shows. No row says "Unknown device".
 - A paired Bluetooth device that is off still shows its name, with "Not connected".
 - The USB condenser microphone shows by its own name (as Settings shows it), as a microphone.
 - **If a name is wrong or missing:** run `vyro-inventory.exe` from the same artifact and send
@@ -71,7 +71,7 @@ minutes.
 
 ## 5. Footprint
 
-- With the Devices tab open, Task Manager's CPU for Vyro is no higher than with 1.2 when idle;
+- With the Devices tab open, Task Manager's CPU for Clokrix is no higher than with 1.2 when idle;
   battery reads happen at most once a minute.
 
 ## Recording results

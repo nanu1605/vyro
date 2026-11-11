@@ -50,7 +50,7 @@
 <section class="panel rise" style:--i={pcs.length ? 2 : 0} aria-labelledby="pair-title">
   <h1 id="pair-title">{pcs.length ? 'Pair another PC' : 'Pair with your PC'}</h1>
   <ol class="steps">
-    <li>Open <b>Vyro</b> on the PC.</li>
+    <li>Open <b>Clokrix</b> on the PC.</li>
     <li>Go to <b>Settings → Remote → From anywhere → Pair a phone</b>.</li>
     <li>Scan the code it shows {standalone ? 'here' : 'with this phone’s camera'}. It lasts 10 minutes.</li>
   </ol>
@@ -80,8 +80,8 @@
   <section class="panel rise" style:--i={3} aria-labelledby="install-help">
     <h2 id="install-help">Install the app</h2>
     {#if installable}
-      <p>Vyro works like an app from your Home Screen, with no app store.</p>
-      <div class="actions"><button type="button" onclick={oninstall}>Install Vyro</button></div>
+      <p>Clokrix works like an app from your Home Screen, with no app store.</p>
+      <div class="actions"><button type="button" onclick={oninstall}>Install Clokrix</button></div>
     {:else if ios}
       <p>In Safari, tap <b>Share</b> → <b>Add to Home Screen</b>, then pair from the app there.</p>
     {:else}
@@ -91,7 +91,7 @@
 {/if}
 
 <p class="muted small about">
-  Everything travels through the Vyro relay sealed with keys only this phone and your PC have; the relay cannot read it.
+  Everything travels through the Clokrix relay sealed with keys only this phone and your PC have; the relay cannot read it.
   Whether this phone may change a PC is decided on that PC.
 </p>
 

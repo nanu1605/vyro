@@ -1,4 +1,4 @@
-// Dashboard presets (P24): the layouts Vyro ships, made into saved layouts on first run and used
+// Dashboard presets (P24): the layouts Clokrix ships, made into saved layouts on first run and used
 // by "Reset". Loaded on first run and with the editor.
 
 import { DEFAULT_SPEC, r3, widgetsOf, type Spec } from './dashboard';

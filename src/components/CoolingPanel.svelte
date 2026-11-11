@@ -144,7 +144,7 @@
 
   const labelOf = (c: FanConfig, h: HeaderStatus) => c.labels[h.index] ?? h.name;
   // One card per fan header (two columns wide while it shows a curve), then Safety and the events:
-  // in Vyro's order or the owner's (2.0.2).
+  // in Clokrix's order or the owner's (2.0.2).
   const cards = $derived<CardItem[]>([
     ...(status?.headers ?? []).map(
       (h): CardItem => ({
@@ -264,10 +264,10 @@
       <h2>Fan control is not available</h2>
       <p>{status.capability.reason}.</p>
       {#if backend?.mode === 'local'}
-        <p class="note">Fan control runs in the Vyro sensor service, which is not running.</p>
+        <p class="note">Fan control runs in the Clokrix sensor service, which is not running.</p>
       {:else if status.capability.state === 'readonly'}
         <p class="note">
-          Vyro drives fans only on motherboards where its fan control has been checked. Your fans keep following the
+          Clokrix drives fans only on motherboards where its fan control has been checked. Your fans keep following the
           BIOS, and their speeds still show on the Dashboard.
         </p>
       {/if}
@@ -278,7 +278,7 @@
         <h2>Fan control</h2>
         <p class="sub">
           {status.capability.board} ·
-          {#if !status.config.enabled}off: every fan follows the BIOS{:else if status.active}Vyro is driving your fans{:else}on, all fans on BIOS{/if}
+          {#if !status.config.enabled}off: every fan follows the BIOS{:else if status.active}Clokrix is driving your fans{:else}on, all fans on BIOS{/if}
         </p>
       </div>
       <div class="actions">
@@ -308,7 +308,7 @@
     {/if}
     {#if status.boost}
       <p class="note boost" role="status">
-        The alert “{status.boost.rule}” holds: the fans Vyro drives run {status.boost.pct} % faster until it clears.
+        The alert “{status.boost.rule}” holds: the fans Clokrix drives run {status.boost.pct} % faster until it clears.
       </p>
     {/if}
     {#if status.lastError}
@@ -391,10 +391,10 @@
               </label>
             </div>
             <p class="note">
-              Every fan Vyro drives goes to 100 % when either limit is reached, or when a curve’s temperature has no reading.
-              Vyro never sets a fan below 20 % or a pump below {now.pumpMinPct} %, and hands every fan back to the BIOS
+              Every fan Clokrix drives goes to 100 % when either limit is reached, or when a curve’s temperature has no reading.
+              Clokrix never sets a fan below 20 % or a pump below {now.pumpMinPct} %, and hands every fan back to the BIOS
               when it stops, crashes, loses its sensors, the pump stops reporting a speed, or the PC goes to sleep. Closing
-              this window does not stop fan control; the Vyro service keeps running it.
+              this window does not stop fan control; the Clokrix service keeps running it.
             </p>
           </Card>
         {:else if id === 'fan-events'}
@@ -423,7 +423,7 @@
             >
               <p class="state">
                 {#if h.software}
-                  <span class="tag on">Vyro</span> target {fmt(h.targetPct)} %
+                  <span class="tag on">Clokrix</span> target {fmt(h.targetPct)} %
                   {#if h.sourceC != null}at {t(h.sourceC)}{/if}
                 {:else}
                   <span class="tag">BIOS</span> following the BIOS curve
@@ -431,11 +431,11 @@
                 {#if cfg.labels[h.index]}<span class="board-name">· {h.name}</span>{/if}
               </p>
               {#if !h.controllable}
-                <p class="note">Vyro cannot control this header on this motherboard.</p>
+                <p class="note">Clokrix cannot control this header on this motherboard.</p>
               {:else if !confirmed(cfg, h)}
                 <p class="note">
                   This header is meant for a liquid cooler’s pump{#if h.connected && h.rpm}; something on it runs at
-                    {fmt(h.rpm)} RPM{/if}. Before Vyro controls it, confirm that a pump is plugged in here. Vyro keeps a
+                    {fmt(h.rpm)} RPM{/if}. Before Clokrix controls it, confirm that a pump is plugged in here. Clokrix keeps a
                   pump at {now.pumpMinPct} % or more, and hands every fan back to the BIOS if the pump stops reporting a
                   speed.
                 </p>
@@ -443,7 +443,7 @@
               {:else}
                 {#if isPump(cfg, h) && !h.connected}
                   <p class="note warn">
-                    Vyro can’t see this pump’s speed, so it can’t tell if the pump stops. Leave it on BIOS unless you’re
+                    Clokrix can’t see this pump’s speed, so it can’t tell if the pump stops. Leave it on BIOS unless you’re
                     sure the pump is on this header.
                   </p>
                 {:else if !h.connected}
@@ -646,14 +646,14 @@
 
     <dialog bind:this={confirm} aria-labelledby="fan-confirm-title">
       <h2 id="fan-confirm-title">Turn on fan control?</h2>
-      <p>Vyro will set the speed of the fans you choose instead of the BIOS.</p>
+      <p>Clokrix will set the speed of the fans you choose instead of the BIOS.</p>
       <ul>
         <li>
           Fans never go below 20 %, pumps never below {status.pumpMinPct} %. The pump header is controlled only after you
           confirm a pump is plugged into it.
         </li>
-        <li>Every fan Vyro drives runs at 100 % above the safety limits ({t(config.emergencyCpuC)} CPU, {t(config.emergencyGpuC)} GPU).</li>
-        <li>If Vyro stops, crashes or loses its sensor readings, the BIOS takes the fans back.</li>
+        <li>Every fan Clokrix drives runs at 100 % above the safety limits ({t(config.emergencyCpuC)} CPU, {t(config.emergencyGpuC)} GPU).</li>
+        <li>If Clokrix stops, crashes or loses its sensor readings, the BIOS takes the fans back.</li>
         <li>Closing the window does not stop fan control. Use “Return to BIOS” to hand everything back.</li>
         <li>Close MSI Center, FanControl and other fan tools first: two programs driving the same fans fight.</li>
       </ul>

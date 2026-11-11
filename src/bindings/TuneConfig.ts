@@ -16,7 +16,7 @@ enabled: boolean,
  */
 preset: string, 
 /**
- * Apply it again when Vyro starts (only settings that passed the stability test).
+ * Apply it again when Clokrix starts (only settings that passed the stability test).
  */
 applyAtStart: boolean, 
 /**

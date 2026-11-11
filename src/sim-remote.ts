@@ -1,6 +1,6 @@
 // Browser preview of Settings → Remote (P26, 1.4): the companion and the relay as the app would
 // report them, kept in memory. The QR code is a real one for the sample address (made by
-// `vyro_core::remote::qr`); the preview shows it for the relay's link too.
+// `clokrix_core::remote::qr`); the preview shows it for the relay's link too.
 
 import type { PhoneAction, RemoteBrief, RemoteStatus, ScreenStatus, WakeReadiness } from './types';
 
@@ -47,7 +47,7 @@ let status: RemoteStatus = {
   firewall: 'unknown',
   relay: {
     enabled: false,
-    url: 'https://vyro-relay.example.workers.dev',
+    url: 'https://clokrix-relay.example.workers.dev',
     custom: false,
     state: 'off',
     error: null,
@@ -57,7 +57,7 @@ let status: RemoteStatus = {
   },
 };
 
-const BUILT_IN = 'https://vyro-relay.example.workers.dev';
+const BUILT_IN = 'https://clokrix-relay.example.workers.dev';
 
 const listeners = new Set<(b: RemoteBrief) => void>();
 function changed(): RemoteStatus {

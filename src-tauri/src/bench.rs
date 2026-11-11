@@ -1,20 +1,20 @@
 //! Benchmark mode (P20), app side. A run happens in this process, on its own thread, so
-//! quitting Vyro always ends it; it watches the PC through the snapshots the engine sends, and
+//! quitting Clokrix always ends it; it watches the PC through the snapshots the engine sends, and
 //! the result goes to the engine's history store. A run stops when the owner presses Stop,
-//! closes the window (also when it hides to the tray) or quits Vyro, or on a safety rule (see
-//! `vyro_core::bench::runner`). The Benchmark profile is in force while it runs.
+//! closes the window (also when it hides to the tray) or quits Clokrix, or on a safety rule (see
+//! `clokrix_core::bench::runner`). The Benchmark profile is in force while it runs.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Emitter, Manager, State};
-use vyro_core::bench::runner::{self, Control, RunInputs, Scale};
-use vyro_core::bench::{
+use clokrix_core::bench::runner::{self, Control, RunInputs, Scale};
+use clokrix_core::bench::{
     self, BenchMode, BenchProgress, BenchRun, BenchSetup, Preflight, Probe, RunSummary, Sample,
 };
-use vyro_core::{lock, SensorSnapshot};
+use clokrix_core::{lock, SensorSnapshot};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::engine::Engine;
 
@@ -152,7 +152,7 @@ fn setup(
     .join(" ");
     let effective = crate::gaming::effective(app);
     BenchSetup {
-        vyro: app.package_info().version.to_string(),
+        clokrix: app.package_info().version.to_string(),
         cpu: hw.cpu.brand.clone(),
         cores: hw.cpu.cores,
         threads: hw.cpu.threads,
@@ -175,7 +175,7 @@ fn setup(
         board: (!board.is_empty()).then_some(board),
         bios: hw.board.bios_version.clone(),
         windows: (!windows.is_empty()).then_some(windows),
-        power_plan: vyro_core::sysinfo::power_plan(),
+        power_plan: clokrix_core::sysinfo::power_plan(),
         profile: Some(effective.profile.spec().name),
         fan_profile: Some(effective.fans.spec().name),
         drive,
@@ -245,7 +245,7 @@ pub(crate) fn start(app: &AppHandle, mode: BenchMode) -> Result<(), String> {
         gpu: bench::gpu::factory(),
         gpu_name: pre.gpu,
         hardware_errors: Some(Box::new(|since| {
-            vyro_core::sysinfo::stability_counts(since).map(|c| c.corrected + c.fatal)
+            clokrix_core::sysinfo::stability_counts(since).map(|c| c.corrected + c.fatal)
         })),
         scale: Scale::default(),
     };
@@ -256,7 +256,7 @@ pub(crate) fn start(app: &AppHandle, mode: BenchMode) -> Result<(), String> {
         let app = app.clone();
         let ctl = Arc::clone(&ctl);
         std::thread::Builder::new()
-            .name("vyro-bench".into())
+            .name("clokrix-bench".into())
             .spawn(move || {
                 log::info!("benchmark: {mode:?} run started");
                 let shown = |p: &BenchProgress| {

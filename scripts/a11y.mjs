@@ -59,7 +59,7 @@ const WIDGETS = {
     { ...DESK('top1', 'top', ['proc.ram'], 'app'), locked: true, clickThrough: true },
   ],
 };
-const SEED_WIDGETS = `localStorage.setItem('vyro.widgets', ${JSON.stringify(JSON.stringify(WIDGETS))})`;
+const SEED_WIDGETS = `localStorage.setItem('clokrix.widgets', ${JSON.stringify(JSON.stringify(WIDGETS))})`;
 // The longest texts each kind shows: the second GPU's readings ("GPU hotspot (GPU 2)"), a dial
 // on a rate in the hundreds, a clock with two GPU readings (1.2's finding: past the edge).
 const LONG = {
@@ -74,7 +74,7 @@ const LONG = {
     DESK('clock3', 'clock', ['gpu.0.hotspot'], 'glass'),
   ],
 };
-const SEED_LONG = `localStorage.setItem('vyro.widgets', ${JSON.stringify(JSON.stringify(LONG))})`;
+const SEED_LONG = `localStorage.setItem('clokrix.widgets', ${JSON.stringify(JSON.stringify(LONG))})`;
 
 /** A widget window's size, logical px: `widgetSize` in src/widgets.ts at 100 %. */
 function deskSize(w) {
@@ -108,7 +108,7 @@ const NARROW = [
 ];
 const layout = (id, name, widgets) => ({ id, name, preset: null, locked: false, widgets: widgets.map(([kind, w, h, source], i) => ({ id: `w${i + 1}`, kind, w, h, source })) });
 const seedDash = (active) =>
-  `localStorage.setItem('vyro.dashboard', ${JSON.stringify(JSON.stringify({ version: 1, active, layouts: [layout('owner', 'Owner', OWNER), layout('narrow', 'Narrow', NARROW)] }))})`;
+  `localStorage.setItem('clokrix.dashboard', ${JSON.stringify(JSON.stringify({ version: 1, active, layouts: [layout('owner', 'Owner', OWNER), layout('narrow', 'Narrow', NARROW)] }))})`;
 
 const problems = [];
 const problem = (where, what) => problems.push(`${where}: ${what}`);
@@ -187,7 +187,7 @@ async function axe(page, where) {
 }
 
 /**
- * Nothing scrolls sideways (2.0.2: "no horizontal scrolling throughout vyro"): not the window,
+ * Nothing scrolls sideways (2.0.2: "no horizontal scrolling throughout clokrix"): not the window,
  * measured with the frame's clip lifted so what it hides still counts, and no area in it (a table
  * in a card, a dialog's list) from 480 px, the narrowest the window gets (tauri.conf.json), or at
  * any width with `inner`.
@@ -217,7 +217,7 @@ async function open(browser, url, { width, theme, motion = 'no-preference', init
   await ctx.addInitScript(
     ([t, a, extra]) => {
       try {
-        localStorage.setItem('vyro.look', JSON.stringify({ theme: t, accent: a, openOn: 'dashboard' }));
+        localStorage.setItem('clokrix.look', JSON.stringify({ theme: t, accent: a, openOn: 'dashboard' }));
       } catch {
         /* the page works without it */
       }
@@ -352,7 +352,7 @@ async function sweepDialogs(browser, theme, width) {
 
   // What's new (1.5), as after an update from 1.4.1: once, and gone after Got it.
   await page.goto(`${BASE}/?whatsnew=1.4.1`);
-  const news = page.getByRole('dialog', { name: /^What’s new in Vyro/ });
+  const news = page.getByRole('dialog', { name: /^What’s new in Clokrix/ });
   await news.waitFor({ timeout: 5000 }).catch(() => problem(at("What's new"), 'does not show after an update'));
   await page.waitForTimeout(500);
   await axe(page, at("What's new"));
@@ -921,7 +921,7 @@ async function sweepSections(browser) {
 }
 
 // --- Links to a card (2.0.4). ------------------------------------------------------------------
-// The top bar's "Vyro … is available" (titled "Open Settings → Updates") and the Dashboard's
+// The top bar's "Clokrix … is available" (titled "Open Settings → Updates") and the Dashboard's
 // "Change profile" opened Settings at its top, wherever the card was. Gaming's "Turn it on in
 // Settings" and an alert's toast, which do not show in the preview (its game never stops, and no
 // alert fires in it), go the same way to the Gaming and Alerts cards checked above.

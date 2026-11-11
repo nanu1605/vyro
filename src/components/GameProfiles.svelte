@@ -139,7 +139,7 @@
       </table>
     </div>
     <p class="note">
-      Fans: whose fan settings apply (each profile can have its own in the Cooling tab). Update rate: how often Vyro
+      Fans: whose fan settings apply (each profile can have its own in the Cooling tab). Update rate: how often Clokrix
       reads sensors and refreshes the overlay while the game runs. A saved game is recognised in a window too.
     </p>
   {/if}

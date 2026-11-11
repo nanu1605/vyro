@@ -10,13 +10,13 @@
     if (!status) return null;
     if (status.mode === 'local') {
       return (
-        `The Vyro sensor service is not running${status.detail ? ` (${status.detail})` : ''}, so CPU temperature ` +
-        'and power, board fans and voltages, RAM temperatures, drive health and history while Vyro is closed ' +
-        'are unavailable. Reinstall Vyro, or start “Vyro Sensor Service” in Services, then restart Vyro.'
+        `The Clokrix sensor service is not running${status.detail ? ` (${status.detail})` : ''}, so CPU temperature ` +
+        'and power, board fans and voltages, RAM temperatures, drive health and history while Clokrix is closed ' +
+        'are unavailable. Reinstall Clokrix, or start “Clokrix Sensor Service” in Services, then restart Clokrix.'
       );
     }
     if (!status.connected) {
-      return `Reconnecting to the Vyro sensor service…${status.detail ? ` (${status.detail})` : ''}`;
+      return `Reconnecting to the Clokrix sensor service…${status.detail ? ` (${status.detail})` : ''}`;
     }
     return null;
   });

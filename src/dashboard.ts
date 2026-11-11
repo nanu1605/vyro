@@ -28,7 +28,7 @@ export const NEEDS_PAWNIO = 'needs PawnIO';
 export const NOT_REPORTED = 'not reported';
 export const NOT_THIS_CPU = 'not read on this CPU';
 
-/** The reasons from PawnIO's state: "not reported" once it is installed, and a CPU Vyro does not
+/** The reasons from PawnIO's state: "not reported" once it is installed, and a CPU Clokrix does not
  * read (an Intel one) says so whatever its state. Both said "needs PawnIO" until 2.0.4. */
 export function needsFor(pawnio: PawnIoStatus | null): Needs {
   const board = pawnio?.state === 'ready' ? NOT_REPORTED : NEEDS_PAWNIO;

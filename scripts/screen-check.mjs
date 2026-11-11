@@ -32,7 +32,7 @@ const problem = (m) => {
   console.log(ci ? `::error title=Screen check::${m}` : `✗ ${m}`);
 };
 
-const built = spawnSync('cargo', ['build', '-q', '-p', 'vyro-core', '--example', 'screen_check'], { cwd: root, stdio: 'inherit', shell: windows });
+const built = spawnSync('cargo', ['build', '-q', '-p', 'clokrix-core', '--example', 'screen_check'], { cwd: root, stdio: 'inherit', shell: windows });
 if (built.status !== 0) process.exit(1);
 const exe = `${root}/target/debug/examples/screen_check${windows ? '.exe' : ''}`;
 

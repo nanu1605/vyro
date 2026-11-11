@@ -1,4 +1,4 @@
-// The Vyro relay (1.4): serves the phone app, and passes sealed frames between a PC and its
+// The Clokrix relay (1.4): serves the phone app, and passes sealed frames between a PC and its
 // phones (`room.ts`). Sockets are `/pc/<room>` and `/phone/<room>/<phone>`; `/push/key` is the
 // relay's public key for push services (2.0, `keys.ts`), which a phone subscribes with;
 // everything else is the app's files.

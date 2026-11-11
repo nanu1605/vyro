@@ -91,7 +91,7 @@
     selected = id;
     document.getElementById(`disp:${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
-  // The arrangement across the top, then one card per display, in Vyro's order or the owner's (2.0.2).
+  // The arrangement across the top, then one card per display, in Clokrix's order or the owner's (2.0.2).
   const cards = $derived<CardItem[]>([
     { id: 'disp-arrangement', title: 'Arrangement', w: 'full' },
     ...(displays ?? []).map((d, i) => ({ id: `disp:${d.id}`, title: `Display ${i + 1}: ${d.name}` })),

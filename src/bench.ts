@@ -193,10 +193,10 @@ const SETUP: [keyof BenchSetup, string][] = [
   ['bios', 'BIOS'],
   ['windows', 'Windows'],
   ['powerPlan', 'Power plan'],
-  ['profile', 'Vyro profile'],
+  ['profile', 'Clokrix profile'],
   ['fanProfile', 'Fan settings'],
   ['drive', 'Drive tested'],
-  ['vyro', 'Vyro'],
+  ['clokrix', 'Clokrix'],
 ];
 
 export function setupRows(s: BenchSetup): { label: string; value: string }[] {

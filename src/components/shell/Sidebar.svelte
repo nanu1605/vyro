@@ -24,7 +24,7 @@
   }
   let { tab, onselect, dots, laptop = false, status }: Props = $props();
 
-  const KEY = 'vyro.nav.rail';
+  const KEY = 'clokrix.nav.rail';
   function remembered(): boolean {
     try {
       return localStorage.getItem(KEY) === '1';
@@ -101,20 +101,20 @@
   const groups = GROUPS.map((g) => ({ ...g, views: VIEWS.filter((v) => v.group === g.id) }));
 </script>
 
-<nav class="sidebar" class:rail aria-label="Vyro">
+<nav class="sidebar" class:rail aria-label="Clokrix">
   <div class="brand">
     <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
       <defs>
-        <linearGradient id="vyro-mark" x1="0" y1="0" x2="1" y2="1">
+        <linearGradient id="clokrix-mark" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stop-color="var(--accent-fill)" />
           <stop offset="1" stop-color="var(--accent-gpu-fill)" />
         </linearGradient>
       </defs>
-      <rect x="1" y="1" width="30" height="30" rx="9" fill="url(#vyro-mark)" opacity="0.18" />
-      <path d="M8 9.5 16 23l8-13.5" fill="none" stroke="url(#vyro-mark)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />
+      <rect x="1" y="1" width="30" height="30" rx="9" fill="url(#clokrix-mark)" opacity="0.18" />
+      <path d="M8 9.5 16 23l8-13.5" fill="none" stroke="url(#clokrix-mark)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />
     </svg>
     <div class="name">
-      <h1>VYRO</h1>
+      <h1>CLOKRIX</h1>
       <span class="sub">hardware monitor</span>
     </div>
   </div>

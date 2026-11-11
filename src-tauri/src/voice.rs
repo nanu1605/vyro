@@ -2,9 +2,9 @@
 //! kept in "Phone clips" (AAC, or WAV where Windows has no AAC encoder) and put on the clipboard
 //! as Explorer's Copy puts a file, so Paste in a chat attaches it. The phone's live microphone
 //! plays into a virtual cable (VB-CABLE and the like: Windows lets only a signed driver add a
-//! microphone, and Vyro ships none); while it plays, the cable's recording side is Windows'
+//! microphone, and Clokrix ships none); while it plays, the cable's recording side is Windows'
 //! default microphone if the owner allows it, and the defaults it replaced are put back after,
-//! even after a crash (`mic-restore.json`). What needs no app is in `vyro_core::screen::voice`.
+//! even after a crash (`mic-restore.json`). What needs no app is in `clokrix_core::screen::voice`.
 
 // Elsewhere only the pure parts are reached.
 #![cfg_attr(not(windows), allow(dead_code, unused_imports))]
@@ -14,12 +14,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use clokrix_core::screen::share::Note;
+use clokrix_core::screen::voice::{self, Pieces};
+use clokrix_core::{files, lock};
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 use tauri_plugin_notification::NotificationExt;
-use vyro_core::screen::share::Note;
-use vyro_core::screen::voice::{self, Pieces};
-use vyro_core::{files, lock};
 
 /// The clips' folder, in the app's local data folder.
 const CLIPS: &str = "Phone clips";
@@ -61,7 +61,7 @@ fn put_back(
     (back(console, &was.console), back(calls, &was.calls))
 }
 
-/// Whether a file in the clips' folder is a clip Vyro made (only those are deleted).
+/// Whether a file in the clips' folder is a clip Clokrix made (only those are deleted).
 fn is_clip(name: &str) -> bool {
     name.starts_with("Clip ") && (name.ends_with(".m4a") || name.ends_with(".wav"))
 }
@@ -177,7 +177,7 @@ impl Voice {
         #[cfg(windows)]
         if let Some(path) = dir.as_ref().map(|d| d.join(RESTORE)).filter(|p| p.exists()) {
             let _ = std::thread::Builder::new()
-                .name("vyro-mic-restore".into())
+                .name("clokrix-mic-restore".into())
                 .spawn(move || {
                     // At sign-in Windows' sound may not answer yet: up to a minute for it.
                     for _ in 0..60 {
@@ -221,12 +221,12 @@ fn state(app: &AppHandle) -> Option<tauri::State<'_, crate::screen::ScreenState>
 pub fn save_clip(app: &AppHandle, phone: &str, wav: &[u8]) -> Result<String, String> {
     use voice::win;
     let samples = voice::samples(voice::read_wav(wav)?);
-    let state = state(app).ok_or("Vyro is starting.")?;
+    let state = state(app).ok_or("Clokrix is starting.")?;
     let dir = state
         .voice
         .dir
         .as_ref()
-        .ok_or("Vyro has no folder for clips.")?
+        .ok_or("Clokrix has no folder for clips.")?
         .join(CLIPS);
     std::fs::create_dir_all(&dir).map_err(|e| format!("the clips' folder: {e}"))?;
     prune(&dir);
@@ -280,7 +280,7 @@ pub fn clip_piece(
     piece: Vec<u8>,
 ) -> Result<Option<String>, String> {
     let whole = {
-        let state = state(app).ok_or("Vyro is starting.")?;
+        let state = state(app).ok_or("Clokrix is starting.")?;
         let mut pieces = lock(&state.voice.pieces);
         let same = pieces
             .as_ref()
@@ -346,7 +346,7 @@ pub fn mic_frame(app: &AppHandle, phone: &str, ended: &AtomicBool, frame: &[u8])
     drop(mic);
     let (app, phone) = (app.clone(), phone.to_owned());
     let spawned = std::thread::Builder::new()
-        .name("vyro-mic-start".into())
+        .name("clokrix-mic-start".into())
         .spawn(move || start(&app, phone));
     if let Err(e) = spawned {
         log::warn!("phone microphone: {e}");
@@ -441,7 +441,7 @@ fn start(app: &AppHandle, phone: String) {
 fn watch(app: &AppHandle) {
     let app = app.clone();
     let spawned = std::thread::Builder::new()
-        .name("vyro-mic-quiet".into())
+        .name("clokrix-mic-quiet".into())
         .spawn(move || loop {
             std::thread::sleep(Duration::from_millis(250));
             let Some(state) = state(&app) else {
@@ -519,7 +519,7 @@ fn stop(app: &AppHandle, on: On, why: &str) {
 #[cfg(windows)]
 fn make_default(path: Option<&Path>, cable: &str) -> Result<bool, String> {
     use voice::win;
-    let path = path.ok_or("Vyro has no folder for its settings.")?;
+    let path = path.ok_or("Clokrix has no folder for its settings.")?;
     let (console, calls) = win::default_microphones()?;
     if console.as_deref() == Some(cable) && calls.as_deref() == Some(cable) {
         return Ok(false);
@@ -633,7 +633,7 @@ mod tests {
 
     #[test]
     fn a_second_clip_in_the_same_second_gets_its_own_name() {
-        let dir = std::env::temp_dir().join(format!("vyro-clips-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("clokrix-clips-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let t = [2026, 10, 21, 14, 3, 22];
         let first = free_path(&dir, t, "m4a");

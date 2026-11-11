@@ -2,14 +2,14 @@
 //! corner of the taskbar), as Rainmeter's "On desktop" skins stay (1.1.1).
 //!
 //! Show desktop lifts the window that holds the desktop icons above every window that is not
-//! always-on-top, so a widget kept at the bottom disappears under it. Vyro keeps a hidden probe
+//! always-on-top, so a widget kept at the bottom disappears under it. Clokrix keeps a hidden probe
 //! window just above the icons' window: when the icons' window rises above the probe with the
 //! desktop in front, the desktop is being shown, and the widgets go on top of it until an app
-//! (Vyro's main window too) comes forward or the desktop drops back. The check runs
+//! (Clokrix's main window too) comes forward or the desktop drops back. The check runs
 //! for a moment after each change of foreground window (the shell lifts the desktop a little
 //! after), and every 100 ms while the desktop shows, from a hook set only while a widget sits
-//! behind windows; otherwise nothing runs. Vyro's windows are never put inside Explorer's: that
-//! would tie the desktop's input to Vyro's main thread.
+//! behind windows; otherwise nothing runs. Clokrix's windows are never put inside Explorer's: that
+//! would tie the desktop's input to Clokrix's main thread.
 
 #[cfg(windows)]
 pub use imp::{desktop_shown, smoke_show_desktop, watch};
@@ -22,8 +22,8 @@ pub enum Front {
     Desktop,
     /// The taskbar, Start, search, the notification area, task switching.
     Shell,
-    /// One of Vyro's widgets (Vyro's main window counts as an app).
-    Vyro,
+    /// One of Clokrix's widgets (Clokrix's main window counts as an app).
+    Clokrix,
     /// Any other window.
     App,
     /// None, for a moment while windows switch.
@@ -44,7 +44,7 @@ pub fn next(shown: bool, front: Front, raised: bool) -> bool {
     }
 }
 
-/// The foreground window's kind by its class (Vyro's own windows are told by their process).
+/// The foreground window's kind by its class (Clokrix's own windows are told by their process).
 #[cfg_attr(not(windows), allow(dead_code))]
 pub fn front_of_class(class: &str) -> Front {
     match class {
@@ -93,7 +93,7 @@ mod imp {
 
     use super::{front_of_class, next, Front};
 
-    const PROBE_CLASS: PCWSTR = w!("VyroDesktopProbe");
+    const PROBE_CLASS: PCWSTR = w!("ClokrixDesktopProbe");
     const TIMER_ID: usize = 1;
     /// Checks this far apart: after a change of foreground window, and while the desktop shows.
     const TICK_MS: u32 = 100;
@@ -184,7 +184,7 @@ mod imp {
             let hwnd = CreateWindowExW(
                 WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
                 PROBE_CLASS,
-                w!("Vyro desktop probe"),
+                w!("Clokrix desktop probe"),
                 WS_POPUP | WS_DISABLED,
                 0,
                 0,
@@ -372,7 +372,7 @@ mod imp {
                 let n = usize::try_from(GetWindowTextW(fg, &mut title)).unwrap_or(0);
                 let title = String::from_utf16_lossy(&title[..n.min(title.len())]);
                 return if title == crate::widgets::TITLE {
-                    Front::Vyro
+                    Front::Clokrix
                 } else {
                     Front::App
                 };
@@ -426,7 +426,7 @@ mod imp {
     }
 
     /// CI's smoke test (`smoke.rs`): presses Show desktop through Explorer and checks the widget
-    /// (behind windows) stays over the desktop; then brings Vyro's main window forward, as a
+    /// (behind windows) stays over the desktop; then brings Clokrix's main window forward, as a
     /// click on an app in the taskbar would, and checks the widget goes back behind windows.
     /// "skipped: …" where the runner has no desktop to show. Runs on the smoke test's thread.
     pub fn smoke_show_desktop(app: &AppHandle, label: &str) -> String {
@@ -508,14 +508,14 @@ mod tests {
         // Clicking the desktop brings it forward without lifting it.
         assert!(!next(false, Front::Desktop, false));
         // Lifted with anything else in front is not counted as a start.
-        for front in [Front::Shell, Front::Vyro, Front::App, Front::Nothing] {
+        for front in [Front::Shell, Front::Clokrix, Front::App, Front::Nothing] {
             assert!(!next(false, front, true), "{front:?}");
         }
     }
 
     #[test]
-    fn it_lasts_through_the_shell_and_vyro_and_ends_with_an_app_or_the_desktop_dropping() {
-        for front in [Front::Desktop, Front::Shell, Front::Vyro, Front::Nothing] {
+    fn it_lasts_through_the_shell_and_clokrix_and_ends_with_an_app_or_the_desktop_dropping() {
+        for front in [Front::Desktop, Front::Shell, Front::Clokrix, Front::Nothing] {
             assert!(next(true, front, true), "{front:?}");
             assert!(!next(true, front, false), "{front:?}");
         }

@@ -27,12 +27,12 @@
 
 {#if state === 'asleep'}
   <State icon={Moon} title="{pc} is asleep or off">
-    <p>Its readings come back here as soon as it wakes, with Vyro running and <b>Reach from anywhere</b> on.</p>
+    <p>Its readings come back here as soon as it wakes, with Clokrix running and <b>Reach from anywhere</b> on.</p>
     {#if !canWake}
       <p>
         {paired > 1
           ? `To wake ${pc} from here, turn on Wake from phone on it (Settings → Remote) while it is on.`
-          : `A phone can’t wake a PC by itself: another PC with Vyro on the same network sends the signal. Pair one with this phone, and turn on Wake from phone on ${pc}.`}
+          : `A phone can’t wake a PC by itself: another PC with Clokrix on the same network sends the signal. Pair one with this phone, and turn on Wake from phone on ${pc}.`}
       </p>
     {/if}
     {#if waking}<p role="status">{waking}</p>{/if}
@@ -41,26 +41,26 @@
     {/snippet}
   </State>
 {:else if state === 'unreachable'}
-  <State icon={CloudOff} title="Can’t reach the Vyro relay" tone="warn">
+  <State icon={CloudOff} title="Can’t reach the Clokrix relay" tone="warn">
     <p>Check this phone’s connection. Trying again by itself…</p>
   </State>
 {:else if state === 'elsewhere'}
   <State icon={Smartphone} title="Open in another window">
-    <p>{pc} is open in another window of Vyro on this device.</p>
+    <p>{pc} is open in another window of Clokrix on this device.</p>
     {#snippet actions()}
       <button type="button" onclick={onuse}>Use it here</button>
     {/snippet}
   </State>
 {:else if state === 'tooOld'}
-  <State icon={Download} title="Update Vyro on {pc}" tone="warn">
-    <p>This app needs a newer Vyro on the PC. Vyro updates from its tray menu → Check for updates.</p>
+  <State icon={Download} title="Update Clokrix on {pc}" tone="warn">
+    <p>This app needs a newer Clokrix on the PC. Clokrix updates from its tray menu → Check for updates.</p>
   </State>
 {:else}
   <State icon={state === 'expired' ? ClockAlert : LogOut} title={state === 'expired' ? 'That pairing code has expired' : `Signed out of ${pc}`} tone="hot">
     <p>
       {state === 'expired'
-        ? 'It lasts 10 minutes and works once. In Vyro on the PC, show a new one: Settings → Remote → Pair a phone.'
-        : 'The PC signed this phone out, or its pairing ran out. Pair it again from Vyro: Settings → Remote → Pair a phone.'}
+        ? 'It lasts 10 minutes and works once. In Clokrix on the PC, show a new one: Settings → Remote → Pair a phone.'
+        : 'The PC signed this phone out, or its pairing ran out. Pair it again from Clokrix: Settings → Remote → Pair a phone.'}
     </p>
     {#snippet actions()}
       <button type="button" onclick={onforget}>Remove {pc}</button>

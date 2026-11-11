@@ -1,4 +1,4 @@
-//! The app runs unelevated (`asInvoker`): the Vyro sensor service does the reads that need
+//! The app runs unelevated (`asInvoker`): the Clokrix sensor service does the reads that need
 //! administrator rights (PawnIO, SMART).
 
 fn main() {

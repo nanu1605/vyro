@@ -1,4 +1,4 @@
-// Generated from vyro_core::network::sample(). Regenerate: cargo run -p vyro-core --example
+// Generated from clokrix_core::network::sample(). Regenerate: cargo run -p clokrix-core --example
 // inventory -- --no-wait (non-Windows), copy "network".
 
 import type { NetAdapterInfo } from './types';

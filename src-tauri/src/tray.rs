@@ -6,18 +6,18 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
+use clokrix_core::alerts::AlertFired;
+use clokrix_core::fan::FanBrief;
+use clokrix_core::gaming::auto::GameAutomation;
+use clokrix_core::gpu_tune::TuneBrief;
+use clokrix_core::profiles::Profile;
+use clokrix_core::units::TempUnit;
+use clokrix_core::{files, lock, unix_now};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, Window, WindowEvent, Wry};
-use vyro_core::alerts::AlertFired;
-use vyro_core::fan::FanBrief;
-use vyro_core::gaming::auto::GameAutomation;
-use vyro_core::gpu_tune::TuneBrief;
-use vyro_core::profiles::Profile;
-use vyro_core::units::TempUnit;
-use vyro_core::{files, lock, unix_now};
 
 use crate::engine::{notify, Engine};
 use crate::look::{Accent, MyPc, OpenOn, Theme};
@@ -26,7 +26,7 @@ use crate::overlay::OverlaySettings;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
-    /// Closing the window keeps Vyro running in the tray (alerts keep working).
+    /// Closing the window keeps Clokrix running in the tray (alerts keep working).
     pub close_to_tray: bool,
     /// How temperatures are shown (the engine always works in °C).
     pub temperature_unit: TempUnit,
@@ -82,7 +82,7 @@ pub struct SettingsStore {
 }
 
 /// Reads `settings.json` one setting at a time: a value this version cannot read (damaged, or
-/// written by a newer Vyro) falls back to its default and the others are kept. Returns the
+/// written by a newer Clokrix) falls back to its default and the others are kept. Returns the
 /// settings and the names of those reset; an error when the text is not a settings object.
 fn parse(text: &str) -> Result<(Settings, Vec<String>), String> {
     let file = match serde_json::from_str::<Value>(text) {
@@ -111,7 +111,7 @@ fn parse(text: &str) -> Result<(Settings, Vec<String>), String> {
 }
 
 /// The saved settings; defaults on first run. A file that is not settings at all is set aside
-/// as `settings.bad.json` (see `vyro_core::files`), never overwritten by the next save.
+/// as `settings.bad.json` (see `clokrix_core::files`), never overwritten by the next save.
 fn read_settings(path: &Path) -> Settings {
     let text = match std::fs::read(path) {
         Ok(b) => String::from_utf8(b).map_err(|e| e.to_string()),
@@ -293,7 +293,7 @@ pub fn set_widgets_checked(app: &AppHandle, on: bool) {
     }
 }
 
-/// "Return fans to BIOS", enabled while Vyro drives fans.
+/// "Return fans to BIOS", enabled while Clokrix drives fans.
 pub struct FanItem(MenuItem<Wry>);
 /// "Return GPU to stock", enabled while the GPU runs tuned (1.6).
 pub struct GpuItem(MenuItem<Wry>);
@@ -338,7 +338,7 @@ pub fn set_tray_state(app: &AppHandle, state: &TrayState) -> bool {
     true
 }
 
-/// "Vyro · fan control on · GPU tuned · remote on · alert: Hot under load" (Windows keeps 127
+/// "Clokrix · fan control on · GPU tuned · remote on · alert: Hot under load" (Windows keeps 127
 /// characters).
 fn tooltip(state: &TrayState) -> String {
     let TrayState {
@@ -348,9 +348,9 @@ fn tooltip(state: &TrayState) -> String {
         alerts,
     } = state;
     let mut tip = String::from(match (fans.active, fans.full_speed) {
-        (true, true) => "Vyro · fans at full speed",
-        (true, false) => "Vyro · fan control on",
-        (false, _) => "Vyro",
+        (true, true) => "Clokrix · fans at full speed",
+        (true, false) => "Clokrix · fan control on",
+        (false, _) => "Clokrix",
     });
     if gpu.tuned {
         tip.push_str(" · GPU tuned");
@@ -490,8 +490,8 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     )?;
     app.manage(ScreenItem(screen.clone()));
 
-    let show = MenuItem::with_id(app, "show", "Show Vyro", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Vyro", true, None::<&str>)?;
+    let show = MenuItem::with_id(app, "show", "Show Clokrix", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Clokrix", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(
         app,
@@ -500,7 +500,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         ],
     )?;
     let mut tray = TrayIconBuilder::with_id("main")
-        .tooltip("Vyro")
+        .tooltip("Clokrix")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, e| match e.id.as_ref() {
@@ -572,7 +572,7 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
     }
     let app = window.app_handle();
     // A benchmark never runs on unseen (P20).
-    crate::bench::stop(app, "The Vyro window was closed.");
+    crate::bench::stop(app, "The Clokrix window was closed.");
     let Some(store) = app.try_state::<SettingsStore>() else {
         return;
     };
@@ -587,7 +587,7 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
             &AlertFired::new(
                 unix_now(),
                 "tray",
-                "Vyro is still running".into(),
+                "Clokrix is still running".into(),
                 "Monitoring and alerts continue in the tray. Right-click the icon to quit.".into(),
                 false,
             ),
@@ -614,15 +614,15 @@ mod tests {
         let off = TuneBrief::default();
         assert_eq!(
             tooltip(&state(FanBrief::default(), off, false, &[])),
-            "Vyro"
+            "Clokrix"
         );
         assert_eq!(
             tooltip(&state(on, off, false, &["Hot under load".into()])),
-            "Vyro · fan control on · alert: Hot under load"
+            "Clokrix · fan control on · alert: Hot under load"
         );
         assert_eq!(
             tooltip(&state(FanBrief::default(), off, true, &[])),
-            "Vyro · remote on"
+            "Clokrix · remote on"
         );
         let tuned = TuneBrief {
             tuned: true,
@@ -630,7 +630,7 @@ mod tests {
         };
         assert_eq!(
             tooltip(&state(on, tuned, false, &[])),
-            "Vyro · fan control on · GPU tuned"
+            "Clokrix · fan control on · GPU tuned"
         );
         let held = TuneBrief {
             tuned: false,
@@ -638,11 +638,11 @@ mod tests {
         };
         assert_eq!(
             tooltip(&state(FanBrief::default(), held, false, &[])),
-            "Vyro · GPU held at stock"
+            "Clokrix · GPU held at stock"
         );
         let many: Vec<String> = (0..20).map(|i| format!("Alert number {i}")).collect();
         let tip = tooltip(&state(FanBrief::default(), off, false, &many));
-        assert!(tip.starts_with("Vyro · alerts: Alert number 0, "));
+        assert!(tip.starts_with("Clokrix · alerts: Alert number 0, "));
         assert_eq!(tip.chars().count(), 127);
     }
 
@@ -685,12 +685,14 @@ mod tests {
     fn release(version: &str) -> Settings {
         let text = match version {
             "0.1.4" => {
-                include_str!("../../crates/vyro-core/tests/fixtures/v0.1.4/config/settings.json")
+                include_str!("../../crates/clokrix-core/tests/fixtures/v0.1.4/config/settings.json")
             }
             "0.2.0" => {
-                include_str!("../../crates/vyro-core/tests/fixtures/v0.2.0/config/settings.json")
+                include_str!("../../crates/clokrix-core/tests/fixtures/v0.2.0/config/settings.json")
             }
-            _ => include_str!("../../crates/vyro-core/tests/fixtures/v0.3.0/config/settings.json"),
+            _ => {
+                include_str!("../../crates/clokrix-core/tests/fixtures/v0.3.0/config/settings.json")
+            }
         };
         let (s, reset) = parse(text).unwrap();
         assert!(reset.is_empty(), "{version}: {reset:?}");
@@ -699,7 +701,7 @@ mod tests {
 
     #[test]
     fn every_release_s_settings_carry_over() {
-        // Written by 0.1.4 and 0.2.0 themselves (crates/vyro-core/tests/fixtures/gen).
+        // Written by 0.1.4 and 0.2.0 themselves (crates/clokrix-core/tests/fixtures/gen).
         for version in ["0.1.4", "0.2.0"] {
             let s = release(version);
             assert!(!s.close_to_tray);
@@ -713,7 +715,7 @@ mod tests {
             // "Not detailed" became the Minimal mode in 0.3.
             assert_eq!(
                 s.overlay.mode,
-                vyro_core::gaming::overlay::OverlayMode::Minimal
+                clokrix_core::gaming::overlay::OverlayMode::Minimal
             );
             assert_eq!(s.games, GameAutomation::default());
             assert_eq!(s.theme, Theme::Midnight);
@@ -724,7 +726,7 @@ mod tests {
         assert_eq!(s.temperature_unit, TempUnit::F);
         assert_eq!(
             s.overlay.mode,
-            vyro_core::gaming::overlay::OverlayMode::Full
+            clokrix_core::gaming::overlay::OverlayMode::Full
         );
         assert_eq!(s.overlay.corner, crate::overlay::Corner::TopRight);
         assert_eq!((s.overlay.offset_x, s.overlay.offset_y), (24, 40));
@@ -761,7 +763,7 @@ mod tests {
 
     #[test]
     fn a_damaged_settings_file_is_set_aside_and_saves_are_whole() {
-        let dir = std::env::temp_dir().join(format!("vyro-settings-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("clokrix-settings-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("settings.json");

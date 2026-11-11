@@ -119,7 +119,7 @@ export const sampleSystem: SystemInfo = {
     { name: 'OneDrive', command: '"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe" /background', source: 'registryUser', enabled: true },
     { name: 'SecurityHealth', command: '%windir%\\system32\\SecurityHealthSystray.exe', source: 'registryMachine', enabled: true },
     { name: 'Steam', command: '"C:\\Program Files (x86)\\Steam\\steam.exe" -silent', source: 'registryUser', enabled: true },
-    { name: 'Vyro updater', command: 'C:\\Program Files\\Vyro\\vyro.exe --check-update', source: 'scheduledTask', enabled: true },
+    { name: 'Clokrix updater', command: 'C:\\Program Files\\Clokrix\\clokrix.exe --check-update', source: 'scheduledTask', enabled: true },
   ],
   powerEvents: [
     { ts: boot + 2 * 86400 + 3600, kind: 'wake', detail: 'wake source: USB Composite Device' },
@@ -132,7 +132,7 @@ export const sampleSystem: SystemInfo = {
   elevated: false,
 };
 
-/** The browser preview as a laptop (`localStorage['vyro.sim.form'] = 'laptop'`). */
+/** The browser preview as a laptop (`localStorage['clokrix.sim.form'] = 'laptop'`). */
 export const sampleLaptop: HardwareId = {
   ...sampleHardware,
   board: {

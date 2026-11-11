@@ -24,7 +24,7 @@ const metric = (key: string, value: number, spread: number | null, better: Metri
 function run(id: number, ts: number, metrics: Metric[], extra: Partial<BenchRun> = {}): BenchRun {
   return {
     id, ts, method: 1, mode: 'quick', status: 'completed', reason: null, secs: 130, busy: false, notes: [],
-    setup: { vyro: '0.4.0', cpu: 'CPU', cores: 8, threads: 16, gpu: 'GPU', gpuDriver: '576.02', ramGb: 32, ramMts: 6000, board: null,
+    setup: { clokrix: '0.4.0', cpu: 'CPU', cores: 8, threads: 16, gpu: 'GPU', gpuDriver: '576.02', ramGb: 32, ramMts: 6000, board: null,
       bios: '1.A0', windows: null, powerPlan: 'Balanced', profile: 'Benchmark', fanProfile: 'Benchmark', drive: null, busyPct: 2 },
     areas: [{ area: 'cpuMulti', metrics, watch: null, missing: null, detail: null, loops: [] }],
     errors: { calc: 0, storage: 0, hardware: 0, gpuResets: 0 },

@@ -23,7 +23,7 @@ describe('HD or SD', () => {
     expect(readQuality('sd')).toBe('sd');
     expect(readQuality('4k')).toBeNull();
     expect(readQuality(null)).toBeNull();
-    expect(keyFor('DESKTOP-7E24')).toBe('vyro.quality.DESKTOP-7E24');
+    expect(keyFor('DESKTOP-7E24')).toBe('clokrix.quality.DESKTOP-7E24');
   });
 
   it('pastes with Ctrl+V and lets Ctrl go', () => {

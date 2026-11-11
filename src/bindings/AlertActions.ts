@@ -18,7 +18,7 @@ tray: boolean,
  */
 profile: Profile | null, 
 /**
- * While it holds, the fans Vyro drives run this many percentage points faster. Never a
+ * While it holds, the fans Clokrix drives run this many percentage points faster. Never a
  * header left to the BIOS, and nothing at all while fan control is off.
  */
 fanBoost: number | null, 

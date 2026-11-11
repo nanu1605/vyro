@@ -28,7 +28,7 @@ export const GROUPS: Array<{ id: Group; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'performance', label: 'Performance' },
   { id: 'pc', label: 'This PC' },
-  { id: 'app', label: 'Vyro' },
+  { id: 'app', label: 'Clokrix' },
 ];
 
 export interface View {

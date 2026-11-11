@@ -4,6 +4,6 @@ import type { TuneSettings } from "./TuneSettings";
 
 export type TunePreset = { id: string, name: string, settings: TuneSettings, kind: TunePresetKind, 
 /**
- * What it does, in a sentence (Vyro's presets).
+ * What it does, in a sentence (Clokrix's presets).
  */
 note: string | null, };

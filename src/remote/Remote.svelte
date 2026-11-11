@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The remote companion page (P26), served by the Vyro app to a paired phone or computer on the
+  // The remote companion page (P26), served by the Clokrix app to a paired phone or computer on the
   // same network. Read-only: it shows the PC's readings and can only sign itself out.
   import { onMount } from 'svelte';
   import { fmtDate } from '../format';
@@ -29,7 +29,7 @@
   const stale = $derived(stage === 'live' && (lastAt === 0 || now - lastAt > STALE_SECS * 1000));
 
   $effect(() => {
-    document.title = stage === 'live' ? pageTitle(info?.pc ?? '', view) : 'Vyro';
+    document.title = stage === 'live' ? pageTitle(info?.pc ?? '', view) : 'Clokrix';
   });
 
   function onView(v: RemoteView): void {
@@ -92,7 +92,7 @@
     e.preventDefault();
     const c = canonCode(code);
     if (!c) {
-      error = 'Enter the 8-character code shown in Vyro.';
+      error = 'Enter the 8-character code shown in Clokrix.';
       return;
     }
     busy = true;
@@ -158,7 +158,7 @@
 <div class="page">
   <header>
     <div class="top">
-      <p class="brand"><span class="logo">VYRO</span>{#if info?.pc}<span class="pc">{info.pc}</span>{/if}</p>
+      <p class="brand"><span class="logo">CLOKRIX</span>{#if info?.pc}<span class="pc">{info.pc}</span>{/if}</p>
       {#if stage === 'live'}
         <p class="live" class:wait={stale} role="status">{stale ? 'Waiting for readings…' : 'Live'}</p>
       {/if}
@@ -169,23 +169,23 @@
   <main>
 
     {#if stage === 'loading'}
-      <p class="muted" role="status">Connecting to Vyro…</p>
+      <p class="muted" role="status">Connecting to Clokrix…</p>
     {:else if stage === 'down'}
       <section class="panel" aria-labelledby="down-title">
-        <h1 id="down-title">Can’t reach Vyro</h1>
+        <h1 id="down-title">Can’t reach Clokrix</h1>
         <p>
-          Vyro has to be running on the PC with Settings → Remote turned on, and this device on the same network. Trying
+          Clokrix has to be running on the PC with Settings → Remote turned on, and this device on the same network. Trying
           again every few seconds…
         </p>
       </section>
     {:else if stage === 'pair'}
       <section class="panel pair" aria-labelledby="pair-title">
-        <h1 id="pair-title">Pair with Vyro</h1>
+        <h1 id="pair-title">Pair with Clokrix</h1>
         {#if signedOut}
           <p class="note warn" role="status">This device was signed out. Pair it again to keep watching.</p>
         {/if}
         <p>
-          On the PC, open Vyro → Settings → Remote → <b>Pair a device</b>, then scan the QR code with this device or type
+          On the PC, open Clokrix → Settings → Remote → <b>Pair a device</b>, then scan the QR code with this device or type
           the code shown there.
         </p>
         <form onsubmit={submit}>
@@ -222,7 +222,7 @@
           <p>{info.device} · paired until {fmtDate(info.expires)}</p>
         {/if}
         <button type="button" class="ghost" onclick={() => void leave()}>Sign out of this PC</button>
-        {#if info}<p class="muted small">Vyro {info.version}</p>{/if}
+        {#if info}<p class="muted small">Clokrix {info.version}</p>{/if}
       </footer>
     {:else}
       <p class="muted" role="status">Waiting for the first reading…</p>

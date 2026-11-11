@@ -24,7 +24,7 @@ export const STYLES: Record<CardStyle, { label: string; hint: string }> = {
 
 export const TITLE_MAX = 40;
 export const DEFAULT_TITLE = 'My PC';
-export const POWERED_BY = 'Powered by Vyro';
+export const POWERED_BY = 'Powered by Clokrix';
 
 export interface CardLine {
   label: string;
@@ -140,7 +140,7 @@ export function layout(model: CardModel, size: CardSize, style: CardStyle, measu
   const big = style === 'minimal' ? 1.15 : 1;
 
   // Header: wordmark, then the owner's title.
-  ops.push({ t: 'text', x: inner, y: inner + 30, text: 'VYRO', size: 30, weight: 700, role: 'accent', align: 'left', spacing: 10 });
+  ops.push({ t: 'text', x: inner, y: inner + 30, text: 'CLOKRIX', size: 30, weight: 700, role: 'accent', align: 'left', spacing: 10 });
 
   // The score ring: right of the specs on 16:9, beside the title on square, centred on story.
   const ringR = size === 'wide' ? 190 : size === 'square' ? 105 : 210;
@@ -269,8 +269,8 @@ export function paint(ctx: CanvasRenderingContext2D, ops: Op[], size: CardSize, 
   }
 }
 
-/** "vyro-card-20261015-1024-16x9.png". */
+/** "clokrix-card-20261015-1024-16x9.png". */
 export function fileName(stamp: string, size: CardSize, style: CardStyle): string {
   const tag = size === 'wide' ? '16x9' : size === 'square' ? '1x1' : 'story';
-  return `vyro-card-${stamp}-${tag}${style === 'full' ? '' : `-${style}`}.png`;
+  return `clokrix-card-${stamp}-${tag}${style === 'full' ? '' : `-${style}`}.png`;
 }
