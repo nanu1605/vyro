@@ -14,15 +14,17 @@
 }
 .brand {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.6rem;
   min-width: 0;
   margin: 0;
 }
+/* The Clokrix logo (2.2, components/Logo.svelte), X and word. */
 .logo {
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  color: var(--accent);
+  display: block;
+  flex: none;
+  width: auto;
+  height: 1.35rem;
 }
 .pc {
   overflow: hidden;

@@ -3,6 +3,8 @@
 // number or the computer's name), and the layout is pure so the tests can check every size;
 // `paint` draws it on a canvas with the theme's colours.
 
+import { CYAN, INK_DARK, INK_LIGHT, LAYER, MAGENTA, MARK, VIEW, WORD, type Pixel } from './brand';
+import { SCATTER } from './brand-scatter';
 import { BANDS } from './score';
 import { parseColor } from './themes';
 import type { DriveInfo, HardwareId, OsInfo, PerformanceScore } from './types';
@@ -110,6 +112,8 @@ export type Op =
   | { t: 'background' }
   | { t: 'panel'; x: number; y: number; w: number; h: number; r: number }
   | { t: 'text'; x: number; y: number; text: string; size: number; weight: number; role: Role; align: 'left' | 'center' | 'right'; spacing?: number }
+  /** The Clokrix logo with its pixels (brand.ts), its top-left corner at (x, y), `h` tall. */
+  | { t: 'logo'; x: number; y: number; h: number }
   | { t: 'ring'; cx: number; cy: number; r: number; width: number; value: number };
 
 /** Text width in pixels at a size and weight (the canvas in the app, a stand-in in tests). */
@@ -130,6 +134,11 @@ function fitSize(text: string, sizes: number[], weight: number, max: number, mea
   return [fit(text, size, weight, max, measure), size];
 }
 
+/** The logo's height on a card (2.2): its letters as tall as the old wordmark's. */
+export const LOGO_H = 40;
+/** The logo's width at a height. */
+export const logoWidth = (h: number) => (h * VIEW.scatter[2]) / VIEW.scatter[3];
+
 export function layout(model: CardModel, size: CardSize, style: CardStyle, measure: Measure): Op[] {
   const { w, h } = SIZES[size];
   const ops: Op[] = [];
@@ -139,8 +148,8 @@ export function layout(model: CardModel, size: CardSize, style: CardStyle, measu
   const inner = pad + (style === 'full' ? 24 : 0);
   const big = style === 'minimal' ? 1.15 : 1;
 
-  // Header: wordmark, then the owner's title.
-  ops.push({ t: 'text', x: inner, y: inner + 30, text: 'CLOKRIX', size: 30, weight: 700, role: 'accent', align: 'left', spacing: 10 });
+  // Header: the logo, then the owner's title.
+  ops.push({ t: 'logo', x: inner, y: inner, h: LOGO_H });
 
   // The score ring: right of the specs on 16:9, beside the title on square, centred on story.
   const ringR = size === 'wide' ? 190 : size === 'square' ? 105 : 210;
@@ -253,6 +262,12 @@ export function paint(ctx: CanvasRenderingContext2D, ops: Op[], size: CardSize, 
       ctx.beginPath();
       ctx.arc(op.cx, op.cy, op.r, start, start + (sweep * Math.max(0, Math.min(100, op.value))) / 100);
       ctx.stroke();
+    } else if (op.t === 'logo') {
+      if (transparent) {
+        ctx.shadowColor = p.light ? 'rgb(255 255 255 / 85%)' : 'rgb(0 0 0 / 70%)';
+        ctx.shadowBlur = 12;
+      }
+      drawLogo(ctx, op.x, op.y, op.h, p.light ? INK_LIGHT : INK_DARK);
     } else {
       ctx.font = font(op.size, op.weight);
       ctx.fillStyle = color[op.role];
@@ -267,6 +282,44 @@ export function paint(ctx: CanvasRenderingContext2D, ops: Op[], size: CardSize, 
     }
     ctx.restore();
   }
+}
+
+/** The logo as Logo.svelte draws it, with its pixels: the X and the word, each magenta and cyan
+ * offset either way and the main strokes (`ink`) on top. */
+function drawLogo(ctx: CanvasRenderingContext2D, x: number, y: number, h: number, ink: string): void {
+  const [vx, vy, , vh] = VIEW.scatter;
+  const k = h / vh;
+  ctx.translate(x - vx * k, y - vy * k);
+  ctx.scale(k, k);
+  const fill = (p: Pixel) => (p[3] === 1 ? CYAN : p[3] === 2 ? MAGENTA : ink);
+  const part = (shape: typeof MARK | typeof WORD, pixels: readonly Pixel[], skew: number) => {
+    const [sx, sy] = shape.shift;
+    const path = new Path2D(shape.d);
+    ctx.save();
+    ctx.translate(shape.at[0], shape.at[1]);
+    ctx.scale(shape.scale, shape.scale);
+    ctx.lineWidth = shape.width;
+    ctx.lineJoin = 'miter';
+    ctx.miterLimit = 6;
+    for (const [color, dx, dy, alpha] of [[MAGENTA, -sx, -sy, LAYER], [CYAN, sx, sy, LAYER], [ink, 0, 0, 1]] as const) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(dx, dy);
+      ctx.transform(1, 0, skew, 1, 0, 0);
+      ctx.strokeStyle = color;
+      ctx.stroke(path);
+      ctx.restore();
+    }
+    ctx.transform(1, 0, skew, 1, 0, 0);
+    for (const p of pixels) {
+      ctx.globalAlpha = p[4] / 100;
+      ctx.fillStyle = fill(p);
+      ctx.fillRect(p[0], p[1], p[2], p[2]);
+    }
+    ctx.restore();
+  };
+  part(MARK, SCATTER.mark, 0);
+  part(WORD, SCATTER.word, Math.tan((WORD.skew * Math.PI) / 180));
 }
 
 /** "clokrix-card-20261015-1024-16x9.png". */

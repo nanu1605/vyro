@@ -307,6 +307,9 @@ export function tokens(themeId: string, accent: string): Record<string, string> 
     '--shadow': p.shadow,
     // The cards' drop (P28): soft on a light page, deep on a dark one.
     '--shadow-color': t.light ? 'rgb(23 32 43 / 14%)' : 'rgb(0 0 0 / 70%)',
+    // The logo's main strokes (2.2): its own white, or the light logo's near-black (brand.ts's
+    // INK_DARK and INK_LIGHT, written here so the pages that only show the logo skip brand.ts).
+    '--logo-ink': t.light ? '#15151F' : '#FFFFFF',
   };
 }
 

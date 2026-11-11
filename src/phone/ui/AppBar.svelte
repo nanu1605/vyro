@@ -8,6 +8,7 @@
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
   import ShieldCheck from '@lucide/svelte/icons/shield-check';
+  import Logo from '../../components/Logo.svelte';
 
   interface Props {
     /** The PC open now; null on the home screens. */
@@ -31,10 +32,7 @@
         <span>{back.label}</span>
       </button>
     {:else}
-      <span class="brand">
-        <img src="/icons/icon.svg" alt="" width="26" height="26" />
-        <span class="word">CLOKRIX</span>
-      </span>
+      <span class="brand"><span class="sr-only">Clokrix</span><Logo class="logo" /></span>
     {/if}
     {#if chip}
       <p class="chip {chip.tone}" role="status">{chip.text}</p>
@@ -75,15 +73,11 @@
   .brand {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
   }
-  .brand img {
-    border-radius: 7px;
-  }
-  .word {
-    color: var(--accent);
-    font-weight: 800;
-    letter-spacing: 0.16em;
+  .brand :global(.logo) {
+    display: block;
+    width: auto;
+    height: 1.55rem;
   }
   .back {
     display: inline-flex;

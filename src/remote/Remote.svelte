@@ -8,6 +8,7 @@
   import { getInfo, getView, NotPaired, pair, signOut, stream } from './api';
   import { canonCode, codeFromHash, deviceName, pageTitle, showCode, STALE_SECS } from './companion';
   import LiveView from './LiveView.svelte';
+  import Logo from '../components/Logo.svelte';
   import Footer from '../phone/ui/Footer.svelte';
 
   type Stage = 'loading' | 'pair' | 'live' | 'down';
@@ -158,7 +159,7 @@
 <div class="page">
   <header>
     <div class="top">
-      <p class="brand"><span class="logo">CLOKRIX</span>{#if info?.pc}<span class="pc">{info.pc}</span>{/if}</p>
+      <p class="brand"><span class="sr-only">Clokrix</span><Logo class="logo" />{#if info?.pc}<span class="pc">{info.pc}</span>{/if}</p>
       {#if stage === 'live'}
         <p class="live" class:wait={stale} role="status">{stale ? 'Waiting for readings…' : 'Live'}</p>
       {/if}

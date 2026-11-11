@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { INK_DARK, INK_LIGHT } from './brand';
 import { fromLch } from './color';
 import {
   ACCENTS,
@@ -128,6 +129,10 @@ describe('themes', () => {
         }
       }
     }
+  });
+
+  it("give the logo its own white, or the light logo's near-black on a light theme", () => {
+    for (const t of THEMES) expect(tokens(t.id, 'theme')['--logo-ink'], t.id).toBe(t.light ? INK_LIGHT : INK_DARK);
   });
 
   it('fall back to Midnight and the theme accent for unknown names', () => {

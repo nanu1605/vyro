@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_TITLE, POWERED_BY, SIZES, TITLE_MAX, cardModel, driveSize, fileName, fit, layout, shortName, type CardSize, type CardStyle, type Measure } from './card';
+import { DEFAULT_TITLE, POWERED_BY, SIZES, TITLE_MAX, cardModel, driveSize, fileName, fit, layout, logoWidth, shortName, type CardSize, type CardStyle, type Measure } from './card';
 import { sampleDrives } from './sample-drives';
 import { sampleHardware } from './sample';
 import type { DriveInfo, HardwareId, OsInfo, PerformanceScore } from './types';
@@ -90,8 +90,18 @@ describe('share cards', () => {
             expect(o.y - o.size, where).toBeGreaterThanOrEqual(0);
             expect(o.y, where).toBeLessThanOrEqual(h);
           }
+          // The logo (2.2): once, inside the picture and above the title.
+          const logos = ops.filter((o) => o.t === 'logo');
+          expect(logos.length).toBe(1);
+          const [logo, title] = [logos[0]!, texts[0]!];
+          if (logo.t === 'logo' && title.t === 'text') {
+            expect(logo.x).toBeGreaterThanOrEqual(0);
+            expect(logo.x + logoWidth(logo.h)).toBeLessThanOrEqual(w);
+            expect(logo.y).toBeGreaterThanOrEqual(0);
+            expect(logo.y + logo.h, `${size}/${style}`).toBeLessThanOrEqual(title.y - title.size);
+          }
           // Lines never overlap each other or the footer.
-          const ys = texts.map((o) => (o.t === 'text' ? o.y : 0)).filter((_, i) => i > 1);
+          const ys = texts.map((o) => (o.t === 'text' ? o.y : 0)).filter((_, i) => i > 0);
           expect(new Set(ys).size).toBe(ys.length);
           for (const o of ops) {
             if (o.t !== 'ring') continue;

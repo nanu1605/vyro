@@ -1,6 +1,7 @@
-// Page keys saved before the rename to Clokrix (2.2) begin `vyro.`; they move to `clokrix.` once,
-// before anything reads them: each page's entry imports this module first. A key already saved
-// under the new name wins.
+// The app's page keys saved before the rename to Clokrix (2.2) begin `vyro.`; they move to
+// `clokrix.` once, before anything reads them: main.ts imports this module first. A key already
+// saved under the new name wins. The phone app has a new address after the rename (nothing saved
+// there to move), and the companion page keeps only the look, which the PC sends again.
 const OLD = 'vyro.';
 const NEW = 'clokrix.';
 

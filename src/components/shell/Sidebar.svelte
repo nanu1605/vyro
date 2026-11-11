@@ -9,6 +9,8 @@
   import PanelLeftOpen from '@lucide/svelte/icons/panel-left-open';
   import Laptop from '@lucide/svelte/icons/laptop';
   import { GROUPS, VIEWS, type Tab } from '../../nav';
+  import { PIXELS } from '../../brand-scatter';
+  import Logo from '../Logo.svelte';
 
   export type Dot = { tone: 'warn' | 'fail' | 'new'; note: string };
 
@@ -103,18 +105,10 @@
 
 <nav class="sidebar" class:rail aria-label="Clokrix">
   <div class="brand">
-    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
-      <defs>
-        <linearGradient id="clokrix-mark" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="var(--accent-fill)" />
-          <stop offset="1" stop-color="var(--accent-gpu-fill)" />
-        </linearGradient>
-      </defs>
-      <rect x="1" y="1" width="30" height="30" rx="9" fill="url(#clokrix-mark)" opacity="0.18" />
-      <path d="M8 9.5 16 23l8-13.5" fill="none" stroke="url(#clokrix-mark)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
+    <!-- Folded: the X alone. Open: the logo, X and word with its pixels (2.2). -->
+    <Logo word={false} class="mark" />
     <div class="name">
-      <h1>CLOKRIX</h1>
+      <h1><span class="sr-only">Clokrix</span><Logo pixels={PIXELS} class="logo" /></h1>
       <span class="sub">hardware monitor</span>
     </div>
   </div>
@@ -189,10 +183,14 @@
     gap: 0.65rem;
     padding: 0 0.35rem 1rem;
   }
-  .logo {
+  .brand :global(.mark) {
+    display: none;
     flex: none;
     width: 2rem;
     height: 2rem;
+  }
+  .rail .brand :global(.mark) {
+    display: block;
   }
   .name {
     min-width: 0;
@@ -200,11 +198,17 @@
   }
   h1 {
     margin: 0;
-    color: var(--text);
-    font-size: 1rem;
-    letter-spacing: 0.32em;
+    line-height: 0;
+  }
+  .brand :global(.logo) {
+    display: block;
+    width: 9.5rem;
+    max-width: 100%;
+    height: auto;
   }
   .sub {
+    display: block;
+    margin-top: 0.2rem;
     color: var(--muted);
     font-size: 0.72rem;
   }
