@@ -4359,7 +4359,19 @@ everything build" (2026-11-11), answering what was left to build. Built from tha
       2.3.0: Gigabyte boards' sensors, more memory timings, GPU tuning on more GeForce cards. All
       are this PC's, so none is marked for the phone app. The phone app the relay serves
       (2990da0's) behaves as 2.3.0's would: nothing it uses changed since but these notes.
-- [ ] **2.3.0 released.**
+- [x] **2.3.0 released** (2026-11-12, on the owner's go: "release 2.3.0"). CI passed on e3ddfe5
+      (run 43187799352; Linux, Windows with the smoke test, the clean install (31 sensors) and the
+      upgrade from Vyro 2.1.0, the relay and phone app with the end-to-end test, accessibility:
+      1,854 checks in 555 s). `main` fast-forwarded to it from 2.2.0's records, and Release run
+      43190704153 tagged `v2.3.0`, found the relay's address in `clokrix.exe` and published the
+      13.98 MB `Clokrix_2.3.0_x64_en-US.msi`, `latest.json` and checksums here and to
+      `nanu1605/vyro-releases`; GitHub's own digests of the files published here match the
+      checksums the run printed (MSI `5b6007f7…`, `latest.json` `17c34dc2…`), the MSI downloaded
+      from `nanu1605/vyro-releases` has the same SHA-256, and the `latest.json` installed copies
+      read (`nanu1605/vyro-releases`' latest) is that file, offering 2.3.0 from there. Installed
+      copies on 1.4.1 to 2.2.0 are offered it. Unsigned, as before
+      ([`docs/signing.md`](docs/signing.md)). The relay was not deployed: it serves 2990da0's
+      phone app (Relay run 43015537665), which behaves as this release's would.
 
 ## Risks
 
