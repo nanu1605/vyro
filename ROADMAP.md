@@ -4281,6 +4281,9 @@ tighter X at 16 to 32 px. On `claude/vyro-2.0`.
       [`docs/remote.md`](docs/remote.md#the-relays-new-address-22), step 3). PCs still on Vyro
       lost their built-in relay with it: once updated to Clokrix (the updater offers it), their
       phones pair again at `clokrix-relay`.
+- [x] **`VYRO_RELAY_URL` deleted** (2026-11-12, the owner: "deleted VYRO_RELAY_URL"), the
+      repository variable with the old relay's address. Builds read only `CLOKRIX_RELAY_URL`;
+      the Release workflow's guard against the old variable set alone is idle now.
 
 ### 2.3.0 — Gigabyte boards, more memory timings, ASUS fan control, NVAPI
 
