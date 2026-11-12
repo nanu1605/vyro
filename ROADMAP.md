@@ -4277,8 +4277,10 @@ tighter X at 16 to 32 px. On `claude/vyro-2.0`.
       there. Installed copies on 1.4.1 to 2.1.0 are offered it. Unsigned, as before
       ([`docs/signing.md`](docs/signing.md)). The relay serves this release's phone app and relay:
       only these records changed after 2990da0, from which it was deployed.
-- [ ] **`vyro-relay` deleted** (the owner's, in Cloudflare) once every PC runs Clokrix
-      ([`docs/remote.md`](docs/remote.md#the-relays-new-address-22), step 3).
+- [x] **`vyro-relay` deleted** (2026-11-12, the owner, in Cloudflare: "deleted vyro-relay";
+      [`docs/remote.md`](docs/remote.md#the-relays-new-address-22), step 3). PCs still on Vyro
+      lost their built-in relay with it: once updated to Clokrix (the updater offers it), their
+      phones pair again at `clokrix-relay`.
 
 ### 2.3.0 — Gigabyte boards, more memory timings, ASUS fan control, NVAPI
 

@@ -235,13 +235,16 @@ With the rename, the relay is a new Worker, `clokrix-relay`, at its own address;
 that over keeping `vyro-relay` (2026-11-11). A phone keeps its paired PCs in its browser, for that
 address only, so each phone pairs again once, through the new address, and turns notifications on
 again there. Nothing about the relay changed besides its name: the sealing and the socket
-protocol (`vyro.1`) are the same, so the old Worker keeps serving PCs still on Vyro 2.1.
+protocol (`vyro.1`) are the same, so the old Worker kept serving PCs still on Vyro 2.1 until it
+was deleted (2026-11-12). Those PCs reach their phones through the relay again once they update
+to Clokrix (the updater offers it) and the phones pair at the new address.
 
 1. Run the Relay workflow (`relay.yml`) on the commit to release; it deploys `clokrix-relay` and
    prints its address.
 2. Set the repository variable `CLOKRIX_RELAY_URL` to it (builds read only this variable now; the
    Release workflow stops if only `VYRO_RELAY_URL` is set).
-3. Once every PC runs Clokrix: **Workers & Pages → vyro-relay → Settings → Delete**.
+3. Once every PC runs Clokrix: **Workers & Pages → vyro-relay → Settings → Delete** (done
+   2026-11-12).
 
 ### A TURN server for the screen (2.0.1)
 
