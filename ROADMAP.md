@@ -4454,11 +4454,15 @@ for 3" (2026-11-12) had a session on an environment that reaches Intel's hosts b
       clean install (the service answered and read 31 sensors, the app's smoke test passed), then
       the upgrade from Vyro 2.1.0. The MSI is 14 MB. Test build `clokrix-windows-cae8d25`, with
       `clokrix-live.exe` and `clokrix-fans.exe`.
-- [ ] **Field check (the owner)**: [`docs/field-check-2.4.md`](docs/field-check-2.4.md): a
-      Gigabyte board's second chip and its fans tried, and a Tiger Lake laptop's timings against
-      CPU-Z's, where one is at hand.
+- [x] **CI green on ce44498** (run 43267664669), the records commit above.
+- [x] **Field check (the owner), reported done** (2026-11-12: "field check completed"):
+      [`docs/field-check-2.4.md`](docs/field-check-2.4.md). No difference was reported, and no
+      files came with it (`clokrix-live.json`, `clokrix-fans.json`, the `--try` files, a CPU-Z
+      screenshot), so which of its sections had a PC at hand is not recorded, and no raw registers
+      are kept to compare a later report against.
 - [ ] **A Gigabyte board on the allow-list**, from its tries, then the control field check on it
-      (decision 24).
+      (decision 24). It needs the board's `clokrix-fans.json`, its `clokrix-fans-try-N.json` files
+      and the header each output moved: none came with the field check.
 
 ## Risks
 
