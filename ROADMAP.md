@@ -4468,7 +4468,21 @@ for 3" (2026-11-12) had a session on an environment that reaches Intel's hosts b
       laptops. Fan control on Gigabyte boards is not in it, as no board can use it yet. All are
       this PC's, so none is marked for the phone app. The phone app the relay serves (2990da0's)
       behaves as 2.4.0's would: nothing it uses changed since but these notes.
-- [ ] **2.4.0 released.**
+- [x] **2.4.0 released** (2026-11-12, on the owner's go: "release 2.4.0"). CI passed on 26623cc
+      (run 43287868850 on the push, and run 43291547793 on the owner's pull request of this
+      branch into `main`, [nanu1605/vyro#1](https://github.com/nanu1605/vyro/pull/1); Linux,
+      Windows with the smoke test, the clean install and the upgrade from Vyro 2.1.0, the relay
+      and phone app with the end-to-end test, accessibility: 1,854 checks in 658 s). `main`
+      fast-forwarded to it from 2.3.0's records, which GitHub counts as that pull request merged,
+      and Release run 43298162406 tagged `v2.4.0`, found the relay's address in `clokrix.exe` and
+      published the 14.13 MB `Clokrix_2.4.0_x64_en-US.msi`, `latest.json` and checksums here and
+      to `nanu1605/vyro-releases`; GitHub's own digests of the files published here match the
+      checksums the run printed (MSI `3a64a3b7…`, `latest.json` `ecbbb2ee…`), the MSI downloaded
+      from `nanu1605/vyro-releases` has the same SHA-256, and the `latest.json` installed copies
+      read (`nanu1605/vyro-releases`' latest) is that file, offering 2.4.0 from there. Installed
+      copies on 1.4.1 to 2.3.0 are offered it. Unsigned, as before
+      ([`docs/signing.md`](docs/signing.md)). The relay was not deployed: it serves 2990da0's
+      phone app (Relay run 43015537665), which behaves as this release's would.
 
 ## Risks
 
