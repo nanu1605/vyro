@@ -4429,7 +4429,11 @@ this has run on such hardware yet.
       CPU-Z's timings from the same laptop, gives the decoder.
 - [x] **Locally:** types, 295 frontend tests, 883 core tests and the service's, formatting,
       clippy (Linux, and for Windows with the app).
-- [ ] **CI green** on the pushed commit.
+- [x] **CI green on 142b674** (run 43248875686; Linux, Windows with the smoke test, the relay and
+      phone app with the end-to-end test, accessibility: 1,854 checks in 654 s). On Windows, a
+      clean install (the service answered and read 31 sensors, the app's smoke test passed), then
+      the upgrade from Vyro 2.1.0. The MSI is 14 MB. Test build `clokrix-windows-142b674`, with
+      `clokrix-live.exe` and `clokrix-fans.exe`.
 - [ ] **Field check (the owner)**: [`docs/field-check-2.4.md`](docs/field-check-2.4.md): a
       Gigabyte board's second chip and its fans tried, and a Tiger Lake laptop's dump with CPU-Z's
       timings, where one is at hand.
