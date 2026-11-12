@@ -3,13 +3,14 @@
 What only real hardware can show for 2.4:
 - the second ITE chip of Gigabyte boards;
 - the first step of fan control on a Gigabyte board;
-- Tiger Lake's memory controller, dumped so its timings can be decoded.
+- Tiger Lake's memory timings, decoded from Intel's datasheets alone.
 
 The tests check the reading and the writing with register values made up from the documentation
-(Linux `it87`'s and LibreHardwareMonitor's facts). None of it has run on such hardware yet, so a
-difference may need a fix, and `clokrix-live.json` holds what that fix needs. Each section is for
-a PC that has the part: skip the ones you have no PC for. It can be done with the 2.3 check
-([`docs/field-check-2.3.md`](field-check-2.3.md)) on the same build.
+(Linux `it87`'s and LibreHardwareMonitor's facts; for Tiger Lake, Intel's datasheets). None of it
+has run on such hardware yet, so a difference may need a fix, and `clokrix-live.json` holds what
+that fix needs. Each section is for a PC that has the part: skip the ones you have no PC for. It
+can be done with the 2.3 check ([`docs/field-check-2.3.md`](field-check-2.3.md)) on the same
+build.
 
 Install the test build `clokrix-windows-<commit>` of the latest green CI run on `claude/vyro-2.0`
 over 2.3.0. The same artifact has `clokrix-live.exe` and `clokrix-fans.exe`. Have
@@ -61,17 +62,19 @@ chip's (System Fan 4 to 6 on most boards) are driven by the board's own controll
 
 ## 3. A Tiger Lake laptop (11th gen Core with a G or H after the number, such as i7-1165G7)
 
-Clokrix does not read this controller's timings yet: the source its fields would come from was out
-of reach when 2.4 was built. This step gives what a decoder needs.
+Clokrix reads this controller's timings from Intel's datasheets (631122 for the G-series and
+H35, 643524 for the H-series), not from a reader that has run on one. DDR4 and LPDDR4X.
 
-1. Memory card → Timings: "not read on this CPU", as before.
+1. Memory card → Timings: the data rate and CL-tRCD-tRP-tRAS. Against CPU-Z's Memory tab: the
+   data rate is twice CPU-Z's DRAM Frequency (within 1 MT/s), and CL, tRCD, tRP and tRAS are the
+   same. "not read on this CPU" is a difference too, unless the memory is LPDDR5.
 2. Right-click `clokrix-live.exe` → **Run as administrator**. In `clokrix-live.json`, `ramRaw.imc`
-   has `"layout": "none: raw dump for a decoder"` and a little over 500 registers.
-3. In CPU-Z's Memory tab: the type (DDR4 or LPDDR4X), the DRAM frequency, CL, tRCD, tRP, tRAS
-   and tRC. A screenshot is enough.
+   has `"layout": "TigerLake"` (or `"TigerLakeH"` on an H-series CPU), the decoded registers
+   under `regs` and about 400 raw ones under `dump`.
+3. If anything differs, a CPU-Z Memory tab screenshot from the same boot.
 
 ## Report
 
 "Everything is working", or what differs, with each PC's `clokrix-live.json` and board or laptop
 model; from the Gigabyte PC `clokrix-fans.json`, the `clokrix-fans-try-N.json` files and which
-header each output moved; from the laptop the CPU-Z screenshot.
+header each output moved; from the laptop the CPU-Z screenshot if its timings differ.

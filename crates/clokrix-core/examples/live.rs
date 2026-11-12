@@ -397,24 +397,22 @@ fn ram_raw() -> serde_json::Value {
         ) {
             (Ok(io), Some(layout)) => {
                 let r = ram::read_imc(&io, layout);
-                serde_json::json!({
+                let mut out = serde_json::json!({
                     "model": format!("{:#x}", id.model),
                     "layout": format!("{layout:?}"),
                     "regs": regs(&r),
-                })
+                });
+                // Tiger Lake (2.4): its decoder is built from Intel's datasheets alone, so the
+                // raw blocks go beside the decoded registers for a field check to fix it from.
+                if let Some(dump) = ram::intel_dump_regs(id.family, id.model) {
+                    out["dump"] = regs(&ram::read_imc_regs(&io, &dump)).into();
+                }
+                out
             }
-            // Tiger Lake (2.4): not decoded yet, so every register a decoder may need.
-            (Ok(io), None) => match ram::intel_dump_regs(id.family, id.model) {
-                Some(dump) => serde_json::json!({
-                    "model": format!("{:#x}", id.model),
-                    "layout": "none: raw dump for a decoder",
-                    "regs": regs(&ram::read_imc_regs(&io, &dump)),
-                }),
-                None => serde_json::json!({
-                    "model": format!("{:#x}", id.model),
-                    "error": "no memory controller layout known for this CPU",
-                }),
-            },
+            (Ok(_), None) => serde_json::json!({
+                "model": format!("{:#x}", id.model),
+                "error": "no memory controller layout known for this CPU",
+            }),
             (Err(e), _) => serde_json::json!({ "error": e.to_string() }),
         }
     } else {

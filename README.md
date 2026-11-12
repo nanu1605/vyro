@@ -78,8 +78,9 @@ Through PawnIO, Clokrix reads:
   ITE chip many of them carry, with three more fans;
 - the memory modules' temperatures (DDR5, and DDR4 modules that have a sensor) and the running
   timings on AM5 (Ryzen 7000 and later); from 2.1 on Intel 12th to 14th gen; and from 2.3 on AM4
-  (Ryzen 1000 to 5000, DDR4) and on Intel's 10th gen desktop (Comet Lake), 11th gen (Rocket
-  Lake) and Core Ultra 200S (Arrow Lake). Intel's controllers give CL, tRCD, tRP and tRAS.
+  (Ryzen 1000 to 5000, DDR4) and on Intel's 10th gen desktop (Comet Lake), 11th gen desktop
+  (Rocket Lake) and Core Ultra 200S (Arrow Lake); from 2.4 on Intel's 11th gen laptops (Tiger
+  Lake, DDR4 and LPDDR4X). Intel's controllers give CL, tRCD, tRP and tRAS.
 
 Elsewhere Clokrix says those readings are not read, rather than asking for PawnIO (2.0.4). The
 Intel CPUs, the NCT679x and DDR4 on Intel have been checked on one PC so far
@@ -511,7 +512,7 @@ Nothing on it changes the PC.
 | [`docs/field-check-2.1.md`](docs/field-check-2.1.md) | The field check of 2.1: Intel CPU sensors, an ASUS board's Nuvoton chip, DDR4 on Intel |
 | [`docs/field-check-2.2.md`](docs/field-check-2.2.md) | The field check of 2.2: the update from Vyro to Clokrix, everything kept, the new name and logo, the phones paired again |
 | [`docs/field-check-2.3.md`](docs/field-check-2.3.md) | The field check of 2.3: Gigabyte boards' ITE chip, memory timings on AM4 and more Intel CPUs, an ASUS board's fan control tried, NVAPI's offsets |
-| [`docs/field-check-2.4.md`](docs/field-check-2.4.md) | The field check of 2.4: Gigabyte boards' second ITE chip, a Gigabyte board's fan control tried, Tiger Lake's memory controller dumped |
+| [`docs/field-check-2.4.md`](docs/field-check-2.4.md) | The field check of 2.4: Gigabyte boards' second ITE chip, a Gigabyte board's fan control tried, Tiger Lake's memory timings |
 | [`docs/signing.md`](docs/signing.md) | Code signing (2.0): what the release does once SignPath is set up, and what only the owner can do |
 
 `clokrix-remote.exe` in the same artifact checks the service from the outside (state, connection,

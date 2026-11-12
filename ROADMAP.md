@@ -4373,13 +4373,15 @@ everything build" (2026-11-11), answering what was left to build. Built from tha
       ([`docs/signing.md`](docs/signing.md)). The relay was not deployed: it serves 2990da0's
       phone app (Relay run 43015537665), which behaves as this release's would.
 
-### 2.4.0 — Gigabyte's second chip, Gigabyte fan control, Tiger Lake's controller dumped
+### 2.4.0 — Gigabyte's second chip, Gigabyte fan control, Tiger Lake's memory timings
 
 The owner's "start building all three" (2026-11-12), after asking what was left to build and
 being given these three: the second ITE chip of Gigabyte boards, fan control on Gigabyte boards,
 and memory timings on Intel 11th gen laptops (Tiger Lake). Built on `claude/vyro-2.0`. The tests
 use register values made up from the documentation (each fixture says "constructed"): none of
-this has run on such hardware yet.
+this has run on such hardware yet. Tiger Lake's timings came second: the first session could not
+reach Intel's datasheets and dumped the controller instead; the owner's "go with recommended step
+for 3" (2026-11-12) had a session on an environment that reaches Intel's hosts build the decoder.
 
 - [x] **The second ITE chip of Gigabyte boards** (`sio::win::detect_second`, `sio::ite`): the
       IT8790E, the IT8792E (whose ID the IT8791E and IT8795E share) and the IT87952E at 0x4E,
@@ -4417,16 +4419,6 @@ this has run on such hardware yet.
       the saved state is this chip's before writing.
 - [x] **Found on reading it again:** the NCT679x and NCT6687 restores refuse an ITE chip's saved
       state (it carries the fan main control register) and the ITE restore a Nuvoton one.
-- [x] **Tiger Lake's memory controller, dumped** (`ram::intel_dump_regs`): `clokrix-live` reads
-      both controllers (0x10000 apart, Linux `igen6_edac`'s), the first 64 registers of each 0x400
-      step from 0x4000 to 0x4C00, their channel maps at 0x5000 and the memory clock's registers,
-      532 in all; PawnIO's `IntelMCHBAR` maps 128 KB on Tiger Lake. The app still says "not read
-      on this CPU" there.
-- [ ] **Tiger Lake's timings decoded.** memtest86+, the source of 2.3's Intel readers, has no
-      Tiger Lake reader, and the fields of its timing registers are in Intel's datasheet (11th gen,
-      volume 2), which this session's network could not reach (`cdrdv2.intel.com` and a copy
-      elsewhere were refused). Either that host allowed in the environment, or the dump above with
-      CPU-Z's timings from the same laptop, gives the decoder.
 - [x] **Locally:** types, 295 frontend tests, 883 core tests and the service's, formatting,
       clippy (Linux, and for Windows with the app).
 - [x] **CI green on 142b674** (run 43248875686; Linux, Windows with the smoke test, the relay and
@@ -4434,9 +4426,32 @@ this has run on such hardware yet.
       clean install (the service answered and read 31 sensors, the app's smoke test passed), then
       the upgrade from Vyro 2.1.0. The MSI is 14 MB. Test build `clokrix-windows-142b674`, with
       `clokrix-live.exe` and `clokrix-fans.exe`.
+- [x] **Tiger Lake's memory timings** (`ram::decode_intel`, `ImcLayout::TigerLake` and
+      `TigerLakeH`): the data rate and CL-tRCD-tRP-tRAS, from Intel's 11th Generation Intel Core
+      Processors datasheets, revision 003: volume 2a (document 631122) for UP3, UP4 and H35
+      (model 0x8C) and volume 2b (643524) for H (0x8D); volume 1 (631121, table 15-1) gives the
+      CPUIDs, 806C1h/806C2h and 806D1h. The two volumes have the same fields in blocks at
+      different places: channel 0 at 0x4000, channel 1 at 0x4400 and the shared registers at
+      0x5000 on UP3/UP4, at 0xE000, 0xE800 and 0xD800 on H; the second controller 0x10000 above
+      the first on both. The channel read is the first with a DIMM size in MAD_DIMM_CH0/CH1
+      (bits 6:0 and 22:16); MAD_INTER_CHANNEL's DDR_TYPE (bits 2:0) must say DDR4 or LPDDR4.
+      TC_PRE gives tRP (bits 6:0), tRAS (40:33) and tRCD (47:41), TC_ODT tCL (22:16), all in tCK.
+      The data rate is SA_PERF_STATUS's QCLK_RATIO (bits 9:2) × BCLK_FREQ, × 4/3 on the
+      133.34 MHz reference (bit 10 clear), × 2 in gear 1 or × 4 in gear 2 (SC_GS_CFG bit 31;
+      MC_BIOS_REQ has the DDR bus at QCLK in gear 1 and twice it in gear 2). **Not read:**
+      LPDDR5 (its timings count WCK cycles, and the datasheets give no ratio to the data rate),
+      and gear 2 with NO_GEAR2_PARAM_DIVIDE set (SC_GS_CFG bit 30: the timings in DCLKs, with no
+      conversion given); both show "not read", as does a controller with no DIMM mapped or its
+      clock's ratio at 0. The other timings stay unread, as on Intel's other controllers.
+      `clokrix-live` writes the decoded registers and, beside them in `ramRaw.imc.dump`, 404 raw
+      ones: in both controllers the first 64 registers of channel 0's, channel 1's and the
+      broadcast block and eight shared ones, and the memory clock's four. It replaces 2.4's first
+      dump, which had read UP3's places on H as well.
+- [x] **Locally, with the decoder:** 887 core tests and the service's, formatting, clippy (Linux,
+      and for Windows with the app).
 - [ ] **Field check (the owner)**: [`docs/field-check-2.4.md`](docs/field-check-2.4.md): a
-      Gigabyte board's second chip and its fans tried, and a Tiger Lake laptop's dump with CPU-Z's
-      timings, where one is at hand.
+      Gigabyte board's second chip and its fans tried, and a Tiger Lake laptop's timings against
+      CPU-Z's, where one is at hand.
 - [ ] **A Gigabyte board on the allow-list**, from its tries, then the control field check on it
       (decision 24).
 

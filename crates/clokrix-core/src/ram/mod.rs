@@ -438,7 +438,8 @@ const MTL_REGS: [u32; 21] = [
     MTL_PTGRAM,
 ];
 
-/// Which Intel memory controller a CPU has, as memtest86+ tells them apart.
+/// Which Intel memory controller a CPU has, as memtest86+ tells them apart (Tiger Lake from
+/// Intel's datasheet).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImcLayout {
     /// Comet Lake-S (10th gen desktop): Skylake's controller, DDR4.
@@ -449,6 +450,10 @@ pub enum ImcLayout {
     AlderLake,
     /// Meteor Lake and Arrow Lake (Core Ultra 100 and 200S): DDR5.
     MeteorLake,
+    /// Tiger Lake UP3, UP4 and H35 (11th gen laptops), from Intel's datasheet 631122.
+    TigerLake,
+    /// Tiger Lake H (11th gen laptops, H45), from Intel's datasheet 643524.
+    TigerLakeH,
 }
 
 /// The controller of an Intel CPU Clokrix reads (family 6): `None` for the others.
@@ -457,6 +462,8 @@ pub const fn intel_layout(family: u32, model: u32) -> Option<ImcLayout> {
         return None;
     }
     match model {
+        0x8C => Some(ImcLayout::TigerLake),
+        0x8D => Some(ImcLayout::TigerLakeH),
         0xA5 => Some(ImcLayout::Skylake),
         0xA7 => Some(ImcLayout::IceLake),
         0x97 | 0x9A | 0xB7 | 0xBA | 0xBF => Some(ImcLayout::AlderLake),
@@ -470,30 +477,100 @@ pub const fn intel_imc(family: u32, model: u32) -> bool {
     intel_layout(family, model).is_some()
 }
 
-/// Tiger Lake's second memory controller, 0x10000 above the first (Linux `igen6_edac`).
+/// Tiger Lake (11th gen laptops, 2.4), from Intel's 11th Generation Intel Core Processors
+/// datasheets, revision 003: volume 2a (document 631122) for UP3, UP4 and H35 (CPUID 806C1h and
+/// 806C2h, model 0x8C, per volume 1, document 631121, table 15-1) and volume 2b (document 643524)
+/// for H (806D1h, model 0x8D). Both have two controllers, the second 0x10000 above the first, and
+/// the same fields at the same places within each register block; the blocks sit apart. DDR4 uses
+/// one channel per controller, LPDDR4x two.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TglMap {
+    /// The shared registers (MAD_INTER_CHANNEL first).
+    pub shared: u32,
+    /// Channel 0's registers (TC_PRE first).
+    pub ch0: u32,
+    /// Channel 1's registers.
+    pub ch1: u32,
+}
+/// Volume 2a, section 3.2: channel 0 at 0x4000, channel 1 at 0x4400, shared at 0x5000.
+pub const TGL_UP: TglMap = TglMap {
+    shared: 0x5000,
+    ch0: 0x4000,
+    ch1: 0x4400,
+};
+/// Volume 2b, section 3.2: channel 0 at 0xE000, channel 1 at 0xE800, shared at 0xD800.
+pub const TGL_H: TglMap = TglMap {
+    shared: 0xD800,
+    ch0: 0xE000,
+    ch1: 0xE800,
+};
 pub const TGL_MC1: u32 = 0x1_0000;
+/// TC_PRE (64-bit): tRP in bits 6:0; the upper word has tRAS in bits 8:1 (40:33) and tRCD in bits
+/// 15:9 (47:41). In tCK. Offsets from a channel's block.
+pub const TGL_TC_PRE: u32 = 0x00;
+pub const TGL_TC_PRE_HIGH: u32 = 0x04;
+/// TC_ODT: tCL in bits 22:16, in tCK.
+pub const TGL_TC_ODT: u32 = 0x70;
+/// SC_GS_CFG: bit 31 gear 2; bit 30 NO_GEAR2_PARAM_DIVIDE (in gear 2, the timings in DCLKs, not
+/// tCK).
+pub const TGL_SC_GS_CFG: u32 = 0x88;
+/// MAD_INTER_CHANNEL: DDR_TYPE in bits 2:0 (0 DDR4, 1 DDR5, 2 LPDDR5, 3 LPDDR4). Offsets from the
+/// shared block.
+pub const TGL_MAD_INTER: u32 = 0x00;
+/// MAD_DIMM_CH0 and MAD_DIMM_CH1: DIMM L's size in bits 6:0, DIMM S's in bits 22:16 (0.5 GB
+/// steps).
+pub const TGL_MAD_DIMM_CH0: u32 = 0x0C;
+pub const TGL_MAD_DIMM_CH1: u32 = 0x10;
 
-/// What [`intel_dump_regs`] reads in each controller: four timing pages, then the channel map.
-const TGL_PAGES: [u32; 4] = [0x4000, 0x4400, 0x4800, 0x4C00];
-
-/// Tiger Lake (11th gen laptops, models 0x8C and 0x8D; 2.4) has a controller Clokrix does not
-/// decode yet, so `clokrix-live` dumps it for a decoder to be written against. Linux `igen6_edac`
-/// places its two controllers 0x10000 apart, each with its channel map at 0x5000 (the DDR type in
-/// bits 2:0) and its channels' DIMM sizes from 0x500C; an 11th gen datasheet lists the timing
-/// registers from 0x4000. Their fields, and where a second channel's start, are in no source this
-/// was built from, so the dump takes the first 64 registers of each 0x400 step from 0x4000 to
-/// 0x4C00 in both controllers, their channel maps and the memory clock's registers. `None` for the
-/// CPUs [`intel_layout`] decodes and the others.
-pub fn intel_dump_regs(family: u32, model: u32) -> Option<Vec<u32>> {
-    if family != 6 || !matches!(model, 0x8C | 0x8D) {
-        return None;
+/// Every register the Tiger Lake decoder reads: per controller its type and DIMM maps, per
+/// channel its four timing registers; then SA_PERF_STATUS and BCLK_FREQ.
+const fn tgl_regs(map: TglMap) -> [u32; 24] {
+    let mut r = [0; 24];
+    let mut i = 0;
+    let mut mc = 0;
+    while mc < 2 {
+        let base = mc * TGL_MC1;
+        r[i] = base + map.shared + TGL_MAD_INTER;
+        r[i + 1] = base + map.shared + TGL_MAD_DIMM_CH0;
+        r[i + 2] = base + map.shared + TGL_MAD_DIMM_CH1;
+        i += 3;
+        let chs = [map.ch0, map.ch1];
+        let mut ch = 0;
+        while ch < 2 {
+            let at = base + chs[ch];
+            r[i] = at + TGL_TC_PRE;
+            r[i + 1] = at + TGL_TC_PRE_HIGH;
+            r[i + 2] = at + TGL_TC_ODT;
+            r[i + 3] = at + TGL_SC_GS_CFG;
+            i += 4;
+            ch += 1;
+        }
+        mc += 1;
     }
+    r[i] = IMC_SA_PERF;
+    r[i + 1] = IMC_BCLK;
+    r
+}
+const TGL_UP_REGS: [u32; 24] = tgl_regs(TGL_UP);
+const TGL_H_REGS: [u32; 24] = tgl_regs(TGL_H);
+
+/// Tiger Lake's raw registers (models 0x8C and 0x8D), which `clokrix-live` writes beside the
+/// decoded ones so a mismatch in a field check can be fixed from one file: in both controllers
+/// the first 64 registers of channel 0's, channel 1's and the broadcast block (channel 0 + 0xC00
+/// on UP3/UP4, + 0x1000 on H) and the first eight shared registers; then the memory clock's
+/// registers (SA_PERF_STATUS, MC_BIOS_REQ, MC_BIOS_DATA, BCLK_FREQ). `None` for other CPUs.
+pub fn intel_dump_regs(family: u32, model: u32) -> Option<Vec<u32>> {
+    let (map, broadcast) = match (family, model) {
+        (6, 0x8C) => (TGL_UP, 0x4C00),
+        (6, 0x8D) => (TGL_H, 0xF000),
+        _ => return None,
+    };
     let mut regs = Vec::new();
     for mc in [0, TGL_MC1] {
-        for page in TGL_PAGES {
-            regs.extend((0..64).map(|i| mc + page + i * 4));
+        for block in [map.ch0, map.ch1, broadcast] {
+            regs.extend((0..64).map(|i| mc + block + i * 4));
         }
-        regs.extend((0..8).map(|i| mc + 0x5000 + i * 4));
+        regs.extend((0..8).map(|i| mc + map.shared + i * 4));
     }
     regs.extend([IMC_SA_PERF, 0x5E00, IMC_BIOS_DATA, IMC_BCLK]);
     Some(regs)
@@ -506,6 +583,8 @@ pub const fn intel_regs(layout: ImcLayout) -> &'static [u32] {
         ImcLayout::IceLake => &ICL_REGS,
         ImcLayout::AlderLake => &ALDER_REGS,
         ImcLayout::MeteorLake => &MTL_REGS,
+        ImcLayout::TigerLake => &TGL_UP_REGS,
+        ImcLayout::TigerLakeH => &TGL_H_REGS,
     }
 }
 
@@ -517,6 +596,8 @@ pub fn decode_intel(layout: ImcLayout, read: impl Fn(u32) -> Option<u32>) -> Opt
         ImcLayout::Skylake | ImcLayout::IceLake => decode_skylake(layout, &read)?,
         ImcLayout::AlderLake => decode_alder(&read)?,
         ImcLayout::MeteorLake => decode_meteor(&read)?,
+        ImcLayout::TigerLake => decode_tiger(TGL_UP, &read)?,
+        ImcLayout::TigerLakeH => decode_tiger(TGL_H, &read)?,
     };
     let sane = (1000.0..=10000.0).contains(&t.mts)
         && (8..=80).contains(&t.cl)
@@ -636,6 +717,56 @@ fn decode_meteor(read: &impl Fn(u32) -> Option<u32>) -> Option<MemTimings> {
         rcd_rd: bits(read(ch + MTL_TC_ACT)?, 29, 22),
         rp: bits(read(ch + IMC_TC_PRE)?, 7, 0),
         ras: bits(read(ch + IMC_TC_PRE_HIGH)?, 21, 13),
+        ..MemTimings::default()
+    })
+}
+
+/// Tiger Lake, from Intel's datasheets 631122 and 643524 (section 3.2 for the controller, 3.3
+/// for the clock): the first controller with a DIMM size in MAD_DIMM_CH0 or MAD_DIMM_CH1, and in
+/// it the first such channel. DDR4 and LPDDR4x only: LPDDR5's timings count WCK cycles, whose
+/// ratio to the data rate the datasheets do not give, and DDR5 is not a Tiger Lake memory. The
+/// data rate is SA_PERF_STATUS's QCLK_RATIO (bits 9:2) × BCLK_FREQ (kHz), × 4/3 when
+/// QCLK_REFERENCE (bit 10) is 0 (the 133.34 MHz reference); MC_BIOS_REQ's GEAR_TYPE has the DDR
+/// bus clock equal to QCLK in gear 1 and twice it in gear 2, and a double data rate carries two
+/// transfers per clock. In gear 2 with NO_GEAR2_PARAM_DIVIDE set the timings count DCLKs, not
+/// tCK: `None`, as the datasheets give no conversion.
+fn decode_tiger(map: TglMap, read: &impl Fn(u32) -> Option<u32>) -> Option<MemTimings> {
+    let size = |v: u32| v != u32::MAX && bits(v, 6, 0) + bits(v, 22, 16) > 0;
+    let (mc, ch) = [0, TGL_MC1]
+        .into_iter()
+        .flat_map(|mc| {
+            [
+                (mc, TGL_MAD_DIMM_CH0, map.ch0),
+                (mc, TGL_MAD_DIMM_CH1, map.ch1),
+            ]
+        })
+        .find(|&(mc, mad, _)| read(mc + map.shared + mad).is_some_and(size))
+        .map(|(mc, _, ch)| (mc, mc + ch))?;
+    if !matches!(read(mc + map.shared + TGL_MAD_INTER)? & 7, 0 | 3) {
+        return None;
+    }
+    let cfg = read(ch + TGL_SC_GS_CFG)?;
+    let gear2 = cfg & 1 << 31 != 0;
+    if gear2 && cfg & 1 << 30 != 0 {
+        return None;
+    }
+    let bclk = f64::from(read(IMC_BCLK)?) / 1000.0;
+    if !(50.0..=200.0).contains(&bclk) {
+        return None;
+    }
+    let perf = read(IMC_SA_PERF)?;
+    let mut qclk = f64::from(bits(perf, 9, 2)) * bclk;
+    if perf & 1 << 10 == 0 {
+        qclk *= 4.0 / 3.0;
+    }
+    let mts = qclk * if gear2 { 4.0 } else { 2.0 };
+    let high = read(ch + TGL_TC_PRE_HIGH)?;
+    Some(MemTimings {
+        mts: mts.round(),
+        cl: bits(read(ch + TGL_TC_ODT)?, 22, 16),
+        rcd_rd: bits(high, 15, 9),
+        rp: bits(read(ch + TGL_TC_PRE)?, 6, 0),
+        ras: bits(high, 8, 1),
         ..MemTimings::default()
     })
 }
@@ -1078,33 +1209,188 @@ mod tests {
         assert_eq!(decode_ddr5(|_| u32::MAX), None, "all ones");
     }
 
+    /// One Tiger Lake channel's constructed registers (from the fields in Intel's datasheets
+    /// 631122 and 643524; no field dump from such a laptop yet): DIMM size in `mad`, the DDR type,
+    /// SC_GS_CFG and CL-tRCD-tRP-tRAS.
+    fn tgl_channel(
+        regs: &mut HashMap<u32, u32>,
+        map: TglMap,
+        mc: u32,
+        ch1: bool,
+        ddr_type: u32,
+        cfg: u32,
+        (cl, rcd, rp, ras): (u32, u32, u32, u32),
+    ) {
+        let shared = mc + map.shared;
+        let (mad, ch) = if ch1 {
+            (TGL_MAD_DIMM_CH1, mc + map.ch1)
+        } else {
+            (TGL_MAD_DIMM_CH0, mc + map.ch0)
+        };
+        regs.insert(shared + TGL_MAD_INTER, ddr_type);
+        regs.insert(shared + mad, 16);
+        regs.insert(ch + TGL_SC_GS_CFG, cfg);
+        regs.insert(ch + TGL_TC_PRE, rp);
+        regs.insert(ch + TGL_TC_PRE_HIGH, rcd << 9 | ras << 1);
+        regs.insert(ch + TGL_TC_ODT, cl << 16);
+    }
+
+    /// Constructed: DDR4-3200 22-22-22-52 in gear 1 on channel 0 of the first controller, QCLK
+    /// ratio 12 on the 133 MHz reference (12 × 100 MHz × 4/3 = 1600 MHz QCLK).
+    fn tgl_ddr4(map: TglMap) -> HashMap<u32, u32> {
+        let mut regs = HashMap::from([(IMC_BCLK, 100_000), (IMC_SA_PERF, 12 << 2)]);
+        tgl_channel(&mut regs, map, 0, false, 0, 0, (22, 22, 22, 52));
+        regs
+    }
+
+    fn read_tiger(layout: ImcLayout, r: &HashMap<u32, u32>) -> Option<MemTimings> {
+        decode_intel(layout, |a| r.get(&a).copied())
+    }
+
     #[test]
-    fn tiger_lake_is_dumped_not_decoded() {
-        assert_eq!(
-            intel_layout(6, 0x8C),
-            None,
-            "no decoder: its fields are not known"
-        );
-        assert!(!intel_imc(6, 0x8D));
-        let regs = intel_dump_regs(6, 0x8C).expect("Tiger Lake");
-        assert_eq!(intel_dump_regs(6, 0x8D).map(|r| r.len()), Some(regs.len()));
-        assert_eq!(regs.len(), 2 * (4 * 64 + 8) + 4);
-        for r in [
-            0x4000, 0x4070, 0x4470, 0x4C00, 0x500C, 0x1_4000, 0x1_500C, 0x5E04, 0x5F60,
+    fn decodes_tiger_lake_ddr4() {
+        for (layout, map) in [
+            (ImcLayout::TigerLake, TGL_UP),
+            (ImcLayout::TigerLakeH, TGL_H),
         ] {
-            assert!(regs.contains(&r), "{r:#x}");
+            let mut regs = tgl_ddr4(map);
+            let t = read_tiger(layout, &regs).expect("timings");
+            assert_eq!(t.mts, 3200.0);
+            assert_eq!((t.cl, t.rcd_rd, t.rp, t.ras), (22, 22, 22, 52));
+            assert_eq!((t.rc, t.rfc), (0, 0), "not read on Intel");
+            // The 100 MHz reference (bit 10): ratio 16 is the same DDR4-3200.
+            regs.insert(IMC_SA_PERF, 1 << 10 | 16 << 2);
+            assert_eq!(read_tiger(layout, &regs).map(|t| t.mts), Some(3200.0));
+            // The fields' neighbours (tRPab_ext and up; tCWL) are not part of the timings.
+            regs.insert(map.ch0 + TGL_TC_PRE, 22 | 0xFFFF_FF80);
+            regs.insert(map.ch0 + TGL_TC_ODT, 22 << 16 | 6 << 23);
+            let t = read_tiger(layout, &regs).expect("timings");
+            assert_eq!((t.cl, t.rp), (22, 22));
+        }
+        // UP3's registers mean nothing to H's decoder.
+        assert_eq!(read_tiger(ImcLayout::TigerLakeH, &tgl_ddr4(TGL_UP)), None);
+        assert_eq!(intel_layout(6, 0x8C), Some(ImcLayout::TigerLake));
+        assert_eq!(intel_layout(6, 0x8D), Some(ImcLayout::TigerLakeH));
+        assert!(intel_imc(6, 0x8D));
+    }
+
+    /// Constructed: LPDDR4x-4267 36-39-39-90 in gear 2 on both channels of both controllers,
+    /// ratio 8 on the 133 MHz reference (1066.7 MHz QCLK, a 2133.3 MHz bus).
+    #[test]
+    fn decodes_tiger_lake_lpddr4x() {
+        let mut regs = HashMap::from([(IMC_BCLK, 100_000), (IMC_SA_PERF, 8 << 2)]);
+        for mc in [0, TGL_MC1] {
+            for ch1 in [false, true] {
+                tgl_channel(&mut regs, TGL_UP, mc, ch1, 3, 1 << 31, (36, 39, 39, 90));
+            }
+        }
+        let layout = ImcLayout::TigerLake;
+        let t = read_tiger(layout, &regs).expect("timings");
+        assert_eq!(t.mts, 4267.0);
+        assert_eq!((t.cl, t.rcd_rd, t.rp, t.ras), (36, 39, 39, 90));
+        regs.insert(TGL_UP.ch0 + TGL_SC_GS_CFG, 1 << 31 | 1 << 30);
+        assert_eq!(read_tiger(layout, &regs), None, "gear 2 timings in DCLKs");
+        regs.insert(TGL_UP.ch0 + TGL_SC_GS_CFG, 1 << 31);
+        regs.insert(TGL_UP.shared + TGL_MAD_INTER, 2);
+        assert_eq!(read_tiger(layout, &regs), None, "LPDDR5: WCK cycles");
+    }
+
+    /// Constructed: one SO-DIMM on the second controller (the first's maps empty), DDR4-2933
+    /// 21-21-21-47, ratio 11 on the 133 MHz reference; then on that controller's channel 1.
+    #[test]
+    fn decodes_tiger_lake_second_controller_and_channel() {
+        for (layout, map) in [
+            (ImcLayout::TigerLake, TGL_UP),
+            (ImcLayout::TigerLakeH, TGL_H),
+        ] {
+            let mut regs = HashMap::from([
+                (IMC_BCLK, 100_000),
+                (IMC_SA_PERF, 11 << 2),
+                (map.shared + TGL_MAD_INTER, 0),
+                (map.shared + TGL_MAD_DIMM_CH0, 0),
+                (map.shared + TGL_MAD_DIMM_CH1, 0),
+            ]);
+            tgl_channel(&mut regs, map, TGL_MC1, false, 0, 0, (21, 21, 21, 47));
+            let t = read_tiger(layout, &regs).expect("timings");
+            assert_eq!(t.mts, 2933.0);
+            assert_eq!((t.cl, t.rcd_rd, t.rp, t.ras), (21, 21, 21, 47));
+            regs.insert(TGL_MC1 + map.shared + TGL_MAD_DIMM_CH0, 0);
+            tgl_channel(&mut regs, map, TGL_MC1, true, 0, 0, (20, 20, 20, 46));
+            let t = read_tiger(layout, &regs).expect("channel 1");
+            assert_eq!((t.cl, t.rcd_rd, t.rp, t.ras), (20, 20, 20, 46));
+        }
+    }
+
+    #[test]
+    fn rejects_an_untrained_or_switched_off_tiger_lake() {
+        let layout = ImcLayout::TigerLake;
+        let mad = TGL_UP.shared + TGL_MAD_DIMM_CH0;
+        let mut regs = tgl_ddr4(TGL_UP);
+        regs.insert(mad, 0);
+        assert_eq!(read_tiger(layout, &regs), None, "no DIMM mapped: untrained");
+        regs.insert(mad, u32::MAX);
+        assert_eq!(read_tiger(layout, &regs), None, "all ones: switched off");
+        let mut regs = tgl_ddr4(TGL_UP);
+        regs.insert(IMC_SA_PERF, 0);
+        assert_eq!(
+            read_tiger(layout, &regs),
+            None,
+            "QCLK ratio 0: the PLL is off"
+        );
+        let mut regs = tgl_ddr4(TGL_UP);
+        regs.insert(TGL_UP.ch0 + TGL_TC_ODT, 0);
+        assert_eq!(read_tiger(layout, &regs), None, "CL 0");
+        let mut regs = tgl_ddr4(TGL_UP);
+        regs.insert(IMC_BCLK, 0);
+        assert_eq!(read_tiger(layout, &regs), None, "no base clock");
+        assert_eq!(decode_intel(layout, |_| None), None);
+        assert_eq!(decode_intel(ImcLayout::TigerLakeH, |_| None), None);
+    }
+
+    #[test]
+    fn tiger_lake_is_decoded_and_dumped() {
+        for (model, layout, expected) in [
+            (
+                0x8C,
+                ImcLayout::TigerLake,
+                [0x4004, 0x4088, 0x4470, 0x5010, 0x1_4404, 0x1_5000, 0x4C00],
+            ),
+            (
+                0x8D,
+                ImcLayout::TigerLakeH,
+                [0xE004, 0xE088, 0xE870, 0xD810, 0x1_E804, 0x1_D800, 0xF000],
+            ),
+        ] {
+            let decoded = intel_regs(layout);
+            assert_eq!(decoded.len(), 24);
+            let regs = intel_dump_regs(6, model).expect("Tiger Lake");
+            assert_eq!(regs.len(), 2 * (3 * 64 + 8) + 4);
+            assert!(
+                decoded.iter().all(|r| regs.contains(r)),
+                "the dump holds every decoded register"
+            );
+            let (dumped_only, decoded_too) = expected.split_last().expect("registers");
+            for r in decoded_too {
+                assert!(decoded.contains(r) && regs.contains(r), "{r:#x}");
+            }
+            assert!(regs.contains(dumped_only), "the broadcast block");
+            for r in [0x5918, 0x5E00, 0x5E04, 0x5F60] {
+                assert!(regs.contains(&r), "{r:#x}");
+            }
+            let mut sorted = regs.clone();
+            sorted.sort_unstable();
+            sorted.dedup();
+            assert_eq!(sorted.len(), regs.len(), "no register twice");
+            assert!(
+                regs.iter().all(|&r| r % 4 == 0 && r < 0x2_0000),
+                "PawnIO's 128 KB window"
+            );
         }
         assert!(
-            !regs.contains(&0x4100),
-            "the first 64 registers of each page only"
-        );
-        let mut sorted = regs.clone();
-        sorted.sort_unstable();
-        sorted.dedup();
-        assert_eq!(sorted.len(), regs.len(), "no register twice");
-        assert!(
-            regs.iter().all(|&r| r % 4 == 0 && r < 0x2_0000),
-            "PawnIO's 128 KB window"
+            !intel_dump_regs(6, 0x8C)
+                .expect("Tiger Lake")
+                .contains(&0x4100),
+            "the first 64 registers of each block only"
         );
         assert_eq!(intel_dump_regs(6, 0xA7), None);
         assert_eq!(intel_dump_regs(0x19, 0x8C), None);
