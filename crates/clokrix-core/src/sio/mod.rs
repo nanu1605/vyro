@@ -2,26 +2,30 @@
 //! board temperatures and voltages. Started with the Nuvoton NCT6687D(-R) that MSI uses on AM5
 //! and LGA1700/1851 boards; from 2.1 also the Nuvoton NCT6791D to NCT6799D of most ASUS boards
 //! and many ASRock ones ([`nct679x`]); from 2.3 the ITE IT8620E to IT8698E of Gigabyte boards
-//! ([`ite`]). Decoders and board layouts here are pure; `win` does the port I/O. The NCT6687's
-//! layout follows LibreHardwareMonitor's `Nct677X` and the Linux `nct6687d` driver.
+//! ([`ite`]), and from 2.4 the second ITE chip many of them have. Decoders and board layouts here
+//! are pure; `win` does the port I/O. The NCT6687's layout follows LibreHardwareMonitor's
+//! `Nct677X` and the Linux `nct6687d` driver.
 //!
 //! Monitoring only reads: Clokrix never writes the chip's monitor-enable registers, so a board whose
 //! firmware left monitoring off simply reports nothing. One exception (2.1): on a NCT679x whose
 //! firmware locked the monitor's I/O ports, so that nothing can be read, the lock bit is cleared,
 //! as Linux `nct6775` and LibreHardwareMonitor do; nothing else about the chip changes. Register
 //! banks are selected to read, and put back (an ITE chip's) or left at bank 0 (a NCT679x's). Fan
-//! control (`control`, Phase 12; `control679x` for the NCT679x, 2.3) writes only the fan
-//! registers, only on allow-listed boards.
+//! control (`control`, Phase 12; `control679x` for the NCT679x, 2.3; `control_ite` for an ITE
+//! chip, 2.4) writes only the fan registers, only on allow-listed boards.
 
 pub mod control;
 pub mod control679x;
+pub mod control_ite;
 pub mod ite;
 pub mod nct679x;
 #[cfg(windows)]
 mod win;
 
 #[cfg(windows)]
-pub use win::{detect, read_block, unlock_monitor, Found, Ports, SioProvider};
+pub use win::{
+    detect, detect_second, read_block, unlock_monitor, Found, Ports, SioProvider, SECOND_KEYS,
+};
 
 use crate::snapshot::FanKind;
 
@@ -79,6 +83,11 @@ pub enum Chip {
     /// X870, B850 and Z890 boards.
     It8696,
     It8698,
+    /// The second chip of some Gigabyte boards, at 0x4E (2.4; [`ite::identify_second`]).
+    It8790,
+    /// ID 0x8733, which the IT8791E and IT8795E share.
+    It8792,
+    It87952,
 }
 
 /// How a chip's monitor registers are reached.
@@ -112,6 +121,9 @@ impl Chip {
             Self::It8689 => "ITE IT8689E",
             Self::It8696 => "ITE IT8696E",
             Self::It8698 => "ITE IT8698E",
+            Self::It8790 => "ITE IT8790E",
+            Self::It8792 => "ITE IT8792E",
+            Self::It87952 => "ITE IT87952E",
         }
     }
 
@@ -124,7 +136,10 @@ impl Chip {
             | Self::It8688
             | Self::It8689
             | Self::It8696
-            | Self::It8698 => Family::Ite,
+            | Self::It8698
+            | Self::It8790
+            | Self::It8792
+            | Self::It87952 => Family::Ite,
             _ => Family::Nct679x,
         }
     }
@@ -137,19 +152,35 @@ impl Chip {
     /// Name of a temperature channel (the NCT6687's), source (a NCT679x's) or input (an ITE
     /// chip's) no board layout names.
     pub fn temp_name(self, n: u16) -> String {
-        match self.family() {
+        let name = match self.family() {
             Family::Nct6687 => format!("TMPIN{n}"),
             Family::Nct679x => nct679x::source_name(n),
             Family::Ite => ite::temp_name(n),
-        }
+        };
+        self.mark(name)
     }
 
     /// Name of a voltage input no board layout names.
     pub fn voltage_name(self, n: u16) -> String {
-        match self.family() {
+        let name = match self.family() {
             Family::Nct6687 => voltage_channel(n).0,
             Family::Nct679x => nct679x::input_name(n),
             Family::Ite => ite::input_name(n),
+        };
+        self.mark(name)
+    }
+
+    /// Name of a fan input no board layout names.
+    pub fn fan_name(self, n: u16) -> String {
+        self.mark(format!("Fan #{}", n + 1))
+    }
+
+    /// A second chip's channels say so, beside the first chip's of the same name.
+    fn mark(self, name: String) -> String {
+        if ite::is_second(self) {
+            format!("{name} (second chip)")
+        } else {
+            name
         }
     }
 }
@@ -307,6 +338,9 @@ pub fn layout(manufacturer: Option<&str>, product: Option<&str>, chip: Chip) -> 
         Family::Nct6687 if msi && product.contains("MS-7E24") => Some(MSI_B650M_GAMING_PLUS_WIFI),
         Family::Nct6687 if msi => Some(MSI_NCT6687),
         Family::Nct679x if maker.contains("ASUSTEK") => Some(ASUS_NCT679X),
+        Family::Ite if maker.contains("GIGABYTE") && ite::is_second(chip) => {
+            Some(ite::gigabyte_second(product))
+        }
         Family::Ite if maker.contains("GIGABYTE") => Some(ite::gigabyte(product)),
         _ => None,
     }
@@ -479,6 +513,16 @@ mod tests {
             "a Nuvoton chip on Gigabyte"
         );
         assert!(layout(None, None, Chip::It8686).is_none());
+        let second = layout(gb, Some("X570 AORUS MASTER"), Chip::It8792).expect("second");
+        assert_eq!(second.fans[0].1, "System Fan 5 / Pump");
+        assert_eq!(second.volts[1], (2, "Chipset Core", 1.0));
+        assert!(layout(Some("ASRock"), None, Chip::It8792).is_none());
+        assert_eq!(Chip::It8792.temp_name(0), "TMPIN1 (second chip)");
+        assert_eq!(Chip::It87952.voltage_name(3), "VIN3 (second chip)");
+        assert_eq!(Chip::It8792.fan_name(1), "Fan #2 (second chip)");
+        assert_eq!(Chip::It8689.fan_name(1), "Fan #2");
+        assert_eq!(Chip::It8689.temp_name(5), "TMPIN6");
+        assert_eq!(Chip::It8792.family(), Family::Ite);
     }
 
     #[test]

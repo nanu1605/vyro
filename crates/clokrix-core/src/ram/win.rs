@@ -209,8 +209,12 @@ pub fn read_umc(io: &Handle, layout: UmcLayout) -> Vec<UmcRaw> {
 /// The Intel memory controller's registers [`decode_intel`] reads for its layout (MCHBAR,
 /// memory-mapped: no shared port, so no mutex).
 pub fn read_imc(io: &Handle, layout: ImcLayout) -> Vec<(u32, u32)> {
-    intel_regs(layout)
-        .iter()
+    read_imc_regs(io, intel_regs(layout))
+}
+
+/// Reads MCHBAR registers by offset; one that does not read is left out.
+pub fn read_imc_regs(io: &Handle, regs: &[u32]) -> Vec<(u32, u32)> {
+    regs.iter()
         .filter_map(|&a| {
             let v = io.exec1("ioctl_read_dword", &[u64::from(a)]).ok()?;
             Some((a, u32::try_from(v & 0xFFFF_FFFF).ok()?))

@@ -1,13 +1,13 @@
-//! The fan controller chip as a [`FanDevice`]: the NCT6687's EC transactions or a NCT679x's banked
-//! registers (2.3), PawnIO `LpcIO` port I/O, each call one transaction under the ISA-bus mutex,
-//! only on an allow-listed board (`sio::control::capability`).
+//! The fan controller chip as a [`FanDevice`]: the NCT6687's EC transactions, a NCT679x's banked
+//! registers (2.3) or an ITE chip's (2.4), PawnIO `LpcIO` port I/O, each call one transaction
+//! under the ISA-bus mutex, only on an allow-listed board (`sio::control::capability`).
 
 use super::controller::{ChipState, DevError, FanDevice};
 use super::FanCapability;
 use crate::hwid::smbios;
 use crate::pawnio::{BusLock, Handle, Module, PawnIoError, MUTEX_ISABUS};
 use crate::sio::control::{self, BiosState, Board, ControlError};
-use crate::sio::{self, control679x, nct679x, Family, Found, Ports};
+use crate::sio::{self, control679x, control_ite, ite, nct679x, Family, Found, Ports};
 
 /// Longest wait for another tool's bus access before skipping this write (tried next tick).
 const LOCK_MS: u32 = 200;
@@ -30,8 +30,13 @@ impl SioDevice {
             .map_err(DevError::from)
     }
 
-    fn banked(&self) -> bool {
-        self.found.chip.family() == Family::Nct679x
+    fn family(&self) -> Family {
+        self.found.chip.family()
+    }
+
+    /// An ITE chip with register banks.
+    fn banks(&self) -> bool {
+        ite::has_banks(self.found.chip)
     }
 
     /// A saved state is this chip's: the same ID and revision.
@@ -53,51 +58,71 @@ impl FanDevice for SioDevice {
 
     fn capture(&mut self, now: u64) -> Result<BiosState, DevError> {
         let (base, id, rev) = (self.found.base, self.found.id, self.found.rev);
-        if self.banked() {
-            let n = control679x::outputs(self.found.chip);
-            self.locked(|io| control679x::capture(io, base, (id, rev), n, now))
-        } else {
-            self.locked(|io| control::capture(io, base, id, rev, now))
+        let (chip, banks) = (self.found.chip, self.banks());
+        match self.family() {
+            Family::Nct679x => {
+                let n = control679x::outputs(chip);
+                self.locked(|io| control679x::capture(io, base, (id, rev), n, now))
+            }
+            Family::Ite => {
+                let n = control_ite::outputs(chip);
+                self.locked(|io| control_ite::capture(io, base, banks, (id, rev), n, now))
+            }
+            Family::Nct6687 => self.locked(|io| control::capture(io, base, id, rev, now)),
         }
     }
 
     fn set(&mut self, header: u16, pct: f64) -> Result<u8, DevError> {
-        let (base, board) = (self.found.base, self.board);
-        if self.banked() {
-            self.locked(|io| control679x::set_duty(io, base, board, header, pct))
-        } else {
-            self.locked(|io| control::set_duty(io, base, board, header, pct))
+        let (base, board, banks) = (self.found.base, self.board, self.banks());
+        match self.family() {
+            Family::Nct679x => {
+                self.locked(|io| control679x::set_duty(io, base, board, header, pct))
+            }
+            Family::Ite => {
+                self.locked(|io| control_ite::set_duty(io, base, banks, board, header, pct))
+            }
+            Family::Nct6687 => self.locked(|io| control::set_duty(io, base, board, header, pct)),
         }
     }
 
     fn release(&mut self, header: u16, bios: &BiosState) -> Result<(), DevError> {
         self.ours(bios)?;
-        let base = self.found.base;
-        if self.banked() {
-            self.locked(|io| control679x::release(io, base, header, bios))
-        } else {
-            self.locked(|io| control::release(io, base, header, bios))
+        let (base, banks) = (self.found.base, self.banks());
+        match self.family() {
+            Family::Nct679x => self.locked(|io| control679x::release(io, base, header, bios)),
+            Family::Ite => self.locked(|io| control_ite::release(io, base, banks, header, bios)),
+            Family::Nct6687 => self.locked(|io| control::release(io, base, header, bios)),
         }
     }
 
     fn restore(&mut self, bios: &BiosState) -> Result<(), DevError> {
         self.ours(bios)?;
-        let base = self.found.base;
-        if self.banked() {
-            self.locked(|io| control679x::restore(io, base, bios))
-        } else {
-            self.locked(|io| control::restore(io, base, bios))
+        let (base, banks) = (self.found.base, self.banks());
+        match self.family() {
+            Family::Nct679x => self.locked(|io| control679x::restore(io, base, bios)),
+            Family::Ite => self.locked(|io| control_ite::restore(io, base, banks, bios)),
+            Family::Nct6687 => self.locked(|io| control::restore(io, base, bios)),
         }
     }
 
     fn read(&mut self) -> Result<ChipState, DevError> {
-        let base = self.found.base;
-        if self.banked() {
-            let n = control679x::outputs(self.found.chip);
-            return self.locked(|io| {
-                let (mode, outputs) = control679x::read_state(io, base, n)?;
-                Ok(ChipState { mode, outputs })
-            });
+        let (base, chip, banks) = (self.found.base, self.found.chip, self.banks());
+        match self.family() {
+            Family::Nct679x => {
+                let n = control679x::outputs(chip);
+                return self.locked(|io| {
+                    let (mode, outputs) = control679x::read_state(io, base, n)?;
+                    Ok(ChipState { mode, outputs })
+                });
+            }
+            Family::Ite => {
+                let n = control_ite::outputs(chip);
+                return self.locked(|io| {
+                    let (mode, outputs) = control_ite::read_state(io, base, banks, n)?;
+                    Ok(ChipState { mode, outputs })
+                });
+            }
+            Family::Nct6687 => {}
         }
         self.locked(|io| {
             let read = |io: &mut Ports<'_>, start, len| {

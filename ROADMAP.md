@@ -23,7 +23,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 6 | History tiers / cap | raw ≤ 30 min · 10 s avg ≤ 24 h · 1 min avg ≤ 7 d · ≤ 200 MB | default |
 | 7 | Frontend framework | **Svelte 5** + strict TS + Vite | decided |
 | 8 | Installer | **WiX (MSI)**; bundles `PawnIO_setup.exe` and runs `-install -silent` when PawnIO is missing or older | default |
-| 9 | Extra Super-I/O coverage | Nuvoton NCT6687D first (MSI AM5), then NCT67xx + ITE IT87xx: the NCT679x in 2.1, the ITE IT8620E–IT8698E in 2.3 | done |
+| 9 | Extra Super-I/O coverage | Nuvoton NCT6687D first (MSI AM5), then NCT67xx + ITE IT87xx: the NCT679x in 2.1, the ITE IT8620E–IT8698E in 2.3, the second ITE chip of Gigabyte boards in 2.4 | done |
 | 10 | Low-level hardware access | **PawnIO** (signed, free, HVCI-compatible) replaces our own KMDF driver | decided |
 | 11 | Code signing | **SignPath Foundation** or **Certum Open Source** (no EV certificate). From 2.0 a release signs itself through SignPath once its four settings are in the repository ([`docs/signing.md`](docs/signing.md)); making the repository public and applying are the owner's | decided |
 | 12 | Source availability | **Open source**; license MIT OR Apache-2.0 (LICENSE files added in P11; can still change before the repo goes public) | default |
@@ -4372,6 +4372,69 @@ everything build" (2026-11-11), answering what was left to build. Built from tha
       copies on 1.4.1 to 2.2.0 are offered it. Unsigned, as before
       ([`docs/signing.md`](docs/signing.md)). The relay was not deployed: it serves 2990da0's
       phone app (Relay run 43015537665), which behaves as this release's would.
+
+### 2.4.0 — Gigabyte's second chip, Gigabyte fan control, Tiger Lake's controller dumped
+
+The owner's "start building all three" (2026-11-12), after asking what was left to build and
+being given these three: the second ITE chip of Gigabyte boards, fan control on Gigabyte boards,
+and memory timings on Intel 11th gen laptops (Tiger Lake). Built on `claude/vyro-2.0`. The tests
+use register values made up from the documentation (each fixture says "constructed"): none of
+this has run on such hardware yet.
+
+- [x] **The second ITE chip of Gigabyte boards** (`sio::win::detect_second`, `sio::ite`): the
+      IT8790E, the IT8792E (whose ID the IT8791E and IT8795E share) and the IT87952E at 0x4E,
+      looked for when the first chip is an ITE one. As Linux `it87` and LibreHardwareMonitor
+      reach it: its ID read without the key first, since these chips stay in configuration mode
+      for the board's embedded controller; the key (ending 0xAA on 0x4E) only when nothing
+      answers; configuration mode never left; the logical device selected before selected again.
+      It has its own PawnIO handle, since `LpcIO` lets through the ports of the chip its slot last
+      found. Three fans, three temperatures and nine voltage inputs at 11 mV a count
+      (LibreHardwareMonitor's, matching Gigabyte's software; Linux uses 10.9), 12 mV on the
+      IT8790E. Named as every Gigabyte mapping of LibreHardwareMonitor names them: System Fan 5 /
+      Pump, System Fan 6 / Pump and System Fan 4, External 2 and System 2; on the boards it maps,
+      by their whole name, the PCIe temperature and the voltages it names (the X570 and B550
+      AORUS family, Z390 AORUS PRO, Z690 and Z790 AORUS, X870 and X870E AORUS). Its other
+      voltages are not shown (its standby rail and battery repeat the first chip's), and its
+      unnamed channels say "(second chip)". Its sensors are keyed from 32 (`fan.32`), clear of the
+      first chip's, and come after them; none feeds the board's own readings. A failure of the
+      second chip leaves the first chip's readings as they are. `clokrix-live` dumps it
+      (`sioRaw.second`).
+- [x] **Fan control on Gigabyte boards: the write path and the first step of a board's check**
+      (`sio::control_ite`): each PWM output's control register (bit 7 the chip's automatic mode,
+      which Gigabyte's Smart Fan curves run on; the low bits the temperature it follows) and duty
+      register, and for outputs 1–3 their bit in the fan main control register, Linux `it87`'s.
+      Taking an output keeps the temperature it follows (LibreHardwareMonitor writes 0x7F on the
+      IT8689E instead: the tries will show if that matters); giving it back writes the duty only
+      while the output is manual (on the curve its duty register is read-only), then the control
+      register, then the main-control bit. Every write is read back, in bank 0 with the bank found
+      put back. A chip whose fan control register has every fan off with active-low polarity is
+      not written, as Linux refuses it. Five outputs on the IT8620E, IT8686E and IT8688E (where
+      Linux and LibreHardwareMonitor differ, the fewer), six on the others. Only the first chip:
+      the second chip's fans are the embedded controller's, which LibreHardwareMonitor stops
+      through a memory window on AMD's LPC bridge; that is not built. Decision 24 stands: no
+      Gigabyte board is on the allow-list. `clokrix-fans` dumps an ITE chip and `--try` sets one
+      output of a Gigabyte board for 10 s, then puts the BIOS state back; `--restore` now checks
+      the saved state is this chip's before writing.
+- [x] **Found on reading it again:** the NCT679x and NCT6687 restores refuse an ITE chip's saved
+      state (it carries the fan main control register) and the ITE restore a Nuvoton one.
+- [x] **Tiger Lake's memory controller, dumped** (`ram::intel_dump_regs`): `clokrix-live` reads
+      both controllers (0x10000 apart, Linux `igen6_edac`'s), the first 64 registers of each 0x400
+      step from 0x4000 to 0x4C00, their channel maps at 0x5000 and the memory clock's registers,
+      532 in all; PawnIO's `IntelMCHBAR` maps 128 KB on Tiger Lake. The app still says "not read
+      on this CPU" there.
+- [ ] **Tiger Lake's timings decoded.** memtest86+, the source of 2.3's Intel readers, has no
+      Tiger Lake reader, and the fields of its timing registers are in Intel's datasheet (11th gen,
+      volume 2), which this session's network could not reach (`cdrdv2.intel.com` and a copy
+      elsewhere were refused). Either that host allowed in the environment, or the dump above with
+      CPU-Z's timings from the same laptop, gives the decoder.
+- [x] **Locally:** types, 295 frontend tests, 883 core tests and the service's, formatting,
+      clippy (Linux, and for Windows with the app).
+- [ ] **CI green** on the pushed commit.
+- [ ] **Field check (the owner)**: [`docs/field-check-2.4.md`](docs/field-check-2.4.md): a
+      Gigabyte board's second chip and its fans tried, and a Tiger Lake laptop's dump with CPU-Z's
+      timings, where one is at hand.
+- [ ] **A Gigabyte board on the allow-list**, from its tries, then the control field check on it
+      (decision 24).
 
 ## Risks
 

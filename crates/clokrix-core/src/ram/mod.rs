@@ -16,7 +16,9 @@
 mod win;
 
 #[cfg(windows)]
-pub use win::{probe_spd, read_imc, read_umc, Bus, Probe, RamProvider, SpdRaw, TsodRaw, UmcRaw};
+pub use win::{
+    probe_spd, read_imc, read_imc_regs, read_umc, Bus, Probe, RamProvider, SpdRaw, TsodRaw, UmcRaw,
+};
 
 use crate::snapshot::MemTimings;
 
@@ -468,6 +470,35 @@ pub const fn intel_imc(family: u32, model: u32) -> bool {
     intel_layout(family, model).is_some()
 }
 
+/// Tiger Lake's second memory controller, 0x10000 above the first (Linux `igen6_edac`).
+pub const TGL_MC1: u32 = 0x1_0000;
+
+/// What [`intel_dump_regs`] reads in each controller: four timing pages, then the channel map.
+const TGL_PAGES: [u32; 4] = [0x4000, 0x4400, 0x4800, 0x4C00];
+
+/// Tiger Lake (11th gen laptops, models 0x8C and 0x8D; 2.4) has a controller Clokrix does not
+/// decode yet, so `clokrix-live` dumps it for a decoder to be written against. Linux `igen6_edac`
+/// places its two controllers 0x10000 apart, each with its channel map at 0x5000 (the DDR type in
+/// bits 2:0) and its channels' DIMM sizes from 0x500C; an 11th gen datasheet lists the timing
+/// registers from 0x4000. Their fields, and where a second channel's start, are in no source this
+/// was built from, so the dump takes the first 64 registers of each 0x400 step from 0x4000 to
+/// 0x4C00 in both controllers, their channel maps and the memory clock's registers. `None` for the
+/// CPUs [`intel_layout`] decodes and the others.
+pub fn intel_dump_regs(family: u32, model: u32) -> Option<Vec<u32>> {
+    if family != 6 || !matches!(model, 0x8C | 0x8D) {
+        return None;
+    }
+    let mut regs = Vec::new();
+    for mc in [0, TGL_MC1] {
+        for page in TGL_PAGES {
+            regs.extend((0..64).map(|i| mc + page + i * 4));
+        }
+        regs.extend((0..8).map(|i| mc + 0x5000 + i * 4));
+    }
+    regs.extend([IMC_SA_PERF, 0x5E00, IMC_BIOS_DATA, IMC_BCLK]);
+    Some(regs)
+}
+
 /// Every register [`decode_intel`] reads for a layout (MCHBAR offsets), for dumps and fixtures.
 pub const fn intel_regs(layout: ImcLayout) -> &'static [u32] {
     match layout {
@@ -769,6 +800,7 @@ mod tests {
         regs.insert(SKL_MAD_CH1, 0);
         assert_eq!(read(&regs), None, "no channel in use");
         assert_eq!(intel_regs(ImcLayout::Skylake).len(), 8);
+        assert_eq!(intel_dump_regs(6, 0xA5), None, "decoded, not dumped");
     }
 
     /// Constructed Rocket Lake registers in memtest86+'s Ice Lake layout: DDR4-3200 16-16-16-36
@@ -1044,5 +1076,37 @@ mod tests {
         regs.insert(UMC_RATIO, 0);
         assert_eq!(decode_ddr5(|a| regs.get(&a).copied().unwrap_or(0)), None);
         assert_eq!(decode_ddr5(|_| u32::MAX), None, "all ones");
+    }
+
+    #[test]
+    fn tiger_lake_is_dumped_not_decoded() {
+        assert_eq!(
+            intel_layout(6, 0x8C),
+            None,
+            "no decoder: its fields are not known"
+        );
+        assert!(!intel_imc(6, 0x8D));
+        let regs = intel_dump_regs(6, 0x8C).expect("Tiger Lake");
+        assert_eq!(intel_dump_regs(6, 0x8D).map(|r| r.len()), Some(regs.len()));
+        assert_eq!(regs.len(), 2 * (4 * 64 + 8) + 4);
+        for r in [
+            0x4000, 0x4070, 0x4470, 0x4C00, 0x500C, 0x1_4000, 0x1_500C, 0x5E04, 0x5F60,
+        ] {
+            assert!(regs.contains(&r), "{r:#x}");
+        }
+        assert!(
+            !regs.contains(&0x4100),
+            "the first 64 registers of each page only"
+        );
+        let mut sorted = regs.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), regs.len(), "no register twice");
+        assert!(
+            regs.iter().all(|&r| r % 4 == 0 && r < 0x2_0000),
+            "PawnIO's 128 KB window"
+        );
+        assert_eq!(intel_dump_regs(6, 0xA7), None);
+        assert_eq!(intel_dump_regs(0x19, 0x8C), None);
     }
 }

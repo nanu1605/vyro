@@ -1133,6 +1133,7 @@ impl FanDevice for SimDevice {
             mode: c.mode,
             commands: c.commands.clone(),
             modes: Vec::new(),
+            fan_main: None,
             saved_at: now,
         })
     }
@@ -1370,6 +1371,7 @@ mod tests {
             mode: 0,
             commands: vec![0x66; 8],
             modes: Vec::new(),
+            fan_main: None,
             saved_at: 1,
         };
         control::save(&dir.join(RESTORE_FILE), &left).unwrap();
@@ -1393,6 +1395,7 @@ mod tests {
             mode: 0,
             commands: vec![0x66; 8],
             modes: Vec::new(),
+            fan_main: None,
             saved_at: 1,
         };
         control::save(&dir.join(RESTORE_FILE), &left).unwrap();

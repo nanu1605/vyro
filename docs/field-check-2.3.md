@@ -67,8 +67,9 @@ goes on the list of boards Clokrix may drive.
    by its name (TMPIN2); X570's fourth fan is the Chipset Fan.
 2. Against HWiNFO's section for the chip ("ITE IT8689E" and so on): fans within a few RPM, +12V,
    +5V and +3.3V within 0.1 V, the temperatures within 1 °C. Note any channel named wrongly.
-3. Not read: the second ITE chip many Gigabyte boards have (HWiNFO lists an "IT8792E" or
-   "IT87952E" on its own), with a few more fans and temperatures.
+3. Not read in 2.3: the second ITE chip many Gigabyte boards have (HWiNFO lists an "IT8792E" or
+   "IT87952E" on its own), with a few more fans and temperatures. A 2.4 build reads it
+   ([`docs/field-check-2.4.md`](field-check-2.4.md)).
 4. Cooling: read-only; nothing Clokrix does changes a fan.
 
 ## 4. Memory timings (on a PC with one of these)

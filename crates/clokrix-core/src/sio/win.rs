@@ -1,6 +1,7 @@
 //! `SioProvider`: reads the Super-I/O hardware monitor through PawnIO's `LpcIO` module: a
-//! Nuvoton NCT6687 or NCT679x, or an ITE chip (2.3). Without PawnIO or a supported chip `init`
-//! fails and fans, voltages and board temperatures stay empty.
+//! Nuvoton NCT6687 or NCT679x, or an ITE chip (2.3) and the second ITE chip beside it (2.4).
+//! Without PawnIO or a supported chip `init` fails and fans, voltages and board temperatures stay
+//! empty.
 
 use std::time::Duration;
 
@@ -11,6 +12,7 @@ use super::{
     REG_BASE, REG_CHIP_ID, REG_CHIP_REV, REG_LDN,
 };
 use crate::hwid::smbios;
+use crate::info::BoardId;
 use crate::pawnio::{BusLock, Handle, Module, PawnIoError, MUTEX_ISABUS};
 use crate::provider::{BoxError, Provider};
 use crate::registry::{Group, Registry, SensorDesc, SensorKey, Source, Unit};
@@ -20,6 +22,9 @@ use crate::snapshot::{BoardSnapshot, FanSnapshot, SensorSnapshot, VoltageReading
 const LOCK_MS: u32 = 50;
 /// Ticks the last readings stand in while another tool keeps the bus (then empty).
 const MAX_STALE: u32 = 3;
+/// Where the second chip's channels start in the sensors' keys (`fan.32`, `board.temp32`,
+/// `voltage.vin32`), clear of any first chip's.
+pub const SECOND_KEYS: u16 = 32;
 
 /// A detected chip and its hardware-monitor I/O base.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -159,6 +164,55 @@ fn probe_ite(io: &Handle, port: u16) -> Result<Option<Found>, PawnIoError> {
     Ok(found)
 }
 
+/// Looks for the second ITE chip of a Gigabyte board at 0x4E (2.4), on a handle of its own: the
+/// `LpcIO` module lets through the ports of the chip its slot last found, so the first chip keeps
+/// its handle. As Linux `it87` and LibreHardwareMonitor do: the ID is read without the key first,
+/// since these chips stay in configuration mode for the board's embedded controller; the key
+/// (ending 0xAA) is sent only when nothing answers; configuration mode is never left. The logical
+/// device selected before is selected again. Call with the ISA-bus mutex held, after [`detect`]
+/// found an ITE chip at 0x2E.
+pub fn detect_second(io: &Handle) -> Result<Option<Found>, PawnIoError> {
+    io.exec("ioctl_select_slot", &[1], 0)?;
+    let port = CONFIG_PORTS[1];
+    let read_id = || -> Result<u16, PawnIoError> {
+        Ok(u16::from_be_bytes([
+            sio_in(io, REG_CHIP_ID)?,
+            sio_in(io, REG_CHIP_REV)?,
+        ]))
+    };
+    let mut id = read_id()?;
+    if id == 0xFFFF {
+        for key in ite::ENTER_4E {
+            outb(io, port, key)?;
+        }
+        id = read_id()?;
+    }
+    let Some(chip) = ite::identify_second(id) else {
+        return Ok(None);
+    };
+    let ldn = sio_in(io, REG_LDN)?;
+    let probe = (|| {
+        io.exec("ioctl_find_bars", &[], 0)?;
+        sio_out(io, REG_LDN, ite::LDN_EC)?;
+        let base = u16::from_be_bytes([sio_in(io, REG_BASE)?, sio_in(io, REG_BASE + 1)?]) & !7;
+        let active = sio_in(io, ite::CR_ACTIVATE)? & 1 != 0;
+        let [hi, lo] = id.to_be_bytes();
+        Ok(valid_base(base).then_some(Found {
+            chip,
+            id: hi,
+            rev: lo,
+            config_port: port,
+            base,
+            active,
+            io_locked: false,
+        }))
+    })();
+    let back = sio_out(io, REG_LDN, ldn);
+    let found = probe?;
+    back?;
+    Ok(found)
+}
+
 /// Clears a NCT679x's monitor I/O lock (Super-I/O register 0x28, bit 4) and nothing else, as
 /// Linux `nct6775` and LibreHardwareMonitor do on these chips: with it set the monitor's ports
 /// answer nothing. Call with the ISA-bus mutex held, after [`detect`] on the same handle.
@@ -236,6 +290,17 @@ struct Readings {
     voltages: Vec<VoltageReading>,
 }
 
+/// The second ITE chip of a Gigabyte board (2.4), read on its own handle beside the first.
+struct Second {
+    io: Handle,
+    found: Found,
+    setup: ite::Setup,
+    layout: Option<Layout>,
+    keys: Keys,
+    last: Readings,
+    stale: u32,
+}
+
 pub struct SioProvider {
     io: Option<Handle>,
     isa: BusLock,
@@ -246,46 +311,228 @@ pub struct SioProvider {
     keys: Keys,
     last: Readings,
     stale: u32,
+    second: Option<Second>,
+}
+
+/// An ITE chip's monitor must be on and answer; then what its firmware enabled.
+fn ite_setup(isa: &BusLock, io: &Handle, found: &Found) -> Result<ite::Setup, BoxError> {
+    let name = found.chip.name();
+    if !found.active {
+        return Err(format!("{name}: the firmware left its hardware monitor off").into());
+    }
+    let regs = [ite::VENDOR, ite::CONFIG]
+        .into_iter()
+        .chain(ite::SETUP_REGS)
+        .collect::<Vec<_>>();
+    let got = isa
+        .hold(500, || {
+            ite::read(
+                &mut Ports(io),
+                found.base,
+                ite::has_banks(found.chip),
+                &regs,
+            )
+        })
+        .ok_or("ISA bus busy")??;
+    let r = |a: u8| got.iter().find(|x| x.0 == a).map_or(0, |x| x.1);
+    ite::answers(r(ite::VENDOR), r(ite::CONFIG)).map_err(|e| format!("{name}: {e}"))?;
+    let s = ite::setup(
+        found.chip,
+        r(ite::FAN_MAIN_CTRL),
+        r(ite::FAN_16BIT),
+        r(ite::TEMP456),
+    );
+    log::info!(
+        "sio: {name} fans enabled {:#08b}, temperatures {:#08b}",
+        s.fans,
+        s.temps
+    );
+    Ok(s)
+}
+
+/// The second ITE chip beside a first one, if the board has it and it answers. Anything wrong
+/// with it is logged and leaves the first chip's readings as they are.
+fn second_chip(isa: &BusLock, board: &BoardId) -> Option<Second> {
+    let open = || -> Result<Option<Second>, BoxError> {
+        let io = Handle::open(Module::LpcIo)?;
+        let Some(found) = isa
+            .hold(500, || detect_second(&io))
+            .ok_or("ISA bus busy")??
+        else {
+            return Ok(None);
+        };
+        let setup = ite_setup(isa, &io, &found)?;
+        let layout = layout(
+            board.manufacturer.as_deref(),
+            board.product.as_deref(),
+            found.chip,
+        );
+        log::info!(
+            "sio: second chip {} (id {:#04x}{:02x}) at {:#x}, monitor base {:#06x}, layout {}",
+            found.chip.name(),
+            found.id,
+            found.rev,
+            found.config_port,
+            found.base,
+            if layout.is_some() { "known" } else { "generic" },
+        );
+        Ok(Some(Second {
+            io,
+            found,
+            setup,
+            layout,
+            keys: Keys::default(),
+            last: Readings::default(),
+            stale: 0,
+        }))
+    };
+    open().unwrap_or_else(|e| {
+        log::info!("sio: second chip not read: {e}");
+        None
+    })
+}
+
+/// Registers and names one chip's decoded channels. `offset` moves a second chip's keys clear of
+/// the first chip's.
+fn named(
+    chip: Chip,
+    layout: Option<Layout>,
+    keys: &mut Keys,
+    offset: u16,
+    reg: &mut Registry,
+    d: &Decoded,
+) -> Readings {
+    let mut out = Readings::default();
+    for &(n, t) in &d.temps {
+        let named = layout.and_then(|l| l.temps.iter().find(|c| c.0 == n));
+        // Unnamed channels that read nothing (or 0 °C, an unconnected input) are skipped.
+        if named.is_none() && t.is_none_or(|t| t == 0.0) {
+            continue;
+        }
+        let (name, target) = named.map_or_else(
+            || (chip.temp_name(n), BoardTemp::None),
+            |c| (c.1.to_owned(), c.2),
+        );
+        let k = key(&mut keys.temps, n, reg, || {
+            SensorDesc::new(
+                format!("board.temp{}", n + offset),
+                Group::Board,
+                name,
+                Unit::Celsius,
+                Source::Driver,
+            )
+            .with_history()
+        });
+        let t = reg.set(k, t);
+        let b = &mut out.board;
+        match target {
+            BoardTemp::None => {}
+            BoardTemp::System => b.temp_system = t,
+            BoardTemp::VrmMos => b.temp_vrm_mos = t,
+            BoardTemp::Chipset => b.temp_chipset = t,
+            BoardTemp::Vrm => b.temp_vrm = t,
+            BoardTemp::Pcie => b.temp_pcie = t,
+            BoardTemp::M2 => b.temp_m2 = t,
+        }
+    }
+    for &(n, v) in &d.volts {
+        let named = layout.and_then(|l| l.volts.iter().find(|c| c.0 == n));
+        let (name, v) = match named {
+            Some(c) => (c.1.to_owned(), v * c.2),
+            None if layout.is_some_and(|l| l.volts_only) => continue,
+            None => {
+                let known = keys.volts.get(usize::from(n)).is_some_and(Option::is_some);
+                if v <= 0.0 && !known {
+                    continue;
+                }
+                (chip.voltage_name(n), v)
+            }
+        };
+        let k = key(&mut keys.volts, n, reg, || {
+            SensorDesc::new(
+                format!("voltage.vin{}", n + offset),
+                Group::Voltages,
+                name.clone(),
+                Unit::Volt,
+                Source::Driver,
+            )
+            .with_history()
+        });
+        // Exactly 0 V is an input the chip is not sampling (on MS-7E24 the standby rail
+        // and the CMOS battery read 0 unless something turned their monitoring on), not a
+        // dead rail: a PC that runs has standby power.
+        let value = reg.set(k, (v > 0.0).then_some(v));
+        out.voltages.push(VoltageReading { name, value });
+    }
+    for &(n, r) in &d.fans {
+        let named = layout.and_then(|l| l.fans.iter().find(|c| c.0 == n));
+        let known = keys.fans.get(usize::from(n)).is_some_and(Option::is_some);
+        if named.is_none() && !known && r.is_none_or(|r| r <= 0.0) {
+            continue;
+        }
+        let (name, kind) = named.map_or_else(
+            || (chip.fan_name(n), crate::snapshot::FanKind::Fan),
+            |c| (c.1.to_owned(), c.2),
+        );
+        let k = key(&mut keys.fans, n, reg, || {
+            SensorDesc::new(
+                format!("fan.{}", n + offset),
+                Group::Fans,
+                name.clone(),
+                Unit::Rpm,
+                Source::Driver,
+            )
+            .with_history()
+        });
+        let rpm = reg.set(k, r);
+        out.fans.push(FanSnapshot {
+            name,
+            rpm,
+            kind,
+            ..Default::default()
+        });
+    }
+    out
+}
+
+/// A chip's last readings stand in for a few ticks while another tool keeps the bus, then go.
+fn keep(last: &mut Readings, stale: &mut u32, now: Option<Readings>) {
+    if let Some(r) = now {
+        *last = r;
+        *stale = 0;
+    } else if *stale < MAX_STALE {
+        *stale += 1;
+    } else {
+        *last = Readings::default();
+    }
+}
+
+/// Reads and decodes an ITE chip's registers; `None` when the bus stayed busy or the read was
+/// not sensor data.
+fn read_ite(
+    isa: &BusLock,
+    io: &Handle,
+    found: &Found,
+    s: ite::Setup,
+) -> Result<Option<Decoded>, PawnIoError> {
+    let regs = ite::registers(s);
+    let banks = ite::has_banks(found.chip);
+    Ok(isa
+        .hold(LOCK_MS, || {
+            ite::read(&mut Ports(io), found.base, banks, &regs)
+        })
+        .transpose()?
+        .filter(|dump| plausible(&dump.iter().map(|r| r.1).collect::<Vec<_>>()))
+        .map(|dump| {
+            ite::decode(s, |a| {
+                dump.binary_search_by_key(&a, |r| r.0)
+                    .ok()
+                    .map(|i| dump[i].1)
+            })
+        }))
 }
 
 impl SioProvider {
-    /// An ITE chip's monitor must be on and answer; then what its firmware enabled.
-    fn ite_setup(&self, io: &Handle, found: &Found) -> Result<ite::Setup, BoxError> {
-        let name = found.chip.name();
-        if !found.active {
-            return Err(format!("{name}: the firmware left its hardware monitor off").into());
-        }
-        let regs = [ite::VENDOR, ite::CONFIG]
-            .into_iter()
-            .chain(ite::SETUP_REGS)
-            .collect::<Vec<_>>();
-        let got = self
-            .isa
-            .hold(500, || {
-                ite::read(
-                    &mut Ports(io),
-                    found.base,
-                    ite::has_banks(found.chip),
-                    &regs,
-                )
-            })
-            .ok_or("ISA bus busy")??;
-        let r = |a: u8| got.iter().find(|x| x.0 == a).map_or(0, |x| x.1);
-        ite::answers(r(ite::VENDOR), r(ite::CONFIG)).map_err(|e| format!("{name}: {e}"))?;
-        let s = ite::setup(
-            found.chip,
-            r(ite::FAN_MAIN_CTRL),
-            r(ite::FAN_16BIT),
-            r(ite::TEMP456),
-        );
-        log::info!(
-            "sio: {name} fans enabled {:#08b}, temperatures {:#08b}",
-            s.fans,
-            s.temps
-        );
-        Ok(s)
-    }
-
     pub fn new() -> Self {
         Self {
             io: None,
@@ -296,113 +543,8 @@ impl SioProvider {
             keys: Keys::default(),
             last: Readings::default(),
             stale: 0,
+            second: None,
         }
-    }
-
-    fn named(&mut self, reg: &mut Registry, d: &Decoded) -> Readings {
-        let layout = self.layout;
-        let Some(chip) = self.found.map(|f| f.chip) else {
-            return Readings::default();
-        };
-        let mut out = Readings::default();
-        for &(n, t) in &d.temps {
-            let named = layout.and_then(|l| l.temps.iter().find(|c| c.0 == n));
-            // Unnamed channels that read nothing (or 0 °C, an unconnected input) are skipped.
-            if named.is_none() && t.is_none_or(|t| t == 0.0) {
-                continue;
-            }
-            let (name, target) = named.map_or_else(
-                || (chip.temp_name(n), BoardTemp::None),
-                |c| (c.1.to_owned(), c.2),
-            );
-            let k = key(&mut self.keys.temps, n, reg, || {
-                SensorDesc::new(
-                    format!("board.temp{n}"),
-                    Group::Board,
-                    name,
-                    Unit::Celsius,
-                    Source::Driver,
-                )
-                .with_history()
-            });
-            let t = reg.set(k, t);
-            let b = &mut out.board;
-            match target {
-                BoardTemp::None => {}
-                BoardTemp::System => b.temp_system = t,
-                BoardTemp::VrmMos => b.temp_vrm_mos = t,
-                BoardTemp::Chipset => b.temp_chipset = t,
-                BoardTemp::Vrm => b.temp_vrm = t,
-                BoardTemp::Pcie => b.temp_pcie = t,
-                BoardTemp::M2 => b.temp_m2 = t,
-            }
-        }
-        for &(n, v) in &d.volts {
-            let named = layout.and_then(|l| l.volts.iter().find(|c| c.0 == n));
-            let (name, v) = match named {
-                Some(c) => (c.1.to_owned(), v * c.2),
-                None if layout.is_some_and(|l| l.volts_only) => continue,
-                None => {
-                    let known = self
-                        .keys
-                        .volts
-                        .get(usize::from(n))
-                        .is_some_and(Option::is_some);
-                    if v <= 0.0 && !known {
-                        continue;
-                    }
-                    (chip.voltage_name(n), v)
-                }
-            };
-            let k = key(&mut self.keys.volts, n, reg, || {
-                SensorDesc::new(
-                    format!("voltage.vin{n}"),
-                    Group::Voltages,
-                    name.clone(),
-                    Unit::Volt,
-                    Source::Driver,
-                )
-                .with_history()
-            });
-            // Exactly 0 V is an input the chip is not sampling (on MS-7E24 the standby rail
-            // and the CMOS battery read 0 unless something turned their monitoring on), not a
-            // dead rail: a PC that runs has standby power.
-            let value = reg.set(k, (v > 0.0).then_some(v));
-            out.voltages.push(VoltageReading { name, value });
-        }
-        for &(n, r) in &d.fans {
-            let named = layout.and_then(|l| l.fans.iter().find(|c| c.0 == n));
-            let known = self
-                .keys
-                .fans
-                .get(usize::from(n))
-                .is_some_and(Option::is_some);
-            if named.is_none() && !known && r.is_none_or(|r| r <= 0.0) {
-                continue;
-            }
-            let (name, kind) = named.map_or_else(
-                || (format!("Fan #{}", n + 1), crate::snapshot::FanKind::Fan),
-                |c| (c.1.to_owned(), c.2),
-            );
-            let k = key(&mut self.keys.fans, n, reg, || {
-                SensorDesc::new(
-                    format!("fan.{n}"),
-                    Group::Fans,
-                    name.clone(),
-                    Unit::Rpm,
-                    Source::Driver,
-                )
-                .with_history()
-            });
-            let rpm = reg.set(k, r);
-            out.fans.push(FanSnapshot {
-                name,
-                rpm,
-                kind,
-                ..Default::default()
-            });
-        }
-        out
     }
 }
 
@@ -425,7 +567,7 @@ impl Provider for SioProvider {
             .ok_or("ISA bus busy")??
             .ok_or("no supported Super-I/O chip")?;
         if found.chip.family() == Family::Ite {
-            self.ite = Some(self.ite_setup(&io, &found)?);
+            self.ite = Some(ite_setup(&self.isa, &io, &found)?);
         }
         if found.chip.banked() {
             if !found.active {
@@ -491,6 +633,9 @@ impl Provider for SioProvider {
                 "generic"
             },
         );
+        if found.chip.family() == Family::Ite {
+            self.second = second_chip(&self.isa, &board);
+        }
         self.found = Some(found);
         self.io = Some(io);
         Ok(())
@@ -514,21 +659,7 @@ impl Provider for SioProvider {
                     })
                 })
         } else if let Some(s) = self.ite {
-            let regs = ite::registers(s);
-            let banks = ite::has_banks(found.chip);
-            self.isa
-                .hold(LOCK_MS, || {
-                    ite::read(&mut Ports(io), found.base, banks, &regs)
-                })
-                .transpose()?
-                .filter(|dump| plausible(&dump.iter().map(|r| r.1).collect::<Vec<_>>()))
-                .map(|dump| {
-                    ite::decode(s, |a| {
-                        dump.binary_search_by_key(&a, |r| r.0)
-                            .ok()
-                            .map(|i| dump[i].1)
-                    })
-                })
+            read_ite(&self.isa, io, &found, s)?
         } else {
             self.isa
                 .hold(LOCK_MS, || {
@@ -539,16 +670,31 @@ impl Provider for SioProvider {
                 .filter(|b| plausible(b))
                 .map(|b| decode(&b))
         };
-        if let Some(d) = decoded {
-            self.last = self.named(reg, &d);
-            self.stale = 0;
-        } else if self.stale < MAX_STALE {
-            // Another monitor holds the bus or the EC this tick: keep the last reading.
-            self.stale += 1;
-        } else {
-            self.last = Readings::default();
+        // Another monitor holding the bus or the EC this tick keeps the last reading a while.
+        let now = decoded.map(|d| named(found.chip, self.layout, &mut self.keys, 0, reg, &d));
+        keep(&mut self.last, &mut self.stale, now);
+        let mut r = self.last.clone();
+        if let Some(sec) = &mut self.second {
+            // The second chip's own failures leave the first chip's readings as they are.
+            let now = read_ite(&self.isa, &sec.io, &sec.found, sec.setup)
+                .unwrap_or_else(|e| {
+                    log::debug!("sio: second chip: {e}");
+                    None
+                })
+                .map(|d| {
+                    named(
+                        sec.found.chip,
+                        sec.layout,
+                        &mut sec.keys,
+                        SECOND_KEYS,
+                        reg,
+                        &d,
+                    )
+                });
+            keep(&mut sec.last, &mut sec.stale, now);
+            r.fans.extend(sec.last.fans.iter().cloned());
+            r.voltages.extend(sec.last.voltages.iter().cloned());
         }
-        let r = self.last.clone();
         snap.board = r.board;
         snap.fans = r.fans;
         snap.voltages = r.voltages;

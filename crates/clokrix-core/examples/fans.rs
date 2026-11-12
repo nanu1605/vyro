@@ -1,5 +1,5 @@
-//! Fan-control check for Phase 12a (and, from 2.3, a NCT679x board's first check), run as
-//! administrator with PawnIO installed.
+//! Fan-control check for Phase 12a (and, from 2.3, a NCT679x board's first check; from 2.4 a
+//! Gigabyte board's, on its first ITE chip), run as administrator with PawnIO installed.
 //!
 //! ```sh
 //! clokrix-fans                 # read only: control registers, each header's mode / duty / RPM
@@ -8,10 +8,11 @@
 //! ```
 //!
 //! The default run writes nothing. `--try` works on an allow-listed board and header, and on an
-//! ASUS board with a NCT679x that has not had its field check yet (one PWM output at a time, with
-//! you watching: the first step of that check). It saves the BIOS state next to the executable
-//! before writing and restores it afterwards. Quit MSI Center, Armoury Crate / AI Suite and
-//! FanControl first: two programs driving the same chip fight each other.
+//! ASUS board with a NCT679x or a Gigabyte board with an ITE chip that has not had its field check
+//! yet (one PWM output at a time, with you watching: the first step of that check). It saves the
+//! BIOS state next to the executable before writing and restores it afterwards. Quit MSI Center,
+//! Armoury Crate / AI Suite, Gigabyte Control Center and FanControl first: two programs driving
+//! the same chip fight each other.
 
 #[cfg(windows)]
 mod win {
@@ -21,7 +22,9 @@ mod win {
 
     use clokrix_core::pawnio::{BusLock, Handle, Module, PawnIoError, MUTEX_ISABUS};
     use clokrix_core::sio::control::{self, BiosState, Board, ControlError};
-    use clokrix_core::sio::{self, control679x, nct679x, Family, Found, FAN_BASE};
+    use clokrix_core::sio::{
+        self, control679x, control_ite, ite, nct679x, Family, Found, FAN_BASE,
+    };
 
     type Error = Box<dyn std::error::Error>;
 
@@ -76,6 +79,15 @@ mod win {
             self.found.chip.family() == Family::Nct679x
         }
 
+        fn ite(&self) -> bool {
+            self.found.chip.family() == Family::Ite
+        }
+
+        /// An ITE chip with register banks.
+        fn banks(&self) -> bool {
+            ite::has_banks(self.found.chip)
+        }
+
         /// One locked access: reads `len` EC bytes from `start` (the NCT6687).
         fn read(&self, start: u16, len: u16) -> Result<Vec<u8>, Error> {
             let r = self
@@ -111,13 +123,19 @@ mod win {
         }
 
         fn outputs(&self) -> u16 {
-            control679x::outputs(self.found.chip)
+            if self.ite() {
+                control_ite::outputs(self.found.chip)
+            } else {
+                control679x::outputs(self.found.chip)
+            }
         }
 
         fn capture(&self, now: u64) -> Result<BiosState, Error> {
             let (id, rev, base) = (self.found.id, self.found.rev, self.found.base);
-            if self.banked() {
-                let n = self.outputs();
+            let (n, banks) = (self.outputs(), self.banks());
+            if self.ite() {
+                self.control(|io| control_ite::capture(io, base, banks, (id, rev), n, now))
+            } else if self.banked() {
                 self.control(|io| control679x::capture(io, base, (id, rev), n, now))
             } else {
                 self.control(|io| control::capture(io, base, id, rev, now))
@@ -125,17 +143,29 @@ mod win {
         }
 
         fn set(&self, board: &Board, header: u16, pct: f64) -> Result<u8, Error> {
-            let base = self.found.base;
-            if self.banked() {
+            let (base, banks) = (self.found.base, self.banks());
+            if self.ite() {
+                self.control(|io| control_ite::set_duty(io, base, banks, board, header, pct))
+            } else if self.banked() {
                 self.control(|io| control679x::set_duty(io, base, board, header, pct))
             } else {
                 self.control(|io| control::set_duty(io, base, board, header, pct))
             }
         }
 
+        /// Puts a saved state back, if it is this chip's (the same ID and revision).
         fn restore(&self, state: &BiosState) -> Result<(), Error> {
-            let base = self.found.base;
-            if self.banked() {
+            if (state.chip_id, state.chip_rev) != (self.found.id, self.found.rev) {
+                return Err(format!(
+                    "the saved fan settings are another chip's ({:#04x} {:#04x}), not this one's",
+                    state.chip_id, state.chip_rev
+                )
+                .into());
+            }
+            let (base, banks) = (self.found.base, self.banks());
+            if self.ite() {
+                self.control(|io| control_ite::restore(io, base, banks, state))
+            } else if self.banked() {
                 self.control(|io| control679x::restore(io, base, state))
             } else {
                 self.control(|io| control::restore(io, base, state))
@@ -151,6 +181,9 @@ mod win {
 
     /// Mode, duty command, duty output and RPM of each header, as a table and as JSON.
     fn snapshot(chip: &Chip, board: Option<&Board>) -> Result<serde_json::Value, Error> {
+        if chip.ite() {
+            return snapshot_ite(chip, board);
+        }
         if chip.banked() {
             return snapshot_banked(chip, board);
         }
@@ -230,6 +263,59 @@ mod win {
         Ok(serde_json::json!({ "headers": rows }))
     }
 
+    /// The same for an ITE chip (2.4): each PWM output's control register (bit 7: the chip's own
+    /// curve), duty and the speed of the fan input with the same number (usually, not always, the
+    /// header's own), with the fan main control and fan control registers.
+    fn snapshot_ite(chip: &Chip, board: Option<&Board>) -> Result<serde_json::Value, Error> {
+        let (base, banks, n) = (chip.found.base, chip.banks(), chip.outputs());
+        let dump = chip.control(|io| control_ite::dump(io, base, banks, n))?;
+        let fan_regs: Vec<u8> = ite::FAN_LOW.iter().chain(&ite::FAN_HIGH).copied().collect();
+        let fans = chip
+            .lock
+            .hold(LOCK_MS, || {
+                ite::read(&mut sio::Ports(&chip.io), base, banks, &fan_regs)
+            })
+            .ok_or("ISA bus busy")??;
+        let rpm = |i: usize| {
+            let r = |a: u8| fans.iter().find(|x| x.0 == a).map(|x| x.1);
+            ite::rpm(u16::from_le_bytes([
+                r(ite::FAN_LOW[i])?,
+                r(ite::FAN_HIGH[i])?,
+            ]))
+        };
+        println!(
+            "  fan main control {:#04x}, fan control {:#04x}",
+            dump.main, dump.fan_ctl
+        );
+        let mut rows = Vec::new();
+        println!("  pwm  name            control         duty        RPM");
+        for p in &dump.outputs {
+            let name = name(board, p.index);
+            let rpm = rpm(usize::from(p.index));
+            println!(
+                "  {:<4} {:<15} {:<15} {:>5.1} %   {:>6}",
+                p.index,
+                name,
+                if p.software {
+                    format!("software ({:#04x})", p.ctrl)
+                } else {
+                    format!("BIOS ({:#04x})", p.ctrl)
+                },
+                control::percent(p.duty),
+                rpm.map_or("-".to_owned(), |r| format!("{r:.0}")),
+            );
+            rows.push(serde_json::json!({
+                "header": p.index, "name": name, "software": p.software,
+                "control": format!("{:#04x}", p.ctrl), "duty": p.duty, "rpm": rpm,
+            }));
+        }
+        Ok(serde_json::json!({
+            "fanMain": format!("{:#04x}", dump.main),
+            "fanCtl": format!("{:#04x}", dump.fan_ctl),
+            "headers": rows,
+        }))
+    }
+
     fn exe_dir() -> PathBuf {
         std::env::current_exe()
             .ok()
@@ -307,12 +393,8 @@ mod win {
             f.base,
         );
         println!("Board: {} {}", maker.unwrap_or("?"), product.unwrap_or("?"));
-        if f.chip.family() == Family::Ite {
-            println!("Fan control: none on ITE chips; the app reads their fans.");
-            return Ok(());
-        }
         let board = control::capability(f.chip, f.rev, maker, product);
-        // Before a NCT679x board's field check, only this tool's supervised test writes it.
+        // Before a NCT679x or ITE board's field check, only this tool's supervised test writes it.
         let candidate = control::candidate(f.chip, f.rev, maker);
         match (&board, &candidate) {
             (Ok(b), _) => println!("Fan control: allowed on {} (validation pending)", b.name),
@@ -346,7 +428,24 @@ mod win {
         }
 
         // Read only: registers and three samples a second apart (the BIOS curve at work).
-        let regs = if chip.banked() {
+        let regs = if chip.ite() {
+            let mut regs = vec![control_ite::MAIN, control_ite::FAN_CTL];
+            regs.extend(control_ite::CTRL.iter().chain(&control_ite::DUTY));
+            regs.sort_unstable();
+            let r = chip
+                .lock
+                .hold(LOCK_MS, || {
+                    ite::read(&mut sio::Ports(&chip.io), f.base, chip.banks(), &regs)
+                })
+                .ok_or("ISA bus busy")??;
+            println!("\nPWM registers (bank 0):");
+            for (a, v) in &r {
+                println!("  {a:#04x} = {v:#04x}");
+            }
+            serde_json::json!({
+                "pwm": r.iter().map(|(a, v)| (format!("{a:#04x}"), serde_json::Value::from(format!("{v:#04x}")))).collect::<serde_json::Map<_, _>>(),
+            })
+        } else if chip.banked() {
             let mut regs: Vec<u16> = control679x::MODE
                 .iter()
                 .chain(&control679x::DUTY)

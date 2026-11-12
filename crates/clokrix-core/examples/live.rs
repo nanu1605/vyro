@@ -232,11 +232,7 @@ fn sio_raw() -> serde_json::Value {
             // An ITE chip: the registers its setup comes from and every one Clokrix decodes with
             // all fans and temperatures counted in, by address (bank 0).
             Some(f) if f.chip.family() == sio::Family::Ite => {
-                let all = sio::ite::Setup {
-                    fans: 0x3F,
-                    temps: 0x3F,
-                    avcc3: sio::ite::has_avcc3(f.chip),
-                };
+                let all = sio::ite::all(f.chip);
                 let mut regs = vec![
                     sio::ite::CONFIG,
                     sio::ite::BANK,
@@ -262,9 +258,14 @@ fn sio_raw() -> serde_json::Value {
     }) else {
         return serde_json::json!({ "error": "ISA bus busy" });
     };
+    let second = match &result {
+        Ok((Some(f), ..)) if f.chip.family() == sio::Family::Ite => second_raw(&lock),
+        _ => serde_json::Value::Null,
+    };
     match result {
         Ok((None, ..)) => serde_json::json!({ "chip": null }),
         Ok((Some(f), block, banked, vendor)) => serde_json::json!({
+            "second": second,
             "chip": f.chip.name(),
             "id": format!("{:#04x}", f.id),
             "rev": format!("{:#04x}", f.rev),
@@ -276,6 +277,41 @@ fn sio_raw() -> serde_json::Value {
             "start": format!("{BLOCK_START:#05x}"),
             "block": block.map(|b| b.chunks(16).map(|row| row.iter().map(|x| format!("{x:02X}")).collect::<Vec<_>>().join(" ")).collect::<Vec<_>>()),
             "registers": banked.map(|r| r.iter().map(|(a, v)| (format!("{a:#05x}"), serde_json::Value::from(format!("{v:#04x}")))).collect::<serde_json::Map<_, _>>()),
+        }),
+        Err(e) => serde_json::json!({ "error": e.to_string() }),
+    }
+}
+
+/// The second ITE chip of a Gigabyte board (2.4), on its own handle as the app reads it: where it
+/// answered and every register Clokrix decodes, with the ones its setup comes from.
+#[cfg(windows)]
+fn second_raw(lock: &clokrix_core::pawnio::BusLock) -> serde_json::Value {
+    use clokrix_core::pawnio::{Handle, Module};
+    use clokrix_core::sio::{self, ite};
+    let io = match Handle::open(Module::LpcIo) {
+        Ok(io) => io,
+        Err(e) => return serde_json::json!({ "error": e.to_string() }),
+    };
+    let Some(result) = lock.hold(500, || {
+        let Some(f) = sio::detect_second(&io)? else {
+            return Ok(None);
+        };
+        let mut regs = vec![ite::CONFIG, ite::VENDOR, ite::FAN_16BIT, ite::FAN_MAIN_CTRL];
+        regs.extend(ite::registers(ite::all(f.chip)));
+        let dump = ite::read(&mut sio::Ports(&io), f.base, false, &regs)?;
+        Ok::<_, clokrix_core::pawnio::PawnIoError>(Some((f, dump)))
+    }) else {
+        return serde_json::json!({ "error": "ISA bus busy" });
+    };
+    match result {
+        Ok(None) => serde_json::json!({ "chip": null }),
+        Ok(Some((f, dump))) => serde_json::json!({
+            "chip": f.chip.name(),
+            "id": format!("{:#04x}{:02x}", f.id, f.rev),
+            "configPort": format!("{:#x}", f.config_port),
+            "base": format!("{:#06x}", f.base),
+            "monitorOn": f.active,
+            "registers": dump.iter().map(|(a, v)| (format!("{a:#04x}"), serde_json::Value::from(format!("{v:#04x}")))).collect::<serde_json::Map<_, _>>(),
         }),
         Err(e) => serde_json::json!({ "error": e.to_string() }),
     }
@@ -367,10 +403,18 @@ fn ram_raw() -> serde_json::Value {
                     "regs": regs(&r),
                 })
             }
-            (Ok(_), None) => serde_json::json!({
-                "model": format!("{:#x}", id.model),
-                "error": "no memory controller layout known for this CPU",
-            }),
+            // Tiger Lake (2.4): not decoded yet, so every register a decoder may need.
+            (Ok(io), None) => match ram::intel_dump_regs(id.family, id.model) {
+                Some(dump) => serde_json::json!({
+                    "model": format!("{:#x}", id.model),
+                    "layout": "none: raw dump for a decoder",
+                    "regs": regs(&ram::read_imc_regs(&io, &dump)),
+                }),
+                None => serde_json::json!({
+                    "model": format!("{:#x}", id.model),
+                    "error": "no memory controller layout known for this CPU",
+                }),
+            },
             (Err(e), _) => serde_json::json!({ "error": e.to_string() }),
         }
     } else {

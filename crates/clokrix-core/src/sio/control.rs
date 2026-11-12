@@ -47,6 +47,7 @@ pub struct Header {
 pub enum Maker {
     Msi,
     Asus,
+    Gigabyte,
 }
 
 impl Maker {
@@ -58,6 +59,7 @@ impl Maker {
         match self {
             Self::Msi => m.contains("MICRO-STAR") || m.contains("MSI"),
             Self::Asus => m.contains("ASUSTEK"),
+            Self::Gigabyte => m.contains("GIGABYTE"),
         }
     }
 }
@@ -144,7 +146,8 @@ pub fn capability(
     Ok(board)
 }
 
-/// Outputs a NCT679x board offers `clokrix-fans --try` before its field check, by PWM number.
+/// Outputs a NCT679x board (or, from 2.4, an ITE one) offers `clokrix-fans --try` before its field
+/// check, by PWM number.
 const TRY_679X: [Header; 7] = [
     fan(0, "PWM 1"),
     fan(1, "PWM 2"),
@@ -158,12 +161,18 @@ const TRY_679X: [Header; 7] = [
 /// A board whose fan registers Clokrix knows but that has not had its field check: the first
 /// step of that check (`docs/control-safety.md`, "To add a board") is `clokrix-fans --try`, which
 /// writes one output at a time for ten seconds with the owner watching, then puts the firmware's
-/// settings back. Only that tool uses this: the service drives allow-listed boards only.
+/// settings back. Only that tool uses this: the service drives allow-listed boards only. An ASUS
+/// board with a NCT679x (2.3) or a Gigabyte one with an ITE chip (2.4, its first chip only).
 pub fn candidate(chip: Chip, rev: u8, manufacturer: Option<&str>) -> Option<Board> {
-    let n = usize::from(super::control679x::outputs(chip));
-    (n > 0 && Maker::Asus.matches(manufacturer)).then(|| Board {
+    let (maker, n) = match chip.family() {
+        super::Family::Nct679x => (Maker::Asus, super::control679x::outputs(chip)),
+        super::Family::Ite => (Maker::Gigabyte, super::control_ite::outputs(chip)),
+        super::Family::Nct6687 => return None,
+    };
+    let n = usize::from(n);
+    (n > 0 && maker.matches(manufacturer)).then(|| Board {
         name: "a board not yet checked",
-        maker: Maker::Asus,
+        maker,
         product: "",
         chip,
         chip_rev: rev,
@@ -200,6 +209,8 @@ pub enum ControlError<E> {
     },
     /// The header is not one of the board's controllable headers.
     NotAllowed(u16),
+    /// The chip's fan setup looks wrong, so nothing is written (the reason says what).
+    Refused(&'static str),
 }
 
 impl<E> From<E> for ControlError<E> {
@@ -221,6 +232,7 @@ impl<E: std::fmt::Display> std::fmt::Display for ControlError<E> {
                 )
             }
             Self::NotAllowed(n) => write!(f, "header {n} may not be controlled"),
+            Self::Refused(why) => f.write_str(why),
         }
     }
 }
@@ -284,10 +296,14 @@ pub struct BiosState {
     pub mode: u8,
     /// Duty command of headers 0–7.
     pub commands: Vec<u8>,
-    /// A NCT679x's mode register of each output (2.3; empty on the NCT6687, whose modes are the
-    /// bits of `mode`).
+    /// A NCT679x's mode register (2.3) or an ITE chip's control register (2.4) of each output;
+    /// empty on the NCT6687, whose modes are the bits of `mode`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub modes: Vec<u8>,
+    /// An ITE chip's fan main control register (2.4): bits 0–2 put outputs 1–3 in PWM mode.
+    /// `None` on the Nuvoton chips, so each chip's restore knows its own state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fan_main: Option<u8>,
     /// Unix seconds when captured.
     pub saved_at: u64,
 }
@@ -309,6 +325,7 @@ pub fn capture<P: PortIo>(
         mode,
         commands,
         modes: Vec::new(),
+        fan_main: None,
         saved_at: now,
     })
 }
@@ -348,7 +365,7 @@ pub fn set_duty<P: PortIo>(
 /// header Clokrix took back to the BIOS curve. Headers another tool put under software control
 /// before Clokrix started stay as the BIOS state recorded them.
 pub fn restore<P: PortIo>(io: &mut P, base: u16, state: &BiosState) -> Res<(), P::Error> {
-    if !state.modes.is_empty() {
+    if !state.modes.is_empty() || state.fan_main.is_some() {
         return Err(ControlError::WrongState);
     }
     write_ec(io, base, CTRL_REQUEST, REQ_BEGIN)?;
@@ -582,10 +599,34 @@ mod tests {
         );
         assert!(
             candidate(Chip::It8689, 0x89, asus).is_none(),
-            "no ITE control"
+            "an ITE chip on an ASUS board: not a known arrangement"
         );
         assert!(Maker::Msi.matches(Some("Micro-Star International Co., Ltd.")));
         assert!(!Maker::Msi.matches(None));
+    }
+
+    #[test]
+    fn gigabyte_boards_get_supervised_tries_on_their_first_chip_only() {
+        let gb = Some("Gigabyte Technology Co., Ltd.");
+        assert_eq!(
+            capability(Chip::It8689, 0x89, gb, Some("B650 AORUS ELITE AX")),
+            Err(ReadOnly::UnvalidatedBoard),
+            "decision 24: no Gigabyte board is allow-listed before its own field check"
+        );
+        let c = candidate(Chip::It8689, 0x89, gb).expect("a candidate");
+        assert_eq!((c.maker, c.headers.len()), (Maker::Gigabyte, 6));
+        assert_eq!(c.headers[5].name, "PWM 6");
+        assert_eq!(
+            candidate(Chip::It8688, 0x88, gb).map(|c| c.headers.len()),
+            Some(5)
+        );
+        assert!(
+            candidate(Chip::It8792, 0x33, gb).is_none(),
+            "the second chip's fans are the embedded controller's"
+        );
+        assert!(candidate(Chip::It8689, 0x89, Some("ASRock")).is_none());
+        assert!(candidate(Chip::Nct6798, 0x2B, gb).is_none());
+        assert!(Maker::Gigabyte.matches(gb));
     }
 
     #[test]
@@ -598,6 +639,7 @@ mod tests {
             mode: 0,
             commands: vec![0x40; 7],
             modes: vec![0x42; 7],
+            fan_main: None,
             saved_at: 0,
         };
         assert_eq!(
@@ -807,6 +849,7 @@ mod tests {
             mode: 0x02,
             commands: vec![1, 2, 3, 4, 5, 6, 7, 8],
             modes: Vec::new(),
+            fan_main: None,
             saved_at: 42,
         };
         save(&path, &state).unwrap();

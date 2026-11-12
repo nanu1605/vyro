@@ -1,16 +1,20 @@
 //! ITE environment controllers (2.3): the hardware monitor of Gigabyte boards, from the IT8620E
 //! and IT8628E of their 9- and 100-series boards to the IT8686E–IT8689E of the AM4, AM5 and
-//! LGA1700 ones and the IT8696E and IT8698E of the newest. The register facts are ITE's, as the
-//! Linux `it87` driver (and its out-of-tree version, which knows the newer chips) and
-//! LibreHardwareMonitor's `IT87XX` read them. Pure: the port I/O is behind [`PortIo`], so the
-//! access sequence is tested without hardware.
+//! LGA1700 ones and the IT8696E and IT8698E of the newest; from 2.4 also the second chip many of
+//! them have at 0x4E (an IT8790E, IT8792E or IT87952E, with three more fans and temperatures). The
+//! register facts are ITE's, as the Linux `it87` driver (and its out-of-tree version, which knows
+//! the newer chips) and LibreHardwareMonitor's `IT87XX` read them. Pure: the port I/O is behind
+//! [`PortIo`], so the access sequence is tested without hardware.
 //!
 //! Configuration mode on 0x2E opens with 0x87 0x01 0x55 0x55 and closes by writing 0x02 to
 //! register 0x02. The environment controller is logical device 4; its registers are reached by
-//! writing the register's address to its base + 5 and reading the value at + 6. Only the chip at
-//! 0x2E is read. The second ITE chip of many Gigabyte boards (an IT8792E or IT87952E at 0x4E, with
-//! a few more fans and temperatures) sits behind the board's embedded controller, which would
-//! have to be stopped first, so it is left alone.
+//! writing the register's address to its base + 5 and reading the value at + 6.
+//!
+//! The second chip is reached as Linux `it87` and LibreHardwareMonitor reach it: its ID is read
+//! first without the key, since these chips stay in configuration mode for the board's embedded
+//! controller, which uses them too; the key (ending 0xAA on 0x4E) is sent only when nothing
+//! answers, and configuration mode is never left. Its fans are read, never driven: the embedded
+//! controller drives them, and would have to be stopped first.
 //!
 //! Monitoring only reads. One write is made, as the Linux driver makes it: on the chips with
 //! register banks, a bank another program left selected is switched to bank 0, which holds every
@@ -19,8 +23,10 @@
 use super::{BoardTemp, Chip, Decoded, Layout, PortIo};
 use crate::snapshot::FanKind;
 
-/// Opens configuration mode on 0x2E (on 0x4E the last byte would be 0xAA).
+/// Opens configuration mode on 0x2E.
 pub const ENTER_2E: [u8; 4] = [0x87, 0x01, 0x55, 0x55];
+/// Opens it on 0x4E, the second chip's port.
+pub const ENTER_4E: [u8; 4] = [0x87, 0x01, 0x55, 0xAA];
 /// Configuration control register: writing [`EXIT`] to it leaves configuration mode.
 pub const CR_CONFIG_CONTROL: u8 = 0x02;
 pub const EXIT: u8 = 0x02;
@@ -57,8 +63,11 @@ pub const TEMP: [u8; 6] = [0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E];
 /// Tachometer counts of fans 1–6, 16 bits each: low byte, then high byte.
 pub const FAN_LOW: [u8; 6] = [0x0D, 0x0E, 0x0F, 0x80, 0x82, 0x4C];
 pub const FAN_HIGH: [u8; 6] = [0x18, 0x19, 0x1A, 0x81, 0x83, 0x4D];
-/// Millivolts per count on every chip read here.
-pub const MV_PER_COUNT: f64 = 12.0;
+/// Microvolts per count: 12 mV on the first chips and the IT8790E.
+pub const LSB_UV: u16 = 12_000;
+/// 11 mV on the IT8792E and IT87952E: LibreHardwareMonitor's, which matches Gigabyte's own software
+/// and SIV (Linux `it87` uses 10.9 mV).
+pub const LSB_UV_SECOND: u16 = 11_000;
 
 /// Chips Clokrix reads, from the configuration-space ID (registers 0x20 and 0x21).
 pub const fn identify(id: u16) -> Option<Chip> {
@@ -71,6 +80,30 @@ pub const fn identify(id: u16) -> Option<Chip> {
         0x8696 => Some(Chip::It8696),
         0x8698 => Some(Chip::It8698),
         _ => None,
+    }
+}
+
+/// The second chip, at 0x4E: the IT8790E, the IT8792E (whose ID the IT8791E and IT8795E share)
+/// and the IT87952E.
+pub const fn identify_second(id: u16) -> Option<Chip> {
+    match id {
+        0x8790 => Some(Chip::It8790),
+        0x8733 => Some(Chip::It8792),
+        0x8695 => Some(Chip::It87952),
+        _ => None,
+    }
+}
+
+/// One of the second chips: three fans, three temperatures, nine voltage inputs.
+pub const fn is_second(chip: Chip) -> bool {
+    matches!(chip, Chip::It8790 | Chip::It8792 | Chip::It87952)
+}
+
+/// Microvolts per count of the chip's voltage inputs.
+pub const fn lsb_uv(chip: Chip) -> u16 {
+    match chip {
+        Chip::It8792 | Chip::It87952 => LSB_UV_SECOND,
+        _ => LSB_UV,
     }
 }
 
@@ -97,36 +130,52 @@ pub const fn has_avcc3(chip: Chip) -> bool {
 }
 
 /// What the firmware set up, read once at start: the fans (bit n = fan n + 1) and temperatures
-/// enabled, and whether input 9 exists.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// enabled, whether input 9 exists, and the voltage step.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Setup {
     pub fans: u8,
     pub temps: u8,
     pub avcc3: bool,
+    pub lsb_uv: u16,
 }
 
 /// The registers [`setup`] needs, read in bank 0.
 pub const SETUP_REGS: [u8; 3] = [FAN_MAIN_CTRL, FAN_16BIT, TEMP456];
 
 /// The setup from [`SETUP_REGS`]: fans 1–3 from the main control register, fans 4–6 from the
-/// 16-bit counter register, temperatures 1–3 always and 4–6 where their field is 2 or 3.
+/// 16-bit counter register, temperatures 1–3 always and 4–6 where their field is 2 or 3. A second
+/// chip has fans and temperatures 1–3 only.
 pub fn setup(chip: Chip, fan_main: u8, fan_16bit: u8, temp456: u8) -> Setup {
     let mut fans = (fan_main >> 4) & 0x07;
-    for (bit, fan) in [(4, 3), (5, 4), (2, 5)] {
-        if fan_16bit & (1 << bit) != 0 {
-            fans |= 1 << fan;
-        }
-    }
     let mut temps = 0x07;
-    for i in 0..3 {
-        if (temp456 >> (2 * i)) & 0x03 >= 2 {
-            temps |= 1 << (3 + i);
+    if !is_second(chip) {
+        for (bit, fan) in [(4, 3), (5, 4), (2, 5)] {
+            if fan_16bit & (1 << bit) != 0 {
+                fans |= 1 << fan;
+            }
+        }
+        for i in 0..3 {
+            if (temp456 >> (2 * i)) & 0x03 >= 2 {
+                temps |= 1 << (3 + i);
+            }
         }
     }
     Setup {
         fans,
         temps,
         avcc3: has_avcc3(chip),
+        lsb_uv: lsb_uv(chip),
+    }
+}
+
+/// Every fan and temperature the chip has counted in, for `clokrix-live`'s dump.
+pub fn all(chip: Chip) -> Setup {
+    let n = if is_second(chip) { 0x07 } else { 0x3F };
+    Setup {
+        fans: n,
+        temps: n,
+        avcc3: has_avcc3(chip),
+        lsb_uv: lsb_uv(chip),
     }
 }
 
@@ -147,42 +196,55 @@ pub fn registers(s: Setup) -> Vec<u8> {
     regs
 }
 
-fn read1<P: PortIo>(io: &mut P, base: u16, reg: u8) -> Result<u8, P::Error> {
+/// Reads one environment-controller register: its address to base + 5, the value from + 6.
+pub fn read_reg<P: PortIo>(io: &mut P, base: u16, reg: u8) -> Result<u8, P::Error> {
     io.outb(base + ADDR_PORT, reg)?;
     io.inb(base + DATA_PORT)
 }
 
-fn write1<P: PortIo>(io: &mut P, base: u16, reg: u8, value: u8) -> Result<(), P::Error> {
+/// Writes one environment-controller register.
+pub fn write_reg<P: PortIo>(io: &mut P, base: u16, reg: u8, value: u8) -> Result<(), P::Error> {
     io.outb(base + ADDR_PORT, reg)?;
     io.outb(base + DATA_PORT, value)
 }
 
-/// Reads `regs` (all in bank 0). On a chip with banks a bank another program left selected is
-/// switched to bank 0 for the read and put back afterwards, also when a read failed; a bank
-/// register reading all ones is nothing answering, and is left alone. Call with the ISA-bus mutex
-/// held.
+/// Runs `f` in bank 0, which holds every register Clokrix reads or writes. On a chip with banks a
+/// bank another program left selected is switched to bank 0 first and put back afterwards, also
+/// when `f` failed; a bank register reading all ones is nothing answering, and is left alone. Call
+/// with the ISA-bus mutex held.
+pub fn in_bank0<P: PortIo, R, E: From<P::Error>>(
+    io: &mut P,
+    base: u16,
+    banks: bool,
+    f: impl FnOnce(&mut P) -> Result<R, E>,
+) -> Result<R, E> {
+    let other = if banks {
+        Some(read_reg(io, base, BANK)?).filter(|&b| b & BANK_BITS != 0 && b != 0xFF)
+    } else {
+        None
+    };
+    if let Some(b) = other {
+        write_reg(io, base, BANK, b & !BANK_BITS)?;
+    }
+    let out = f(io);
+    let back = other.map_or(Ok(()), |b| write_reg(io, base, BANK, b));
+    let out = out?;
+    back?;
+    Ok(out)
+}
+
+/// Reads `regs` (all in bank 0; see [`in_bank0`]). Call with the ISA-bus mutex held.
 pub fn read<P: PortIo>(
     io: &mut P,
     base: u16,
     banks: bool,
     regs: &[u8],
 ) -> Result<Vec<(u8, u8)>, P::Error> {
-    let other = if banks {
-        Some(read1(io, base, BANK)?).filter(|&b| b & BANK_BITS != 0 && b != 0xFF)
-    } else {
-        None
-    };
-    if let Some(b) = other {
-        write1(io, base, BANK, b & !BANK_BITS)?;
-    }
-    let out = regs
-        .iter()
-        .map(|&r| read1(io, base, r).map(|v| (r, v)))
-        .collect::<Result<Vec<_>, _>>();
-    let back = other.map_or(Ok(()), |b| write1(io, base, BANK, b));
-    let out = out?;
-    back?;
-    Ok(out)
+    in_bank0(io, base, banks, |io| {
+        regs.iter()
+            .map(|&r| read_reg(io, base, r).map(|v| (r, v)))
+            .collect()
+    })
 }
 
 /// Whether the environment controller answers as an ITE one with monitoring running: its
@@ -224,7 +286,10 @@ pub fn decode(s: Setup, read: impl Fn(u8) -> Option<u8>) -> Decoded {
         .zip(0u16..)
         .filter_map(|(&reg, n)| {
             let halved = if n >= 7 { 2.0 } else { 1.0 };
-            Some((n, f64::from(read(reg)?) * MV_PER_COUNT * halved / 1000.0))
+            Some((
+                n,
+                f64::from(read(reg)?) * f64::from(s.lsb_uv) * halved / 1_000_000.0,
+            ))
         })
         .collect();
     let temps = TEMP
@@ -321,6 +386,132 @@ pub fn gigabyte(product: &str) -> Layout {
     }
 }
 
+/// The second chip on Gigabyte boards: what LibreHardwareMonitor's mappings of it share (its X570,
+/// B550, Z390, Z690, Z790, X870 and X870E boards): fans 1 and 2 on the two headers that take a
+/// pump too, fan 3 on the fourth chassis header; input 2 the header for an external sensor, 3 a
+/// second system sensor. None of it goes into the board's own readings, which are the first
+/// chip's. Its voltages differ from board to board and are named only on the boards
+/// [`gigabyte_second`] knows; its standby rail and battery repeat the first chip's, so no other
+/// voltage of it is shown.
+pub const GIGABYTE_SECOND: Layout = Layout {
+    temps: &[
+        (1, "External 2", BoardTemp::None),
+        (2, "System 2", BoardTemp::None),
+    ],
+    fans: &[
+        (0, "System Fan 5 / Pump", FanKind::Fan),
+        (1, "System Fan 6 / Pump", FanKind::Fan),
+        (2, "System Fan 4", FanKind::Fan),
+    ],
+    volts: &[],
+    volts_only: true,
+};
+
+const SECOND_PCIE_X8: &[(u16, &str, BoardTemp)] = &[
+    (0, "PCIe x8", BoardTemp::None),
+    (1, "External 2", BoardTemp::None),
+    (2, "System 2", BoardTemp::None),
+];
+
+const SECOND_PCIE_X4: &[(u16, &str, BoardTemp)] = &[
+    (0, "PCIe x4", BoardTemp::None),
+    (1, "External 2", BoardTemp::None),
+    (2, "System 2", BoardTemp::None),
+];
+
+/// X570 and B550 AORUS boards LibreHardwareMonitor maps.
+pub const GIGABYTE_SECOND_AM4: Layout = Layout {
+    temps: SECOND_PCIE_X8,
+    volts: &[
+        (1, "DDR VTT", 1.0),
+        (2, "Chipset Core", 1.0),
+        (4, "CPU VDD18", 1.0),
+        (5, "PM_CLDO12", 1.0),
+    ],
+    ..GIGABYTE_SECOND
+};
+
+/// Z390 AORUS PRO.
+pub const GIGABYTE_SECOND_Z390: Layout = Layout {
+    temps: SECOND_PCIE_X8,
+    volts: &[
+        (1, "DDR VTT", 1.0),
+        (2, "Chipset Core", 1.0),
+        (4, "VCCIO", 1.0),
+        (6, "DDR VPP", 1.0),
+    ],
+    ..GIGABYTE_SECOND
+};
+
+/// Z690 AORUS PRO and MASTER, Z790 AORUS PRO X.
+pub const GIGABYTE_SECOND_Z690: Layout = Layout {
+    temps: SECOND_PCIE_X4,
+    volts: &[
+        (1, "DIMM I/O", 1.0),
+        (2, "Chipset +0.82V", 1.0),
+        (4, "CPU System Agent", 1.0),
+        (5, "Chipset +1.8V", 1.0),
+    ],
+    ..GIGABYTE_SECOND
+};
+
+/// X870E AORUS PRO, PRO ICE and XTREME AI TOP.
+pub const GIGABYTE_SECOND_X870E: Layout = Layout {
+    temps: SECOND_PCIE_X4,
+    volts: &[
+        (2, "PM_VCC18", 1.0),
+        (4, "CPU VDD18", 1.0),
+        (5, "PM_VDD1V", 1.0),
+    ],
+    ..GIGABYTE_SECOND
+};
+
+/// X870 AORUS ELITE WIFI7: its voltages are not named.
+pub const GIGABYTE_SECOND_X870: Layout = Layout {
+    temps: SECOND_PCIE_X4,
+    ..GIGABYTE_SECOND
+};
+
+/// The second chip's layout on a Gigabyte board, from its SMBIOS product as LibreHardwareMonitor
+/// matches it (the whole name).
+pub fn gigabyte_second(product: &str) -> Layout {
+    let p = product.trim().to_ascii_uppercase();
+    let is = |names: &[&str]| names.contains(&p.as_str());
+    if is(&[
+        "X570 AORUS MASTER",
+        "X570 AORUS PRO",
+        "X570 AORUS ULTRA",
+        "B550 AORUS MASTER",
+        "B550 AORUS PRO",
+        "B550 AORUS PRO V2",
+        "B550 AORUS PRO AC",
+        "B550 AORUS PRO AX",
+        "B550 VISION D",
+        "B550 VISION D-P",
+    ]) {
+        GIGABYTE_SECOND_AM4
+    } else if is(&["Z390 AORUS PRO-CF"]) {
+        GIGABYTE_SECOND_Z390
+    } else if is(&[
+        "Z690 AORUS PRO",
+        "Z690 AORUS MASTER",
+        "Z790 AORUS PRO X",
+        "Z790 AORUS PRO X WIFI7",
+    ]) {
+        GIGABYTE_SECOND_Z690
+    } else if is(&[
+        "X870E AORUS PRO",
+        "X870E AORUS PRO ICE",
+        "X870E AORUS XTREME AI TOP",
+    ]) {
+        GIGABYTE_SECOND_X870E
+    } else if is(&["X870 AORUS ELITE WIFI7", "X870 AORUS ELITE WIFI7 ICE"]) {
+        GIGABYTE_SECOND_X870
+    } else {
+        GIGABYTE_SECOND
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -393,8 +584,30 @@ mod tests {
         assert_eq!(identify(0x8696), Some(Chip::It8696));
         assert_eq!(identify(0x8698), Some(Chip::It8698));
         assert_eq!(identify(0x8620), Some(Chip::It8620));
-        assert_eq!(identify(0x8733), None, "IT8792E: the second chip, not read");
+        assert_eq!(
+            identify(0x8733),
+            None,
+            "IT8792E: a second chip, not at 0x2E"
+        );
         assert_eq!(identify(0xFFFF), None);
+        assert_eq!(identify_second(0x8733), Some(Chip::It8792));
+        assert_eq!(identify_second(0x8695), Some(Chip::It87952));
+        assert_eq!(identify_second(0x8790), Some(Chip::It8790));
+        assert_eq!(identify_second(0x8689), None, "a first chip");
+        assert_eq!(
+            identify_second(0x8883),
+            None,
+            "what an IT8792E answers when sent the key it did not need"
+        );
+        assert!(is_second(Chip::It87952));
+        assert!(!is_second(Chip::It8689));
+        assert!(!has_banks(Chip::It8792));
+        assert!(!has_avcc3(Chip::It87952));
+        assert_eq!(lsb_uv(Chip::It8792), 11_000);
+        assert_eq!(lsb_uv(Chip::It8790), 12_000);
+        assert_eq!(lsb_uv(Chip::It8689), 12_000);
+        assert_eq!(Chip::It87952.name(), "ITE IT87952E");
+        assert_eq!(ENTER_4E[3], 0xAA);
         assert!(is_ite(0x8733));
         assert!(
             is_ite(0x8613),
@@ -419,6 +632,19 @@ mod tests {
         assert!(s.avcc3);
         let none = setup(Chip::It8620, 0x00, 0x00, 0x00);
         assert_eq!((none.fans, none.temps, none.avcc3), (0, 0x07, false));
+        // A second chip: fans and temperatures 1–3 only, whatever registers 0x0C and 0x77 hold.
+        let second = setup(Chip::It87952, 0x77, 0xFF, 0xFF);
+        assert_eq!((second.fans, second.temps), (0b111, 0b111));
+        assert_eq!(second.lsb_uv, 11_000);
+        assert_eq!(all(Chip::It8792).fans, 0x07);
+        assert_eq!(all(Chip::It8689).temps, 0x3F);
+        let regs = registers(second);
+        assert!(!regs.contains(&0x80) && !regs.contains(&0x2C) && !regs.contains(&0x2F));
+        assert_eq!(
+            regs.len(),
+            9 + 3 + 6,
+            "nine inputs, three temperatures, three fans"
+        );
     }
 
     #[test]
@@ -427,6 +653,7 @@ mod tests {
             fans: 0b00_0011,
             temps: 0b00_1111,
             avcc3: false,
+            lsb_uv: LSB_UV,
         };
         let regs = registers(s);
         assert!(regs.windows(2).all(|w| w[0] < w[1]), "sorted, no repeats");
@@ -560,6 +787,85 @@ mod tests {
         assert!(d.volts.iter().all(|v| v.0 < 9));
         assert_eq!(d.temps.len(), 3);
         assert_eq!(d.fans, [(0, Some(1250.0))]);
+    }
+
+    /// A constructed IT87952E dump (no field dump of a second chip yet): VIN1 1.2 V, VIN4 1.804 V,
+    /// the standby rail and battery halved inside; PCIe 38 °C, the external input open, System 2
+    /// 31 °C; a pump at 2,700 RPM on fan 1, fan 2 stopped, fan 3 at 900.
+    fn second_dump() -> HashMap<u8, u8> {
+        HashMap::from([
+            (0x21, 109), // 1.199 V at 11 mV
+            (0x24, 164), // 1.804 V
+            (0x27, 150), // 1.65 V × 2 = 3.3 V
+            (0x28, 140), // 1.54 V × 2 = 3.08 V
+            (0x29, 38),
+            (0x2A, 0x80),
+            (0x2B, 31),
+            (0x0D, 0xFA),
+            (0x18, 0x00),
+            (0x0E, 0xFF),
+            (0x19, 0xFF),
+            (0x0F, 0xEE),
+            (0x1A, 0x02),
+        ])
+    }
+
+    #[test]
+    fn decodes_a_second_chip() {
+        let regs = second_dump();
+        let s = setup(Chip::It87952, 0x70, 0, 0);
+        let d = decode(s, |r| regs.get(&r).copied().or(Some(0)));
+        let v = |n: u16| d.volts.iter().find(|x| x.0 == n).expect("input").1;
+        let close = |a: f64, b: f64| (a - b).abs() < 1e-9;
+        assert_eq!(d.volts.len(), 9, "no AVCC3");
+        assert!(close(v(1), 1.199));
+        assert!(close(v(4), 1.804));
+        assert!(close(v(7), 3.3), "standby rail halved inside");
+        assert!(close(v(8), 3.08), "battery halved inside");
+        assert_eq!(d.temps, [(0, Some(38.0)), (1, None), (2, Some(31.0))]);
+        assert_eq!(
+            d.fans,
+            [(0, Some(2700.0)), (1, Some(0.0)), (2, Some(900.0))]
+        );
+    }
+
+    #[test]
+    fn gigabyte_second_chip_layouts() {
+        let am4 = gigabyte_second("B550 AORUS PRO AC");
+        assert_eq!(am4.temps[0], (0, "PCIe x8", BoardTemp::None));
+        assert_eq!(am4.volts[0], (1, "DDR VTT", 1.0));
+        assert!(am4.volts_only);
+        assert_eq!(gigabyte_second(" x570 aorus master ").volts, am4.volts);
+        assert_eq!(
+            gigabyte_second("B550 AORUS ELITE").volts,
+            GIGABYTE_SECOND.volts,
+            "whole names only: another B550 board's voltages are not named"
+        );
+        let z690 = gigabyte_second("Z790 AORUS PRO X WIFI7");
+        assert_eq!(z690.temps[0].1, "PCIe x4");
+        assert_eq!(z690.volts[2], (4, "CPU System Agent", 1.0));
+        assert_eq!(
+            gigabyte_second("Z390 AORUS PRO-CF").volts[3],
+            (6, "DDR VPP", 1.0)
+        );
+        assert_eq!(gigabyte_second("X870E AORUS PRO ICE").volts.len(), 3);
+        let x870 = gigabyte_second("X870 AORUS ELITE WIFI7");
+        assert!(x870.volts.is_empty());
+        assert_eq!(x870.temps[0].1, "PCIe x4");
+        let other = gigabyte_second("Z890 AORUS ELITE WIFI7");
+        assert!(other.volts.is_empty() && other.volts_only);
+        assert!(
+            other.temps.iter().all(|t| t.0 != 0),
+            "input 1 unnamed elsewhere"
+        );
+        for l in [am4, z690, x870, other] {
+            assert_eq!(l.fans[0], (0, "System Fan 5 / Pump", FanKind::Fan));
+            assert_eq!(l.fans[2].1, "System Fan 4");
+            assert!(
+                l.temps.iter().all(|t| t.2 == BoardTemp::None),
+                "the board's own readings stay the first chip's"
+            );
+        }
     }
 
     #[test]

@@ -88,6 +88,7 @@ pub fn capture<P: PortIo>(
         mode: mask(&modes),
         commands,
         modes,
+        fan_main: None,
         saved_at: now,
     })
 }
@@ -116,8 +117,12 @@ pub fn set_duty<P: PortIo>(
     Ok(raw)
 }
 
-/// The saved state is a NCT679x's (its modes were recorded) and covers output `n`.
+/// The saved state is a NCT679x's (its modes were recorded, and no ITE register) and covers
+/// output `n`.
 fn recorded(state: &BiosState, n: usize) -> Option<(u8, u8)> {
+    if state.fan_main.is_some() {
+        return None;
+    }
     Some((*state.commands.get(n)?, *state.modes.get(n)?))
 }
 
@@ -164,9 +169,12 @@ pub fn release<P: PortIo>(
 }
 
 /// Puts every recorded output back; the others are tried after one that fails. A state without
-/// recorded modes (another chip's) is refused before anything is written.
+/// recorded modes or with an ITE register (another chip's) is refused before anything is written.
 pub fn restore<P: PortIo>(io: &mut P, base: u16, state: &BiosState) -> Res<(), P::Error> {
-    if state.modes.is_empty() || state.modes.len() != state.commands.len() {
+    if state.modes.is_empty()
+        || state.modes.len() != state.commands.len()
+        || state.fan_main.is_some()
+    {
         return Err(ControlError::WrongState);
     }
     let mut first = None;
@@ -448,6 +456,7 @@ mod tests {
             mode: 0,
             commands: vec![0x66; 8],
             modes: Vec::new(),
+            fan_main: None,
             saved_at: 0,
         };
         assert_eq!(
@@ -459,6 +468,24 @@ mod tests {
             Err(ControlError::NotAllowed(0))
         );
         assert!(chip.writes.is_empty());
+        let ite = BiosState {
+            modes: vec![0x80; 7],
+            commands: vec![0x66; 7],
+            fan_main: Some(0x77),
+            ..nct6687
+        };
+        assert_eq!(
+            restore(&mut chip, BASE, &ite),
+            Err(ControlError::WrongState)
+        );
+        assert_eq!(
+            release(&mut chip, BASE, 0, &ite),
+            Err(ControlError::NotAllowed(0))
+        );
+        assert!(
+            chip.writes.is_empty(),
+            "an ITE chip's state is not this chip's"
+        );
     }
 
     #[test]
