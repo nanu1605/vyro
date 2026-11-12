@@ -21,6 +21,26 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '2.3.0',
+    items: [
+      {
+        icon: 'fan',
+        title: 'Gigabyte boards’ sensors',
+        text: 'Boards with an ITE IT8620E to IT8698E, as most Gigabyte boards have, now show their fans, temperatures and voltages, named as Gigabyte names them. They are shown only: fan control stays on the boards it was checked on. The second chip some of these boards have, with a few more fans, isn’t read yet.',
+      },
+      {
+        icon: 'sparkles',
+        title: 'More memory timings',
+        text: 'The Memory card now shows the running timings on AM4 (Ryzen 1000 to 5000, DDR4), in the same detail as on AM5. On Intel’s 10th and 11th gen desktop CPUs and the Core Ultra 200S, it shows the data rate and CL-tRCD-tRP-tRAS.',
+      },
+      {
+        icon: 'gpu',
+        title: 'GPU tuning on more GeForce cards',
+        text: 'Where NVIDIA’s driver gives Clokrix no clock offsets through NVML, or refuses to set them, GPU tuning now sets the core and memory offsets through NVAPI, as overclocking tools do. The power limit is set as before.',
+      },
+    ],
+  },
+  {
     version: '2.2.0',
     items: [
       {

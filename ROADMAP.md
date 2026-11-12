@@ -4354,7 +4354,12 @@ everything build" (2026-11-11), answering what was left to build. Built from tha
       Intel PC, and a Gigabyte board, AM4 or the newer Intel CPUs where one is at hand.
 - [ ] **The ASUS board on the allow-list**, from its tries, then the control field check on it
       (decision 24).
-- [ ] **Version 2.3.0 and the release**, on the owner's go.
+- [x] **Version 2.3.0** (the owner, 2026-11-12: "release 2.3.0"; no field check was reported
+      before it, so the two items above stay open): `scripts/set-version.py 2.3.0`; What's new in
+      2.3.0: Gigabyte boards' sensors, more memory timings, GPU tuning on more GeForce cards. All
+      are this PC's, so none is marked for the phone app. The phone app the relay serves
+      (2990da0's) behaves as 2.3.0's would: nothing it uses changed since but these notes.
+- [ ] **2.3.0 released.**
 
 ## Risks
 
