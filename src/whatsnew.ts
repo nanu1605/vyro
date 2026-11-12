@@ -21,6 +21,21 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '2.4.0',
+    items: [
+      {
+        icon: 'fan',
+        title: 'Gigabyte’s second sensor chip',
+        text: 'Gigabyte boards with a second ITE chip (IT8790E, IT8792E or IT87952E) now show its fans and temperatures too, such as System Fan 4 to 6 and System 2, and on the boards Clokrix knows, its PCIe temperature and some of its voltages. They are shown only: the board’s own controller drives those fans.',
+      },
+      {
+        icon: 'sparkles',
+        title: 'Memory timings on 11th gen laptops',
+        text: 'On Intel’s 11th gen laptop CPUs (Tiger Lake, such as the Core i7-1165G7 or i7-11800H), the Memory card now shows the data rate and CL-tRCD-tRP-tRAS of DDR4 and LPDDR4X memory.',
+      },
+    ],
+  },
+  {
     version: '2.3.0',
     items: [
       {

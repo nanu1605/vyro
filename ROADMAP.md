@@ -4463,6 +4463,12 @@ for 3" (2026-11-12) had a session on an environment that reaches Intel's hosts b
 - [ ] **A Gigabyte board on the allow-list**, from its tries, then the control field check on it
       (decision 24). It needs the board's `clokrix-fans.json`, its `clokrix-fans-try-N.json` files
       and the header each output moved: none came with the field check.
+- [x] **Version 2.4.0** (the owner, 2026-11-12: "release 2.4.0"): `scripts/set-version.py
+      2.4.0`; What's new in 2.4.0: Gigabyte's second sensor chip, memory timings on 11th gen
+      laptops. Fan control on Gigabyte boards is not in it, as no board can use it yet. All are
+      this PC's, so none is marked for the phone app. The phone app the relay serves (2990da0's)
+      behaves as 2.4.0's would: nothing it uses changed since but these notes.
+- [ ] **2.4.0 released.**
 
 ## Risks
 
