@@ -4283,7 +4283,9 @@ tighter X at 16 to 32 px. On `claude/vyro-2.0`.
       phones pair again at `clokrix-relay`.
 - [x] **`VYRO_RELAY_URL` deleted** (2026-11-12, the owner: "deleted VYRO_RELAY_URL"), the
       repository variable with the old relay's address. Builds read only `CLOKRIX_RELAY_URL`;
-      the Release workflow's guard against the old variable set alone is idle now.
+      the Release workflow's guard against the old variable set alone is idle now. The first CI
+      run after it (43182540437, on 6f4c126) still built `clokrix-relay`'s address into
+      `clokrix.exe`.
 
 ### 2.3.0 — Gigabyte boards, more memory timings, ASUS fan control, NVAPI
 
@@ -4330,7 +4332,9 @@ everything build" (2026-11-11), answering what was left to build. Built from tha
 - [x] **Extras from the rename:** the social preview (`assets/brand/clokrix-social.png`, 1280 ×
       640, uploaded by hand: Settings → General → Social preview) and the README's note that the
       name and logo are not covered by the code's licences. The relay's own domain stays open: it
-      needs a domain of the owner's.
+      needs a domain of the owner's. The owner uploaded the picture (2026-11-12: "uploaded the
+      social preview"): the repository page's `og:image` is an uploaded one now, not the card
+      GitHub draws (the picture itself is out of this session's network).
 - [x] **`clokrix-live`** dumps an ITE chip's registers and names the memory controller layout
       it read.
 - [x] **Found on reading it again before pushing:** Zen 2's Van Gogh and Mendocino run LPDDR5,
