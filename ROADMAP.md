@@ -4349,11 +4349,18 @@ everything build" (2026-11-11), answering what was left to build. Built from tha
       On Windows, a clean install (the service answered and read 29 sensors, the app's
       smoke test passed), then the upgrade from Vyro 2.1.0. The MSI is 13.98 MB. Test build
       `clokrix-windows-df3c0a2`; 92ff816's run was cancelled by the push of df3c0a2.
-- [ ] **Field check (the owner)**: [`docs/field-check-2.3.md`](docs/field-check-2.3.md): the
-      owner's PC as before, NVAPI's or NVML's offsets on its card, the ASUS board's tries on the
-      Intel PC, and a Gigabyte board, AM4 or the newer Intel CPUs where one is at hand.
+- [x] **Field check (the owner), reported done** (2026-11-13: "2.3 field check done"):
+      [`docs/field-check-2.3.md`](docs/field-check-2.3.md): the owner's PC as before, NVAPI's or
+      NVML's offsets on its card, the ASUS board's tries on the Intel PC, and a Gigabyte board,
+      AM4 or the newer Intel CPUs where one is at hand. No difference was reported, and no files
+      came with it (`clokrix-live.json`, `clokrix-fans.json`, the `--try` files), so which of its
+      sections had a PC at hand is not recorded, and no raw registers are kept to compare a later
+      report against. Nor was the interface `service.log` names for the card's offsets (`gpu
+      tuning: … offsets through NVML` or `NVAPI`), so 1.6's question, whether NVML takes offsets
+      on GeForce, stays open.
 - [ ] **The ASUS board on the allow-list**, from its tries, then the control field check on it
-      (decision 24).
+      (decision 24). It needs the board's `clokrix-fans.json`, its `clokrix-fans-try-N.json`
+      files and the header each output moved: none came with the field check.
 - [x] **Version 2.3.0** (the owner, 2026-11-12: "release 2.3.0"; no field check was reported
       before it, so the two items above stay open): `scripts/set-version.py 2.3.0`; What's new in
       2.3.0: Gigabyte boards' sensors, more memory timings, GPU tuning on more GeForce cards. All
