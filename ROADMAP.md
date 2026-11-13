@@ -2720,10 +2720,11 @@ show on the phone).
 - [x] **CI green** with What's new on a750861 (run 39671633762), merged into 1.6 (76c914b, run
       39671904739) and 1.7 (422e8d0, run 39672234874), every job each. Test build
       `vyro-windows-422e8d0`.
-- [ ] Field check 1.5 ([`docs/field-check-1.5.md`](docs/field-check-1.5.md)); 1.4.1 released
+- [x] Field check 1.5 ([`docs/field-check-1.5.md`](docs/field-check-1.5.md)); 1.4.1 released
       first; the owner's go. Then the relay is deployed (`relay.yml`), which serves the new
       phone app. 1.5 shipped in 1.7.0 (2026-10-24) before this check finished, by the owner's
-      choice; the check goes on, on the release.
+      choice; the check goes on, on the release. **Reported passed** by the owner
+      (2026-11-13: "close the old field checks, they all passed"), with no notes or files.
 
 ### 1.6.0 — GPU tuning: presets, your own settings, a stability test
 
@@ -2784,11 +2785,14 @@ settings, tested on an NVIDIA desktop card and a laptop GPU (decision 37). Built
       with the end-to-end test, accessibility. Test build `vyro-windows-eca77e0`. Locally: fmt,
       clippy (Linux and windows-gnu), 729 core tests, 214 frontend tests, the builds, the
       budgets (the view is its own 6.7 kB chunk) and the accessibility sweep (696 checks).
-- [ ] Field check 1.6 ([`docs/field-check-1.6.md`](docs/field-check-1.6.md)) on the owner's
+- [x] Field check 1.6 ([`docs/field-check-1.6.md`](docs/field-check-1.6.md)) on the owner's
       NVIDIA desktop card and a laptop, including whether NVML accepts the offsets on GeForce
       under Windows (if not, NVAPI is the next step); 1.4.1 and 1.5 released first; the owner's
       go. 1.6 shipped in 1.7.0 (2026-10-24) before this check began, by the owner's choice; the
-      check goes on, on the release.
+      check goes on, on the release. **Reported passed** by the owner
+      (2026-11-13: "close the old field checks, they all passed"), with no notes or files: which
+      interface set the desktop card's offsets (NVML, or from 2.3 NVAPI) is not recorded, so
+      whether NVML takes offsets on GeForce stays open.
 
 ### 1.7.0 — the PC's screen on the phone
 
@@ -3094,13 +3098,14 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
   the phone shows its secure-screen line, as designed). Seeing and answering them would need
   the service to capture and type on the secure desktop as SYSTEM, behind its own permission;
   an idea for after 1.7, not planned.
-- [ ] Field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)): Android Chrome
-      and iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU; the secure screen,
-      an administrator window, two monitors, the slow view, the idle end; 1.4.1 to 1.6 released
-      first; the owner's go. Done by the owner on 2026-10-19 (3095d4f, relay from 2e42a83), every
-      check working except the slow view, not tried (both phones found a direct path; CI's
-      end-to-end test covers it). Steps 8–12 (the owner's requests of 2026-10-21) not done when
-      1.7.0 shipped; the check goes on, on the release.
+- [x] Field check 1.7 ([`docs/field-check-1.7.md`](docs/field-check-1.7.md)): Android Chrome and
+      iPhone Safari, on Wi-Fi and mobile data; latency and the PC's CPU; the secure screen, an
+      administrator window, two monitors, the slow view, the idle end; 1.4.1 to 1.6 released first;
+      the owner's go. Done by the owner on 2026-10-19 (3095d4f, relay from 2e42a83), every check
+      working except the slow view, not tried (both phones found a direct path; CI's end-to-end test
+      covers it). Steps 8–12 (the owner's requests of 2026-10-21) not done when 1.7.0 shipped; the
+      check goes on, on the release. The rest, steps 8–12 and the slow view among it, **reported
+      passed** by the owner (2026-11-13: "close the old field checks, they all passed").
 - [x] **1.7.0 released** (2026-10-24), with 1.5 and 1.6 in it, on the owner's go given before
       the field checks finished (1.5 in progress, 1.6 not begun, 1.7's steps 8–12 to do), by the
       owner's choice: CI passed on 54b85c0 (run 40100528867; Linux, Windows with the smoke test,
@@ -3618,11 +3623,13 @@ branch `claude/vyro-2.0` from 1.7.8's records.
       a will, which no released Clokrix does, so every released app still talks to it. Cloudflare
       took 21 new or changed files; the 19 hashed scripts and styles among them carry the same
       names as a local build of 5f73267. The live relay can't be reached from here.
-- [ ] Field check 2.0 ([`docs/field-check-2.0.md`](docs/field-check-2.0.md)): notifications on
+- [x] Field check 2.0 ([`docs/field-check-2.0.md`](docs/field-check-2.0.md)): notifications on
       Android and iPhone through the real push services, the PC going quiet, and an AMD and an
       Intel card. The relay is deployed from 2.0 (run 40588431507); the PC needs 2.0.0 (released
       below) or a later build. The 2.2 field check (2026-11-11) had a test notification arrive
-      on the owner's phone through its push service; the rest stays open.
+      on the owner's phone through its push service. The rest **reported passed** by the owner
+      (2026-11-13: "close the old field checks, they all passed"), with no notes: the AMD and Intel
+      cards' models, drivers and ranges, which its notes ask for, are not recorded.
 - [x] **2.0.0 released** (2026-10-28, on the owner's go: "release 2.0.0"; asked first for the
       injected overlay and administrator prompts on the phone too, which were not built, and
       the release went ahead without them). CI passed on bc9cc06 (run 40588862822; Linux,
@@ -3703,10 +3710,11 @@ any time constraint?". On `claude/vyro-2.0`; 2.0.1 and the relay deploy on the o
       files; the 17 hashed scripts and styles among them carry the same names as a local build
       of 8c53592. The live relay can't be reached from here.
 - [ ] TURN turned on (the owner's): a TURN key and the three secrets ([`docs/remote.md`](docs/remote.md)).
-- [ ] Field check: on mobile data and on Wi-Fi, the details say "through the TURN server" or
-      show the picture's size and rate (on Wi-Fi without TURN: if it is still the slow view,
-      Settings → Remote's firewall line); Disconnect on the iPhone and on headphones; the
-      iPhone's battery.
+- [x] Field check: on mobile data and on Wi-Fi, the details say "through the TURN server" or show
+      the picture's size and rate (on Wi-Fi without TURN: if it is still the slow view, Settings →
+      Remote's firewall line); Disconnect on the iPhone and on headphones; the iPhone's battery.
+      **Reported passed** by the owner (2026-11-13: "close the old field checks, they all passed").
+      TURN itself stays the owner's to turn on (the item above).
 - [x] **2.0.1 released** (2026-10-28, on the owner's go: "release 2.0.1"). CI passed on 8c53592
       (run 40762318971; Linux, Windows with the smoke test, the relay and phone app with the
       end-to-end test, accessibility). `main` fast-forwarded to it from 2.0.0's records, and
@@ -3988,9 +3996,10 @@ owner's go (2026-10-31: "Release 2.0.4 first", asked before 2.1's hardware suppo
 - [x] **CI green on 2869093** (run 41187884387; Linux, Windows with the smoke test, the relay
       and phone app with the end-to-end test, accessibility: 1,854 checks, the nine new ones
       among them). On Windows, clippy and the app's own tests with the updater's change.
-- [ ] **Field check (the owner, on Windows):** scrolled down on the Dashboard, Settings opens at its
-      top, and each view is where it was left on coming back to it; with the Gaming profile, the
-      Dashboard's "Change profile" lands on Settings → Profile.
+- [x] **Field check (the owner, on Windows), reported passed** (2026-11-13: "close the old field
+      checks, they all passed"): scrolled down on the Dashboard, Settings opens at its top, and each
+      view is where it was left on coming back to it; with the Gaming profile, the Dashboard's
+      "Change profile" lands on Settings → Profile.
 
 The owner's "continue" (2026-10-31), after asking what was left: the wrong reasons found while
 answering, and others like them.
@@ -4030,9 +4039,10 @@ answering, and others like them.
       41195149701) had failed: the new Dashboard test's types (`pnpm check`, run here before
       that test was written) and, on Windows, the GPU tuning test above. a7dca8d's run was
       cancelled by f2cc142's push.
-- [ ] **Field check (the owner, on Windows):** nothing changes on the reference PC, whose CPU
-      and board are read. On an Intel PC, if one is at hand: "not read on this CPU" on the CPU
-      sensors and Power cards and in Health, and Diagnostics' sensor check as information.
+- [x] **Field check (the owner, on Windows), reported passed** (2026-11-13: "close the old field
+      checks, they all passed"): nothing changes on the reference PC, whose CPU and board are read.
+      On an Intel PC, if one is at hand: "not read on this CPU" on the CPU sensors and Power cards
+      and in Health, and Diagnostics' sensor check as information.
 
 The owner's next "continue" (2026-10-31): another look, at what labels say and at time.
 
@@ -4056,9 +4066,10 @@ The owner's next "continue" (2026-10-31): another look, at what labels say and a
       and phone app with the end-to-end test, accessibility: 1,854 checks). Its relay job hung
       37 minutes installing the end-to-end run's browser, before any test; cancelled and run
       again once, it passed.
-- [ ] **Field check (the owner, on Windows):** none on the reference PC, unless a change of
-      daylight saving time falls in its time zone: then History's ticks across it on round
-      hours, and midnight as the day's name.
+- [x] **Field check (the owner, on Windows), reported passed** (2026-11-13: "close the old field
+      checks, they all passed"): none on the reference PC, unless a change of daylight saving time
+      falls in its time zone: then History's ticks across it on round hours, and midnight as the
+      day's name.
 - [x] **Version 2.0.4** (the owner, 2026-10-31: "Release 2.0.4 first"): `scripts/set-version.py
       2.0.4`; What's new in 2.0.4: links land on their card, each view where you left it, missing
       readings say why, an update that stalls ends, time across a clock change. All are this

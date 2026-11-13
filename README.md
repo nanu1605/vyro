@@ -123,8 +123,8 @@ service through the maker's own driver interface, as the maker's tools do: NVML 
 range for or refuses to set), ADLX for AMD (as AMD Software), the Intel Graphics Control Library
 for Intel. Intel's driver
 offers no memory clock, and an Intel card's warranty waiver is set when you turn tuning on, as
-Intel asks of every tuning tool. The AMD and Intel parts have not yet run on a real card:
-[`docs/field-check-2.0.md`](docs/field-check-2.0.md).
+Intel asks of every tuning tool. The AMD and Intel parts' field check
+([`docs/field-check-2.0.md`](docs/field-check-2.0.md)) was reported passed (2026-11-13).
 
 - **Presets** made for the card's family and scaled to what its driver allows: Quiet (lower
   power limit), Efficient (nearly the same speed for less power) and Performance (the highest
