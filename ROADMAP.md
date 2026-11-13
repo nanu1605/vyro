@@ -419,8 +419,8 @@ In progress.
       throttling (full load, high temperature, clock ≤ 90 % of the usual full-load clock);
       fans much slower than usual at the current CPU temperature; sustained CPU + GPU power
       steps explained by the component and load that changed. Each links to History.
-- [ ] Field check: insights after a few days of history; the footprint breakdown visible and
-      in the tray.
+- [x] Field check: insights after a few days of history; the footprint breakdown visible and
+      in the tray. **Reported passed** by the owner (2026-11-13: "those passed too, close them").
 ### P10 — Gaming capture + companion overlay (M6)
 In progress.
 
@@ -441,7 +441,8 @@ In progress.
       switch; PresentMon fetched with a pinned SHA-256 and installed by the MSI.
       `vyro-remote --capture <exe|pid>` checks capture through the service without the app.
 - [x] P10a Field-checked: FPS matches the game's own counter.
-- [ ] P10a Field check: anti-cheat games (FACEIT excepted, as with PawnIO) unaffected.
+- [x] P10a Field check: anti-cheat games (FACEIT excepted, as with PawnIO) unaffected.
+      **Reported passed** by the owner (2026-11-13: "those passed too, close them").
 - [x] P10b Companion overlay (off by default; Settings → Gaming or the tray's "Game overlay"):
       a transparent, always-on-top, click-through window in a chosen corner of the game's
       monitor with FPS, 1 % low and frame time, optionally a frame-time graph and CPU / GPU
@@ -3927,8 +3928,9 @@ owner's go (2026-10-30: "release 2.0.3").
 - [x] **Field check (the owner, on Windows), passed** (2026-10-30: "everything is working"): just
       after Clokrix starts, Ctrl K → Units, and the top bar's Remote chip: the card at the top of
       the window; Ctrl K → Alerts: Health at its alerts.
-- [ ] Over the next days: Settings → Updates' last check never more than a day old, after nights
-      asleep too (no night had passed with the build at the field check).
+- [x] Over the next days: Settings → Updates' last check never more than a day old, after nights
+      asleep too (no night had passed with the build at the field check). **Reported passed** by
+      the owner (2026-11-13: "those passed too, close them").
 - [x] **Version 2.0.3** (the owner, 2026-10-30: "release 2.0.3"): `scripts/set-version.py
       2.0.3`; What's new in 2.0.3: Ctrl K lands on the card, updates looked for every day. Both
       are this PC's, so neither is marked for the phone app.
