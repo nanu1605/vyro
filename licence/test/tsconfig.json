@@ -1,0 +1,15 @@
+{
+  // The tests' own settings (they run in Node and start the Worker in workerd): without them,
+  // Vite would take the repository root's, which needs the app's packages.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["*.ts"]
+}
