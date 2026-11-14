@@ -30,8 +30,8 @@
     the Benchmark, every part of this PC, widgets, the overlay and the phone app.
   </p>
   <p>
-    Fans went back to the BIOS and the GPU to stock; your settings are kept for when Pro is on again, and History kept
-    recording.
+    Fan control and GPU tuning are off (fans on the BIOS, the GPU at stock), with your settings kept for when Pro is on
+    again. History kept recording.
   </p>
   <p class="price"><b>{edition.e?.price ?? '$100'}</b> once, for life, on this PC.</p>
   <div class="actions">
