@@ -345,7 +345,7 @@ pub fn active(app: &AppHandle) -> bool {
     app.try_state::<WidgetStore>().is_some_and(|s| {
         let w = lock(&s.current);
         w.shown && !w.widgets.is_empty()
-    })
+    }) && crate::edition::full(app)
 }
 
 /// Each snapshot to the widget windows (only they listen to this event).
@@ -410,7 +410,12 @@ fn apply(handle: &AppHandle) {
         return;
     };
     let cfg = store.get();
-    let want: Vec<DesktopWidget> = if cfg.shown { cfg.widgets } else { Vec::new() };
+    // Free (2.5): none show; they come back with Pro.
+    let want: Vec<DesktopWidget> = if cfg.shown && crate::edition::full(handle) {
+        cfg.widgets
+    } else {
+        Vec::new()
+    };
     for (label, w) in handle.webview_windows() {
         if let Some(id) = label.strip_prefix(PREFIX) {
             if !want.iter().any(|x| x.id == id) {

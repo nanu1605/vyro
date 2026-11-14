@@ -8,7 +8,7 @@ import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
 import { savedLook, type AccentChoice, type OpenOn, type ThemeId } from './themes';
 import { EMPTY as NO_WIDGETS, type Widgets } from './widgets';
-import type { AlertFired, AlertRule, BackendStatus, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Control, Dashboard, DeviceInfo, Devices, LinkState, PhoneAction, PowerState, ScreenStatus, WakeReadiness, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo, GpuTestDone, GpuTestKind, GpuTestProgress, TuneConfig, TuneEvent, TuneSettings, TuneStatus } from './types';
+import type { AlertFired, AlertRule, BackendStatus, Edition, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Control, Dashboard, DeviceInfo, Devices, LinkState, PhoneAction, PowerState, ScreenStatus, WakeReadiness, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo, GpuTestDone, GpuTestKind, GpuTestProgress, TuneConfig, TuneEvent, TuneSettings, TuneStatus } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -1109,4 +1109,40 @@ export async function onGpuTest(progress: (p: GpuTestProgress) => void, done: (d
     a();
     b();
   };
+}
+
+// --- Clokrix Free and Pro (2.5). -------------------------------------------------------------------
+
+export async function getEdition(): Promise<Edition> {
+  if (!inTauri) return (await import('./sim-edition')).simEdition();
+  return invoke<Edition>('get_edition');
+}
+
+/** Opens the checkout in the browser; the app waits for the purchase's key by itself. */
+export async function buyPro(): Promise<Edition> {
+  if (!inTauri) return (await import('./sim-edition')).simBuyPro();
+  return invoke<Edition>('buy_pro');
+}
+
+/** A key typed in; `moveHere` takes it from the PC it is on. */
+export async function enterKey(key: string, moveHere: boolean): Promise<Edition> {
+  if (!inTauri) return (await import('./sim-edition')).simEnterKey(key);
+  return invoke<Edition>('enter_key', { key, moveHere });
+}
+
+/** Frees this PC's key for another PC. */
+export async function releasePro(): Promise<Edition> {
+  if (!inTauri) return (await import('./sim-edition')).simReleasePro();
+  return invoke<Edition>('release_pro');
+}
+
+/** The trial's end (or a note) has been shown. */
+export async function editionSeen(): Promise<Edition> {
+  if (!inTauri) return (await import('./sim-edition')).simEditionSeen();
+  return invoke<Edition>('edition_seen');
+}
+
+export async function onEdition(cb: (e: Edition) => void): Promise<() => void> {
+  if (!inTauri) return (await import('./sim-edition')).onSimEdition(cb);
+  return listen<Edition>('edition-changed', (e) => cb(e.payload));
 }

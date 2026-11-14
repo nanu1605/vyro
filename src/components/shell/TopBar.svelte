@@ -12,6 +12,9 @@
     gpu: TuneBrief | null;
     /** A newer version, when one is waiting. */
     update: string | null;
+    /** Days left in the Pro trial, while it runs (2.5). */
+    trial?: number | null;
+    ontrial?: () => void;
     onselect: (t: Tab) => void;
     onremote: () => void;
     onupdate: () => void;
@@ -19,7 +22,7 @@
     onstock: () => void;
     onsearch: () => void;
   }
-  let { tab, remote, fans, gpu, update, onselect, onremote, onupdate, onbios, onstock, onsearch }: Props = $props();
+  let { tab, remote, fans, gpu, update, trial = null, ontrial, onselect, onremote, onupdate, onbios, onstock, onsearch }: Props = $props();
 
   const v = $derived(view(tab));
   const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
@@ -37,6 +40,12 @@
       <button type="button" class="chip update" onclick={onupdate} title="Open Settings → Updates">
         <span class="led" aria-hidden="true"></span>
         Clokrix {update} is available
+      </button>
+    {/if}
+    {#if trial !== null}
+      <button type="button" class="chip" onclick={ontrial} title="Open Settings → Clokrix Pro">
+        <span class="led" aria-hidden="true"></span>
+        Pro trial · {trial} {trial === 1 ? 'day' : 'days'} left
       </button>
     {/if}
     {#if remote?.running}

@@ -1062,6 +1062,90 @@ async function sweepLists(browser) {
   await ctx.close();
 }
 
+// --- Clokrix Free and Pro (2.5), in the preview's stand-in. ------------------------------------
+// Free: every view but the Dashboard and Settings shows what Pro adds, with a lock in the
+// sidebar; Settings' Pro sections the same, in their window; a key turns Pro on. The trial: its
+// chip, leading to Settings → Clokrix Pro. Its end: said once, in a dialog.
+
+async function sweepFree(browser, theme) {
+  const at = (what) => `Free · ${what} · ${theme}`;
+  {
+    const { ctx, page } = await open(browser, BASE, { width: 1440, theme });
+    await page.goto(`${BASE}/?edition=free`);
+    await page.waitForTimeout(1200);
+    const locks = await page.locator('.sidebar [role="tab"] .lock').count();
+    checks++;
+    if (locks !== 17) problem(at('Sidebar'), `${locks} views marked Pro, not 17`);
+    await tab(page, 'Health');
+    const panel = page.locator('#panel-health');
+    checks++;
+    if (!(await panel.getByRole('heading', { name: 'Health is part of Clokrix Pro' }).count())) problem(at('Health'), 'no Pro screen');
+    if (await page.locator('ol.events').count()) problem(at('Health'), "Health's own content shows");
+    await axe(page, at('Health'));
+    await noSidewaysScroll(page, at('Health'));
+    await tab(page, 'Dashboard');
+    checks++;
+    if (await page.locator('#panel-dashboard').getByText('part of Clokrix Pro').count()) problem(at('Dashboard'), 'the Dashboard is locked');
+    // A Pro section of Settings, then the Pro card, each in its window.
+    await tab(page, 'Settings');
+    await page.locator('#panel-settings nav a[href="#remote"]').click();
+    await page.waitForTimeout(400);
+    checks++;
+    if (!(await page.locator('dialog.section[open]').getByText('Part of Clokrix Pro.').count())) problem(at('Remote'), 'no Pro note in its window');
+    await axe(page, at('Remote section'));
+    await page.locator('dialog.section[open]').getByRole('button', { name: 'Enter a key' }).click();
+    await page.waitForTimeout(500);
+    await inWindow(page, at('Enter a key'), 'pro');
+    await axe(page, at('Clokrix Pro card'));
+    const win = page.locator('dialog.section[open]');
+    await win.getByLabel('Already have a key?').fill('not a key at all, sorry');
+    await win.getByRole('button', { name: 'Turn Pro on' }).click();
+    checks++;
+    await win.getByRole('alert').waitFor({ timeout: 3000 }).catch(() => problem(at('Wrong key'), 'no error shown'));
+    await win.getByLabel('Already have a key?').fill('clkx 7q4ma 2b9xk p0rtn 8c3vd');
+    await win.getByRole('button', { name: 'Turn Pro on' }).click();
+    checks++;
+    await win.getByText('Pro is on for this PC').waitFor({ timeout: 3000 }).catch(() => problem(at('Key entered'), 'Pro did not turn on'));
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(400);
+    await tab(page, 'Health');
+    checks++;
+    if (await page.locator('.sidebar [role="tab"] .lock').count()) problem(at('Pro'), 'views still marked Pro after the key');
+    if (!(await page.locator('ol.events').count())) problem(at('Pro'), 'Health did not open after the key');
+    await ctx.close();
+  }
+  {
+    // The trial: its chip, to the Pro card.
+    const { ctx, page } = await open(browser, BASE, { width: 1440, theme });
+    await page.goto(`${BASE}/?edition=trial`);
+    await page.waitForTimeout(1200);
+    const chip = page.getByRole('button', { name: /^Pro trial · \d+ days left$/ });
+    checks++;
+    if (!(await chip.count())) problem(at('Trial chip'), 'not in the top bar');
+    else {
+      await chip.click();
+      await page.waitForTimeout(800);
+      await inWindow(page, at('Trial chip'), 'pro');
+      await axe(page, at('Trial card'));
+    }
+    await ctx.close();
+  }
+  {
+    // The trial's end: said once.
+    const { ctx, page } = await open(browser, BASE, { width: 1440, theme });
+    await page.goto(`${BASE}/?edition=ended`);
+    const ended = page.getByRole('dialog', { name: 'Your Clokrix Pro trial has ended' });
+    await ended.waitFor({ timeout: 5000 }).catch(() => problem(at('Trial ended'), 'not said'));
+    await page.waitForTimeout(400);
+    await axe(page, at('Trial ended'));
+    await ended.getByRole('button', { name: 'Not now' }).click();
+    await page.waitForTimeout(300);
+    checks++;
+    if (await ended.isVisible()) problem(at('Trial ended'), 'still shows after Not now');
+    await ctx.close();
+  }
+}
+
 // --- A view shows where it was left (2.0.4). ----------------------------------------------------
 // The views share the window's scroll, and each opened as far down as the one before it was: with
 // the Dashboard scrolled to 800 px, Settings opened 800 px down; with Settings at 1,000, Health.
@@ -1172,6 +1256,7 @@ try {
     await sweepLinks(browser);
     for (const theme of ['midnight', 'daylight']) await sweepSettingsWindow(browser, theme);
     await sweepLists(browser);
+    for (const theme of ['midnight', 'daylight']) await sweepFree(browser, theme);
     await sweepViewScroll(browser);
     await sweepMotion(browser);
   } finally {

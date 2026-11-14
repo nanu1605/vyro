@@ -56,6 +56,8 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 39 | Voice from the phone | The phone's voice reaches the PC two ways (1.7; the owner's report, 2026-10-21: a WhatsApp Web voice note sent through the phone's screen recorded nothing, as it records the PC's microphone and the phone's never reached the PC; the owner's choice, "clips and live mic"). Windows adds a microphone only through a driver Microsoft has signed (an EV certificate and a partner account Clokrix does not have), so Clokrix ships none. A **clip** recorded on the phone is kept on the PC (AAC through Windows' own encoder, or WAV without one; named by Clokrix, never the phone; 5 minutes at most; deleted after 7 days) and put on the clipboard as a file, only when the phone sends one, so Paste in a chat attaches it. The **live microphone** plays into a virtual cable the owner installs (VB-CABLE, VoiceMeeter or Virtual Audio Cable, found by name, never bundled); while it plays, the cable's recording side is Windows' default microphone (an option, on by default) through `IPolicyConfig`, an interface Windows does not document but has kept since Windows 7 (EarTrumpet and SoundSwitch use it). The defaults it replaced are kept in a file first and put back when the microphone stops, the session ends or Clokrix closes, or at the next start after a crash; a role the owner changed meanwhile is left alone. Both need the Screen permission and a session on; the live microphone the direct connection | decided |
 | 40 | Notifications on the phone | A phone may get notifications with its app closed (2.0; the owner's choice, 2026-10-27): it turns them on for each PC and chooses what about (alerts as Windows shows them, low batteries, game summaries, the PC going quiet), and only it turns them on; any paired phone may, as they concern only it. Web Push: the browser's subscription goes to the PC sealed; the PC seals each notification for it (RFC 8291) and the relay posts it to the browser's push service (Google's, Apple's, Mozilla's or Microsoft's only) signed with a key the relay makes and keeps (VAPID, RFC 8292), at a limited rate. "Stopped answering" is sealed ahead of time and left with the relay, sent when the PC's connection ends or its pings stop without its "leaving", and it is not back within two minutes | decided |
 | 41 | TURN for the screen | Where a phone has no direct path to the PC (most mobile networks; the owner, 2026-10-28: "can we cast without any time constraint?"), its screen session may go through Cloudflare's TURN service instead of the slow view (2.0.1): only where the relay's owner set a TURN key and listed the PC's room (`TURN_ROOMS`, or `*`), as the relay is shared by every installed Clokrix and Cloudflare charges past 1,000 GB a month. The relay gets day-long credentials with the key, which never leaves it, and hands them to a phone of a listed room; the picture stays encrypted end to end, the TURN server passing packets it cannot read. The slow view stays for where there is neither | decided |
+| 42 | Clokrix Free and Pro | Free is the Dashboard and Settings' own sections; Pro is everything, $100 once, for life, on one PC, with a 7-day trial from the first start of 2.5 for new and updated installs alike. Sold by Jainan Infotech through Razorpay, from a checkout of Clokrix's own on Cloudflare (`licence/`) that binds each key to one PC and signs an activation the app checks offline. The code stays open source (MIT OR Apache-2.0): the lock is in the public code, and a build without the checkout's settings is Pro (2.5; the owner, 2026-11-13: "I will sell this product so there will be 2 packages", "He will pay on the jainan infotech website using razorpay platform. And once he has paid the pro version should be activated for lifetime. Price: 100 USD.", "only 7 days free trial", one PC per purchase; [`docs/pro.md`](docs/pro.md)) | decided |
+| 43 | Settings sections in a window | A section named in Settings' list opens in a centred window over the page, growing out of its name and shrinking back into it; Ctrl K and the links that name a section open it the same way (2.5; the owner, 2026-11-13: "That section should pop out of the screen also add animations to it", and chose the centred window) | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -4504,6 +4506,92 @@ for 3" (2026-11-12) had a session on an environment that reaches Intel's hosts b
       ([`docs/signing.md`](docs/signing.md)). The relay was not deployed: it serves 2990da0's
       phone app (Relay run 43015537665), which behaves as this release's would.
 
+### 2.5.0 — Settings in a window, shorter lists, Clokrix Free and Pro
+
+The owner's four requests (2026-11-13), planned before building as asked ("i have some new
+features, plan them before implementing"):
+
+> 1. in settings when i click any of the sections (attached screenshot) like appeareance,
+>    gaming ,general, and more. That section should pop out of the screen also add animations to
+>    it.
+> 2. I will sell this product so there will be 2 packages :
+>    1. Free Version: Only dashboard will be available rest features will locked.
+>    2. pro version: All the features will be available.
+> 3. In settings>remote the "recents from your phone" shows lot of lines, show only latest 3 and
+>    rest give "show more" option.
+> 4. In health>recent events: show only latest 5 and rest give "show more" option. Also give
+>    categories to sort the recent events, like memory, cpu, gpu, etc.
+
+Their answers to the plan's questions: the code stays open source; "He will pay on the jainan
+infotech website using razorpay platform. And once he has paid the pro version should be
+activated for lifetime. Price: 100 USD."; a checkout of Clokrix's own on Cloudflare; one PC per
+purchase; "only 7 days free trial"; a centred window for Settings' sections (decisions 42, 43).
+On `claude/vyro-2.0`.
+
+- [x] **Settings' sections in their own window** (`SettingsDialog.svelte`): a name in Settings'
+      list opens its section in a centred window over the dimmed page, growing out of the name
+      (scale and fade, `--dur-3`) and shrinking back into it on Escape, its × or a click beside
+      it; under reduced motion a fade, with animation off nothing. The section's own card moves
+      into the window, so nothing runs twice, and its place in the page keeps its size. Ctrl K,
+      the update and Remote chips, the Dashboard's "Change profile" and Gaming's "Turn it on"
+      open sections the same way. Found while checking it:
+  - **Focus:** the focus goes back to the section's name, also when Remote's card going back
+    into the page moves the list's names a moment later.
+  - **Switching sections:** opening another section from inside a window (Enter a key) no longer
+    closes the new window too.
+  - **Backdrops:** a dialog's dimmed backdrop no longer fades in under reduced motion or with
+    animation off (every dialog, not only this one).
+- [x] **Recent from your phones** (Settings → Remote): the latest 3, then "Show all N actions"
+      (all 50 kept) and "Show fewer".
+- [x] **Health's recent events:** the latest 5, then "Show all N events"; chips for each part of
+      the PC with events (CPU, GPU, Memory, Storage, Board thermals, Fans, Voltages) with their
+      counts, which show that part's events only. `src/listing.ts`, tested.
+- [x] **Clokrix Free and Pro** ([`docs/pro.md`](docs/pro.md)):
+  - **The checkout** (`licence/`, a Cloudflare Worker with one SQLite Durable Object, deployed by
+    hand with `licence.yml`):
+    - pays $100 through Razorpay's checkout, making the order only when Pay is pressed;
+    - checks Razorpay's signature and the payment ($100 in US dollars, captured, for an order it
+      made), and gives one key per order, from the page or Razorpay's webhook, whichever comes
+      first; a refund turns the key off;
+    - gives the app the key of the purchase it opened, once;
+    - binds each key to one PC (a salted hash of Windows' installation id), moves it at most once
+      in 30 days, frees it, and signs an Ed25519 activation the app checks offline;
+    - limits each address to 40 requests a minute.
+    Its tests run it in workerd with Razorpay played by a local server; CI runs them.
+  - **In the app** (`clokrix_core::edition`, `src-tauri/src/edition.rs`):
+    - the 7-day trial from the first start of 2.5, then Free unless an activation for this PC
+      checks out;
+    - Buy Pro opens the checkout and collects the key by itself;
+    - a key entered by hand, Move Pro here, Free this PC;
+    - a look at the activation at most weekly, when online.
+  - **Free:** locked views show what Pro adds (`ProLocked.svelte`), with a lock in the sidebar,
+    and so do Settings' Remote, Gaming, Overlay and Profile. Fans go back to the BIOS and the GPU
+    to stock (control off, settings kept); widgets, the overlay, game watching, the phone link
+    and alert notifications stop; the tray greys out Profile, Game overlay and Desktop widgets.
+  - **The trial:** a top-bar chip with the days left; its end said once in a dialog.
+  - **Builds:** a build without `CLOKRIX_LICENCE_URL` and `CLOKRIX_LICENCE_PUBKEY` is Pro. The
+    Release workflow refuses to publish without them and checks `clokrix.exe` carries them;
+    `scripts/licence-keygen.mjs` makes the key pair.
+- [x] **Locally:**
+  - types, 300 frontend tests and the core's (the edition's 12 among them, one an activation
+    signed by WebCrypto exactly as the checkout signs, checked with `ring`);
+  - the checkout's 15 tests;
+  - clippy for Windows with the app, and for Linux;
+  - the accessibility sweep's new parts: each section's window in two themes, the lists, Free,
+    the trial and its end.
+- [x] **CI green on ed2fa8d** (run 43569598002; the window and the lists: Linux, Windows with the
+      smoke test, the relay and phone app, accessibility).
+- [ ] **CI green** on the commit with Free and Pro.
+- [ ] **The owner's set-up** ([`docs/pro.md`](docs/pro.md) → Setting it up):
+  - Razorpay (international payments, keys, webhook);
+  - the website's pages and Buy button;
+  - the key pair, the secrets and the variables;
+  - the checkout deployed (on the owner's go);
+  - a purchase in Razorpay's Test mode end to end.
+- [ ] **Field check (the owner)** ([`docs/field-check-2.5.md`](docs/field-check-2.5.md)): the
+      window's animation; a test-mode purchase turning Pro on by itself; the key refused on a
+      second PC, then moved; Free this PC; the trial's end.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on
@@ -4525,6 +4613,11 @@ for 3" (2026-11-12) had a session on an environment that reaches Intel's hosts b
   Android phone saving battery, iOS with the app not on the Home Screen); "stopped answering"
   depends on the relay noticing within a few minutes.
 - SignPath / Certum OSS require a public repo with an OSI license and a verifiable build.
+- Clokrix Pro (2.5) is sold from open-source code: anyone may build it without the lock (not
+  under the Clokrix name and logo). SignPath Foundation and Certum Open Source sign
+  open-source projects; whether a paid edition fits their terms is to be checked before
+  applying. Every 2.5 install turns Free after 7 days, so the checkout must be live and
+  tried before 2.5.0 is released.
 - Fan control (P12): some boards' fans are owned by the embedded controller and cannot be
   driven safely, pump headers are easy to mislabel, and another tool (MSI Center, FanControl)
   writing the same EC fights Clokrix. Mitigations: allow-list, owner-confirmed pump header,

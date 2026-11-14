@@ -394,6 +394,15 @@ fn migrate_alert_rules(app: &AppHandle, api: &Arc<dyn EngineApi>) {
 /// Shows a fired alert as a Windows notification, if the profile lets it through (silent
 /// unless the rule and the profile ask for sound).
 pub fn notify(app: &AppHandle, alert: &AlertFired) {
+    // Free (2.5): alerts are Health's, which is Pro's; still logged.
+    if !crate::edition::full(app) {
+        log::info!(
+            "alert (Free, not shown): {}: {}",
+            alert.title,
+            alert.message
+        );
+        return;
+    }
     if !alert.notify {
         // Logged only, or it repeats an alert just shown about the same part.
         log::info!("alert (not shown): {}: {}", alert.title, alert.message);

@@ -67,3 +67,8 @@ export type Tab = (typeof VIEWS)[number]['id'];
 export const isTab = (t: string | null | undefined): t is Tab => VIEWS.some((v) => v.id === t);
 
 export const view = (id: Tab): View => VIEWS.find((v) => v.id === id)!;
+
+/** What Clokrix Free keeps open (2.5): the Dashboard, and Settings' own sections. */
+export const FREE_VIEWS: readonly Tab[] = ['dashboard', 'settings'];
+/** Settings' sections that are Pro's: the phone, games, the overlay and profiles. */
+export const PRO_SECTIONS: readonly string[] = ['remote', 'gaming', 'overlay', 'profile'];

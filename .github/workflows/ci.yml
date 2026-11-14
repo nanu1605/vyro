@@ -204,6 +204,9 @@ jobs:
         env:
           # The relay built into the app (1.4); empty until the owner sets the variable.
           CLOKRIX_RELAY_URL: ${{ vars.CLOKRIX_RELAY_URL }}
+          # Clokrix Pro (2.5): test builds start the trial as releases do, once both are set.
+          CLOKRIX_LICENCE_URL: ${{ vars.CLOKRIX_LICENCE_URL }}
+          CLOKRIX_LICENCE_PUBKEY: ${{ vars.CLOKRIX_LICENCE_PUBKEY }}
         run: pnpm tauri build
       - name: The relay address built in (1.4)
         shell: pwsh

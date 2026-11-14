@@ -7,6 +7,7 @@ mod commands;
 mod dashboard;
 mod device_watch;
 mod diag;
+mod edition;
 mod engine;
 mod gaming;
 mod gpu_tune;
@@ -73,6 +74,8 @@ fn main() {
             // First: it looks for an earlier install's files (Vyro's, moved above, count) before
             // this start writes any.
             app.manage(whats_new::WhatsNew::load(app.handle(), &version));
+            // Before anything Pro opens asks whether it may (2.5).
+            app.manage(edition::EditionState::load(app.handle()));
             let engine = Engine::start(app.handle(), !minimized)?;
             app.manage(overlay::Overlay::default());
             app.manage(gaming::GameState::default());
@@ -102,6 +105,7 @@ fn main() {
             // CI's smoke test of the installed app (only with CLOKRIX_SMOKE set).
             smoke::start();
             whats_new::announce(app.handle(), minimized);
+            edition::start(app.handle());
             if minimized {
                 tray::park_after_start(app.handle());
             } else {
@@ -215,6 +219,11 @@ fn main() {
             updates::install_update,
             whats_new::get_whats_new,
             whats_new::whats_new_seen,
+            edition::get_edition,
+            edition::buy_pro,
+            edition::enter_key,
+            edition::release_pro,
+            edition::edition_seen,
         ])
         .build(context)
         .expect("failed to build the Tauri application");

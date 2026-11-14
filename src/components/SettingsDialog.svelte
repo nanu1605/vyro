@@ -22,11 +22,12 @@
   let closing = false;
   /** What had the focus when it opened (the section's name in the list), to give it back. */
   let before: HTMLElement | null = null;
+  /** Taken down by the page (another section opened in its place): its closing says nothing. */
+  let gone = false;
 
   onMount(() => {
     const d = dialog;
     if (!d) return;
-    let gone = false;
     // After the update that opened it: Ctrl K's palette, closing in that same update, would
     // otherwise hand the focus back behind this window.
     queueMicrotask(() => {
@@ -81,6 +82,7 @@
   }}
   onclose={() => {
     closing = false;
+    if (gone) return;
     onclosed();
     // The browser gives the focus back as it closes, but the card going back into the page can
     // move the list's names around while it settles (Remote's loads a moment later), and a name

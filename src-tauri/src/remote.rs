@@ -363,6 +363,10 @@ impl Remote {
 
     /// Starts serving; a failure (port taken) is kept for Settings to show.
     fn start(&self, app: &AppHandle) {
+        // Free (2.5): the phone link is Pro's.
+        if !crate::edition::full(app) {
+            return;
+        }
         let mut server = lock(&self.server);
         if server.is_some() {
             return;
@@ -484,6 +488,9 @@ impl Remote {
 
     /// Connects to the relay; a failure (no address) is kept for Settings to show.
     fn start_relay(&self, app: &AppHandle) {
+        if !crate::edition::full(app) {
+            return;
+        }
         let mut client = lock(&self.client);
         if client.is_some() {
             return;

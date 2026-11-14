@@ -706,6 +706,7 @@ dependencies = [
  "openh264",
  "p256",
  "qrcodegen",
+ "ring",
  "rusqlite",
  "rustls",
  "rustls-platform-verifier",

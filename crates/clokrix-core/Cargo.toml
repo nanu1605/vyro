@@ -17,6 +17,8 @@ log = "0.4.34"
 # Web Push (2.0): the PC seals each notification to the phone's key; already built for WebRTC.
 p256 = { version = "0.13.2", default-features = false, features = ["ecdh"] }
 qrcodegen = "1.8.0"
+# Clokrix Pro (2.5): the checkout's signed activations, checked with Ed25519; already built for TLS.
+ring = "0.17.14"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"

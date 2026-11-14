@@ -119,6 +119,8 @@ export type { Status } from './bindings/Status';
 export type { HealthReport } from './bindings/HealthReport';
 export type { SubsystemHealth } from './bindings/SubsystemHealth';
 export type { HealthEvent } from './bindings/HealthEvent';
+export type { Edition } from './bindings/Edition';
+export type { Tier } from './bindings/Tier';
 export type { AlertRule } from './bindings/AlertRule';
 export type { AlertKind } from './bindings/AlertKind';
 export type { AlertFired } from './bindings/AlertFired';

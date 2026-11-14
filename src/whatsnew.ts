@@ -21,6 +21,26 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '2.5.0',
+    items: [
+      {
+        icon: 'sparkles',
+        title: 'Clokrix Pro, with 7 days to try it',
+        text: 'Clokrix now comes as Free and Pro. Free keeps the Dashboard and Settings; Pro keeps everything else, for $100 once, for life, on one PC. Every PC has Pro for 7 days from this update; Settings → Clokrix Pro buys it, or takes a key.',
+      },
+      {
+        icon: 'sparkles',
+        title: 'Settings sections in their own window',
+        text: 'Click a section in Settings’ list and it opens in a window over the page, growing out of its name. Escape or a click beside it closes it.',
+      },
+      {
+        icon: 'gauge',
+        title: 'Shorter recent lists',
+        text: 'Health’s recent events show the latest 5, with a chip for each part of the PC (CPU, GPU, Memory and more); Settings → Remote shows the latest 3 things your phones did. Show all brings back the rest.',
+      },
+    ],
+  },
+  {
     version: '2.4.0',
     items: [
       {

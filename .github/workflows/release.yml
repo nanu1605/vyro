@@ -19,6 +19,9 @@ name: Release
 # and, for reach from anywhere (1.4):
 #   variable CLOKRIX_RELAY_URL                   the relay built into the app (relay.yml deploys it;
 #                                                VYRO_RELAY_URL until 2.2, no longer read)
+# and, for Clokrix Pro (2.5, docs/pro.md), both, or the release stops (it would be Pro for all):
+#   variable CLOKRIX_LICENCE_URL                 the checkout (licence.yml deploys it)
+#   variable CLOKRIX_LICENCE_PUBKEY              its key pair's public half (scripts/licence-keygen.mjs)
 # and, to sign the app and its installer (2.0, decision 11; docs/signing.md), all four:
 #   variable SIGNPATH_ORGANIZATION_ID            SignPath's organization id for Clokrix
 #   variable SIGNPATH_PROJECT_SLUG               its project (normally "clokrix")
@@ -70,9 +73,13 @@ jobs:
           # release would ship with no relay, so it stops here instead.
           HAS_OLD_RELAY: ${{ vars.VYRO_RELAY_URL != '' }}
           HAS_RELAY: ${{ vars.CLOKRIX_RELAY_URL != '' }}
+          HAS_LICENCE: ${{ vars.CLOKRIX_LICENCE_URL != '' && vars.CLOKRIX_LICENCE_PUBKEY != '' }}
         run: |
           if ($env:HAS_OLD_RELAY -eq 'true' -and $env:HAS_RELAY -ne 'true') {
             throw "set the variable CLOKRIX_RELAY_URL to the clokrix-relay address (the Relay workflow prints it); VYRO_RELAY_URL is no longer read"
+          }
+          if ($env:HAS_LICENCE -ne 'true') {
+            throw "set the variables CLOKRIX_LICENCE_URL and CLOKRIX_LICENCE_PUBKEY (docs/pro.md): without them the release would be Pro for everyone"
           }
           $version = python scripts/set-version.py --check
           if ($LASTEXITCODE -ne 0) { throw "version files disagree" }
@@ -142,6 +149,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # The relay built into the app (1.4): Settings → Remote → From anywhere.
           CLOKRIX_RELAY_URL: ${{ vars.CLOKRIX_RELAY_URL }}
+          # Clokrix Pro's checkout and the key its activations are checked with (2.5).
+          CLOKRIX_LICENCE_URL: ${{ vars.CLOKRIX_LICENCE_URL }}
+          CLOKRIX_LICENCE_PUBKEY: ${{ vars.CLOKRIX_LICENCE_PUBKEY }}
         run: pnpm tauri build --config src-tauri/tauri.release.conf.json
 
       # Signed (2.0): the programs first, so the MSI carries signed ones; then the MSI.
@@ -160,6 +170,8 @@ jobs:
         if: vars.SIGNPATH_ORGANIZATION_ID != ''
         env:
           CLOKRIX_RELAY_URL: ${{ vars.CLOKRIX_RELAY_URL }}
+          CLOKRIX_LICENCE_URL: ${{ vars.CLOKRIX_LICENCE_URL }}
+          CLOKRIX_LICENCE_PUBKEY: ${{ vars.CLOKRIX_LICENCE_PUBKEY }}
         run: pnpm tauri build --no-bundle --config src-tauri/tauri.release.conf.json
       - name: The programs, for signing
         id: programs
@@ -252,6 +264,17 @@ jobs:
           $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes('target\release\clokrix.exe'))
           if (-not $text.Contains($url)) { throw "clokrix.exe does not carry the relay address $url" }
           "Relay built in: $url" | Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
+      - name: Clokrix Pro's checkout built in (2.5)
+        shell: pwsh
+        env:
+          CLOKRIX_LICENCE_URL: ${{ vars.CLOKRIX_LICENCE_URL }}
+          CLOKRIX_LICENCE_PUBKEY: ${{ vars.CLOKRIX_LICENCE_PUBKEY }}
+        run: |
+          $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes('target\release\clokrix.exe'))
+          foreach ($v in @($env:CLOKRIX_LICENCE_URL, $env:CLOKRIX_LICENCE_PUBKEY)) {
+            if (-not $text.Contains($v)) { throw "clokrix.exe does not carry Clokrix Pro's checkout settings" }
+          }
+          "Pro checkout built in: $env:CLOKRIX_LICENCE_URL" | Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
 
       - name: Installer, update manifest and checksums
         shell: pwsh

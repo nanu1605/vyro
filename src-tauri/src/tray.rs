@@ -286,6 +286,21 @@ pub struct ProfileItems(Vec<(Profile, CheckMenuItem<Wry>)>);
 pub struct OverlayItem(CheckMenuItem<Wry>);
 pub struct WidgetsItem(CheckMenuItem<Wry>);
 
+/// Profile, Game overlay and Desktop widgets: greyed out while the PC is Free (2.5).
+pub fn set_pro(app: &AppHandle, on: bool) {
+    if let Some(items) = app.try_state::<ProfileItems>() {
+        for (_, item) in &items.0 {
+            let _ = item.set_enabled(on);
+        }
+    }
+    if let Some(item) = app.try_state::<OverlayItem>() {
+        let _ = item.0.set_enabled(on);
+    }
+    if let Some(item) = app.try_state::<WidgetsItem>() {
+        let _ = item.0.set_enabled(on);
+    }
+}
+
 /// Moves the tray's check mark for desktop widgets.
 pub fn set_widgets_checked(app: &AppHandle, on: bool) {
     if let Some(item) = app.try_state::<WidgetsItem>() {

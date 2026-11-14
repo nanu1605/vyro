@@ -4,6 +4,9 @@
   import CardGrid, { type CardItem } from './CardGrid.svelte';
   import { cards, ordered, resetOrder } from '../card-order.svelte';
   import SettingsDialog from './SettingsDialog.svelte';
+  import ProCard from './ProCard.svelte';
+  import ProLocked from './ProLocked.svelte';
+  import { lockedSection } from '../edition.svelte';
   import { closeSettingsSection, openSettingsSection, settingsDialog } from '../settings-dialog.svelte';
   import { getAutostart, getSensorTree, pickProfile, setAutostart, type OverlayCorner, type OverlaySettings } from '../ipc';
   import { activeProfile, game, prefs, profiles, savePrefs } from '../prefs.svelte';
@@ -119,6 +122,7 @@
     { id: 'hidden-sensors', title: 'Hidden sensors' },
     { id: 'service', title: 'Sensor service' },
     { id: 'updates', title: 'Updates' },
+    { id: 'pro', title: 'Clokrix Pro' },
   ];
   // The section list beside the cards (P28), in the order they show in: a click opens the section
   // in its own window (2.5); the card in view is marked as you scroll (the one nearest the top,
@@ -185,7 +189,14 @@
 </script>
 
 {#snippet section(id: string)}
-  {#if id === 'appearance'}
+  {#if id === 'pro'}
+    <ProCard />
+  {:else if lockedSection(id)}
+    {@const item = CARDS.find((c) => c.id === id)}
+    <Card title={item?.title ?? id} {id}>
+      <ProLocked compact title={item?.title ?? id} onkey={() => openSettingsSection('pro')} />
+    </Card>
+  {:else if id === 'appearance'}
     <Card title="Appearance" id="appearance" subtitle={look.name}>
       <fieldset>
         <legend>Theme</legend>

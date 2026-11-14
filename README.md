@@ -89,6 +89,17 @@ Intel CPUs, the NCT679x and DDR4 on Intel have been checked on one PC so far
 ([`docs/field-check-2.3.md`](docs/field-check-2.3.md),
 [`docs/field-check-2.4.md`](docs/field-check-2.4.md)).
 
+## Free and Pro (2.5)
+
+Clokrix Free is the Dashboard, with its layouts and editing, and Settings. Clokrix Pro is
+everything else: Health and alerts, fan control, GPU tuning, History, the Benchmark, every part
+of this PC, desktop widgets, the game overlay and the phone app. It costs $100 once, for life, on
+one PC, and can move to another. Every PC gets Pro for 7 days from the first start of 2.5. Buy
+Pro (Settings → Clokrix Pro) opens the checkout in the browser, and Pro turns on by itself once
+it is paid. [`docs/pro.md`](docs/pro.md) explains the trial, one PC, what is sent, and the
+checkout's set-up. The code stays MIT or Apache-2.0, and a build without the checkout's settings
+is Pro.
+
 ## Fan and pump control
 
 The **Cooling** tab sets each fan header to the BIOS curve, a fixed speed or Clokrix's own curve
@@ -513,6 +524,8 @@ Nothing on it changes the PC.
 | [`docs/field-check-2.2.md`](docs/field-check-2.2.md) | The field check of 2.2: the update from Vyro to Clokrix, everything kept, the new name and logo, the phones paired again |
 | [`docs/field-check-2.3.md`](docs/field-check-2.3.md) | The field check of 2.3: Gigabyte boards' ITE chip, memory timings on AM4 and more Intel CPUs, an ASUS board's fan control tried, NVAPI's offsets |
 | [`docs/field-check-2.4.md`](docs/field-check-2.4.md) | The field check of 2.4: Gigabyte boards' second ITE chip, a Gigabyte board's fan control tried, Tiger Lake's memory timings |
+| [`docs/pro.md`](docs/pro.md) | Clokrix Free and Pro (2.5): the trial, buying, one PC, what is sent, and the checkout's set-up |
+| [`docs/field-check-2.5.md`](docs/field-check-2.5.md) | The field check of 2.5: Settings' sections in a window, the shorter lists, Pro bought in Razorpay's Test mode on one PC |
 | [`docs/signing.md`](docs/signing.md) | Code signing (2.0): what the release does once SignPath is set up, and what only the owner can do |
 
 `clokrix-remote.exe` in the same artifact checks the service from the outside (state, connection,

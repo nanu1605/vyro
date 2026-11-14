@@ -4,6 +4,9 @@
   import HardwarePanel from './components/HardwarePanel.svelte';
   import SystemPanel from './components/SystemPanel.svelte';
   import SettingsPanel from './components/SettingsPanel.svelte';
+  import ProLocked from './components/ProLocked.svelte';
+  import TrialEnded from './components/TrialEnded.svelte';
+  import { edition, full, loadEdition, locked, trialDays } from './edition.svelte';
   import { openSettingsSection } from './settings-dialog.svelte';
   import DisplaysPanel from './components/DisplaysPanel.svelte';
   import DashboardGrid from './components/DashboardGrid.svelte';
@@ -28,7 +31,7 @@
   import { loadSeenKeys, markSeen, unseen } from './insights';
   import { loadPrefs, prefs, profileSpec, tempText } from './prefs.svelte';
   import { applyLook, savedLook, uiState } from './themes';
-  import { isTab, VIEWS, type Tab } from './nav';
+  import { isTab, view, VIEWS, type Tab } from './nav';
   import Sidebar, { type Dot } from './components/shell/Sidebar.svelte';
   import TopBar from './components/shell/TopBar.svelte';
   import LiveRail from './components/shell/LiveRail.svelte';
@@ -55,6 +58,8 @@
   let toasts = $state<Array<AlertFired & { key: number }>>([]);
   let toastSeq = 0;
   function showToast(a: AlertFired): void {
+    // Free (2.5): alerts are Health's, which is Pro's.
+    if (!full()) return;
     // Same policy as Windows notifications: the profile decides what interrupts.
     const policy = profileSpec().notifications;
     if (policy === 'off' || (policy === 'critical' && a.ruleId !== 'health-problems')) return;
@@ -283,6 +288,7 @@
 
   onMount(() => {
     visited[tab] = true;
+    void loadEdition();
     loadPawnIo();
     void loadPrefs()
       .then(() => {
@@ -428,6 +434,8 @@
       onbios={fansToBios}
       onstock={gpuToStock}
       onsearch={openPalette}
+      trial={trialDays(edition.e)}
+      ontrial={() => openSection('settings', 'pro')}
     />
 
     <main>
@@ -452,7 +460,7 @@
           <button type="button" onclick={() => void stopScreen()}>Stop sharing</button>
         </div>
       {/if}
-      {#if visited.cooling}
+      {#if visited.cooling && !locked('cooling')}
         <div id="panel-cooling" role="tabpanel" aria-labelledby="tab-cooling" hidden={tab !== 'cooling'}>
           <CoolingPanel {snap} {backend} active={tab === 'cooling'} />
         </div>
@@ -499,7 +507,14 @@
         </div>
       </div>
 
-      {#if visited.history}
+      {#if locked(tab)}
+        <!-- Free (2.5): a Pro view shows what Pro adds, and how to get it. -->
+        <div id="panel-{tab}" role="tabpanel" aria-labelledby="tab-{tab}">
+          <ProLocked title={view(tab).label} blurb={view(tab).blurb} onkey={() => openSection('settings', 'pro')} />
+        </div>
+      {/if}
+
+      {#if visited.history && !locked('history')}
         <div id="panel-history" role="tabpanel" aria-labelledby="tab-history" hidden={tab !== 'history'}>
           <HistoryPanel
             {snap}
@@ -511,25 +526,25 @@
         </div>
       {/if}
 
-      {#if visited.health}
+      {#if visited.health && !locked('health')}
         <div id="panel-health" role="tabpanel" aria-labelledby="tab-health" hidden={tab !== 'health'}>
           <HealthPanel {snap} active={tab === 'health'} oninsights={() => openView('insights')} onhistory={openHistory} />
         </div>
       {/if}
 
-      {#if visited.insights}
+      {#if visited.insights && !locked('insights')}
         <div id="panel-insights" role="tabpanel" aria-labelledby="tab-insights" hidden={tab !== 'insights'}>
           <InsightsPanel active={tab === 'insights'} fresh={insightsFresh} onhistory={openHistory} />
         </div>
       {/if}
 
-      {#if visited.gaming}
+      {#if visited.gaming && !locked('gaming')}
         <div id="panel-gaming" role="tabpanel" aria-labelledby="tab-gaming" hidden={tab !== 'gaming'}>
           <GamingPanel {snap} {backend} active={tab === 'gaming'} onsettings={() => openSection('settings', 'gaming')} />
         </div>
       {/if}
 
-      {#if visited.gpu}
+      {#if visited.gpu && !locked('gpu')}
         <div id="panel-gpu" role="tabpanel" aria-labelledby="tab-gpu" hidden={tab !== 'gpu'}>
           <!-- Loaded on first visit, as Benchmark. -->
           {#await import('./components/GpuTunePanel.svelte') then { default: GpuTunePanel }}
@@ -537,7 +552,7 @@
           {/await}
         </div>
       {/if}
-      {#if visited.benchmark}
+      {#if visited.benchmark && !locked('benchmark')}
         <div id="panel-benchmark" role="tabpanel" aria-labelledby="tab-benchmark" hidden={tab !== 'benchmark'}>
           <!-- Loaded on first visit: most sessions never open it. -->
           {#await import('./components/BenchmarkPanel.svelte') then { default: BenchmarkPanel }}
@@ -546,18 +561,18 @@
         </div>
       {/if}
 
-      {#if visited.processes}
+      {#if visited.processes && !locked('processes')}
         <div id="panel-processes" role="tabpanel" aria-labelledby="tab-processes" hidden={tab !== 'processes'}>
           <ProcessesPanel processes={snap?.processes ?? []} active={tab === 'processes'} />
         </div>
       {/if}
 
-      {#if visited.hardware}
+      {#if visited.hardware && !locked('hardware')}
         <div id="panel-hardware" role="tabpanel" aria-labelledby="tab-hardware" hidden={tab !== 'hardware'}>
           <HardwarePanel newSince={changesNewSince} />
         </div>
       {/if}
-      {#if visited.mypc}
+      {#if visited.mypc && !locked('mypc')}
         <div id="panel-mypc" role="tabpanel" aria-labelledby="tab-mypc" hidden={tab !== 'mypc'}>
           <!-- Loaded on first visit; its 3-D view (Three.js) exists only while the tab shows. -->
           {#await import('./components/MyPcPanel.svelte') then { default: MyPcPanel }}
@@ -565,22 +580,22 @@
           {/await}
         </div>
       {/if}
-      {#if visited.storage}
+      {#if visited.storage && !locked('storage')}
         <div id="panel-storage" role="tabpanel" aria-labelledby="tab-storage" hidden={tab !== 'storage'}>
           <StoragePanel live={snap?.storage ?? []} />
         </div>
       {/if}
-      {#if visited.network}
+      {#if visited.network && !locked('network')}
         <div id="panel-network" role="tabpanel" aria-labelledby="tab-network" hidden={tab !== 'network'}>
           <NetworkPanel ts={snap?.ts ?? 0} live={snap?.network ?? []} ping={snap?.ping ?? null} />
         </div>
       {/if}
-      {#if visited.displays}
+      {#if visited.displays && !locked('displays')}
         <div id="panel-displays" role="tabpanel" aria-labelledby="tab-displays" hidden={tab !== 'displays'}>
           <DisplaysPanel />
         </div>
       {/if}
-      {#if visited.devices}
+      {#if visited.devices && !locked('devices')}
         <div id="panel-devices" role="tabpanel" aria-labelledby="tab-devices" hidden={tab !== 'devices'}>
           <!-- Loaded on first visit, like Benchmark. -->
           {#await import('./components/DevicesPanel.svelte') then { default: DevicesPanel }}
@@ -588,17 +603,17 @@
           {/await}
         </div>
       {/if}
-      {#if visited.system}
+      {#if visited.system && !locked('system')}
         <div id="panel-system" role="tabpanel" aria-labelledby="tab-system" hidden={tab !== 'system'}>
           <SystemPanel />
         </div>
       {/if}
-      {#if visited.sensors}
+      {#if visited.sensors && !locked('sensors')}
         <div id="panel-sensors" role="tabpanel" aria-labelledby="tab-sensors" hidden={tab !== 'sensors'}>
           <SensorsPanel {snap} active={tab === 'sensors'} onhistory={openHistory} />
         </div>
       {/if}
-      {#if visited.widgets}
+      {#if visited.widgets && !locked('widgets')}
         <div id="panel-widgets" role="tabpanel" aria-labelledby="tab-widgets" hidden={tab !== 'widgets'}>
           <!-- Loaded on first visit. -->
           {#await import('./components/WidgetsPanel.svelte') then { default: WidgetsPanel }}
@@ -639,6 +654,10 @@
       onwhatsnew={openWhatsNew}
     />
   {/await}
+{/if}
+
+{#if edition.e?.endedUnseen && !whatsNew}
+  <TrialEnded onkey={() => openSection('settings', 'pro')} />
 {/if}
 
 {#if whatsNew}

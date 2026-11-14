@@ -13,6 +13,7 @@ pub mod dashboard;
 pub mod devices;
 pub mod diag;
 pub mod display;
+pub mod edition;
 pub mod engine;
 pub mod fan;
 pub mod files;

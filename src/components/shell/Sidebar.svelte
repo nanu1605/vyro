@@ -8,6 +8,8 @@
   import PanelLeftClose from '@lucide/svelte/icons/panel-left-close';
   import PanelLeftOpen from '@lucide/svelte/icons/panel-left-open';
   import Laptop from '@lucide/svelte/icons/laptop';
+  import Lock from '@lucide/svelte/icons/lock';
+  import { locked } from '../../edition.svelte';
   import { GROUPS, VIEWS, type Tab } from '../../nav';
   import { PIXELS } from '../../brand-scatter';
   import Logo from '../Logo.svelte';
@@ -132,6 +134,11 @@
         >
           <span class="icon"><Icon size={18} strokeWidth={1.9} aria-hidden="true" /></span>
           <span class="label">{v.label}</span>
+          {#if locked(v.id)}
+            <!-- Free (2.5): the view shows what Pro adds instead. -->
+            <span class="lock" aria-hidden="true"><Lock size={12} /></span>
+            <span class="sr-only">(Pro)</span>
+          {/if}
           {#if dot}
             <span class="dot {dot.tone}" aria-hidden="true"></span>
             <span class="sr-only">({dot.note})</span>
@@ -331,6 +338,15 @@
   }
   .dot.new {
     background: var(--accent);
+  }
+  .lock {
+    display: grid;
+    flex: none;
+    place-items: center;
+    color: var(--muted);
+  }
+  .rail .lock {
+    display: none;
   }
   .rail .dot {
     position: absolute;

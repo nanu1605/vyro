@@ -228,7 +228,9 @@ fn run(app: &AppHandle) {
         };
         let is_game =
             |f: &Foreground| is_candidate(f, own, known(f), busy && Some(f.pid) == fg_pid);
-        let following = settings.game_capture || games.enabled;
+        // Free (2.5): no game is followed, so no profile switches, capture or overlay.
+        let pro = crate::edition::full(app);
+        let following = pro && (settings.game_capture || games.enabled);
         // A game just marked "Not a game" stops being followed.
         let dropped = watcher.current().is_some_and(|t| games.ignored(&t.name));
         let change = if following && !dropped {
@@ -254,7 +256,10 @@ fn run(app: &AppHandle) {
             lock(&state.switcher).set_game(exe.as_deref());
             apply_effective(app);
         }
-        let capture = watcher.current().filter(|_| settings.game_capture).cloned();
+        let capture = watcher
+            .current()
+            .filter(|_| pro && settings.game_capture)
+            .cloned();
         if capture.as_ref().map(|t| t.pid) != captured {
             if captured.is_some() {
                 summary = Some((
