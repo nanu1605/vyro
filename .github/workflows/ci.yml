@@ -114,6 +114,23 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  licence:
+    name: Pro checkout and keys (Linux)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: licence/pnpm-lock.yaml
+      - name: The checkout's own packages (Wrangler, workerd)
+        run: pnpm --dir licence install --frozen-lockfile
+      - run: pnpm --dir licence check
+      - name: The checkout in workerd, with Razorpay played by the tests
+        run: pnpm --dir licence test
+
   tauri-windows:
     name: Tauri app (Windows)
     runs-on: windows-latest

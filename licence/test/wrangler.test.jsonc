@@ -1,0 +1,10 @@
+// The checkout as the tests run it: the same Worker; Razorpay's address, the keys and the secrets
+// are the tests' own, given when it starts (licence.test.ts).
+{
+  "name": "clokrix-licence-test",
+  "main": "../src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "durable_objects": { "bindings": [{ "name": "LEDGER", "class_name": "Ledger" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Ledger"] }],
+  "vars": { "SELLER": "Test Seller" }
+}

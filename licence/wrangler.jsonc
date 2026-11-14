@@ -1,0 +1,22 @@
+// Clokrix Pro's checkout and keys (2.5). Deployed by .github/workflows/licence.yml, by hand, into
+// the owner's Cloudflare account. Razorpay takes the payment; this Worker makes each order, checks
+// that it was paid, gives the buyer a key, and binds the key to one PC (docs/pro.md).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "clokrix-licence",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "durable_objects": {
+    // Every order and key, in one Durable Object.
+    "bindings": [{ "name": "LEDGER", "class_name": "Ledger" }]
+  },
+  // SQLite-backed, as the free plan requires.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Ledger"] }],
+  // Who sells it, as the checkout names them. The secrets RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET,
+  // RAZORPAY_WEBHOOK_SECRET and LICENCE_SIGNING_KEY are set by the deploy (licence.yml).
+  "vars": { "SELLER": "Jainan Infotech" },
+  // No request logs: it keeps nothing it does not need.
+  "observability": { "enabled": false }
+}

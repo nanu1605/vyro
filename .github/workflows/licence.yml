@@ -1,0 +1,103 @@
+name: Licence
+
+# Deploys Clokrix Pro's checkout and keys (licence/: a Cloudflare Worker with one Durable Object) to
+# the owner's Cloudflare account (2.5, docs/pro.md). By hand only, on the owner's go: every
+# purchase and every Pro activation goes through it. Two ways to start it:
+#   - Actions → Licence → Run workflow, with the ref to deploy (GitHub offers this only for a file
+#     on the default branch, main);
+#   - push a tag named licence-<anything> on the commit to deploy.
+#
+# Needs, in the repository settings (Secrets and variables → Actions):
+#   secret   CLOUDFLARE_API_TOKEN      as for the relay
+#   secret   CLOUDFLARE_ACCOUNT_ID     as for the relay
+#   secret   RAZORPAY_KEY_ID           Razorpay → Account & Settings → API keys (test, then live)
+#   secret   RAZORPAY_KEY_SECRET       the same key's secret
+#   secret   RAZORPAY_WEBHOOK_SECRET   the secret of the webhook to <address>/razorpay/webhook
+#   secret   LICENCE_SIGNING_KEY       node scripts/licence-keygen.mjs (its private half)
+# After the first deploy, set the variables CLOKRIX_LICENCE_URL to the address it prints and
+# CLOKRIX_LICENCE_PUBKEY to the key pair's public half, so builds carry them (ci.yml, release.yml).
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to deploy (normally main)
+        required: true
+        default: main
+  push:
+    tags: ['licence-*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: licence-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Test and deploy the checkout
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: licence/pnpm-lock.yaml
+      - name: Secrets are set
+        env:
+          HAS_ALL: >-
+            ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' && secrets.RAZORPAY_KEY_ID != ''
+            && secrets.RAZORPAY_KEY_SECRET != '' && secrets.RAZORPAY_WEBHOOK_SECRET != '' && secrets.LICENCE_SIGNING_KEY != '' }}
+        run: |
+          if [ "$HAS_ALL" != true ]; then
+            echo "::error::Set the six secrets named in this file's header first"
+            exit 1
+          fi
+      - name: The signing key matches the public key builds carry
+        env:
+          LICENCE_SIGNING_KEY: ${{ secrets.LICENCE_SIGNING_KEY }}
+          PUBKEY: ${{ vars.CLOKRIX_LICENCE_PUBKEY }}
+        run: |
+          derived=$(node scripts/licence-keygen.mjs --public)
+          if [ -n "$PUBKEY" ] && [ "$derived" != "$PUBKEY" ]; then
+            echo "::error::LICENCE_SIGNING_KEY is not the private half of CLOKRIX_LICENCE_PUBKEY: builds would refuse every activation"
+            exit 1
+          fi
+          echo "Public key: $derived" >> "$GITHUB_STEP_SUMMARY"
+      - run: pnpm --dir licence install --frozen-lockfile
+      - run: pnpm --dir licence check
+      - run: pnpm --dir licence test
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+          DEPLOY_REF: ${{ inputs.ref || github.ref_name }}
+          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+          RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+          LICENCE_SIGNING_KEY: ${{ secrets.LICENCE_SIGNING_KEY }}
+        run: |
+          set -o pipefail  # a failed deploy fails the step, through tee
+          pnpm --dir licence exec wrangler deploy | tee deploy.log
+          # The secrets go on after the code, each a new version of the Worker.
+          for name in RAZORPAY_KEY_ID RAZORPAY_KEY_SECRET RAZORPAY_WEBHOOK_SECRET LICENCE_SIGNING_KEY; do
+            printf '%s' "${!name}" | pnpm --dir licence exec wrangler secret put "$name" > /dev/null
+          done
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -n 1)
+          {
+            echo "### Checkout deployed"
+            echo
+            echo "From \`$DEPLOY_REF\` ($(git rev-parse --short HEAD))."
+            if [ -n "$url" ]; then
+              echo
+              echo "Address: $url (the page: $url/buy; Razorpay's webhook: $url/razorpay/webhook)"
+              echo
+              echo "Builds carry it once the repository variable CLOKRIX_LICENCE_URL is set to it."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
