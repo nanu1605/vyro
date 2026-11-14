@@ -23,6 +23,8 @@ pub enum Refusal {
     Collected,
     /// The key is not on this PC (to free it).
     NotHere,
+    /// Asked too often from this address: wait a minute.
+    Busy,
     /// Anything else the checkout said.
     Other(u16, String),
 }
@@ -41,6 +43,7 @@ impl std::fmt::Display for Refusal {
             }
             Self::Collected => f.write_str("This purchase's key was already collected. Enter it in Settings → Clokrix Pro."),
             Self::NotHere => f.write_str("This key is not Pro on this PC."),
+            Self::Busy => f.write_str("The checkout was asked too often from here. Try again in a minute."),
             Self::Other(status, e) => write!(f, "The checkout answered {status}: {e}"),
         }
     }
@@ -74,7 +77,9 @@ fn refusal(status: u16, body: &str) -> Refusal {
         until: None,
     });
     match w.error.as_deref() {
-        Some("no-key") => Refusal::NoKey,
+        // A key typed wrong is refused before it is looked up.
+        Some("no-key" | "key") => Refusal::NoKey,
+        Some("too-many") => Refusal::Busy,
         Some("revoked") => Refusal::Revoked,
         Some("in-use") => Refusal::InUse,
         Some("moved-recently") => Refusal::MovedRecently { until: w.until },
@@ -254,6 +259,8 @@ mod tests {
             (200, r#"{"ok":true}"#),
             (409, r#"{"error":"not-here"}"#),
             (403, r#"{"error":"revoked"}"#),
+            (400, r#"{"error":"key"}"#),
+            (429, r#"{"error":"too-many"}"#),
         ]);
         let pc = "ab".repeat(32);
         let key = "CLKX-ABCDE-FGHJK-MNPQR-STVWX";
@@ -270,6 +277,8 @@ mod tests {
         assert_eq!(c.release(key, &pc), Ok(()));
         assert_eq!(c.release(key, &pc), Err(Refusal::NotHere));
         assert_eq!(c.activate(key, &pc, false), Err(Refusal::Revoked));
+        assert_eq!(c.activate("CLKX-typo", &pc, false), Err(Refusal::NoKey));
+        assert_eq!(c.check(key, &pc), Err(Refusal::Busy));
         let asked = t.join().unwrap();
         assert!(asked[0].starts_with("POST /activate HTTP/1.1"));
         assert!(asked[0].ends_with(&format!(r#"{{"key":"{key}","move":false,"pc":"{pc}"}}"#)));

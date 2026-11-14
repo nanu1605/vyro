@@ -91,6 +91,8 @@ pub struct Stored {
     pub claim: Option<Claim>,
     /// The trial's end has been said.
     pub ended_seen: bool,
+    /// This PC's id where Windows' own could not be read: made once, then kept.
+    pub own_pc: Option<String>,
 }
 
 impl Stored {

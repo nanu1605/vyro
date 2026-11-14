@@ -53,11 +53,20 @@ impl EditionState {
             .and_then(|p| std::fs::read(p).ok())
             .and_then(|b| serde_json::from_slice(&b).ok())
             .unwrap_or_default();
-        let started = stored.start(unix_now());
-        let pc = edition::machine_guid()
-            .map(|g| edition::pc_id(&g))
+        let mut changed = stored.start(unix_now());
+        let pc = match edition::machine_guid() {
+            Some(g) => edition::pc_id(&g),
             // No id to be found: one made for this install, kept with the rest.
-            .unwrap_or_else(|| edition::pc_id(&edition::new_claim()));
+            None => {
+                let own = stored
+                    .own_pc
+                    .clone()
+                    .unwrap_or_else(|| edition::pc_id(&edition::new_claim()));
+                changed |= stored.own_pc.as_deref() != Some(own.as_str());
+                stored.own_pc = Some(own.clone());
+                own
+            }
+        };
         let key = public_key().filter(|_| checkout().is_some());
         let tier = edition::tier(&stored, unix_now(), &pc, key.as_ref());
         log::info!(
@@ -75,7 +84,7 @@ impl EditionState {
             stored: Mutex::new(stored),
             tier: Mutex::new(tier),
         };
-        if started {
+        if changed {
             this.save();
         }
         this
@@ -239,7 +248,9 @@ fn collect(app: &AppHandle, state: &EditionState, c: &Claim) {
                 changed(app);
             }
         }
+        // Not reached, or asked too often: asked again in 5 s.
         Err(Refusal::Unreachable(e)) => log::debug!("edition: claim: {e}"),
+        Err(Refusal::Busy) => log::debug!("edition: claim: busy"),
         Err(e) => {
             log::info!("edition: claim: {e}");
             state.change(|s| {
