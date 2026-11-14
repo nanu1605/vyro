@@ -1,6 +1,7 @@
 <script lang="ts">
   import AlertsPanel from './AlertsPanel.svelte';
   import { getHealthEvents } from '../ipc';
+  import { eventCategories, moreLabel, newestEvents, preview } from '../listing';
   import { fmtTemp, tempText } from '../prefs.svelte';
   import type { HealthEvent, SensorSnapshot, Status } from '../types';
 
@@ -31,7 +32,19 @@
   });
 
   const LABEL: Record<Status, string> = { ok: 'OK', warn: 'Warning', fail: 'Problem', unknown: 'Not monitored' };
-  const newest = $derived([...events].reverse());
+  // The newest few of one part of the PC, or of all, then the rest on asking (2.5).
+  const RECENT = 5;
+  let category = $state<string | null>(null);
+  let allEvents = $state(false);
+  const categories = $derived(eventCategories(events));
+  // A part whose events have all aged out of the list shows all again.
+  const chosen = $derived(categories.some((c) => c.id === category) ? category : null);
+  const newest = $derived(newestEvents(events, chosen));
+  const moreEvents = $derived(moreLabel(newest.length, RECENT, allEvents, 'events'));
+  function pick(id: string | null): void {
+    category = id;
+    allEvents = false;
+  }
   const when = (t: number) => {
     const d = new Date(t * 1000);
     const today = new Date().toDateString() === d.toDateString();
@@ -93,10 +106,19 @@
     <DiagnosticsCard {active} {onhistory} />
   {/await}
 
-  <h2 class="events-title">Recent events</h2>
+  <h2 class="events-title" id="events-title">Recent events</h2>
+  {#if categories.length > 2}
+    <div class="filters" role="group" aria-label="Show events about">
+      {#each categories as c (c.id ?? '')}
+        <button type="button" class="chip" aria-pressed={chosen === c.id} onclick={() => pick(c.id)}>
+          {c.label} <span class="count">{c.count}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
   {#if newest.length}
-    <ol class="events">
-      {#each newest as e, i (i)}
+    <ol class="events" aria-labelledby="events-title">
+      {#each preview(newest, RECENT, allEvents) as e, i (i)}
         <li class="tone-{e.status}">
           <time>{when(e.ts)}</time>
           <span class="dot" aria-hidden="true"></span>
@@ -104,6 +126,9 @@
         </li>
       {/each}
     </ol>
+    {#if moreEvents}
+      <button type="button" class="more" aria-expanded={allEvents} onclick={() => (allEvents = !allEvents)}>{moreEvents}</button>
+    {/if}
   {:else}
     <p class="fine">No thermal limits, throttling, stopped fans or rail problems since Clokrix started.</p>
   {/if}
@@ -213,6 +238,51 @@
     font-size: 0.72rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+  }
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0 0 0.6rem;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.65rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  .chip:hover {
+    color: var(--text);
+  }
+  .chip[aria-pressed='true'] {
+    border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+    background: var(--accent-soft);
+    color: var(--text);
+  }
+  .chip .count {
+    font-variant-numeric: tabular-nums;
+    opacity: 0.8;
+  }
+  .more {
+    margin-top: 0.6rem;
+    padding: 0.3rem 0.8rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .more:hover {
+    border-color: var(--accent);
   }
   .events {
     margin: 0;

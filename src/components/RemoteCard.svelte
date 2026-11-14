@@ -5,6 +5,7 @@
   import { untrack } from 'svelte';
   import Card from './Card.svelte';
   import { fmtDate, fmtDateTime } from '../format';
+  import { moreLabel, preview } from '../listing';
   import {
     cancelRelayPairing,
     cancelRemotePairing,
@@ -55,6 +56,10 @@
   /** The next phone paired may change the PC (1.5); off unless the owner says so. */
   let pairControl = $state(false);
   let actions = $state.raw<PhoneAction[]>([]);
+  /** What phones did, newest first: the latest few, then all that are kept (2.5). */
+  const RECENT = 3;
+  let allActions = $state(false);
+  const moreActions = $derived(moreLabel(actions.length, RECENT, allActions, 'actions'));
   let readiness = $state.raw<WakeReadiness | null>(null);
   let screen = $state.raw<ScreenStatus | null>(null);
   /** The microphone a virtual cable offers: `undefined` while it is looked for. */
@@ -597,13 +602,16 @@
         <div class="group">
           <h3 id="remote-recent">Recent from your phones</h3>
           <ul class="recent" aria-labelledby="remote-recent">
-            {#each actions.slice(0, 10) as a, i (i)}
+            {#each preview(actions, RECENT, allActions) as a, i (i)}
               <li>
                 <span>{a.what}</span>
                 <small>{a.phone} · {fmtDateTime(a.at)}{a.error ? ` · not done: ${a.error}` : ''}</small>
               </li>
             {/each}
           </ul>
+          {#if moreActions}
+            <button type="button" class="more" aria-expanded={allActions} onclick={() => (allActions = !allActions)}>{moreActions}</button>
+          {/if}
         </div>
       {/if}
 
@@ -712,6 +720,20 @@
   }
   .recent small {
     color: var(--muted);
+  }
+  .more {
+    margin-top: 0.5rem;
+    padding: 0.3rem 0.8rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .more:hover {
+    border-color: var(--accent);
   }
   p {
     margin: 0 0 0.5rem;

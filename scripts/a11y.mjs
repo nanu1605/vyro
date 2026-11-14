@@ -884,6 +884,27 @@ async function landed(page, where, id) {
   }
 }
 
+/** After opening the Settings section `id` (2.5): its own window open, holding it, on screen, with the focus. */
+async function inWindow(page, where, id) {
+  checks++;
+  const got = await page.evaluate((id) => {
+    const d = document.querySelector('dialog.section[open]');
+    if (!d) return null;
+    const r = d.getBoundingClientRect();
+    return {
+      has: !!d.querySelector(`#${CSS.escape(id)}`),
+      inside: r.top >= -1 && r.left >= -1 && r.bottom <= innerHeight + 1 && r.right <= innerWidth + 1,
+      focus: d.contains(document.activeElement),
+    };
+  }, id);
+  if (!got) problem(where, 'no Settings window open');
+  else if (!got.has) problem(where, `the window open does not hold #${id}`);
+  else {
+    if (!got.inside) problem(where, 'the window reaches past the edge of the app');
+    if (!got.focus) problem(where, 'the focus is not in the window');
+  }
+}
+
 async function sweepSections(browser) {
   const SECTIONS = [
     ['Units', 'units', 'Settings'],
@@ -915,7 +936,8 @@ async function sweepSections(browser) {
     }
     await page.keyboard.press('Enter');
     await page.waitForTimeout(2500);
-    await landed(page, where, id);
+    if (kind === 'Settings') await inWindow(page, where, id);
+    else await landed(page, where, id);
     await ctx.close();
   }
 }
@@ -941,7 +963,7 @@ async function sweepLinks(browser) {
     await tab(page, 'Dashboard');
     await chip.click();
     await page.waitForTimeout(2500);
-    await landed(page, 'Update chip', 'updates');
+    await inWindow(page, 'Update chip', 'updates');
     await ctx.close();
   }
   {
@@ -959,10 +981,85 @@ async function sweepLinks(browser) {
     else {
       await link.click();
       await page.waitForTimeout(2500);
-      await landed(page, 'Change profile', 'profile');
+      await inWindow(page, 'Change profile', 'profile');
     }
     await ctx.close();
   }
+}
+
+// --- Settings' sections in their own window (2.5). ------------------------------------------------
+// Each name in Settings' list opens its section over the page: axe there, the focus inside, and
+// back on the name once it has closed again, by Escape, its × or a click beside it. Its card in
+// the page keeps its place meanwhile and is back after.
+
+async function sweepSettingsWindow(browser, theme) {
+  const { ctx, page } = await open(browser, BASE, { width: 1440, theme });
+  await page.goto(`${BASE}/`);
+  await page.waitForTimeout(1200);
+  await tab(page, 'Settings');
+  const names = await page.locator('#panel-settings nav a').evaluateAll((as) => as.map((a) => [a.textContent.trim(), a.getAttribute('href').slice(1)]));
+  checks++;
+  if (names.length < 10) problem(`Settings window · ${theme}`, `${names.length} sections in the list`);
+  const ways = ['Escape', 'close', 'beside'];
+  for (const [i, [name, id]] of names.entries()) {
+    const where = `Settings window · ${name} · ${theme}`;
+    const link = page.locator(`#panel-settings nav a[href="#${id}"]`);
+    await link.click();
+    await page.waitForTimeout(400);
+    await inWindow(page, where, id);
+    await axe(page, where);
+    await noSidewaysScroll(page, where);
+    const way = ways[i % ways.length];
+    if (way === 'Escape') await page.keyboard.press('Escape');
+    else if (way === 'close') await page.getByRole('button', { name: `Close ${name}` }).click();
+    // The dimmed page beside the window, near the window's top-left corner.
+    else await page.mouse.click(8, 300);
+    await page.waitForTimeout(500);
+    const after = await page.evaluate((id) => ({
+      open: !!document.querySelector('dialog.section[open]'),
+      back: document.activeElement?.getAttribute('href') === `#${id}`,
+      card: !!document.querySelector(`#panel-settings .card-cell[data-card="${id}"] #${CSS.escape(id)}`),
+      held: document.querySelectorAll('#panel-settings .moved').length,
+    }), id);
+    checks++;
+    if (after.open) problem(where, `still open after ${way}`);
+    else {
+      if (!after.back && way !== 'beside') problem(where, `the focus is not back on "${name}" after ${way}`);
+      if (!after.card || after.held) problem(where, 'its card is not back in the page');
+    }
+  }
+  await ctx.close();
+}
+
+// --- Long lists shown short (2.5): Health's events and what phones did. -------------------------
+
+async function sweepLists(browser) {
+  const { ctx, page } = await open(browser, BASE, { width: 1440, theme: 'midnight' });
+  await page.goto(`${BASE}/`);
+  await page.waitForTimeout(1200);
+  const count = async (rows, where, want) => {
+    checks++;
+    const n = await rows.count();
+    if (n !== want) problem(where, `${n} listed, not ${want}`);
+  };
+  await tab(page, 'Health');
+  const events = page.locator('ol.events > li');
+  await events.first().waitFor();
+  await count(events, 'Health events', 5);
+  await page.getByRole('button', { name: /^Show all \d+ events$/ }).click();
+  await count(events, 'Health events, all', 9);
+  await axe(page, 'Health events, all');
+  await page.getByRole('group', { name: 'Show events about' }).getByRole('button', { name: /^GPU/ }).click();
+  await count(events, 'Health events, GPU only', 2);
+  checks++;
+  if (await page.getByRole('button', { name: 'Show fewer' }).count()) problem('Health events, GPU only', 'still offers Show fewer');
+  await tab(page, 'Settings');
+  const recent = page.locator('#remote ul.recent > li');
+  await recent.first().waitFor();
+  await count(recent, 'Recent from your phones', 3);
+  await page.locator('#remote').getByRole('button', { name: /^Show all \d+ actions$/ }).click();
+  await count(recent, 'Recent from your phones, all', 7);
+  await ctx.close();
 }
 
 // --- A view shows where it was left (2.0.4). ----------------------------------------------------
@@ -1000,13 +1097,23 @@ async function sweepMotion(browser) {
   const { ctx, page } = await open(browser, BASE, { width: 1440, theme: 'cyber', motion: 'reduce' });
   await page.goto(`${BASE}/`);
   await page.waitForTimeout(1200);
+  const still = () =>
+    page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running').map((a) => a.animationName ?? a.constructor.name));
   for (const t of ['Dashboard', 'Cooling', 'Gaming', 'Widgets', 'Settings']) {
     await tab(page, t);
-    const running = await page.evaluate(() =>
-      document.getAnimations().filter((a) => a.playState === 'running').map((a) => a.animationName ?? a.constructor.name),
-    );
+    const running = await still();
     checks++;
     if (running.length) problem(`Reduced motion · ${t}`, `still animating: ${running.join(', ')}`);
+  }
+  // A Settings section's window shows and goes at once.
+  await page.locator('#panel-settings nav a[href="#units"]').click();
+  const opening = await still();
+  checks++;
+  if (opening.length) problem('Reduced motion · Settings window', `animating as it opens: ${opening.join(', ')}`);
+  await page.keyboard.press('Escape');
+  checks++;
+  if (await page.evaluate(() => !!document.querySelector('dialog.section[open]'))) {
+    problem('Reduced motion · Settings window', 'not closed at once on Escape');
   }
   await ctx.close();
 }
@@ -1063,6 +1170,8 @@ try {
     await sweepResize(browser);
     await sweepSections(browser);
     await sweepLinks(browser);
+    for (const theme of ['midnight', 'daylight']) await sweepSettingsWindow(browser, theme);
+    await sweepLists(browser);
     await sweepViewScroll(browser);
     await sweepMotion(browser);
   } finally {

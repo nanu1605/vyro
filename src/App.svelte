@@ -4,6 +4,7 @@
   import HardwarePanel from './components/HardwarePanel.svelte';
   import SystemPanel from './components/SystemPanel.svelte';
   import SettingsPanel from './components/SettingsPanel.svelte';
+  import { openSettingsSection } from './settings-dialog.svelte';
   import DisplaysPanel from './components/DisplaysPanel.svelte';
   import DashboardGrid from './components/DashboardGrid.svelte';
   import StoragePanel from './components/StoragePanel.svelte';
@@ -214,10 +215,11 @@
     openSection('settings', 'remote');
   }
   /** A view, scrolled to one of its cards: once the card shows, and after it while the view's
-   * cards settle (2.0.3, `reveal`). */
+   * cards settle (2.0.3, `reveal`). A Settings section opens in its own window instead (2.5). */
   function openSection(t: Tab, id: string): void {
     select(t);
-    reveal(id);
+    if (t === 'settings') openSettingsSection(id);
+    else reveal(id);
   }
 
   // What's new (1.5): after an update, the new versions' notes once; from Settings or the

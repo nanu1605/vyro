@@ -216,7 +216,12 @@ export function simWakeReadiness(): WakeReadiness {
 export function simPhoneActions(): PhoneAction[] {
   return [
     { at: now() - 3600, phone: 'iPhone · Safari', what: 'Ended chrome.exe', error: null },
+    { at: now() - 5 * 3600, phone: 'Pixel 8 · Chrome', what: 'Profile: Gaming', error: null },
+    { at: now() - DAY, phone: 'iPhone · Safari', what: 'GPU: Efficient', error: null },
+    { at: now() - DAY - 1800, phone: 'Pixel 8 · Chrome', what: 'Ended Discord.exe', error: 'access denied' },
     { at: now() - 2 * DAY, phone: 'iPhone · Safari', what: 'Restart, in 30 s', error: null },
+    { at: now() - 3 * DAY, phone: 'iPhone · Safari', what: 'Sleep', error: null },
+    { at: now() - 4 * DAY, phone: 'Pixel 8 · Chrome', what: 'Fans: back to BIOS', error: null },
   ];
 }
 

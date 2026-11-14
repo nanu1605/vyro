@@ -318,6 +318,10 @@ export async function getHealthEvents(): Promise<HealthEvent[]> {
   if (!inTauri) {
     const now = Math.floor(Date.now() / 1000);
     return [
+      { ts: now - 9000, subsystem: 'Memory', status: 'warn', message: 'Memory nearly full: 94 % in use' },
+      { ts: now - 8400, subsystem: 'Memory', status: 'ok', message: 'Cleared: Memory nearly full: 94 % in use' },
+      { ts: now - 7200, subsystem: 'Fans', status: 'fail', message: 'CPU Fan stopped: 0 RPM' },
+      { ts: now - 7140, subsystem: 'Fans', status: 'ok', message: 'Cleared: CPU Fan stopped: 0 RPM' },
       { ts: now - 5400, subsystem: 'Storage', status: 'warn', message: 'ST2000DM008-2UB102 reports a health warning (details in Storage)' },
       { ts: now - 3900, subsystem: 'CPU', status: 'warn', message: 'CPU running hot: 91 °C' },
       { ts: now - 3720, subsystem: 'CPU', status: 'ok', message: 'Cleared: CPU running hot: 91 °C' },

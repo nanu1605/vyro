@@ -84,7 +84,8 @@
 }
 :root[data-motion='off'] *,
 :root[data-motion='off'] *::before,
-:root[data-motion='off'] *::after {
+:root[data-motion='off'] *::after,
+:root[data-motion='off'] *::backdrop {
   transition: none !important;
   animation: none !important;
 }
@@ -173,7 +174,8 @@ body {
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
-  *::after {
+  *::after,
+  *::backdrop {
     transition: none !important;
     animation: none !important;
   }
