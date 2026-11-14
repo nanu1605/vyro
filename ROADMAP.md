@@ -4578,10 +4578,24 @@ On `claude/vyro-2.0`.
   - the checkout's 15 tests;
   - clippy for Windows with the app, and for Linux;
   - the accessibility sweep's new parts: each section's window in two themes, the lists, Free,
-    the trial and its end.
+    the trial and its end;
+  - the app's client against the checkout running in workerd (Razorpay played by a stand-in),
+    end to end: the key collected once, the activation checked for this PC only, refused on a
+    second PC, moved, moving back refused, freed, and a mistyped key said plainly.
+- [x] **Found on checking the app's calls against the checkout's answers:**
+  - a mistyped key read "The checkout answered 400: key", and now says it is not a key;
+  - "too many requests" ended the wait for a purchase, and now the wait goes on;
+  - a PC whose Windows id cannot be read got a new id at each start, and now keeps one.
+
+  CI's checkout job first failed before any test ran: Vite took the repository root's
+  TypeScript settings, which need the app's packages. The tests have their own now
+  (`licence/test/tsconfig.json`); reproduced here with that package moved aside.
 - [x] **CI green on ed2fa8d** (run 43569598002; the window and the lists: Linux, Windows with the
       smoke test, the relay and phone app, accessibility).
-- [ ] **CI green** on the commit with Free and Pro.
+- [x] **CI green on 61b9628** (run 43572858454; Linux, the checkout's tests, Windows with the
+      smoke test, the relay and phone app, accessibility: 1,998 checks in 596 s). The variables
+      `CLOKRIX_LICENCE_URL` and `CLOKRIX_LICENCE_PUBKEY` are not set yet, so this test build is
+      Pro throughout, as any build without the checkout is.
 - [ ] **The owner's set-up** ([`docs/pro.md`](docs/pro.md) → Setting it up):
   - Razorpay (international payments, keys, webhook);
   - the website's pages and Buy button;
