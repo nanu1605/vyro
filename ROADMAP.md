@@ -4669,6 +4669,10 @@ themes with a switch ("All six, with a switch").
   - the phone's end-to-end test, 40 of 43 checks, axe on every phone screen among them. The
     other 3 are the screen's slow view: this machine's Chromium plays H.264, so the phone took
     the live picture instead, which the test does not expect; CI's Chromium does not.
+- [x] **CI green on fbe0b13** (run 43679873309; Linux, the checkout's tests, the relay and phone
+      app with the end-to-end test (the slow view passing there), Windows with the app's own
+      tests and the installed app's smoke test, the main window now built in code,
+      accessibility).
 
 ## Risks
 
