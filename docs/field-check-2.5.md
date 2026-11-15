@@ -21,7 +21,9 @@ About 45 minutes.
 ## 1. Settings' tiles
 
 1. Settings: a search box and six tiles, each saying how it is set (Appearance "Midnight · glass
-   on", and so on).
+   on", and so on). Full screen, the tiles fill the page's width, 3 across, up to its right
+   edge; the search box is as wide as one tile. Make the window narrower (half the screen,
+   then smaller): 2 across, then 1, still edge to edge, with no tile's line cut short.
 2. Click each tile. Its window grows smoothly out of it, with no stutter or pause, and Escape,
    its ×, or a click on the dimmed page beside it shrinks it back. Do this with Glass effects on
    (on Windows 11, with the desktop showing through), then off (Settings → Appearance), and

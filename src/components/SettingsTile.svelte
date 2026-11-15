@@ -39,13 +39,16 @@
 </button>
 
 <style>
+  /* Sized by Settings' page width (cqi): as today in the default window, a little bigger as the
+     tiles stretch across a wide one. */
   .tile {
+    --pad: clamp(1rem, 0.5rem + 0.9cqi, 1.6rem);
     display: flex;
     align-items: center;
-    gap: 0.85rem;
+    gap: clamp(0.85rem, 0.5rem + 0.6cqi, 1.2rem);
     width: 100%;
-    min-height: 5.25rem;
-    padding: 1rem 1rem 1rem 1.1rem;
+    min-height: clamp(5.25rem, 3rem + 3.5cqi, 7.5rem);
+    padding: 1rem var(--pad) 1rem calc(var(--pad) + 0.1rem);
     color: var(--text);
     font: inherit;
     text-align: left;
@@ -61,12 +64,16 @@
     display: grid;
     flex: none;
     place-items: center;
-    width: 2.6rem;
-    height: 2.6rem;
-    border-radius: 12px;
+    width: clamp(2.6rem, 1.6rem + 1.2cqi, 3.4rem);
+    height: clamp(2.6rem, 1.6rem + 1.2cqi, 3.4rem);
+    border-radius: clamp(12px, 0.4rem + 0.3cqi, 15px);
     background: var(--accent-soft);
     box-shadow: inset 0 0 0 1px var(--accent-line);
     color: var(--accent);
+  }
+  .icon :global(svg) {
+    width: clamp(20px, 0.9rem + 0.4cqi, 26px);
+    height: clamp(20px, 0.9rem + 0.4cqi, 26px);
   }
   :global(:root[data-glass='on']) .icon {
     box-shadow:
@@ -83,7 +90,7 @@
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    font-size: 0.98rem;
+    font-size: clamp(0.98rem, 0.85rem + 0.25cqi, 1.15rem);
     font-weight: 600;
   }
   .name :global(svg) {
@@ -92,7 +99,7 @@
   .line {
     overflow: hidden;
     color: var(--muted);
-    font-size: 0.8rem;
+    font-size: clamp(0.8rem, 0.72rem + 0.15cqi, 0.9rem);
     text-overflow: ellipsis;
     white-space: nowrap;
   }

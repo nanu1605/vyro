@@ -663,16 +663,25 @@
 {/if}
 
 <style>
+  /* The tiles fill the page's width (2.5). Their columns, and their size (SettingsTile), go by the
+     page's own width, not the window's, so a full sidebar or a rail counts. Six tiles make 3 × 2,
+     2 × 3 or 6 × 1: never a half-empty row. A column is never under about 22rem, which the
+     longest state line needs. The search field and its results are one tile wide. */
   .settings {
+    --tile-gap: clamp(0.9rem, 1.1cqi, 1.4rem);
     display: grid;
     gap: 1rem;
-    max-width: 72rem;
+    container-type: inline-size;
+  }
+  .find,
+  .results {
+    --col: 100%;
+    max-width: var(--col);
   }
   .find {
     position: relative;
     display: flex;
     align-items: center;
-    max-width: 30rem;
     color: var(--muted);
   }
   .find :global(svg) {
@@ -701,23 +710,30 @@
   }
   .tiles {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.9rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--tile-gap);
   }
-  @media (max-width: 1100px) {
+  @container (min-width: 44rem) {
     .tiles {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+    .find,
+    .results {
+      --col: calc((100% - var(--tile-gap)) / 2);
+    }
   }
-  @media (max-width: 640px) {
+  @container (min-width: 68rem) {
     .tiles {
-      grid-template-columns: minmax(0, 1fr);
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .find,
+    .results {
+      --col: calc((100% - 2 * var(--tile-gap)) / 3);
     }
   }
   .results {
     display: grid;
     gap: 2px;
-    max-width: 40rem;
     margin: 0;
     padding: 0.35rem;
     border: 1px solid var(--line);

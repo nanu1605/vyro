@@ -59,7 +59,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 42 | Clokrix Free and Pro | Free is the Dashboard and Settings' own sections; Pro is everything, $100 once, for life, on one PC, with a 7-day trial from the first start of 2.5 for new and updated installs alike. Sold by Jainan Infotech through Razorpay, from a checkout of Clokrix's own on Cloudflare (`licence/`) that binds each key to one PC and signs an activation the app checks offline. The code stays open source (MIT OR Apache-2.0): the lock is in the public code, and a build without the checkout's settings is Pro (2.5; the owner, 2026-11-13: "I will sell this product so there will be 2 packages", "He will pay on the jainan infotech website using razorpay platform. And once he has paid the pro version should be activated for lifetime. Price: 100 USD.", "only 7 days free trial", one PC per purchase; [`docs/pro.md`](docs/pro.md)) | decided |
 | 43 | Settings sections in a window | A section named in Settings' list opens in a centred window over the page, growing out of its name and shrinking back into it; Ctrl K and the links that name a section open it the same way (2.5; the owner, 2026-11-13: "That section should pop out of the screen also add animations to it", and chose the centred window) | decided |
 | 44 | Glass | Every theme turns to iOS-like glass: see-through panes over a more colourful wash, lit along their top edge, with layers that float over content (menus, toasts, the top bar, the phone's bars and sheets) frosting what is under them, and windows solid panes lit the same way (decision 45); cards do not blur, since the soft wash under them would look the same. On Windows 11 (build 22523 and later) the window itself turns see-through, with Windows' Acrylic frosting the desktop behind it; AMOLED's black stays black. Settings → Appearance → Glass effects, on by default, turns it off, as do Windows' Transparency effects and a system's request for less transparency; off is 2.4's look exactly. Desktop widgets, the game overlay, the phone app, the LAN page and the checkout page take it too (2.5; the owner, 2026-11-14: "Add IOS like glass effect in whole clokrix including relay, which will make clokrix to look premium.", and chose the see-through window on Windows 11 and all six themes with a switch) | decided |
-| 45 | Settings as tiles | Settings is a search box and six tiles (Appearance; Gaming and overlay; Phone and remote; Startup and units; Updates; Clokrix Pro), each saying its state in a line; a tile opens its group in decision 43's window, grown out of the tile. The search finds any one setting by its name or a word it goes by, and opens its window on it, ringed; Ctrl K too. A setting says what it does in a line, the rest behind "More"; the less used ones are under "Advanced"; Phone and remote is in tabs. Windows (every dialog) are solid panes with glass's sheen and lit edge, frosting nothing: the blur was redone at every frame they grew (2.5; the owner, 2026-11-15: "The settings pop out animation is very laggy." and "The setting page attached in the screenshot has too much on the page which makes the settings page very user-unfriendly. Please share ideas to make it more user-friendly.", and chose tiles that pop out with all four tidy-ups: six groups, shorter text, the advanced parts folded, search) | decided |
+| 45 | Settings as tiles | Settings is a search box and six tiles (Appearance; Gaming and overlay; Phone and remote; Startup and units; Updates; Clokrix Pro), each saying its state in a line; a tile opens its group in decision 43's window, grown out of the tile. The search finds any one setting by its name or a word it goes by, and opens its window on it, ringed; Ctrl K too. A setting says what it does in a line, the rest behind "More"; the less used ones are under "Advanced"; Phone and remote is in tabs. Windows (every dialog) are solid panes with glass's sheen and lit edge, frosting nothing: the blur was redone at every frame they grew (2.5; the owner, 2026-11-15: "The settings pop out animation is very laggy." and "The setting page attached in the screenshot has too much on the page which makes the settings page very user-unfriendly. Please share ideas to make it more user-friendly.", and chose tiles that pop out with all four tidy-ups: six groups, shorter text, the advanced parts folded, search). The tiles fill the page's width, 3, 2 or 1 across by the page's own width, and grow a little on a wide screen (the owner, the same day: "the settings page is now good but the cards are in the left aligned which does not look good, make the cards size dynamic so they covers the screen according to the screen size.", and chose "Fill the width") | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -4750,6 +4750,35 @@ tabs, and a search for any setting (decision 45).
 - [x] **CI green on 79a1c7c** (run 43715811613; Linux, the checkout's tests, the relay and phone
       app, Windows with the app's own tests and the installed app's smoke test, and the
       accessibility sweep with Settings' tiles, windows, tabs and search).
+
+The owner's seventh message (2026-11-15), with a screenshot of Settings on a 2560 px wide screen:
+
+> the settings page is now good but the cards are in the left aligned which does not look good,
+> make the cards size dynamic so they covers the screen according to the screen size.
+
+Asked how much of the page the tiles should fill, they chose "Fill the width" over "Fill the
+whole page". The page stopped at 72 rem (1,152 px), so on their screen the tiles filled its left
+half; the columns went by the window's width, sidebar included.
+
+- [x] **Tiles fill the width** (`SettingsPanel.svelte`, `SettingsTile.svelte`): the page has no
+      cap and is a size container, so its columns go by its own width: 3 across from 68 rem, 2
+      from 44 rem, else 1 (six tiles: never a half-empty row), a column never under about
+      22 rem, which the longest state line needs. A tile's height, padding, icon and text grow
+      with the page's width between today's sizes and a cap. The search field and its results
+      are one tile wide.
+
+  | Window | Columns | Tile | Icon |
+  |---|---:|---|---:|
+  | 2560 × 1440 | 3 | 732 × 120 px (789 with the sidebar a rail) | 52 px |
+  | 1600 × 900 | 3 | 420 × 93 px (476 × 99) | 42 px |
+  | 1100 × 760 (default; the sidebar is a rail) | 2 | 482 × 84 px | 42 px |
+  | 700 × 760 | 1 | 592 × 84 px | 42 px |
+  | 480 × 520 | 1 | 385 × 84 px | 42 px |
+
+  At every size the last tile ends at the page's gutter, no state line is cut short, the window
+  does not scroll sideways, and the search field is exactly one tile wide.
+- [x] **Locally:** types, 314 frontend tests, the bundle budget, and the whole accessibility
+      sweep (2,162 checks in 859 s, clean but for the favicon this checkout lacks).
 
 ## Risks
 
