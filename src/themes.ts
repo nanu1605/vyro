@@ -389,6 +389,19 @@ export const nearWarning = (hex: string): boolean => {
  * colour is the main one turned round the hue circle (away from warning hues); a grey keeps
  * the theme's own second colour. */
 export function customPair(t: Theme, hex: string, glass = false): { fill: [string, string]; text: [string, string] } {
+  // Asked for again and again with the same colours (each theme's swatch in Settings, every
+  // look applied): worked out once each. Few are ever picked; dragging the wheel makes many.
+  const key = `${t.id}|${hex.toLowerCase()}|${glass ? 1 : 0}`;
+  const had = pairs.get(key);
+  if (had) return had;
+  if (pairs.size >= 512) pairs.clear();
+  const made = workPair(t, hex, glass);
+  pairs.set(key, made);
+  return made;
+}
+const pairs = new Map<string, { fill: [string, string]; text: [string, string] }>();
+
+function workPair(t: Theme, hex: string, glass: boolean): { fill: [string, string]; text: [string, string] } {
   const x = toLch(hex);
   let second = t.accent[1];
   if (x.c >= 0.03) {

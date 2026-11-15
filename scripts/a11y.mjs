@@ -15,7 +15,9 @@
 // lands on it from a fresh start; since 2.0.4, so do the update chip and "Change profile", and a
 // view shows where it was left. Since 2.5 also: everything with glass on (the default); the
 // see-through window over the lightest and darkest Windows' Acrylic gets; and glass off as 2.4
-// had it, off when the system asks for less transparency, and the switch that turns it off.
+// had it, off when the system asks for less transparency, and the switch that turns it off. And
+// Settings as tiles (2.5): each tile's window, its "More" and "Advanced", Remote's tabs, and the
+// search finding every setting in the index (src/settings-map.ts) and opening its window on it.
 // The phone app itself is swept by scripts/relay-e2e.mjs.
 // Runs against the browser preview
 // (sample data, two GPUs as on the owner's PC) of a finished build:
@@ -303,6 +305,26 @@ async function tab(page, name) {
   await page.waitForTimeout(600);
 }
 
+/** Opens a Settings group's window by its tile (2.5), Settings being shown; returns the window. */
+async function openGroup(page, id) {
+  await page.locator(`#panel-settings [data-group="${id}"]`).click();
+  const win = page.locator('dialog.section[open]');
+  await win.waitFor();
+  await page.waitForTimeout(400);
+  return win;
+}
+
+/** Closes the Settings window open, and waits for it to have gone. */
+async function closeGroup(page) {
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('dialog.section[open]'));
+}
+
+/** Every setting in Settings' index (src/settings-map.ts): its row's id, name and Remote's tab. */
+const SETTINGS_INDEX = [...readFileSync(new URL('../src/settings-map.ts', import.meta.url), 'utf8').matchAll(/\{ id: '(set-[^']+)', label: '([^']+)', part: '([^']+)'(?:, tab: '([^']+)')?/g)].map(
+  ([, id, label, part, tab]) => ({ id, label, part, tab }),
+);
+
 // --- The app: every tab, every theme, both widths. -------------------------------------------
 
 async function sweepApp(browser, theme, width) {
@@ -334,13 +356,15 @@ async function sweepCustomAccent(browser, theme, accent, width) {
     await tab(page, t);
     const where = `${t} · ${theme} with accent ${accent} ${width}px`;
     if (t === 'Settings') {
-      // The colour wheel shows with a custom accent.
+      // The colour wheel shows with a custom accent, in Appearance's window.
+      await openGroup(page, 'appearance');
       const wheel = page.getByRole('slider', { name: /hue and saturation/ });
       await wheel.scrollIntoViewIfNeeded();
       if ((await wheel.count()) === 0) problem(where, 'no colour wheel for a custom accent');
     }
     await axe(page, where);
     await noSidewaysScroll(page, where);
+    if (t === 'Settings') await closeGroup(page);
   }
   await ctx.close();
 }
@@ -414,10 +438,11 @@ async function sweepDialogs(browser, theme, width) {
   await noSidewaysScroll(page, at('Share card'));
   await page.keyboard.press('Escape');
 
-  // The remote companion's card: confirmation, then pairing with its QR code.
+  // The remote companion: confirmation, then pairing with its QR code (Phone and remote's window,
+  // its This network tab).
   await tab(page, 'Settings');
-  const remote = page.locator('#remote');
-  await remote.scrollIntoViewIfNeeded();
+  const remote = await openGroup(page, 'remote');
+  await remote.getByRole('tab', { name: 'This network' }).click();
   await remote.getByRole('button', { name: 'Turn on…' }).click();
   await axe(page, at('Remote confirmation'));
   await remote.getByRole('button', { name: 'Turn on', exact: true }).click();
@@ -425,16 +450,23 @@ async function sweepDialogs(browser, theme, width) {
   await page.waitForTimeout(300);
   await axe(page, at('Remote pairing'));
   await noSidewaysScroll(page, at('Remote pairing'));
-  // Reach from anywhere (1.4): its confirmation, then pairing a phone, and the options.
+  // Reach from anywhere (1.4): its confirmation, then pairing a phone (the Phones tab), and the
+  // other tabs it brings: Screen and Wake; and Options.
+  await remote.getByRole('tab', { name: 'Phones' }).click();
   await remote.getByRole('button', { name: 'Turn on reach from anywhere…' }).click();
   await axe(page, at('Relay confirmation'));
   await remote.getByRole('button', { name: 'Turn on reach from anywhere', exact: true }).click();
   await remote.getByRole('button', { name: 'Pair a phone' }).click();
   await remote.getByRole('img', { name: /pairs a phone/ }).waitFor();
-  await remote.getByText('Options', { exact: true }).click();
-  await page.waitForTimeout(300);
-  await axe(page, at('Relay pairing and options'));
-  await noSidewaysScroll(page, at('Relay pairing and options'));
+  await axe(page, at('Relay pairing'));
+  await noSidewaysScroll(page, at('Relay pairing'));
+  for (const name of ['Screen', 'Wake', 'Options']) {
+    await remote.getByRole('tab', { name }).click();
+    await page.waitForTimeout(300);
+    await axe(page, at(`Remote's ${name} tab`));
+    await noSidewaysScroll(page, at(`Remote's ${name} tab`));
+  }
+  await closeGroup(page);
   // The screen shared with a phone (1.7): the banner on every view (with the phone's
   // microphone on), and Stop.
   await page.goto(`${BASE}/?screen=mic`);
@@ -614,7 +646,9 @@ async function sweepDashboard(browser, theme, width, shows = 'owner') {
   await page.waitForTimeout(1200);
   // The preview always runs a game, and its profile hides the detail cards: keep yours.
   await tab(page, 'Settings');
+  await openGroup(page, 'gaming');
   await page.getByRole('switch', { name: /^Switch profiles for games/ }).uncheck();
+  await closeGroup(page);
   await tab(page, 'Dashboard');
   await page.waitForTimeout(800);
   const where = `Dashboard (${shows}) · ${theme} ${width}px`;
@@ -738,14 +772,16 @@ async function sweepKeyboard(browser) {
 }
 
 // --- Moving cards (2.0.2): by the grip, by its keys, back on Escape, kept after a reload. --------
+// On System's cards (Settings' were moved until its tiles, 2.5).
 
 async function sweepCards(browser) {
   const { ctx, page } = await open(browser, BASE, { width: 1440, theme: 'midnight' });
   await page.goto(`${BASE}/`);
   await page.waitForTimeout(1200);
-  await tab(page, 'Settings');
-  const order = () => page.evaluate(() => [...document.querySelectorAll('#panel-settings .card-cell')].map((c) => c.dataset.card));
-  const said = () => page.locator('#panel-settings [aria-live]').last().textContent();
+  await tab(page, 'System');
+  await page.waitForTimeout(600);
+  const order = () => page.evaluate(() => [...document.querySelectorAll('#panel-system .card-cell')].map((c) => c.dataset.card));
+  const said = () => page.locator('#panel-system [aria-live]').last().textContent();
   const drag = async (name, onto, { drop = true } = {}) => {
     await page.locator(`#${onto}`).scrollIntoViewIfNeeded();
     await page.getByRole('button', { name: `Move ${name}` }).scrollIntoViewIfNeeded();
@@ -764,40 +800,39 @@ async function sweepCards(browser) {
   const first = await order();
   checks++;
   // Dragged by its grip onto the first card, it takes its place.
-  await drag('General', 'appearance');
+  await drag('Security', 'sys-os');
   await page.waitForTimeout(400);
   let now = await order();
-  if (now[0] !== 'general') problem('Cards', `dragged onto Appearance, General is at ${now.indexOf('general') + 1}: ${now.join(', ')}`);
-  if (!/General: 1 of/.test((await said()) ?? '')) problem('Cards', `after the drag the screen reader hears "${await said()}"`);
+  if (now[0] !== 'sys-security') problem('Cards', `dragged onto Operating system, Security is at ${now.indexOf('sys-security') + 1}: ${now.join(', ')}`);
+  if (!/Security: 1 of/.test((await said()) ?? '')) problem('Cards', `after the drag the screen reader hears "${await said()}"`);
   // Its arrow keys move it, and it keeps the focus.
-  await page.getByRole('button', { name: 'Move General' }).focus();
+  await page.getByRole('button', { name: 'Move Security' }).focus();
   await page.keyboard.press('ArrowDown');
   await page.waitForTimeout(400);
   now = await order();
-  if (now[1] !== 'general') problem('Cards', `ArrowDown on its grip left General at ${now.indexOf('general') + 1}`);
+  if (now[1] !== 'sys-security') problem('Cards', `ArrowDown on its grip left Security at ${now.indexOf('sys-security') + 1}`);
   const focused = await page.evaluate(() => document.activeElement?.getAttribute('aria-label'));
-  if (focused !== 'Move General') problem('Cards', `after ArrowDown the focus is on ${focused ?? 'nothing'}`);
+  if (focused !== 'Move Security') problem('Cards', `after ArrowDown the focus is on ${focused ?? 'nothing'}`);
   // Escape while dragging puts it back.
   const before = await order();
-  await drag('Profile', 'appearance', { drop: false });
+  await drag('Uptime', 'sys-security', { drop: false });
   const mid = await order();
   await page.keyboard.press('Escape');
   await page.mouse.up();
   await page.waitForTimeout(400);
-  if (mid.join() === before.join()) problem('Cards', 'dragging Profile over Appearance moved nothing');
+  if (mid.join() === before.join()) problem('Cards', 'dragging Uptime over Security moved nothing');
   if ((await order()).join() !== before.join()) problem('Cards', `Escape left ${(await order()).join(', ')}`);
   if (await page.locator('.card-ghost').count()) problem('Cards', 'the dragged card stayed on screen after Escape');
-  // Kept after a reload, in the section list too, each card where it was.
-  const places = () => page.evaluate(() => [...document.querySelectorAll('#panel-settings .card-cell')].map((c) => `${c.dataset.card} ${c.style.gridColumn} ${c.style.gridRowStart}`).join('; '));
+  // Kept after a reload, each card where it was.
+  const places = () => page.evaluate(() => [...document.querySelectorAll('#panel-system .card-cell')].map((c) => `${c.dataset.card} ${c.style.gridColumn} ${c.style.gridRowStart}`).join('; '));
   const left = await places();
   await page.reload();
   await page.waitForTimeout(1200);
-  await tab(page, 'Settings');
+  await tab(page, 'System');
+  await page.waitForTimeout(600);
   now = await order();
   if (now.join() !== before.join()) problem('Cards', `after a reload: ${now.join(', ')}`);
   if ((await places()) !== left) problem('Cards', `after a reload the cards moved: ${await places()}`);
-  const toc = await page.locator('#panel-settings nav a').first().textContent();
-  if (toc !== 'Appearance') problem('Cards', `the section list starts with ${toc}, not Appearance`);
   // A wider window fits them anew from the owner's order; back at this size they are as left.
   await page.setViewportSize({ width: 2560, height: 900 });
   await page.waitForTimeout(600);
@@ -805,7 +840,13 @@ async function sweepCards(browser) {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(600);
   if ((await places()) !== left) problem('Cards', `back at 1440 px the cards moved: ${await places()}`);
-  await page.getByRole('button', { name: 'Put cards back' }).click();
+  // "Put cards back" is in Settings → Appearance → Advanced.
+  await tab(page, 'Settings');
+  const win = await openGroup(page, 'appearance');
+  await win.locator('details.adv > summary').click();
+  await win.getByRole('button', { name: 'Put cards back' }).click();
+  await closeGroup(page);
+  await tab(page, 'System');
   await page.waitForTimeout(400);
   if ((await order()).join() !== first.join()) problem('Cards', `put back: ${(await order()).join(', ')}`);
   await ctx.close();
@@ -887,15 +928,20 @@ async function landed(page, where, id) {
   }
 }
 
-/** After opening the Settings section `id` (2.5): its own window open, holding it, on screen, with the focus. */
+/** After opening the Settings group, section or setting `id` (2.5): its window open, holding it
+ * where it can be seen (unfolded, its tab shown, scrolled to), on screen, with the focus. */
 async function inWindow(page, where, id) {
   checks++;
   const got = await page.evaluate((id) => {
     const d = document.querySelector('dialog.section[open]');
     if (!d) return null;
     const r = d.getBoundingClientRect();
+    const el = d.querySelector(`#${CSS.escape(id)}`);
+    const body = d.querySelector('.body')?.getBoundingClientRect();
+    const e = el?.getBoundingClientRect();
     return {
-      has: !!d.querySelector(`#${CSS.escape(id)}`),
+      has: !!el,
+      seen: !!e && !!body && e.height > 0 && e.top < body.bottom - 8 && e.bottom > body.top + 8,
       inside: r.top >= -1 && r.left >= -1 && r.bottom <= innerHeight + 1 && r.right <= innerWidth + 1,
       focus: d.contains(document.activeElement),
     };
@@ -903,21 +949,26 @@ async function inWindow(page, where, id) {
   if (!got) problem(where, 'no Settings window open');
   else if (!got.has) problem(where, `the window open does not hold #${id}`);
   else {
+    if (!got.seen) problem(where, `#${id} is not in sight in its window`);
     if (!got.inside) problem(where, 'the window reaches past the edge of the app');
     if (!got.focus) problem(where, 'the focus is not in the window');
   }
 }
 
 async function sweepSections(browser) {
+  // Settings' groups (2.5) open at their top, its settings at the setting: found by a word they
+  // go by, folded away under Advanced, or on one of Remote's tabs.
   const SECTIONS = [
-    ['Units', 'units', 'Settings'],
+    ['Startup and units', 'general', 'Settings', 'units'],
+    ['Temperature unit', 'set-units', 'Settings', 'fahrenheit'],
     ['Updates', 'updates', 'Settings'],
-    ['Hidden sensors', 'hidden-sensors', 'Settings'],
-    ['Remote', 'remote', 'Settings'],
-    // Where Gaming's "Turn it on in Settings" and the Dashboard's "Change profile" go (2.0.4); the
-    // Gaming view comes first for "gaming" alone.
-    ['Gaming', 'gaming', 'Settings', 'gaming settings'],
-    ['Profile', 'profile', 'Settings'],
+    ['Hidden sensors', 'set-hidden', 'Settings'],
+    ['Phone and remote', 'remote', 'Settings'],
+    ['Port on this network', 'set-remote-port', 'Settings', 'port on this'],
+    // The Gaming view comes first for "gaming and overlay" alone.
+    ['Gaming and overlay', 'profile', 'Settings', 'gaming and overlay settings'],
+    ['Switch profiles for games', 'set-game-profiles', 'Settings', 'switch profiles'],
+    ['Overlay size', 'set-overlay-size', 'Settings'],
     ['Alerts', 'alerts', 'Health'],
     ['Diagnostics', 'diagnostics', 'Health'],
   ];
@@ -958,11 +1009,11 @@ async function sweepLinks(browser) {
     await page.waitForTimeout(1200);
     // The preview's check finds a version, and the chip shows from every view.
     await tab(page, 'Settings');
+    await openGroup(page, 'updates');
     await page.getByRole('button', { name: 'Check now' }).click();
     const chip = page.getByRole('button', { name: /is available/ });
     await chip.waitFor();
-    // Settings at its top again: the click scrolled it to the button, and it would show there.
-    await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
+    await closeGroup(page);
     await tab(page, 'Dashboard');
     await chip.click();
     await page.waitForTimeout(2500);
@@ -975,8 +1026,9 @@ async function sweepLinks(browser) {
     await page.waitForTimeout(1200);
     // Gaming's compact Dashboard leaves the detail cards out, and says so.
     await tab(page, 'Settings');
+    await openGroup(page, 'gaming');
     await page.getByRole('radio', { name: /^Gaming/ }).check();
-    await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
+    await closeGroup(page);
     await tab(page, 'Dashboard');
     const link = page.getByRole('button', { name: 'Change profile' });
     checks++;
@@ -990,46 +1042,124 @@ async function sweepLinks(browser) {
   }
 }
 
-// --- Settings' sections in their own window (2.5). ------------------------------------------------
-// Each name in Settings' list opens its section over the page: axe there, the focus inside, and
-// back on the name once it has closed again, by Escape, its × or a click beside it. Its card in
-// the page keeps its place meanwhile and is back after.
+// --- Settings as tiles (2.5): each group in its own window. -------------------------------------
+// Each tile opens its group over the page: axe there, the focus inside, and back on the tile once
+// it has closed again, by Escape, its × or a click beside it. "More" and "Advanced" open, and
+// Remote's tabs each show, and move with the arrow keys.
+
+/** The part a group's window starts with (src/settings-map.ts). */
+const FIRST_PART = { appearance: 'appearance', gaming: 'profile', remote: 'remote', general: 'general', updates: 'updates', pro: 'pro' };
 
 async function sweepSettingsWindow(browser, theme) {
   const { ctx, page } = await open(browser, BASE, { width: 1440, theme });
   await page.goto(`${BASE}/`);
   await page.waitForTimeout(1200);
   await tab(page, 'Settings');
-  const names = await page.locator('#panel-settings nav a').evaluateAll((as) => as.map((a) => [a.textContent.trim(), a.getAttribute('href').slice(1)]));
+  await axe(page, `Settings' tiles · ${theme}`);
+  const groups = await page.locator('#panel-settings [data-group]').evaluateAll((ts) => ts.map((t) => [t.querySelector('.name')?.textContent.trim(), t.dataset.group]));
   checks++;
-  if (names.length < 10) problem(`Settings window · ${theme}`, `${names.length} sections in the list`);
+  if (groups.length !== 6) problem(`Settings window · ${theme}`, `${groups.length} tiles, not 6`);
   const ways = ['Escape', 'close', 'beside'];
-  for (const [i, [name, id]] of names.entries()) {
+  for (const [i, [name, id]] of groups.entries()) {
     const where = `Settings window · ${name} · ${theme}`;
-    const link = page.locator(`#panel-settings nav a[href="#${id}"]`);
-    await link.click();
+    await page.locator(`#panel-settings [data-group="${id}"]`).click();
     await page.waitForTimeout(400);
-    await inWindow(page, where, id);
+    await inWindow(page, where, FIRST_PART[id]);
     await axe(page, where);
     await noSidewaysScroll(page, where);
+    const win = page.locator('dialog.section[open]');
+    // "More" opens the rest of what a setting does; "Advanced" the less used ones.
+    const more = win.locator('.more-toggle').first();
+    if (await more.count()) {
+      await more.click();
+      checks++;
+      if ((await more.getAttribute('aria-expanded')) !== 'true' || !(await win.locator('.more-text:not([hidden])').count())) problem(where, '"More" did not open');
+      await axe(page, `${where}, More`);
+    }
+    for (const adv of await win.locator('details.adv > summary').all()) await adv.click();
+    if (await win.locator('details.adv[open]').count()) await axe(page, `${where}, Advanced`);
     const way = ways[i % ways.length];
     if (way === 'Escape') await page.keyboard.press('Escape');
     else if (way === 'close') await page.getByRole('button', { name: `Close ${name}` }).click();
-    // The dimmed page beside the window, near the window's top-left corner.
+    // The dimmed page beside the window, near the app's left edge.
     else await page.mouse.click(8, 300);
     await page.waitForTimeout(500);
     const after = await page.evaluate((id) => ({
       open: !!document.querySelector('dialog.section[open]'),
-      back: document.activeElement?.getAttribute('href') === `#${id}`,
-      card: !!document.querySelector(`#panel-settings .card-cell[data-card="${id}"] #${CSS.escape(id)}`),
-      held: document.querySelectorAll('#panel-settings .moved').length,
+      back: document.activeElement?.closest('[data-group]')?.getAttribute('data-group') === id,
     }), id);
     checks++;
     if (after.open) problem(where, `still open after ${way}`);
-    else {
-      if (!after.back && way !== 'beside') problem(where, `the focus is not back on "${name}" after ${way}`);
-      if (!after.card || after.held) problem(where, 'its card is not back in the page');
+    else if (!after.back && way !== 'beside') problem(where, `the focus is not back on its tile after ${way}`);
+  }
+  // Remote's tabs: each shown alone; the arrow keys move along them, the focus with them.
+  const win = await openGroup(page, 'remote');
+  const tabs = win.getByRole('tab');
+  const names = await tabs.allTextContents();
+  checks++;
+  if (names.length < 3) problem(`Remote's tabs · ${theme}`, `only ${names.join(', ')}`);
+  for (const name of names) {
+    await win.getByRole('tab', { name }).click();
+    await page.waitForTimeout(200);
+    checks++;
+    if ((await win.getByRole('tab', { name }).getAttribute('aria-selected')) !== 'true') problem(`Remote's tabs · ${theme}`, `${name} not selected once clicked`);
+    await axe(page, `Remote's ${name} tab · ${theme}`);
+  }
+  await win.getByRole('tab', { name: names[0] }).click();
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(200);
+  const moved = await page.evaluate(() => ({ focus: document.activeElement?.textContent?.trim(), selected: document.activeElement?.getAttribute('aria-selected') }));
+  checks++;
+  if (moved.focus !== names[1] || moved.selected !== 'true') problem(`Remote's tabs · ${theme}`, `ArrowRight left the focus on ${moved.focus}`);
+  await closeGroup(page);
+  await ctx.close();
+}
+
+// --- Settings' search (2.5): every setting found by its name, its window opened on it. ----------
+
+async function sweepSettingsSearch(browser) {
+  const { ctx, page } = await open(browser, BASE, { width: 1440, theme: 'midnight' });
+  await page.goto(`${BASE}/`);
+  await page.waitForTimeout(1200);
+  await tab(page, 'Settings');
+  // Reach from anywhere on, for Remote's Screen and Wake tabs.
+  const remote = await openGroup(page, 'remote');
+  await remote.getByRole('button', { name: 'Turn on reach from anywhere…' }).click();
+  await remote.getByRole('button', { name: 'Turn on reach from anywhere', exact: true }).click();
+  await remote.getByRole('tab', { name: 'Wake' }).waitFor();
+  await closeGroup(page);
+  const box = page.getByRole('combobox', { name: 'Search settings' });
+  await box.fill('fahrenheit');
+  await page.waitForTimeout(200);
+  await axe(page, 'Settings search, results');
+  checks++;
+  const top = await page.locator('#settings-found [role="option"]').first().textContent();
+  if (!top?.startsWith('Temperature unit')) problem('Settings search · fahrenheit', `the first result is "${top}"`);
+  await box.fill('nothing like this');
+  await page.waitForTimeout(200);
+  checks++;
+  if (!(await page.getByText('Nothing in Settings matches').count())) problem('Settings search · no match', 'says nothing');
+  checks++;
+  if (SETTINGS_INDEX.length < 30) problem('Settings search', `only ${SETTINGS_INDEX.length} settings read from settings-map.ts`);
+  for (const s of SETTINGS_INDEX) {
+    const where = `Settings search · ${s.label}`;
+    await box.fill(s.label);
+    await page.waitForTimeout(150);
+    const first = await page.locator('#settings-found [role="option"]').first().getAttribute('id');
+    checks++;
+    if (first !== `found-${s.id}`) {
+      problem(where, `the first result is ${first}`);
+      continue;
     }
+    await box.press('Enter');
+    await page.waitForTimeout(700);
+    // Clokrix Pro's is its whole window.
+    await inWindow(page, where, s.id === 'set-pro' ? 'pro' : s.id);
+    if (s.id !== 'set-pro') {
+      checks++;
+      if (!(await page.locator(`dialog.section[open] #${s.id}.ringed`).count())) problem(where, 'not ringed');
+    }
+    await closeGroup(page);
   }
   await ctx.close();
 }
@@ -1057,10 +1187,12 @@ async function sweepLists(browser) {
   checks++;
   if (await page.getByRole('button', { name: 'Show fewer' }).count()) problem('Health events, GPU only', 'still offers Show fewer');
   await tab(page, 'Settings');
-  const recent = page.locator('#remote ul.recent > li');
+  const win = await openGroup(page, 'remote');
+  await win.getByRole('tab', { name: 'Activity' }).click();
+  const recent = win.locator('ul.recent > li');
   await recent.first().waitFor();
   await count(recent, 'Recent from your phones', 3);
-  await page.locator('#remote').getByRole('button', { name: /^Show all \d+ actions$/ }).click();
+  await win.getByRole('button', { name: /^Show all \d+ actions$/ }).click();
   await count(recent, 'Recent from your phones, all', 7);
   await ctx.close();
 }
@@ -1089,10 +1221,11 @@ async function sweepFree(browser, theme) {
     await tab(page, 'Dashboard');
     checks++;
     if (await page.locator('#panel-dashboard').getByText('part of Clokrix Pro').count()) problem(at('Dashboard'), 'the Dashboard is locked');
-    // A Pro section of Settings, then the Pro card, each in its window.
+    // A Pro group of Settings (its tile marked), then the Pro card, each in its window.
     await tab(page, 'Settings');
-    await page.locator('#panel-settings nav a[href="#remote"]').click();
-    await page.waitForTimeout(400);
+    checks++;
+    if (!(await page.locator('#panel-settings [data-group="remote"]').getByText('part of Pro').count())) problem(at('Remote tile'), 'not marked Pro');
+    await openGroup(page, 'remote');
     checks++;
     if (!(await page.locator('dialog.section[open]').getByText('Part of Clokrix Pro.').count())) problem(at('Remote'), 'no Pro note in its window');
     await axe(page, at('Remote section'));
@@ -1152,6 +1285,7 @@ async function sweepFree(browser, theme) {
 // --- A view shows where it was left (2.0.4). ----------------------------------------------------
 // The views share the window's scroll, and each opened as far down as the one before it was: with
 // the Dashboard scrolled to 800 px, Settings opened 800 px down; with Settings at 1,000, Health.
+// (Settings is its tiles since 2.5, too short to scroll: Hardware, 300 px down, stands in for it.)
 
 async function sweepViewScroll(browser) {
   const { ctx, page } = await open(browser, BASE, { width: 1440, theme: 'midnight' });
@@ -1166,13 +1300,14 @@ async function sweepViewScroll(browser) {
   };
   await scroll(800);
   const dashboard = await y();
-  await tab(page, 'Settings');
-  await at('Settings, first shown, after the Dashboard was scrolled', 0);
-  await scroll(600);
+  await tab(page, 'Hardware');
+  await page.waitForTimeout(600);
+  await at('Hardware, first shown, after the Dashboard was scrolled', 0);
+  await scroll(300);
   await tab(page, 'Health');
-  await at('Health, first shown, after Settings was scrolled', 0);
-  await tab(page, 'Settings');
-  await at('Settings again', 600);
+  await at('Health, first shown, after Hardware was scrolled', 0);
+  await tab(page, 'Hardware');
+  await at('Hardware again', 300);
   await tab(page, 'Dashboard');
   await at('the Dashboard again', dashboard);
   await ctx.close();
@@ -1192,8 +1327,8 @@ async function sweepMotion(browser) {
     checks++;
     if (running.length) problem(`Reduced motion · ${t}`, `still animating: ${running.join(', ')}`);
   }
-  // A Settings section's window shows and goes at once.
-  await page.locator('#panel-settings nav a[href="#units"]').click();
+  // A Settings group's window shows and goes at once.
+  await page.locator('#panel-settings [data-group="general"]').click();
   const opening = await still();
   checks++;
   if (opening.length) problem('Reduced motion · Settings window', `animating as it opens: ${opening.join(', ')}`);
@@ -1270,7 +1405,7 @@ async function sweepGlass(browser) {
     await page.goto(`${BASE}/`);
     await page.waitForTimeout(1200);
     await tab(page, 'Settings');
-    await page.locator('#panel-settings nav a[href="#appearance"]').click();
+    await openGroup(page, 'appearance');
     const sw = page.getByRole('switch', { name: /Glass effects/ });
     for (const want of ['off', 'on']) {
       await sw.click();
@@ -1287,7 +1422,7 @@ async function sweepGlass(browser) {
     await page.goto(`${BASE}/?transparency=off`);
     await page.waitForTimeout(1200);
     await tab(page, 'Settings');
-    await page.locator('#panel-settings nav a[href="#appearance"]').click();
+    await openGroup(page, 'appearance');
     const sw = page.getByRole('switch', { name: /Glass effects/ });
     await sw.waitFor();
     const state = { ...(await glassOf(page)), disabled: await sw.isDisabled(), says: await page.getByText('Off in Windows (Transparency effects)').count() };
@@ -1350,6 +1485,7 @@ try {
     await sweepSections(browser);
     await sweepLinks(browser);
     for (const theme of ['midnight', 'daylight']) await sweepSettingsWindow(browser, theme);
+    await sweepSettingsSearch(browser);
     await sweepLists(browser);
     for (const theme of ['midnight', 'daylight']) await sweepFree(browser, theme);
     await sweepViewScroll(browser);

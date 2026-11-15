@@ -39,14 +39,23 @@ dialog[open]::backdrop {
   }
 }
 
-/* Glass (2.5, theme.css): layers that float over content (every dialog, and what carries
-   .glass-float: toasts, menus, the editing bar) frost what is under them. The dim behind a
-   dialog stays a plain dim: blurring the whole window under Ctrl K made typing lag (2.0.2). */
+/* Glass (2.5, theme.css): small layers that float over content (what carries .glass-float:
+   toasts, menus, the editing bar) frost what is under them. Windows (every dialog: Settings',
+   Ctrl K, What's new) are solid panes with glass's sheen and lit edge, frosting nothing: over
+   their dim a blur hardly shows, and it was redone at every frame they grew, scrolled or typed
+   in (Settings' window lagged as it opened, Ctrl K's typing went from 28 to 37 ms a key). The
+   dim stays a plain dim: blurring the whole window under Ctrl K made typing lag (2.0.2). */
 :root[data-glass='on'] dialog {
   border: 1px solid var(--glass-line);
   border-radius: calc(var(--radius) + 4px);
+  background:
+    linear-gradient(180deg, var(--glass-sheen) 0, transparent 4rem),
+    var(--panel);
+  background-clip: padding-box;
+  box-shadow:
+    var(--glass-light),
+    0 28px 64px -24px rgb(0 0 0 / 55%);
 }
-:root[data-glass='on'] dialog,
 :root[data-glass='on'] .glass-float {
   background:
     linear-gradient(180deg, var(--glass-sheen) 0, transparent 4rem),
@@ -178,4 +187,20 @@ input.switch:disabled {
 :root[data-glass='on'] input.switch:checked {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent-fill) 70%, transparent);
+}
+
+/* A setting found by search or named by a link (2.5): ringed a moment in its window. */
+.ringed {
+  border-radius: 8px;
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  animation: ringed 1.8s ease-out forwards;
+}
+@keyframes ringed {
+  60% {
+    outline-color: var(--accent);
+  }
+  to {
+    outline-color: transparent;
+  }
 }

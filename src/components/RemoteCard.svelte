@@ -1,9 +1,13 @@
 <script lang="ts">
-  // Settings → Remote (P26, 1.4): reach this PC from anywhere through the Clokrix relay, or from
-  // this network through the local companion; pairs phones and devices with a QR code (or a
-  // typed code on this network), and lists them with a way to sign each out at once.
+  // Settings → Phone and remote (P26, 1.4): reach this PC from anywhere through the Clokrix relay,
+  // or from this network through the local companion; pairs phones and devices with a QR code (or
+  // a typed code on this network), and lists them with a way to sign each out at once. In tabs
+  // since 2.5's tiles (Phones, This network, Screen, Wake, Activity, Options), one at a time.
   import { untrack } from 'svelte';
   import Card from './Card.svelte';
+  import More from './More.svelte';
+  import { remoteStatus } from '../remote-status.svelte';
+  import { tabOf, type RemoteTab } from '../settings-map';
   import { fmtDate, fmtDateTime } from '../format';
   import { moreLabel, preview } from '../listing';
   import {
@@ -14,7 +18,6 @@
     getScreenStatus,
     getWakeReadiness,
     onPhoneActions,
-    onRemote,
     onScreenShare,
     resetRelay,
     setPhoneControl,
@@ -36,13 +39,16 @@
 
   interface Props {
     active: boolean;
+    /** A row to land on (Settings' search, a link): its tab opens first. */
+    at?: string | null;
   }
-  let { active }: Props = $props();
+  let { active, at = null }: Props = $props();
 
   const MAX_DEVICES = 8;
   const DAYS = [1, 7, 30, 90];
 
-  let status = $state.raw<RemoteStatus | null>(null);
+  /** Kept by Settings while it shows (remote-status.svelte.ts), so this opens on it at once. */
+  const status = $derived(remoteStatus.s);
   let confirming = $state(false);
   let confirmingRelay = $state(false);
   let busy = $state(false);
@@ -141,7 +147,7 @@
   async function run(f: () => Promise<RemoteStatus>): Promise<boolean> {
     busy = true;
     try {
-      status = await f();
+      remoteStatus.s = await f();
       error = null;
       return true;
     } catch (e) {
@@ -151,26 +157,6 @@
       busy = false;
     }
   }
-
-  $effect(() => {
-    if (!active) return;
-    untrack(() => void run(getRemoteStatus));
-    let stop: (() => void) | null = null;
-    let gone = false;
-    // A device paired, signed out or opened its view; the relay connected: show it.
-    void onRemote(() => {
-      void getRemoteStatus()
-        .then((s) => (status = s))
-        .catch(() => {});
-    }).then((f) => {
-      if (gone) f();
-      else stop = f;
-    });
-    return () => {
-      gone = true;
-      stop?.();
-    };
-  });
 
   // The codes' countdowns; an expired code goes away.
   $effect(() => {
@@ -247,14 +233,55 @@
   async function saveRelay(url: string | null): Promise<void> {
     if (await run(() => setRelayUrl(url))) relayDraft = null;
   }
+
+  // The tabs: Screen and Wake while reach from anywhere is on, Activity once phones did something.
+  const tabs = $derived<Array<{ id: RemoteTab; label: string }>>([
+    { id: 'phones', label: 'Phones' },
+    { id: 'network', label: 'This network' },
+    ...(relayOn
+      ? [
+          { id: 'screen' as const, label: 'Screen' },
+          { id: 'wake' as const, label: 'Wake' },
+        ]
+      : []),
+    ...(actions.length ? [{ id: 'activity' as const, label: 'Activity' }] : []),
+    { id: 'options', label: 'Options' },
+  ]);
+  let tab = $state<RemoteTab>(untrack(() => tabOf(at) ?? 'phones'));
+  const shown = $derived(tabs.some((t) => t.id === tab) ? tab : 'phones');
+  let tabList = $state<HTMLElement | undefined>();
+  function tabKey(e: KeyboardEvent): void {
+    const i = tabs.findIndex((t) => t.id === shown);
+    const to = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : null;
+    if (to === null) return;
+    e.preventDefault();
+    const next = tabs[(to + tabs.length) % tabs.length]!;
+    tab = next.id;
+    queueMicrotask(() => tabList?.querySelector<HTMLElement>(`#remote-tab-${next.id}`)?.focus());
+  }
 </script>
 
 <Card title="Remote" {subtitle} id="remote">
   {#if !status}
     <p class="note">Loading…</p>
   {:else}
-    <div class="parts">
-      <section class="part" aria-labelledby="remote-anywhere">
+    <div class="tabs" role="tablist" aria-label="Phone and remote" bind:this={tabList}>
+      {#each tabs as t (t.id)}
+        <button
+          type="button"
+          role="tab"
+          id="remote-tab-{t.id}"
+          aria-selected={shown === t.id}
+          aria-controls="remote-tabpanel"
+          tabindex={shown === t.id ? 0 : -1}
+          onclick={() => (tab = t.id)}
+          onkeydown={tabKey}>{t.label}</button
+        >
+      {/each}
+    </div>
+    <div class="tab-body" role="tabpanel" id="remote-tabpanel" aria-labelledby="remote-tab-{shown}">
+      {#if shown === 'phones'}
+      <section class="part" id="set-remote-anywhere" aria-labelledby="remote-anywhere">
         <h3 id="remote-anywhere">From anywhere</h3>
         {#if !relayOn}
           <p>See this PC’s readings on your phone from any network, in the Clokrix app for Android and iPhone.</p>
@@ -356,8 +383,63 @@
           {/if}
         {/if}
       </section>
-
-      <section class="part" aria-labelledby="remote-lan">
+      {#if status.devices.length || lanOn || relayOn}
+        <div class="group" id="set-remote-devices">
+          <h3>Paired devices</h3>
+          {#if status.devices.length}
+            <ul class="devices">
+              {#each status.devices as d (d.id)}
+                <li>
+                  <div>
+                    <span class="name">{d.name}</span>
+                    <span class="via">{d.anywhere ? 'Anywhere' : 'This network'}</span>
+                    {#if d.watching}<span class="watching">watching now</span>{/if}
+                    <small>
+                      Paired {fmtDate(d.paired)} · until {fmtDate(d.expires)}{d.anywhere ? ', renewed each time it is used' : ''}{d.lastSeen
+                        ? ` · last seen ${fmtDateTime(d.lastSeen)}`
+                        : ''}{d.lastAddress ? ` from ${d.lastAddress}` : ''}{d.push ? ' · gets notifications (the phone turns them off)' : ''}
+                    </small>
+                  </div>
+                  <span class="row-actions">
+                    {#if d.anywhere}
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-pressed={d.control}
+                        aria-label="{d.name} may change this PC"
+                        onclick={() => void run(() => setPhoneControl(d.id, !d.control))}
+                      >
+                        {d.control ? 'May change this PC' : 'Only looks'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-pressed={d.screen}
+                        aria-label="{d.name} may see and use the screen"
+                        onclick={() => void run(() => setPhoneScreen(d.id, !d.screen))}
+                      >
+                        {d.screen ? 'Sees the screen' : 'No screen'}
+                      </button>
+                    {/if}
+                    <button type="button" disabled={busy} aria-label="Sign out {d.name}" onclick={() => void run(() => signOutRemote(d.id))}>
+                      Sign out
+                    </button>
+                  </span>
+                </li>
+              {/each}
+            </ul>
+            {#if status.devices.length > 1}
+              <div class="actions">
+                <button type="button" disabled={busy} onclick={() => void run(() => signOutRemote(null))}>Sign out all devices</button>
+              </div>
+            {/if}
+          {:else}
+            <p class="note">None yet.</p>
+          {/if}
+        </div>
+      {/if}
+      {:else if shown === 'network'}
+      <section class="part" id="set-remote-lan" aria-labelledby="remote-lan">
         <h3 id="remote-lan">On this network</h3>
         {#if !lanOn}
           <p>See this PC’s readings in the browser of a phone or another computer on the same network.</p>
@@ -444,79 +526,95 @@
           {/if}
         {/if}
       </section>
-
-      {#if status.devices.length || lanOn || relayOn}
-        <div class="group">
-          <h3>Paired devices</h3>
-          {#if status.devices.length}
-            <ul class="devices">
-              {#each status.devices as d (d.id)}
-                <li>
-                  <div>
-                    <span class="name">{d.name}</span>
-                    <span class="via">{d.anywhere ? 'Anywhere' : 'This network'}</span>
-                    {#if d.watching}<span class="watching">watching now</span>{/if}
-                    <small>
-                      Paired {fmtDate(d.paired)} · until {fmtDate(d.expires)}{d.anywhere ? ', renewed each time it is used' : ''}{d.lastSeen
-                        ? ` · last seen ${fmtDateTime(d.lastSeen)}`
-                        : ''}{d.lastAddress ? ` from ${d.lastAddress}` : ''}{d.push ? ' · gets notifications (the phone turns them off)' : ''}
-                    </small>
-                  </div>
-                  <span class="row-actions">
-                    {#if d.anywhere}
-                      <button
-                        type="button"
-                        disabled={busy}
-                        aria-pressed={d.control}
-                        aria-label="{d.name} may change this PC"
-                        onclick={() => void run(() => setPhoneControl(d.id, !d.control))}
-                      >
-                        {d.control ? 'May change this PC' : 'Only looks'}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        aria-pressed={d.screen}
-                        aria-label="{d.name} may see and use the screen"
-                        onclick={() => void run(() => setPhoneScreen(d.id, !d.screen))}
-                      >
-                        {d.screen ? 'Sees the screen' : 'No screen'}
-                      </button>
-                    {/if}
-                    <button type="button" disabled={busy} aria-label="Sign out {d.name}" onclick={() => void run(() => signOutRemote(d.id))}>
-                      Sign out
-                    </button>
-                  </span>
-                </li>
-              {/each}
-            </ul>
-            {#if status.devices.length > 1}
-              <div class="actions">
-                <button type="button" disabled={busy} onclick={() => void run(() => signOutRemote(null))}>Sign out all devices</button>
-              </div>
-            {/if}
-          {:else}
-            <p class="note">None yet.</p>
+      {:else if shown === 'screen'}
+        {#if !screen}
+          <p class="note">Loading…</p>
+        {:else}
+        <div class="group" id="set-remote-screen">
+          <h3 id="remote-screen">Screen</h3>
+          {#if screen.share}
+            <p class="shared" role="status">
+              Shared now with <b>{screen.share.phone}</b>{screen.share.slow ? ' (slow view)' : ''}{screen.mic
+                ? ', its microphone on'
+                : ''}.
+              <button type="button" onclick={() => void screenCall(stopScreenShare)}>Stop sharing</button>
+            </p>
           {/if}
-        </div>
-      {/if}
-
-      {#if relayOn}
-        <div class="group">
-          <h3 id="remote-wake">Wake from phone</h3>
+          <div class="row plain">
+            <p class="note">A phone marked “Sees the screen” can watch this PC's screen and use its mouse and keyboard, one phone at a time.</p>
+            <More about="sharing the screen">
+              This PC shows a banner while it lasts, and a session nobody uses for 10 minutes ends. Windows' sign-in and
+              administrator prompts cannot be seen or used, and Ctrl+Alt+Del cannot be sent.
+            </More>
+          </div>
+          <label class="check" id="set-remote-lock">
+            <input
+              type="checkbox"
+              class="switch"
+              role="switch"
+              checked={screen.lockOnEnd}
+              onchange={(e) => {
+                const on = e.currentTarget.checked;
+                void screenCall(() => setScreenLock(on));
+              }}
+            />
+            <span>Lock this PC when a phone's session ends</span>
+          </label>
+          <div class="row plain" id="set-remote-mic">
+            <p class="note">
+              <b>The phone as this PC's microphone</b> needs a virtual cable:
+              {#if cable === undefined}
+                looking for one…
+              {:else if cable}
+                <b>{cable}</b> is installed.
+              {:else}
+                none is installed. Install the free VB-CABLE (<code>vb-audio.com/Cable</code>), then restart the PC.
+              {/if}
+            </p>
+            <More about="the phone as a microphone">
+              In a direct session the phone's Mic button makes this PC hear the phone (WhatsApp's voice notes, calls). Voice
+              clips need nothing installed: the phone puts them on this PC's clipboard, ready to paste.
+            </More>
+          </div>
           <label class="check">
             <input
               type="checkbox"
-              checked={status.relay.wake}
-              disabled={busy}
-              onchange={(e) => void run(() => setWakeFromPhone(e.currentTarget.checked))}
+              class="switch"
+              role="switch"
+              checked={screen.micSwitch}
+              onchange={(e) => {
+                const on = e.currentTarget.checked;
+                void screenCall(() => setScreenMic(on));
+              }}
             />
-            Let a phone have another Clokrix PC on this network wake this one
+            <span>Make the cable Windows' default microphone while the phone's microphone is on</span>
           </label>
           <p class="note">
-            A phone cannot send the wake signal itself; another PC that is on, on the same network and paired with the phone
-            sends it. Phones are told this PC's wired network address, sealed.
+            Where a phone cannot reach this PC directly, it shows the screen a picture at a time through the relay:
+            {Math.round(screen.slowLeft / 60)} of 20 minutes left today.
           </p>
+        </div>
+        {/if}
+      {:else if shown === 'wake'}
+        <div class="group" id="set-remote-wake">
+          <h3 id="remote-wake">Wake from phone</h3>
+          <div class="row">
+            <label class="check">
+              <input
+                type="checkbox"
+                class="switch"
+                role="switch"
+                checked={status.relay.wake}
+                disabled={busy}
+                onchange={(e) => void run(() => setWakeFromPhone(e.currentTarget.checked))}
+              />
+              <span>Let a phone have another Clokrix PC on this network wake this one<small>The other PC sends the wake signal for the phone.</small></span>
+            </label>
+            <More about="waking from a phone">
+              A phone cannot send the wake signal itself; another PC that is on, on the same network and paired with the phone
+              sends it. Phones are told this PC's wired network address, sealed.
+            </More>
+          </div>
           {#if status.relay.wake && readiness}
             <ul class="ready">
               <li class:bad={!readiness.adapter}>
@@ -539,67 +637,8 @@
             </ul>
           {/if}
         </div>
-      {/if}
-
-      {#if relayOn && screen}
-        <div class="group">
-          <h3 id="remote-screen">Screen</h3>
-          {#if screen.share}
-            <p class="shared" role="status">
-              Shared now with <b>{screen.share.phone}</b>{screen.share.slow ? ' (slow view)' : ''}{screen.mic
-                ? ', its microphone on'
-                : ''}.
-              <button type="button" onclick={() => void screenCall(stopScreenShare)}>Stop sharing</button>
-            </p>
-          {/if}
-          <p class="note">
-            A phone marked “Sees the screen” can watch this PC's screen and use its mouse and keyboard, one phone at a time.
-            This PC shows a banner while it lasts, and a session nobody uses for 10 minutes ends. Windows' sign-in and
-            administrator prompts cannot be seen or used, and Ctrl+Alt+Del cannot be sent.
-          </p>
-          <label class="check">
-            <input
-              type="checkbox"
-              checked={screen.lockOnEnd}
-              onchange={(e) => {
-                const on = e.currentTarget.checked;
-                void screenCall(() => setScreenLock(on));
-              }}
-            />
-            Lock this PC when a phone's session ends
-          </label>
-          <p class="note" id="remote-mic">
-            <b>The phone as this PC's microphone.</b> In a direct session the phone's Mic button makes this PC hear the phone
-            (WhatsApp's voice notes, calls), through a virtual cable:
-            {#if cable === undefined}
-              looking for one…
-            {:else if cable}
-              <b>{cable}</b> is installed.
-            {:else}
-              none is installed. Install the free VB-CABLE (<code>vb-audio.com/Cable</code>), then restart the PC.
-            {/if}
-            Voice clips need nothing installed: the phone puts them on this PC's clipboard, ready to paste.
-          </p>
-          <label class="check">
-            <input
-              type="checkbox"
-              checked={screen.micSwitch}
-              onchange={(e) => {
-                const on = e.currentTarget.checked;
-                void screenCall(() => setScreenMic(on));
-              }}
-            />
-            Make the cable Windows' default microphone while the phone's microphone is on
-          </label>
-          <p class="note">
-            Where a phone cannot reach this PC directly, it shows the screen a picture at a time through the relay:
-            {Math.round(screen.slowLeft / 60)} of 20 minutes left today.
-          </p>
-        </div>
-      {/if}
-
-      {#if actions.length}
-        <div class="group">
+      {:else if shown === 'activity'}
+        <div class="group" id="set-remote-activity">
           <h3 id="remote-recent">Recent from your phones</h3>
           <ul class="recent" aria-labelledby="remote-recent">
             {#each preview(actions, RECENT, allActions) as a, i (i)}
@@ -613,12 +652,9 @@
             <button type="button" class="more" aria-expanded={allActions} onclick={() => (allActions = !allActions)}>{moreActions}</button>
           {/if}
         </div>
-      {/if}
-
-      <details>
-        <summary>Options</summary>
+      {:else}
         <div class="options">
-          <label>
+          <label id="set-remote-port">
             <span>Port on this network</span>
             <input
               type="number"
@@ -628,7 +664,7 @@
               oninput={(e) => (portDraft = Number(e.currentTarget.value))}
             />
           </label>
-          <label>
+          <label id="set-remote-length">
             <span>A pairing lasts</span>
             <select value={daysDraft ?? status.settings.sessionDays} onchange={(e) => (daysDraft = Number(e.currentTarget.value))}>
               {#each DAYS as d (d)}<option value={d}>{d === 1 ? '1 day' : `${d} days`}</option>{/each}
@@ -641,7 +677,7 @@
           least once in it. A new port signs nobody out; open the new address.
         </p>
         <div class="options">
-          <label class="grow">
+          <label class="grow" id="set-remote-relay">
             <span>Relay address</span>
             <input
               type="url"
@@ -660,12 +696,12 @@
           see docs/remote.md. Phones paired through another relay are signed out when it changes.
         </p>
         {#if relayOn || phones}
-          <div class="actions">
+          <div class="actions" id="set-remote-reset">
             <button type="button" disabled={busy} onclick={() => void run(resetRelay)}>Start over on the relay</button>
           </div>
           <p class="note">New keys for this PC on the relay; every phone paired from anywhere is signed out.</p>
         {/if}
-      </details>
+      {/if}
     </div>
   {/if}
   {#if error}<p class="err" role="alert">{error}</p>{/if}
@@ -697,8 +733,69 @@
   }
   .check {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.5rem;
+    margin: 0.4rem 0 0.6rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .check input {
+    margin-top: 0.15rem;
+  }
+  .check small {
+    display: block;
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+  /* A setting and its "More". */
+  .row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 0.5rem;
+    align-items: start;
+  }
+  .row.plain {
+    --more-indent: 0;
+  }
+  .row > p {
+    margin-bottom: 0.5rem;
+  }
+  /* One tab at a time (2.5). */
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    width: fit-content;
+    margin-bottom: 1rem;
+    padding: 3px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text) 5%, transparent);
+  }
+  :global(:root[data-glass='on']) .tabs {
+    border-color: var(--glass-line);
+    box-shadow: inset 0 1px 2px rgb(0 0 0 / 18%);
+  }
+  .tabs [role='tab'] {
+    padding: 0.32rem 0.85rem;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+  }
+  .tabs [role='tab']:hover {
+    color: var(--text);
+  }
+  .tabs [role='tab'][aria-selected='true'] {
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px var(--accent-line);
+    color: var(--text);
+  }
+  .tab-body > :global(* + *) {
+    margin-top: 0.4rem;
   }
   .ready,
   .recent {
@@ -765,20 +862,9 @@
     overflow-wrap: anywhere;
     user-select: all;
   }
-  /* Two columns of parts once the card has the room (2.0.2: it takes two of Settings' columns),
-     so it is about half as tall. */
-  @container (min-width: 40rem) {
-    .parts {
-      columns: 2;
-      column-gap: 1.75rem;
-    }
-  }
-  .parts > * {
-    break-inside: avoid;
-  }
-  .part + .part {
-    margin-top: 0.4rem;
-    padding-top: 0.2rem;
+  .part + .group {
+    margin-top: 1rem;
+    padding-top: 0.6rem;
     border-top: 1px solid var(--line);
   }
   .warn-text {
@@ -904,14 +990,6 @@
     border: 1px solid color-mix(in srgb, var(--ok) 55%, var(--line));
     border-radius: 999px;
     font-size: 0.7rem;
-  }
-  details {
-    margin: 0.6rem 0;
-    font-size: 0.82rem;
-  }
-  summary {
-    cursor: pointer;
-    color: var(--muted);
   }
   .options {
     display: flex;

@@ -10,15 +10,17 @@
     id?: string;
     /** More classes for the card itself (the display picked in the arrangement). */
     class?: string;
+    /** Its heading's level: 3 inside a window with a heading of its own (Settings' groups). */
+    level?: 2 | 3;
     children: Snippet;
   }
-  let { title, subtitle = null, wide = false, id, class: also = '', children }: Props = $props();
+  let { title, subtitle = null, wide = false, id, class: also = '', level = 2, children }: Props = $props();
 </script>
 
 <section class="panel card {also}" class:wide {id}>
   <header>
     <div class="titles">
-      <h2>{title}</h2>
+      <svelte:element this={`h${level}`} class="title">{title}</svelte:element>
       {#if subtitle}<p>{subtitle}</p>{/if}
     </div>
     {#if id}<CardGrip {id} {title} />{/if}
@@ -49,7 +51,7 @@
     flex: 1;
     min-width: 0;
   }
-  h2 {
+  .title {
     margin: 0;
     color: var(--muted);
     font-size: 0.72rem;

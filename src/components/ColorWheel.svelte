@@ -23,7 +23,6 @@
 
   let hsv = $state<Hsv>(toHsv('#4cc9f0'));
   let typed = $state('');
-  let canvas = $state<HTMLCanvasElement>();
   let dragging = false;
 
   // Follow the saved colour when it changes from elsewhere (the command palette, another window).
@@ -60,38 +59,9 @@
     oncommit(c);
   }
 
-  // The wheel, redrawn when the brightness changes.
-  $effect(() => {
-    const el = canvas;
-    if (!el) return;
-    const v = hsv.v;
-    const dpr = window.devicePixelRatio || 1;
-    const n = Math.round(SIZE * dpr);
-    el.width = n;
-    el.height = n;
-    const ctx = el.getContext('2d');
-    if (!ctx) return;
-    const img = ctx.createImageData(n, n);
-    const r = n / 2;
-    for (let y = 0; y < n; y++) {
-      for (let x = 0; x < n; x++) {
-        const dx = x + 0.5 - r;
-        const dy = y + 0.5 - r;
-        const d = Math.hypot(dx, dy) / r;
-        if (d > 1) continue;
-        const h = ((Math.atan2(-dy, dx) * 180) / Math.PI + 360) % 360;
-        const c = fromHsv({ h, s: d, v });
-        const i = (y * n + x) * 4;
-        img.data[i] = parseInt(c.slice(1, 3), 16);
-        img.data[i + 1] = parseInt(c.slice(3, 5), 16);
-        img.data[i + 2] = parseInt(c.slice(5, 7), 16);
-        // A soft edge.
-        img.data[i + 3] = Math.round(255 * Math.min(1, (1 - d) * r));
-      }
-    }
-    ctx.putImageData(img, 0, 0);
-  });
-
+  // The wheel is drawn by CSS (2.5): hue around it, saturation out from its white middle, and the
+  // brightness as a dimming over both; the same colours HSV gives, for nothing. It was drawn a
+  // pixel at a time in script, which made Appearance's window slow to open with a custom accent.
   const thumb = $derived({
     x: 50 + 50 * hsv.s * Math.cos((hsv.h * Math.PI) / 180),
     y: 50 - 50 * hsv.s * Math.sin((hsv.h * Math.PI) / 180),
@@ -165,7 +135,7 @@
     onpointercancel={cancel}
     role="presentation"
   >
-    <canvas bind:this={canvas} aria-hidden="true" style:width="{SIZE}px" style:height="{SIZE}px"></canvas>
+    <span class="hues" aria-hidden="true" style:--dim={1 - hsv.v}></span>
     <span
       class="thumb"
       role="slider"
@@ -249,9 +219,23 @@
     touch-action: none;
     cursor: crosshair;
   }
-  canvas {
-    display: block;
+  /* HSV, as the thumb reads it: hue counter-clockwise from red at the right, saturation from
+     the middle out (white, then the hue), brightness by darkening it all. */
+  .hues {
+    position: absolute;
+    inset: 0;
     border-radius: 50%;
+    background:
+      radial-gradient(circle closest-side, #fff, rgb(255 255 255 / 0%)),
+      conic-gradient(from 90deg, #f00, #f0f, #00f, #0ff, #0f0, #ff0, #f00);
+  }
+  .hues::after {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: #000;
+    opacity: var(--dim);
+    content: '';
   }
   .thumb {
     position: absolute;

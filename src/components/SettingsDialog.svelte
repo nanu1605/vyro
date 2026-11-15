@@ -1,33 +1,48 @@
 <script lang="ts">
-  // A Settings section in its own window (2.5): it grows out of the section's name in the list
-  // (or the middle of the window, opened from elsewhere) over the dimmed page, and shrinks back
-  // into it on Escape, × or a click beside it. The section's own card is inside, so what it holds
-  // and does is the same as in the page. Under reduced motion it only fades; with the profile's
-  // animation off, or Windows' reduced motion, it just shows and goes.
+  // A Settings group in its own window (2.5): it grows out of the group's tile (or the middle of
+  // the window, opened from elsewhere) over the dimmed page, and shrinks back into it on Escape,
+  // × or a click beside it. Under reduced motion it only fades; with the profile's animation off,
+  // or Windows' reduced motion, it just shows and goes.
+  //
+  // Smooth (the owner, 2026-11-15: "The settings pop out animation is very laggy"): only its
+  // transform and opacity move, from where the tile is, read once at the click (a modal window is
+  // centred, so nothing of the window is measured); what it shows is ready in its first frame; and
+  // it frosts nothing behind it (app.css), which would be redone at every frame of the growing.
   import X from '@lucide/svelte/icons/x';
   import { onMount, type Snippet } from 'svelte';
 
   interface Props {
     title: string;
-    wide?: boolean;
+    /** Its state in a line, as its tile says it. */
+    line?: string | null;
+    /** Its width, in rem. */
+    width?: number;
     /** Where it grows from: a point in the window, or null for its middle. */
     from: { x: number; y: number } | null;
+    /** A row inside to show and ring: a setting found by search, or a part named by a link. */
+    at?: string | null;
     /** Once it has gone, however it was closed. */
     onclosed: () => void;
     children: Snippet;
   }
-  let { title, wide = false, from, onclosed, children }: Props = $props();
+  let { title, line = null, width = 36, from, at = null, onclosed, children }: Props = $props();
 
   let dialog = $state<HTMLDialogElement | undefined>();
+  let body = $state<HTMLElement | undefined>();
   let closing = false;
-  /** What had the focus when it opened (the section's name in the list), to give it back. */
+  /** What had the focus when it opened (the group's tile), to give it back. */
   let before: HTMLElement | null = null;
-  /** Taken down by the page (another section opened in its place): its closing says nothing. */
+  /** Taken down by the page (another group opened in its place): its closing says nothing. */
   let gone = false;
+  /** From the tile's middle to the window's: where the growing starts and the shrinking ends. */
+  const dx = $derived(from ? Math.round(from.x - innerWidth / 2) : 0);
+  const dy = $derived(from ? Math.round(from.y - innerHeight / 2) : 0);
 
   onMount(() => {
     const d = dialog;
     if (!d) return;
+    let ring: ReturnType<typeof setTimeout> | undefined;
+    let raf = 0;
     // After the update that opened it: Ctrl K's palette, closing in that same update, would
     // otherwise hand the focus back behind this window.
     queueMicrotask(() => {
@@ -35,14 +50,25 @@
       const had = document.activeElement;
       before = had instanceof HTMLElement && had !== document.body ? had : null;
       d.showModal();
-      // From untransformed sizes: the growing has already started, and would skew a measured box.
-      // A modal dialog sits in the middle of the window.
-      const left = (innerWidth - d.offsetWidth) / 2;
-      const top = (innerHeight - d.offsetHeight) / 2;
-      d.style.transformOrigin = from ? `${Math.round(from.x - left)}px ${Math.round(from.y - top)}px` : 'center';
+      if (at) show(at, 0);
     });
+    /** The row `id`: unfolded, in the middle of the window, ringed a moment. Rows that load a
+     * little later (Remote's tabs) are waited for, a second at most. */
+    function show(id: string, tries: number): void {
+      const el = body?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
+      if (!el) {
+        if (tries < 60) raf = requestAnimationFrame(() => show(id, tries + 1));
+        return;
+      }
+      for (let p = el.parentElement?.closest('details'); p; p = p.parentElement?.closest('details') ?? null) p.open = true;
+      el.scrollIntoView({ block: 'center' });
+      el.classList.add('ringed');
+      ring = setTimeout(() => el.classList.remove('ringed'), 1800);
+    }
     return () => {
       gone = true;
+      clearTimeout(ring);
+      cancelAnimationFrame(raf);
       if (d.open) d.close();
     };
   });
@@ -73,8 +99,10 @@
 <dialog
   bind:this={dialog}
   class="section"
-  class:wide
-  aria-label={title}
+  aria-labelledby="settings-window-title"
+  style:--w="{width}rem"
+  style:--dx="{dx}px"
+  style:--dy="{dy}px"
   oncancel={(e) => {
     // Escape: shrink first. Windows may close it outright on a second Escape; `close` covers that.
     e.preventDefault();
@@ -82,60 +110,49 @@
   }}
   onclose={() => {
     closing = false;
+    dialog?.classList.remove('closing');
     if (gone) return;
     onclosed();
-    // The browser gives the focus back as it closes, but the card going back into the page can
-    // move the list's names around while it settles (Remote's loads a moment later), and a name
-    // moved loses the focus: it is given back again for a while, until the person does something.
+    // The browser gives the focus back as it closes; if the tile was redrawn meanwhile, again.
     const back = before;
-    if (!back) return;
-    const until = performance.now() + 1500;
-    let done = false;
-    const stop = () => (done = true);
-    addEventListener('pointerdown', stop, { once: true, capture: true });
-    addEventListener('keydown', stop, { once: true, capture: true });
-    const keep = () => {
-      if (done || performance.now() > until || !back.isConnected) {
-        removeEventListener('pointerdown', stop, { capture: true });
-        removeEventListener('keydown', stop, { capture: true });
-        return;
-      }
-      if (document.activeElement === document.body) back.focus({ preventScroll: true });
-      requestAnimationFrame(keep);
-    };
-    requestAnimationFrame(keep);
+    if (back?.isConnected && document.activeElement === document.body) back.focus({ preventScroll: true });
   }}
   onclick={(e) => {
-    // The dialog has no padding of its own: only a click on the dimmed page beside it lands here.
+    // The window has no padding of its own: only a click on the dimmed page beside it lands here.
     if (e.target === dialog) shut();
   }}
 >
-  <div class="inner">
+  <header class="head">
+    <div class="titles">
+      <h2 id="settings-window-title">{title}</h2>
+      {#if line}<p>{line}</p>{/if}
+    </div>
     <button type="button" class="x" aria-label="Close {title}" title="Close (Esc)" onclick={shut}>
       <X size={16} aria-hidden="true" />
     </button>
+  </header>
+  <div class="body" bind:this={body}>
     {@render children()}
   </div>
 </dialog>
 
 <style>
   .section {
-    width: min(34rem, calc(100vw - 2rem));
+    width: min(var(--w), calc(100vw - 2rem));
     max-height: min(85vh, calc(100vh - 2rem));
     padding: 0;
-    overflow-y: auto;
-    border: 0;
-    border-radius: var(--radius);
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: calc(var(--radius) + 4px);
     /* Solid: a see-through theme's card would show the page under it. */
     background: var(--bg);
     color: var(--text);
-    box-shadow: var(--shadow-lift);
-    overscroll-behavior: contain;
+    box-shadow: 0 28px 64px -24px rgb(0 0 0 / 55%);
   }
-  .section.wide {
-    width: min(62rem, calc(100vw - 2rem));
-  }
+  /* The header stays; what is under it scrolls. */
   .section[open] {
+    display: flex;
+    flex-direction: column;
     animation: grow var(--dur-3) var(--ease-out);
   }
   .section[open]::backdrop {
@@ -155,31 +172,69 @@
   :global(:root[data-motion='reduced']) .section:global(.closing) {
     animation-name: undim;
   }
-  .inner {
-    position: relative;
+  .head {
+    display: flex;
+    flex: none;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem 1rem 0.75rem 1.25rem;
+    border-bottom: 1px solid var(--line);
   }
-  /* The card's own frame is the window's. */
-  .inner > :global(.card) {
+  :global(:root[data-glass='on']) .head {
+    border-bottom-color: var(--glass-line);
+  }
+  .titles {
+    flex: 1;
+    min-width: 0;
+  }
+  h2 {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 600;
+  }
+  .titles p {
+    margin: 0.2rem 0 0;
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+  /* A container: what is inside follows the window's width (the overlay's preview goes under its
+     controls in a narrow one). */
+  .body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    container-type: inline-size;
+  }
+  /* Each part's card is a stretch of the window, parted by a line. */
+  .body > :global(.card) {
     margin: 0;
     border: 0;
+    border-radius: 0;
+    background: none;
     box-shadow: none;
+    padding: 1rem 1.25rem;
   }
-  .inner > :global(.card > header) {
-    padding-right: 2.2rem;
+  .body > :global(.card + .card) {
+    border-top: 1px solid var(--line);
+  }
+  :global(:root[data-glass='on']) .body > :global(.card + .card) {
+    border-top-color: var(--glass-line);
+  }
+  /* One part: the window's own header names it. */
+  .body > :global(.card:only-child > header) {
+    display: none;
   }
   .x {
-    position: absolute;
-    z-index: 1;
-    top: 0.7rem;
-    right: 0.7rem;
     display: grid;
+    flex: none;
     place-items: center;
     width: 2rem;
     height: 2rem;
     padding: 0;
     border: 1px solid var(--line);
-    border-radius: 8px;
-    background: var(--bg);
+    border-radius: 999px;
+    background: transparent;
     color: var(--muted);
     cursor: pointer;
   }
@@ -189,13 +244,16 @@
   @keyframes grow {
     from {
       opacity: 0;
-      transform: scale(0.6);
+      transform: translate(var(--dx), var(--dy)) scale(0.5);
+    }
+    55% {
+      opacity: 1;
     }
   }
   @keyframes shrink {
     to {
       opacity: 0;
-      transform: scale(0.6);
+      transform: translate(var(--dx), var(--dy)) scale(0.5);
     }
   }
   @keyframes dim {

@@ -58,7 +58,8 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 41 | TURN for the screen | Where a phone has no direct path to the PC (most mobile networks; the owner, 2026-10-28: "can we cast without any time constraint?"), its screen session may go through Cloudflare's TURN service instead of the slow view (2.0.1): only where the relay's owner set a TURN key and listed the PC's room (`TURN_ROOMS`, or `*`), as the relay is shared by every installed Clokrix and Cloudflare charges past 1,000 GB a month. The relay gets day-long credentials with the key, which never leaves it, and hands them to a phone of a listed room; the picture stays encrypted end to end, the TURN server passing packets it cannot read. The slow view stays for where there is neither | decided |
 | 42 | Clokrix Free and Pro | Free is the Dashboard and Settings' own sections; Pro is everything, $100 once, for life, on one PC, with a 7-day trial from the first start of 2.5 for new and updated installs alike. Sold by Jainan Infotech through Razorpay, from a checkout of Clokrix's own on Cloudflare (`licence/`) that binds each key to one PC and signs an activation the app checks offline. The code stays open source (MIT OR Apache-2.0): the lock is in the public code, and a build without the checkout's settings is Pro (2.5; the owner, 2026-11-13: "I will sell this product so there will be 2 packages", "He will pay on the jainan infotech website using razorpay platform. And once he has paid the pro version should be activated for lifetime. Price: 100 USD.", "only 7 days free trial", one PC per purchase; [`docs/pro.md`](docs/pro.md)) | decided |
 | 43 | Settings sections in a window | A section named in Settings' list opens in a centred window over the page, growing out of its name and shrinking back into it; Ctrl K and the links that name a section open it the same way (2.5; the owner, 2026-11-13: "That section should pop out of the screen also add animations to it", and chose the centred window) | decided |
-| 44 | Glass | Every theme turns to iOS-like glass: see-through panes over a more colourful wash, lit along their top edge, with layers that float over content (dialogs, menus, toasts, the top bar, the phone's bars and sheets) frosting what is under them; cards do not blur, since the soft wash under them would look the same. On Windows 11 (build 22523 and later) the window itself turns see-through, with Windows' Acrylic frosting the desktop behind it; AMOLED's black stays black. Settings → Appearance → Glass effects, on by default, turns it off, as do Windows' Transparency effects and a system's request for less transparency; off is 2.4's look exactly. Desktop widgets, the game overlay, the phone app, the LAN page and the checkout page take it too (2.5; the owner, 2026-11-14: "Add IOS like glass effect in whole clokrix including relay, which will make clokrix to look premium.", and chose the see-through window on Windows 11 and all six themes with a switch) | decided |
+| 44 | Glass | Every theme turns to iOS-like glass: see-through panes over a more colourful wash, lit along their top edge, with layers that float over content (menus, toasts, the top bar, the phone's bars and sheets) frosting what is under them, and windows solid panes lit the same way (decision 45); cards do not blur, since the soft wash under them would look the same. On Windows 11 (build 22523 and later) the window itself turns see-through, with Windows' Acrylic frosting the desktop behind it; AMOLED's black stays black. Settings → Appearance → Glass effects, on by default, turns it off, as do Windows' Transparency effects and a system's request for less transparency; off is 2.4's look exactly. Desktop widgets, the game overlay, the phone app, the LAN page and the checkout page take it too (2.5; the owner, 2026-11-14: "Add IOS like glass effect in whole clokrix including relay, which will make clokrix to look premium.", and chose the see-through window on Windows 11 and all six themes with a switch) | decided |
+| 45 | Settings as tiles | Settings is a search box and six tiles (Appearance; Gaming and overlay; Phone and remote; Startup and units; Updates; Clokrix Pro), each saying its state in a line; a tile opens its group in decision 43's window, grown out of the tile. The search finds any one setting by its name or a word it goes by, and opens its window on it, ringed; Ctrl K too. A setting says what it does in a line, the rest behind "More"; the less used ones are under "Advanced"; Phone and remote is in tabs. Windows (every dialog) are solid panes with glass's sheen and lit edge, frosting nothing: the blur was redone at every frame they grew (2.5; the owner, 2026-11-15: "The settings pop out animation is very laggy." and "The setting page attached in the screenshot has too much on the page which makes the settings page very user-unfriendly. Please share ideas to make it more user-friendly.", and chose tiles that pop out with all four tidy-ups: six groups, shorter text, the advanced parts folded, search) | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -4507,7 +4508,7 @@ for 3" (2026-11-12) had a session on an environment that reaches Intel's hosts b
       ([`docs/signing.md`](docs/signing.md)). The relay was not deployed: it serves 2990da0's
       phone app (Relay run 43015537665), which behaves as this release's would.
 
-### 2.5.0 — Settings in a window, shorter lists, Clokrix Free and Pro, glass
+### 2.5.0 — Settings as tiles in a window, shorter lists, Clokrix Free and Pro, glass
 
 The owner's four requests (2026-11-13), planned before building as asked ("i have some new
 features, plan them before implementing"):
@@ -4673,6 +4674,73 @@ themes with a switch ("All six, with a switch").
       app with the end-to-end test (the slow view passing there), Windows with the app's own
       tests and the installed app's smoke test, the main window now built in code,
       accessibility).
+
+The owner's sixth message (2026-11-15), with a screenshot of Settings about 2000 px wide:
+
+> some bugs:
+>
+> 1. The settings pop out animation is very laggy.
+> 2. The setting page attached in the screenshot has too much on the page which makes the
+>    settings page very user-unfriendly. Please share ideas to make it more user-friendly.
+
+The ideas put to them, and their answers: tiles that pop out ("Tiles + pop-out"), with all four
+tidy-ups: the 11 sections in 6 groups, shorter text, the advanced parts folded with Remote in
+tabs, and a search for any setting (decision 45).
+
+- [x] **Why the window lagged**, measured in the preview's release build on a 4× slowed CPU:
+  - the section was taken out of the page's card grid and built again in the window, so the
+    grid placed its 11 cards again and they glided, as it opened and again as it closed (up to
+    103 layouts and 444 paints for one opening and closing);
+  - Remote's card came a moment after its window opened and loaded its state again, so the
+    window grew while it was growing;
+  - with glass, the window frosted the page under it, redone at every frame;
+  - with a custom accent (the owner's is one), Appearance drew its colour wheel a pixel at a
+    time in script, and worked each theme's accent shades out again.
+
+  With glass, frames came a median 33–67 ms apart while a window grew, up to 16 of them slower
+  than 34 ms, with pauses up to 150 ms as it closed; Appearance with the owner's accent paused
+  up to 217 ms.
+- [x] **Settings as tiles** (`SettingsPanel.svelte`, `SettingsTile.svelte`,
+      `src/settings-map.ts`): a search box and six tiles, each with its state in a line
+      ("Midnight · glass on", "Gaming profile · overlay off", "Version 2.4.0 · up to date"; on
+      Free, a lock on the Pro ones). A tile opens its group in the window, grown out of the
+      tile, with each section a part under its heading. The section list, the card grid and
+      dragging Settings' cards are gone; "Put cards back", for the other views, is under
+      Appearance → Advanced.
+- [x] **Smooth** (`SettingsDialog.svelte`):
+  - only the window's transform and opacity move, from the tile's middle (a modal window is
+    centred, so the window itself is not measured);
+  - what it shows is there in its first frame: Remote's card is loaded and its state kept while
+    Settings shows (`remote-status.svelte.ts`);
+  - every window is a solid pane with glass's sheen and lit edge, frosting nothing, as Ctrl K's
+    already was;
+  - the colour wheel is drawn by CSS, and a custom accent's shades are worked out once.
+
+  After, with glass on and off: a median 16.7 ms while each window grows and shrinks, at most
+  one frame slower than 34 ms, 5–8 layouts and 41–46 paints; Appearance with the owner's accent
+  the same. The first frame comes 50–170 ms after the click on the slowed CPU (Gaming and
+  overlay's, the largest window, the slowest), about a quarter of that at full speed.
+- [x] **Search:** every setting (40) is in an index with the words it goes by ("fahrenheit"
+      finds the temperature unit). Typing lists the matches; the arrow keys and Enter, or a
+      click, open one, and its window opens on it: unfolded, its tab shown, scrolled to and
+      ringed a moment. Ctrl K finds the groups and every setting the same way, and the links
+      that name a section ("Change profile", the update chip, Gaming's "Turn it on") land on it.
+- [x] **Shorter text:** a setting says what it does in a line; the rest is behind "More" beside
+      it.
+- [x] **Folded:** Overlay's refresh, size, background, distances, graph, compact, colour and
+      readings, and Appearance's "Open on" and "Cards", are under "Advanced". Overlay's mode and
+      the temperature unit are segmented controls. Phone and remote is in tabs: Phones, This
+      network, Screen and Wake (while reach from anywhere is on), Activity (once phones did
+      something) and Options; its checkboxes are switches, as everywhere else.
+- [x] **Locally:**
+  - types and 314 frontend tests, `settings-map.test.ts` among them (the groups, every old
+    section's place, the index, the search, the tiles' lines);
+  - the bundle budget;
+  - the accessibility sweep, its Settings parts rewritten: each tile's window in two themes,
+    with "More", "Advanced" and Remote's tabs; the search finding each of the 40 settings and
+    opening its window on it; Ctrl K to groups and settings; the links; Free's locked tiles.
+    Moving cards is checked on System's cards now. The whole sweep: 2,162 checks in 864 s,
+    clean but for the favicon this checkout lacks.
 
 ## Risks
 

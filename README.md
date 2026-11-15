@@ -278,7 +278,7 @@ or actions, 0.3 moves `alerts.json` aside (to `alerts.json.bad`) and uses its de
   does not pulse with reduced motion. Clokrix opens on the Dashboard, or on the last view if you
   choose.
 - **Glass (2.5).** Every theme is glass: see-through cards over a more colourful wash, lit along
-  their top edge, with dialogs, menus, toasts and the top bar frosting what is under them. On
+  their top edge, with menus, toasts and the top bar frosting what is under them. On
   Windows 11 the window itself is see-through, with Windows' Acrylic frosting the desktop behind
   it (not on AMOLED, whose black stays black). Desktop widgets, the game overlay, the phone app
   and the checkout page take it too. Settings → Appearance → Glass effects turns it off, and so

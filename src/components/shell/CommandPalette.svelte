@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Command palette (P28, Ctrl+K): type to jump to a view, a settings section or a sensor's
-  // history, switch the theme or accent, or run an action. A dialog with a combobox and a flat
+  // Command palette (P28, Ctrl+K): type to jump to a view, a Settings group or any one setting
+  // (2.5), a sensor's history, switch the theme or accent, or run an action. A dialog with a combobox and a flat
   // list of options, each tagged with what it is.
   import CornerDownLeft from '@lucide/svelte/icons/corner-down-left';
   import Search from '@lucide/svelte/icons/search';
@@ -8,6 +8,7 @@
   import { getSensorTree } from '../../ipc';
   import { VIEWS, type Tab } from '../../nav';
   import { prefs, savePrefs } from '../../prefs.svelte';
+  import { GROUPS, SETTINGS, whereOf } from '../../settings-map';
   import { ACCENTS, THEMES } from '../../themes';
   import type { SensorSnapshot } from '../../types';
 
@@ -30,6 +31,8 @@
     label: string;
     hint: string;
     kind: string;
+    /** More words it is found by, not shown (a setting's, 2.5). */
+    also?: string;
     run: () => void;
   }
   /** An item with what typing is matched against, lowercased once rather than on every key. */
@@ -37,19 +40,12 @@
     hay: string;
     low: string;
   }
-  const found = (i: Item): Found => ({ ...i, hay: `${i.label} ${i.hint} ${i.kind}`.toLowerCase(), low: i.label.toLowerCase() });
+  const found = (i: Item): Found => ({ ...i, hay: `${i.label} ${i.hint} ${i.kind} ${i.also ?? ''}`.toLowerCase(), low: i.label.toLowerCase() });
 
+  // Settings' groups open at their top (their first part); its settings, at the setting.
   const SECTIONS: Array<[Tab, string, string, string]> = [
-    ['settings', 'appearance', 'Appearance', 'Theme, accent, open on, cards'],
-    ['settings', 'profile', 'Profile', 'Poll rate, notifications, animation'],
-    ['settings', 'general', 'General', 'Tray, start with Windows'],
-    ['settings', 'gaming', 'Gaming', 'Frame rates, game profiles'],
-    ['settings', 'overlay', 'Overlay', 'In-game readings and graph'],
-    ['settings', 'remote', 'Remote', 'Phone app, pairing, screen and wake'],
-    ['settings', 'units', 'Units', '°C or °F'],
-    ['settings', 'hidden-sensors', 'Hidden sensors', 'Sensors left out of views'],
-    ['settings', 'service', 'Sensor service', 'Privileged sensors'],
-    ['settings', 'updates', 'Updates', 'Check for a new version'],
+    ...GROUPS.map((g): [Tab, string, string, string] => ['settings', g.parts[0]!, g.title, g.blurb]),
+    ...SETTINGS.map((s): [Tab, string, string, string] => ['settings', s.id, s.label, whereOf(s)]),
     ['health', 'diagnostics', 'Diagnostics', 'One-click check and report'],
     ['health', 'alerts', 'Alerts', 'Rules, actions and the log'],
   ];
@@ -86,7 +82,14 @@
       ...(Object.keys(cards.views).length
         ? [{ key: 'cards', label: 'Put cards back', hint: 'Every view’s cards in Clokrix’s order', kind: 'Action', run: resetOrder }]
         : []),
-      ...SECTIONS.map(([t, id, label, hint]) => ({ key: `sec:${id}`, label, hint, kind: t === 'settings' ? 'Settings' : 'Health', run: () => onsection(t, id) })),
+      ...SECTIONS.map(([t, id, label, hint]) => ({
+        key: `sec:${id}`,
+        label,
+        hint,
+        kind: t === 'settings' ? 'Settings' : 'Health',
+        also: SETTINGS.find((s) => s.id === id)?.keys,
+        run: () => onsection(t, id),
+      })),
       ...THEMES.map((t) => ({
         key: `theme:${t.id}`,
         label: `Theme: ${t.name}`,
@@ -106,7 +109,7 @@
         label: 'Accent: Custom…',
         hint: prefs.accent.startsWith('#') ? `in use: ${prefs.accent}` : 'any colour, on a colour wheel',
         kind: 'Look',
-        run: () => onsection('settings', 'appearance'),
+        run: () => onsection('settings', 'set-accent'),
       },
     ].map(found),
   );
@@ -214,17 +217,9 @@
   .palette::backdrop {
     background: rgb(0 0 0 / 55%);
   }
-  /* Glass (2.5): a nearly solid pane, lit along its edge, without the blur other dialogs have:
-     each key changes the results, and the blur under them was redone at every one (typing went
-     from 28 to 37 ms a key on a slowed CPU). */
-  :global(:root[data-glass='on']) .palette {
-    background:
-      linear-gradient(180deg, var(--glass-sheen) 0, transparent 4rem),
-      color-mix(in srgb, var(--panel) 94%, transparent);
-    background-clip: padding-box;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
+  /* Glass (2.5): a nearly solid pane lit along its edge, frosting nothing, as every dialog is
+     (app.css): each key changes the results, and a blur under them was redone at every one
+     (typing went from 28 to 37 ms a key on a slowed CPU). */
   .box {
     display: flex;
     flex-direction: column;

@@ -1,7 +1,7 @@
 # Field check 2.5
 
 What only a real PC (and a real Razorpay account) can show for 2.5:
-- Settings' sections in their own window, and its animation;
+- Settings' tiles, their windows and how smoothly they open, and its search;
 - the shorter lists in Settings → Remote and Health;
 - Clokrix Pro bought in Razorpay's Test mode, and its key on one PC;
 - the glass, and the window see-through on Windows 11.
@@ -16,19 +16,25 @@ The tests cover the rest:
 on `claude/vyro-2.0`: once both variables are set, it carries the checkout as a release will. For
 §3 you need a second PC, or a virtual machine with Windows.
 
-About 40 minutes.
+About 45 minutes.
 
-## 1. Settings' sections
+## 1. Settings' tiles
 
-1. Settings, then click each name in the list on the left (Appearance, Gaming, General and the
-   rest). Each section opens in a window over the page, growing out of its name. Escape, its ×,
-   or a click on the dimmed page beside it closes it, shrinking back into the name.
-2. Change something in a window (a theme, a switch): it takes effect as before. Close the window:
-   the card in the page shows the change.
-3. Ctrl K → "units": Settings opens with Units in its window. The update chip, when there is one,
-   opens Updates the same way.
-4. Settings → Profile → Animation: Reduced. A section now fades in and out, without growing.
-   Back to Full.
+1. Settings: a search box and six tiles, each saying how it is set (Appearance "Midnight · glass
+   on", and so on).
+2. Click each tile. Its window grows smoothly out of it, with no stutter or pause, and Escape,
+   its ×, or a click on the dimmed page beside it shrinks it back. Do this with Glass effects on
+   (on Windows 11, with the desktop showing through), then off (Settings → Appearance), and
+   with your custom accent: Appearance opens as smoothly as the rest.
+3. Change something in a window (a theme, a switch): it takes effect at once, and the tile's
+   line says so once the window closes.
+4. "More" beside a setting shows the rest of what it does; "Advanced" (Appearance, Overlay)
+   shows the less used settings. Phone and remote's tabs each show their part.
+5. Type "fahrenheit" in the search box: "Temperature unit" is listed; Enter opens Startup and
+   units on it, ringed a moment. Ctrl K → "overlay size" opens Gaming and overlay with Advanced
+   unfolded at the size. The update chip, when there is one, opens Updates.
+6. Gaming and overlay → Profile → Work, whose animation is calmer: a window now fades in and
+   out, without growing. Back to your own profile.
 
 ## 2. The shorter lists
 
@@ -79,9 +85,10 @@ wallpaper.
    Windows' own apps do, and comes back when clicked.
 2. **Reading it.** Change the wallpaper to a plain white one, then a black one. Every text
    reads well on both, grey text included.
-3. **The glass.** Cards are see-through over a colour wash, lit along their top edge. Ctrl K,
-   the Settings window and What's new frost what is under them. Scrolling a long view feels as
-   before, and typing in Ctrl K is as quick as before.
+3. **The glass.** Cards are see-through over a colour wash, lit along their top edge; menus,
+   notifications and the top bar frost what is under them, and windows (Ctrl K, Settings' and
+   What's new) are solid panes lit the same way. Scrolling a long view feels as before, and
+   typing in Ctrl K is as quick as before.
 4. **Each theme.** Settings → Appearance: each theme in turn. AMOLED stays pure black, and its
    window is not see-through.
 5. **Off.** Settings → Appearance → Glass effects off: everything is solid, as in 2.4, and the

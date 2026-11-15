@@ -26,7 +26,7 @@ export const NOTES: Release[] = [
       {
         icon: 'sparkles',
         title: 'Glass, everywhere',
-        text: 'Every theme turns to glass: see-through cards over a more colourful wash, frosted dialogs, bars and menus, and on Windows 11 the desktop frosted behind the window. The phone app too. Settings → Appearance → Glass effects turns it off.',
+        text: 'Every theme turns to glass: see-through cards over a more colourful wash, frosted bars and menus, and on Windows 11 the desktop frosted behind the window. The phone app too. Settings → Appearance → Glass effects turns it off.',
         phone: true,
       },
       {
@@ -36,8 +36,8 @@ export const NOTES: Release[] = [
       },
       {
         icon: 'sparkles',
-        title: 'Settings sections in their own window',
-        text: 'Click a section in Settings’ list and it opens in a window over the page, growing out of its name. Escape or a click beside it closes it.',
+        title: 'Settings, simpler',
+        text: 'Settings is six tiles, each saying how it is set. Click one and it opens in a window over the page, growing smoothly out of the tile; Escape or a click beside it closes it. Search finds any setting by name and opens it there. Each setting says what it does in a line, with More for the rest and Advanced for what is rarely needed.',
       },
       {
         icon: 'gauge',
