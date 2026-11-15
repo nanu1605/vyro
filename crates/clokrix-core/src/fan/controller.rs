@@ -797,10 +797,13 @@ impl Worker {
                 Step::Suspend => self.restore_all(),
                 Step::Stale => {
                     if self.bios.is_some() {
+                        // Why, before the BIOS settings go back, as `fail` does: whoever sees
+                        // them back also sees why (a test read the reason in between, on a busy
+                        // runner). A failed restore replaces it with its own.
+                        let why = "sensor readings stopped: BIOS fan control restored";
+                        self.note_error(why.into());
                         self.restore_all();
                         if self.bios.is_none() {
-                            let why = "sensor readings stopped: BIOS fan control restored";
-                            self.note_error(why.into());
                             lock(&self.shared.inner).record(
                                 FanEventKind::Watchdog,
                                 "Sensor readings stopped: the BIOS took over until they resume"

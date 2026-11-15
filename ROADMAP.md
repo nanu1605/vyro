@@ -4741,6 +4741,12 @@ tabs, and a search for any setting (decision 45).
     opening its window on it; Ctrl K to groups and settings; the links; Free's locked tiles.
     Moving cards is checked on System's cards now. The whole sweep: 2,162 checks in 864 s,
     clean but for the favicon this checkout lacks.
+- [x] **Found by CI on 689fc68:** the fan watchdog's test failed once on Windows (run
+      43714508733): when sensor readings stopped, the controller put the BIOS settings back
+      before it noted why, and the test read the reason in between. The reason now comes first,
+      as when control is turned off for a fault, so whoever sees the BIOS settings back also
+      sees why. Reproduced here by pausing the controller there: the old order fails, the new
+      one passes.
 
 ## Risks
 
