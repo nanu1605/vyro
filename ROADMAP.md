@@ -4790,8 +4790,9 @@ relay too".
 
 - [x] **Version 2.5.0:** `scripts/set-version.py 2.5.0`. What's new in 2.5.0 as it was (glass,
       Clokrix Pro with its trial, Settings as tiles, the shorter recent lists), but for where
-      the phones' recent actions are now: Settings → Phone and remote → Activity. `main`
-      fast-forwarded to it, which puts the Licence workflow in the Actions tab.
+      the phones' recent actions are now: Settings → Phone and remote → Activity. CI green on
+      9f98111 (run 43742450335; every job). `main` fast-forwarded to it from 2.4.0's records,
+      which put the Licence workflow in the Actions tab.
 - [ ] **Pro set up (the owner):** [`docs/pro.md`](docs/pro.md) → Setting it up, steps 1–6.
 - [ ] **2.5.0 released**, once Pro is set up.
 - [ ] **Relay deployed** from `main` after the release (the owner: "Deploy the relay too"), so
