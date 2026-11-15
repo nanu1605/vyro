@@ -4782,6 +4782,22 @@ half; the columns went by the window's width, sidebar included.
 - [x] **CI green on ed2b052** (run 43721055150; every job, the accessibility sweep and the
       Windows build and install among them).
 
+The owner, 2026-11-15: "release 2.5.0". The Release workflow publishes only with Pro's checkout
+built in (`CLOKRIX_LICENCE_URL` and `CLOKRIX_LICENCE_PUBKEY`), whose set-up was not done, and
+the Licence workflow that deploys it was not on `main` yet. Asked how to go ahead, they chose
+"Set up Pro, then release"; asked about the relay, which serves 2.4.0's phone app, "Deploy the
+relay too".
+
+- [x] **Version 2.5.0:** `scripts/set-version.py 2.5.0`. What's new in 2.5.0 as it was (glass,
+      Clokrix Pro with its trial, Settings as tiles, the shorter recent lists), but for where
+      the phones' recent actions are now: Settings → Phone and remote → Activity. `main`
+      fast-forwarded to it, which puts the Licence workflow in the Actions tab.
+- [ ] **Pro set up (the owner):** [`docs/pro.md`](docs/pro.md) → Setting it up, steps 1–6.
+- [ ] **2.5.0 released**, once Pro is set up.
+- [ ] **Relay deployed** from `main` after the release (the owner: "Deploy the relay too"), so
+      phones reaching the PC from anywhere get glass. The phone app changed since the deployed
+      relay (2990da0) only in its look and one `glass` setting it reads from the PC.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

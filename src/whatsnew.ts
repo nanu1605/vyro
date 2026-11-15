@@ -42,7 +42,7 @@ export const NOTES: Release[] = [
       {
         icon: 'gauge',
         title: 'Shorter recent lists',
-        text: 'Health’s recent events show the latest 5, with a chip for each part of the PC (CPU, GPU, Memory and more); Settings → Remote shows the latest 3 things your phones did. Show all brings back the rest.',
+        text: 'Health’s recent events show the latest 5, with a chip for each part of the PC (CPU, GPU, Memory and more); Settings → Phone and remote → Activity shows the latest 3 things your phones did. Show all brings back the rest.',
       },
     ],
   },
