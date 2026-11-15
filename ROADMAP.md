@@ -4779,6 +4779,8 @@ half; the columns went by the window's width, sidebar included.
   does not scroll sideways, and the search field is exactly one tile wide.
 - [x] **Locally:** types, 314 frontend tests, the bundle budget, and the whole accessibility
       sweep (2,162 checks in 859 s, clean but for the favicon this checkout lacks).
+- [x] **CI green on ed2b052** (run 43721055150; every job, the accessibility sweep and the
+      Windows build and install among them).
 
 ## Risks
 
