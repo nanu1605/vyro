@@ -4747,6 +4747,9 @@ tabs, and a search for any setting (decision 45).
       as when control is turned off for a fault, so whoever sees the BIOS settings back also
       sees why. Reproduced here by pausing the controller there: the old order fails, the new
       one passes.
+- [x] **CI green on 79a1c7c** (run 43715811613; Linux, the checkout's tests, the relay and phone
+      app, Windows with the app's own tests and the installed app's smoke test, and the
+      accessibility sweep with Settings' tiles, windows, tabs and search).
 
 ## Risks
 
