@@ -13,7 +13,10 @@
 // at the window size they were moved at; and nothing scrolls sideways, not even an area inside a
 // view, from the narrowest window up. Since 2.0.3 also: Ctrl K to a Settings or Health section
 // lands on it from a fresh start; since 2.0.4, so do the update chip and "Change profile", and a
-// view shows where it was left. The phone app itself is swept by scripts/relay-e2e.mjs.
+// view shows where it was left. Since 2.5 also: everything with glass on (the default); the
+// see-through window over the lightest and darkest Windows' Acrylic gets; and glass off as 2.4
+// had it, off when the system asks for less transparency, and the switch that turns it off.
+// The phone app itself is swept by scripts/relay-e2e.mjs.
 // Runs against the browser preview
 // (sample data, two GPUs as on the owner's PC) of a finished build:
 //
@@ -212,18 +215,18 @@ async function noSidewaysScroll(page, where, inner = (page.viewportSize()?.width
   for (const f of found) problem(where, f);
 }
 
-async function open(browser, url, { width, theme, motion = 'no-preference', init, accent = 'theme' } = {}) {
+async function open(browser, url, { width, theme, motion = 'no-preference', init, accent = 'theme', glass = true } = {}) {
   const ctx = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: motion });
   await ctx.addInitScript(
-    ([t, a, extra]) => {
+    ([t, a, g, extra]) => {
       try {
-        localStorage.setItem('clokrix.look', JSON.stringify({ theme: t, accent: a, openOn: 'dashboard' }));
+        localStorage.setItem('clokrix.look', JSON.stringify({ theme: t, accent: a, openOn: 'dashboard', glass: g }));
       } catch {
         /* the page works without it */
       }
       if (extra) Function(extra)();
     },
-    [theme, accent, init ?? ''],
+    [theme, accent, glass, init ?? ''],
   );
   const page = await ctx.newPage();
   const where = `${url.replace(BASE, '') || '/'} ${theme} ${width}px`;
@@ -1202,6 +1205,98 @@ async function sweepMotion(browser) {
   await ctx.close();
 }
 
+// --- Glass (2.5): the see-through window, glass off, and what turns it off. ----------------------
+
+/** Windows' Acrylic as themes.ts models it (`acrylicUnder`): over a black and a white wallpaper. */
+const ACRYLIC = { dark: ['#252525', '#4c4c4c'], light: ['#d6d6d6', '#fcfcfc'] };
+
+async function sweepGlass(browser) {
+  const glassOf = (page) =>
+    page.evaluate(() => ({
+      glass: document.documentElement.dataset.glass,
+      blurred: [...document.querySelectorAll('body *')].filter((el) => getComputedStyle(el).backdropFilter !== 'none').length,
+    }));
+  // The see-through window (Windows 11) over the lightest and darkest the Acrylic gets.
+  for (const theme of THEMES) {
+    for (const under of ACRYLIC[theme === 'daylight' ? 'light' : 'dark']) {
+      const { ctx, page } = await open(browser, `${BASE}/?window=see-through`, { width: 1440, theme });
+      await page.goto(`${BASE}/?window=see-through`);
+      await page.waitForTimeout(1200);
+      await page.addStyleTag({ content: `:root[data-window='see-through'] { background: ${under} !important; }` });
+      checks++;
+      if ((await page.evaluate(() => document.documentElement.dataset.window)) !== 'see-through') {
+        problem(`Glass · see-through · ${theme}`, 'the page is not marked see-through');
+      }
+      for (const t of ['Dashboard', 'Health', 'Settings']) {
+        await tab(page, t);
+        await axe(page, `Glass · see-through over ${under} · ${theme} · ${t}`);
+      }
+      await ctx.close();
+    }
+  }
+  // Off: 2.4's look, and nothing blurs, not even a dialog.
+  {
+    const { ctx, page } = await open(browser, BASE, { width: 1440, theme: 'glass', glass: false });
+    await page.goto(`${BASE}/`);
+    await page.waitForTimeout(1200);
+    await page.keyboard.press('Control+k');
+    await page.locator('dialog[open]').waitFor();
+    const off = await glassOf(page);
+    const panel = await page.evaluate(() => {
+      const s = getComputedStyle(document.querySelector('.panel'));
+      return { gradients: (s.backgroundImage.match(/gradient/g) ?? []).length, clip: s.backgroundClip };
+    });
+    checks++;
+    if (off.glass !== 'off' || off.blurred || panel.gradients !== 1 || panel.clip !== 'border-box') {
+      problem('Glass off', `not 2.4's look: ${JSON.stringify({ ...off, ...panel })}`);
+    }
+    await ctx.close();
+  }
+  // The system asking for less transparency turns it off.
+  {
+    const { ctx, page } = await open(browser, BASE, { width: 1440, theme: 'midnight' });
+    const cdp = await ctx.newCDPSession(page);
+    await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }] });
+    await page.goto(`${BASE}/`);
+    await page.waitForTimeout(1200);
+    const reduced = await glassOf(page);
+    checks++;
+    if (reduced.glass !== 'off' || reduced.blurred) problem('Glass · reduced transparency', `still on: ${JSON.stringify(reduced)}`);
+    await ctx.close();
+  }
+  // The switch in Appearance turns it off and on.
+  {
+    const { ctx, page } = await open(browser, BASE, { width: 1440, theme: 'cyber' });
+    await page.goto(`${BASE}/`);
+    await page.waitForTimeout(1200);
+    await tab(page, 'Settings');
+    await page.locator('#panel-settings nav a[href="#appearance"]').click();
+    const sw = page.getByRole('switch', { name: /Glass effects/ });
+    for (const want of ['off', 'on']) {
+      await sw.click();
+      await page.waitForFunction((w) => document.documentElement.dataset.glass === w, want, { timeout: 3000 }).catch(() => {});
+      checks++;
+      const now = await page.evaluate(() => document.documentElement.dataset.glass);
+      if (now !== want) problem('Glass · Appearance switch', `glass is ${now} after turning it ${want}`);
+    }
+    await ctx.close();
+  }
+  // Windows' Transparency effects off: glass is off, and the switch says why.
+  {
+    const { ctx, page } = await open(browser, `${BASE}/?transparency=off`, { width: 1440, theme: 'midnight' });
+    await page.goto(`${BASE}/?transparency=off`);
+    await page.waitForTimeout(1200);
+    await tab(page, 'Settings');
+    await page.locator('#panel-settings nav a[href="#appearance"]').click();
+    const sw = page.getByRole('switch', { name: /Glass effects/ });
+    await sw.waitFor();
+    const state = { ...(await glassOf(page)), disabled: await sw.isDisabled(), says: await page.getByText('Off in Windows (Transparency effects)').count() };
+    checks++;
+    if (state.glass !== 'off' || !state.disabled || !state.says) problem('Glass · Windows off', JSON.stringify(state));
+    await ctx.close();
+  }
+}
+
 // --- Run. ---------------------------------------------------------------------------------------
 
 const server = spawn(process.execPath, [`${root}node_modules/vite/bin/vite.js`, 'preview', '--port', String(PORT), '--strictPort'], {
@@ -1259,6 +1354,7 @@ try {
     for (const theme of ['midnight', 'daylight']) await sweepFree(browser, theme);
     await sweepViewScroll(browser);
     await sweepMotion(browser);
+    await sweepGlass(browser);
   } finally {
     await browser.close();
   }

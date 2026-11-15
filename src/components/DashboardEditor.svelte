@@ -179,7 +179,7 @@
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && (menu = null)} />
 
-<div class="editbar" role="toolbar" aria-label="Edit layout">
+<div class="editbar glass-float" role="toolbar" aria-label="Edit layout">
   <label class="name">
     <span>Name</span>
     <input
@@ -281,7 +281,7 @@
       </div>
       {#if menu === w.id}
         {@const opts = isKind(w.kind) ? options(w) : []}
-        <div class="dash-chrome menu" role="group" aria-label="Options for {t}">
+        <div class="dash-chrome menu glass-float" role="group" aria-label="Options for {t}">
           {#if opts.length || w.kind === 'history'}
             <label class="source">
               <span>Shows</span>

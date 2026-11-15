@@ -387,6 +387,8 @@ export interface AppSettings {
   accent: AccentChoice;
   /** Which tab the window opens on, at launch and from the tray. */
   openOn: OpenOn;
+  /** Glass effects (2.5): see-through surfaces, and on Windows 11 the window too. */
+  glass: boolean;
   /** My PC (P23): 3-D or the flat plan, and the owner's GPU shapes by card key. */
   myPc: MyPcSettings;
 }
@@ -1145,4 +1147,41 @@ export async function editionSeen(): Promise<Edition> {
 export async function onEdition(cb: (e: Edition) => void): Promise<() => void> {
   if (!inTauri) return (await import('./sim-edition')).onSimEdition(cb);
   return listen<Edition>('edition-changed', (e) => cb(e.payload));
+}
+
+/** The window's glass (2.5): Windows' Acrylic behind a see-through window, and Windows' own
+ * Transparency effects, which turn Clokrix's glass off when off. */
+export interface WindowLook {
+  seeThrough: boolean;
+  transparency: boolean;
+}
+
+/** In the browser preview, `?window=see-through` plays a see-through window over a made-up
+ * wallpaper, and `?transparency=off` Windows' switch turned off. */
+function simWindowLook(): WindowLook {
+  const q = new URLSearchParams(location.search);
+  const transparency = q.get('transparency') !== 'off';
+  const seeThrough = transparency && q.get('window') === 'see-through';
+  // A made-up wallpaper under a dark Acrylic, where the app has the real desktop.
+  if (seeThrough && !document.getElementById('sim-wallpaper')) {
+    const style = document.createElement('style');
+    style.id = 'sim-wallpaper';
+    style.textContent = `:root[data-window='see-through'] { background:
+      linear-gradient(rgb(36 36 40 / 70%), rgb(36 36 40 / 70%)),
+      radial-gradient(40rem 30rem at 15% 20%, #ff8a3d, transparent 70%),
+      radial-gradient(40rem 30rem at 85% 30%, #3d7bff, transparent 70%),
+      radial-gradient(50rem 30rem at 50% 90%, #d43dff, transparent 70%), #1a2a40 fixed !important; }`;
+    document.head.append(style);
+  }
+  return { seeThrough, transparency };
+}
+
+export async function getWindowLook(): Promise<WindowLook> {
+  if (!inTauri) return simWindowLook();
+  return invoke<WindowLook>('window_look').catch(() => ({ seeThrough: false, transparency: true }));
+}
+
+export async function onWindowLook(cb: (l: WindowLook) => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<WindowLook>('window-look', (e) => cb(e.payload));
 }

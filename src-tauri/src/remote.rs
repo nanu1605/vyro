@@ -134,6 +134,7 @@ fn info(app: &AppHandle) -> RemoteInfo {
         theme: name_of(&s.theme),
         accent: name_of(&s.accent),
         unit: s.temperature_unit,
+        glass: Some(s.glass && clokrix_core::sysinfo::transparency_effects()),
         ..RemoteInfo::default()
     }
 }

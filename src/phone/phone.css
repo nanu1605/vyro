@@ -174,3 +174,12 @@ body {
 .app dt {
   overflow-wrap: anywhere;
 }
+
+/* Glass (2.5, theme.css): cards keep the phone's rounder corners. */
+:root[data-glass='on'] .app .panel {
+  border-radius: calc(var(--r-card) + 2px);
+}
+:root[data-glass='on'] .app .note:not(.warn, .hot) {
+  border-color: var(--glass-line);
+  background: var(--glass-card);
+}

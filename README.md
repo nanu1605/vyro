@@ -277,6 +277,12 @@ or actions, 0.3 moves `alerts.json` aside (to `alerts.json.bad`) and uses its de
   PC's state: idle, gaming, warning or critical. Critical pulses four times, then holds; it
   does not pulse with reduced motion. Clokrix opens on the Dashboard, or on the last view if you
   choose.
+- **Glass (2.5).** Every theme is glass: see-through cards over a more colourful wash, lit along
+  their top edge, with dialogs, menus, toasts and the top bar frosting what is under them. On
+  Windows 11 the window itself is see-through, with Windows' Acrylic frosting the desktop behind
+  it (not on AMOLED, whose black stays black). Desktop widgets, the game overlay, the phone app
+  and the checkout page take it too. Settings → Appearance → Glass effects turns it off, and so
+  does Windows' Transparency effects switch; off is the solid look of 2.4.
 - **Dashboard builder.** "Edit layout" on the Dashboard adds, moves, resizes, duplicates and
   removes widgets, with the mouse or the keyboard. Widgets:
   - gauges, and any of about 35 readings;

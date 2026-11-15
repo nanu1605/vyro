@@ -139,3 +139,22 @@ footer p {
 .panel {
   margin-bottom: 0.75rem;
 }
+
+/* Glass (2.5): the wash stays put while the cards move over it, so their glass shows the colours
+   passing under them. Phones smooth text in greyscale anyway, so a fixed layer costs nothing
+   here (on the PC the wash scrolls with the page instead). */
+:root[data-glass='on'] body {
+  background: transparent;
+}
+:root[data-glass='on'] body::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(36rem 26rem at 0% 0%, var(--glass-aurora-1) 0%, transparent 65%),
+    radial-gradient(34rem 26rem at 100% 22%, var(--glass-aurora-2) 0%, transparent 62%),
+    radial-gradient(40rem 30rem at 50% 100%, var(--glass-aurora-3) 0%, transparent 65%),
+    var(--bg);
+  content: '';
+  pointer-events: none;
+}

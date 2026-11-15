@@ -25,6 +25,12 @@ export const NOTES: Release[] = [
     items: [
       {
         icon: 'sparkles',
+        title: 'Glass, everywhere',
+        text: 'Every theme turns to glass: see-through cards over a more colourful wash, frosted dialogs, bars and menus, and on Windows 11 the desktop frosted behind the window. The phone app too. Settings → Appearance → Glass effects turns it off.',
+        phone: true,
+      },
+      {
+        icon: 'sparkles',
         title: 'Clokrix Pro, with 7 days to try it',
         text: 'Clokrix now comes as Free and Pro. Free keeps the Dashboard and Settings; Pro keeps everything else, for $100 once, for life, on one PC. Every PC has Pro for 7 days from this update; Settings → Clokrix Pro buys it, or takes a key.',
       },

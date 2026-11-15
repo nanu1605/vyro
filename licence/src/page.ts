@@ -9,12 +9,19 @@ export function esc(s: string): string {
 }
 
 const STYLE = `
-  :root { color-scheme: light dark; --bg: #f6f7fb; --card: #fff; --text: #141821; --muted: #5b6475; --line: #d9dde6; --accent: #2563eb; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #0b0f16; --card: #121822; --text: #e8ecf3; --muted: #9aa4b5; --line: #263042; --accent: #5aa2ff; } }
+  :root { color-scheme: light dark; --bg: #f6f7fb; --card: rgb(255 255 255 / 72%); --text: #141821; --muted: #5b6475; --line: #d9dde6;
+    --accent: #2563eb; --wash-1: #d4e4fa; --wash-2: #e8def8; --wash-3: #d6f0e0; --rim: rgb(255 255 255 / 95%); --edge: rgb(23 32 43 / 11%); }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0b0f16; --card: rgb(18 24 34 / 70%); --text: #e8ecf3; --muted: #9aa4b5; --line: #263042;
+    --accent: #5aa2ff; --wash-1: #173470; --wash-2: #461a6c; --wash-3: #0b3f50; --rim: rgb(255 255 255 / 20%); --edge: rgb(255 255 255 / 9%); } }
   * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg); color: var(--text);
+  /* Clokrix's glass (2.5): a pane over a colour wash, lit along its top edge. */
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; color: var(--text);
+    background: radial-gradient(40rem 30rem at 10% 0%, var(--wash-1), transparent 65%), radial-gradient(36rem 28rem at 95% 20%, var(--wash-2), transparent 62%),
+      radial-gradient(44rem 30rem at 50% 100%, var(--wash-3), transparent 65%), var(--bg);
     font: 16px/1.5 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif; }
-  main { width: min(30rem, 100%); padding: 28px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); }
+  main { width: min(30rem, 100%); padding: 28px; border: 1px solid var(--edge); border-radius: 20px; background: var(--card); background-clip: padding-box;
+    -webkit-backdrop-filter: blur(24px) saturate(170%); backdrop-filter: blur(24px) saturate(170%);
+    box-shadow: inset 0 1px 0 var(--rim), 0 24px 56px -28px rgb(0 0 0 / 45%); }
   h1 { margin: 0 0 4px; font-size: 1.4rem; }
   .price { margin: 0 0 16px; font-size: 2rem; font-weight: 700; }
   ul { margin: 0 0 20px; padding-left: 1.2rem; color: var(--muted); }

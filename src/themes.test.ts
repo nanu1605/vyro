@@ -8,6 +8,7 @@ import {
   accentPair,
   contrast,
   customPair,
+  glassSurfaces,
   nearWarning,
   over,
   parseColor,
@@ -21,8 +22,9 @@ import rust from '../src-tauri/src/look.rs?raw';
 const AA = 4.5;
 const ACCENT_IDS = ['theme', ...ACCENTS.map((a) => a.id)];
 
-/** Every surface text sits on, made opaque (Glass cards over the bare page and both washes). */
-const surfaces = (id: string) => textSurfaces(THEMES.find((t) => t.id === id)!);
+/** Every surface text sits on, made opaque (Glass cards over the bare page and both washes; with
+ * `glass`, the glass's surfaces too). */
+const surfaces = (id: string, glass = false) => textSurfaces(THEMES.find((t) => t.id === id)!, glass);
 
 /** Custom accents (1.3): a grid round the colour space, and the hard cases by name. */
 const CUSTOM = [
@@ -39,21 +41,48 @@ const CUSTOM = [
 ];
 
 describe('themes', () => {
-  it('give every theme and accent AA contrast for text and the colours used as text', () => {
+  it('give every theme and accent AA contrast for text and the colours used as text, glass or not', () => {
     const misses: string[] = [];
-    for (const t of THEMES) {
-      for (const accent of ACCENT_IDS) {
-        const v = tokens(t.id, accent);
-        const fg = ['--text', '--muted', '--accent-cpu', '--accent-gpu', '--ok', '--warn', '--hot'];
-        for (const [where, bg] of surfaces(t.id)) {
-          for (const name of fg) {
-            const c = contrast(v[name]!, bg);
-            if (c < AA) misses.push(`${t.id}/${accent}: ${name} on ${where} ${c.toFixed(2)}`);
+    for (const glass of [false, true]) {
+      for (const t of THEMES) {
+        for (const accent of ACCENT_IDS) {
+          const v = tokens(t.id, accent, glass);
+          const fg = ['--text', '--muted', '--accent-cpu', '--accent-gpu', '--ok', '--warn', '--hot'];
+          for (const [where, bg] of surfaces(t.id, glass)) {
+            for (const name of fg) {
+              const c = contrast(v[name]!, bg);
+              if (c < AA) misses.push(`${t.id}/${accent}${glass ? '/glass' : ''}: ${name} on ${where} ${c.toFixed(2)}`);
+            }
           }
         }
       }
     }
     expect(misses).toEqual([]);
+  });
+
+  it('give the glass every surface text can land on, the see-through window included', () => {
+    for (const t of THEMES) {
+      const names = glassSurfaces(t).map(([w]) => w);
+      // The page, each card and the sidebar over the base and every colour of the wash; a blurred
+      // layer over its haze, dimmed or not.
+      const page = 1 + t.palette.glass.aurora.filter((a) => a !== 'transparent').length + (t.palette.glass.base < 100 ? 2 : 0);
+      expect(names.filter((n) => n.startsWith('glass-card/')).length, t.id).toBe(page);
+      expect(names, t.id).toContain('glass-float/dimmed');
+    }
+    // AMOLED keeps its black: no wash, and its window is never see-through.
+    const amoled = THEMES.find((t) => t.id === 'amoled')!.palette.glass;
+    expect(amoled.base).toBe(100);
+    expect(amoled.aurora.every((a) => a === 'transparent')).toBe(true);
+  });
+
+  it('leave Glass effects off as 2.4 had it, and only make custom accents more readable when on', () => {
+    for (const t of THEMES) {
+      for (const accent of ACCENT_IDS) {
+        // A named accent is the same colour with glass on or off.
+        expect(tokens(t.id, accent, true)['--accent-cpu'], `${t.id}/${accent}`).toBe(tokens(t.id, accent)['--accent-cpu']);
+      }
+      expect(tokens(t.id, 'theme')['--glass-base']).toMatch(/^rgb\(\d+ \d+ \d+ \/ \d+%\)$/);
+    }
   });
 
   it('keep text readable on the tinted strips and buttons', () => {
@@ -79,6 +108,7 @@ describe('themes', () => {
     const mix = (x: string, n: number, s: string) => over(`rgb(${parseColor(x).slice(0, 3).join(' ')} / ${n}%)`, s);
     for (const t of THEMES) {
       const on = surfaces(t.id);
+      const onGlass = surfaces(t.id, true);
       for (const accent of CUSTOM) {
         const v = tokens(t.id, accent);
         if (v['--accent-cpu-fill'] !== accent) misses.push(`${t.id}/${accent}: fill ${v['--accent-cpu-fill']}`);
@@ -86,6 +116,14 @@ describe('themes', () => {
           for (const [where, bg] of on) {
             const c = contrast(v[name]!, bg);
             if (c < AA) misses.push(`${t.id}/${accent}: ${name} on ${where} ${c.toFixed(2)}`);
+          }
+        }
+        // With glass on, on the glass's surfaces as well.
+        const g = tokens(t.id, accent, true);
+        for (const name of ['--accent-cpu', '--accent-gpu']) {
+          for (const [where, bg] of onGlass) {
+            const c = contrast(g[name]!, bg);
+            if (c < AA) misses.push(`${t.id}/${accent}/glass: ${name} on ${where} ${c.toFixed(2)}`);
           }
         }
         for (const bg of [mix(v['--accent-cpu']!, 16, v['--bg']!), mix(v['--accent-cpu']!, 16, v['--panel']!)]) {

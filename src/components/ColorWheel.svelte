@@ -35,7 +35,8 @@
   });
 
   const hex = $derived(fromHsv(hsv));
-  const text = $derived(customPair(theme, hex).text[0]);
+  // The shade text takes, as the page has it (glass on or off, 2.5).
+  const text = $derived(customPair(theme, hex, document.documentElement.dataset.glass === 'on').text[0]);
   const warning = $derived(nearWarning(hex));
 
   function readRecent(): string[] {

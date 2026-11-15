@@ -3,7 +3,8 @@
 What only a real PC (and a real Razorpay account) can show for 2.5:
 - Settings' sections in their own window, and its animation;
 - the shorter lists in Settings → Remote and Health;
-- Clokrix Pro bought in Razorpay's Test mode, and its key on one PC.
+- Clokrix Pro bought in Razorpay's Test mode, and its key on one PC;
+- the glass, and the window see-through on Windows 11.
 
 The tests cover the rest:
 - the checkout in workerd, with Razorpay played by a stand-in;
@@ -15,7 +16,7 @@ The tests cover the rest:
 on `claude/vyro-2.0`: once both variables are set, it carries the checkout as a release will. For
 §3 you need a second PC, or a virtual machine with Windows.
 
-About 30 minutes.
+About 40 minutes.
 
 ## 1. Settings' sections
 
@@ -68,7 +69,34 @@ About 30 minutes.
    the PC with the key, as in step 4, and restart Clokrix: it says the payment was refunded, and
    the PC is Free.
 
+## 4. Glass
+
+On Windows 11 (Settings → System → About shows version 22H2 or later), with a colourful
+wallpaper.
+
+1. **The window.** The desktop shows through Clokrix's window, frosted, behind the cards. Drag
+   the window and resize it: both stay smooth. Click another window: Clokrix's turns solid, as
+   Windows' own apps do, and comes back when clicked.
+2. **Reading it.** Change the wallpaper to a plain white one, then a black one. Every text
+   reads well on both, grey text included.
+3. **The glass.** Cards are see-through over a colour wash, lit along their top edge. Ctrl K,
+   the Settings window and What's new frost what is under them. Scrolling a long view feels as
+   before, and typing in Ctrl K is as quick as before.
+4. **Each theme.** Settings → Appearance: each theme in turn. AMOLED stays pure black, and its
+   window is not see-through.
+5. **Off.** Settings → Appearance → Glass effects off: everything is solid, as in 2.4, and the
+   window is opaque. Back on.
+6. **Windows' switch.** Windows Settings → Personalisation → Colours → Transparency effects
+   off, then click Clokrix: the glass goes, and Glass effects says it is off in Windows. Back
+   on.
+7. **Elsewhere.** A desktop widget and the game overlay (in a game) are lit along their edge.
+   The phone app (after the relay is deployed) has a still wash behind the cards and frosted
+   bars.
+8. **Windows 10**, if you have a PC with it: the glass is inside the window only; the window is
+   opaque, as before.
+
 ## Report
 
 "Everything is working", or what differs. For §3, send `%AppData%\app.clokrix.monitor\
-edition.json` from each PC, with its `key` line removed.
+edition.json` from each PC, with its `key` line removed. For §4, a screenshot of anything that
+looks wrong, with the wallpaper behind it.

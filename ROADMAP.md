@@ -58,6 +58,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 41 | TURN for the screen | Where a phone has no direct path to the PC (most mobile networks; the owner, 2026-10-28: "can we cast without any time constraint?"), its screen session may go through Cloudflare's TURN service instead of the slow view (2.0.1): only where the relay's owner set a TURN key and listed the PC's room (`TURN_ROOMS`, or `*`), as the relay is shared by every installed Clokrix and Cloudflare charges past 1,000 GB a month. The relay gets day-long credentials with the key, which never leaves it, and hands them to a phone of a listed room; the picture stays encrypted end to end, the TURN server passing packets it cannot read. The slow view stays for where there is neither | decided |
 | 42 | Clokrix Free and Pro | Free is the Dashboard and Settings' own sections; Pro is everything, $100 once, for life, on one PC, with a 7-day trial from the first start of 2.5 for new and updated installs alike. Sold by Jainan Infotech through Razorpay, from a checkout of Clokrix's own on Cloudflare (`licence/`) that binds each key to one PC and signs an activation the app checks offline. The code stays open source (MIT OR Apache-2.0): the lock is in the public code, and a build without the checkout's settings is Pro (2.5; the owner, 2026-11-13: "I will sell this product so there will be 2 packages", "He will pay on the jainan infotech website using razorpay platform. And once he has paid the pro version should be activated for lifetime. Price: 100 USD.", "only 7 days free trial", one PC per purchase; [`docs/pro.md`](docs/pro.md)) | decided |
 | 43 | Settings sections in a window | A section named in Settings' list opens in a centred window over the page, growing out of its name and shrinking back into it; Ctrl K and the links that name a section open it the same way (2.5; the owner, 2026-11-13: "That section should pop out of the screen also add animations to it", and chose the centred window) | decided |
+| 44 | Glass | Every theme turns to iOS-like glass: see-through panes over a more colourful wash, lit along their top edge, with layers that float over content (dialogs, menus, toasts, the top bar, the phone's bars and sheets) frosting what is under them; cards do not blur, since the soft wash under them would look the same. On Windows 11 (build 22523 and later) the window itself turns see-through, with Windows' Acrylic frosting the desktop behind it; AMOLED's black stays black. Settings → Appearance → Glass effects, on by default, turns it off, as do Windows' Transparency effects and a system's request for less transparency; off is 2.4's look exactly. Desktop widgets, the game overlay, the phone app, the LAN page and the checkout page take it too (2.5; the owner, 2026-11-14: "Add IOS like glass effect in whole clokrix including relay, which will make clokrix to look premium.", and chose the see-through window on Windows 11 and all six themes with a switch) | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -4506,7 +4507,7 @@ for 3" (2026-11-12) had a session on an environment that reaches Intel's hosts b
       ([`docs/signing.md`](docs/signing.md)). The relay was not deployed: it serves 2990da0's
       phone app (Relay run 43015537665), which behaves as this release's would.
 
-### 2.5.0 — Settings in a window, shorter lists, Clokrix Free and Pro
+### 2.5.0 — Settings in a window, shorter lists, Clokrix Free and Pro, glass
 
 The owner's four requests (2026-11-13), planned before building as asked ("i have some new
 features, plan them before implementing"):
@@ -4604,7 +4605,70 @@ On `claude/vyro-2.0`.
   - a purchase in Razorpay's Test mode end to end.
 - [ ] **Field check (the owner)** ([`docs/field-check-2.5.md`](docs/field-check-2.5.md)): the
       window's animation; a test-mode purchase turning Pro on by itself; the key refused on a
-      second PC, then moved; Free this PC; the trial's end.
+      second PC, then moved; Free this PC; the trial's end; the glass (§4).
+
+The owner's fifth request (2026-11-14), planned and agreed (decision 44):
+
+> Add IOS like glass effect in whole clokrix including relay, which will make clokrix to look
+> premium.
+
+Their answers: the window itself see-through on Windows 11 ("Yes, on Windows 11"), and all six
+themes with a switch ("All six, with a switch").
+
+- [x] **The glass** (`src/themes.ts`, `styles/theme.css`, `styles/app.css`): each theme's glass
+      colours (its wash, cards, sidebar, floating layers and the window's own colour over
+      Acrylic) and the light along a pane's edge, all under `:root[data-glass='on']`, so off is
+      2.4's look.
+  - **Frosted:** every dialog (the Settings window among them), toasts, the layout editor's bar
+    and menus, History's tooltip, and the top bar. Not Ctrl K's own pane, which is nearly solid
+    (below).
+  - **Not frosted:** cards, the sidebar (nothing passes under it), My PC's tooltip (over the 3-D
+    view, which moves), the game overlay (over the game) and desktop widgets (Windows' blur
+    would fill the window's square corners); those take the lit edge only.
+  - **Text stays readable:** `themes.test.ts` checks every text colour on every glass surface
+    (cards over each colour of the wash, the page itself, floating layers over the haze a blur
+    makes, and the see-through window's base over Acrylic modelled over a black and a white
+    wallpaper). On a brighter wash, glass takes a lighter muted grey and problem red (Midnight,
+    Cyber, Glass; darker on Daylight); custom accents are worked out against those surfaces too.
+- [x] **The see-through window** (`src-tauri/src/look.rs`): from Windows build 22523 the main
+      window is built see-through and gets Windows' own Acrylic (`set_effects`), with the
+      page's base at 62–72 % of the theme's colour; older builds keep 2.4's opaque window, so
+      Windows 10 never has a transparent one. Glass effects off, Windows' Transparency effects
+      off (read at start and whenever the window gets focus) or AMOLED paint it opaque again.
+      The window is now built in `setup` instead of from `tauri.conf.json`, to choose that.
+- [x] **Settings → Appearance → Glass effects:** on by default (a 2.4 settings file loads with
+      it on); off and saying why while Windows' Transparency effects are off. Free has it too.
+- [x] **The phone app and the LAN page:** the wash stays still behind the cards (a fixed layer;
+      phones smooth text in greyscale anyway), the bars, sheets and toasts frosted and lit, the
+      live view's tools lit. They follow the PC's choice (`glass` in the info message; absent
+      from an older PC, read as on) and the phone's own Reduce Transparency.
+- [x] **The checkout page** (`licence/src/page.ts`): the wash and a frosted pane, light or dark.
+- [x] **Measured** in the browser preview on a 4× slowed CPU, glass on against off (two runs
+      each):
+  - **Scrolling** Settings and the Dashboard with the frosted top bar: frame times the same
+    (median 16.7 ms; 95 % within 16.8 ms on Settings, within 16.8–33.3 ms on the Dashboard in
+    both), and paints within 4 % (Settings 63–71 against 64–68, Dashboard 100–106 against
+    102–107). So the top bar keeps its blur.
+  - **Typing in Ctrl K:** with its pane frosted, a key took 37 ms to show (median; 51 at worst)
+    against 28 (40), and 95 % of frames 33 ms against 17, because each key redid the blur. Its
+    pane is nearly solid now (94 % of the panel colour, lit edge): 22–28 ms (35–37) against
+    28–31 (32–68), frames the same.
+  - **Settings' overlay preview** holds still while another section's window is over it, as
+    its graph would make the window's blur redo itself 30 times a second.
+- [x] **Size:** the companion page 36.2 kB and the phone app 46.0 kB gzipped, over their 35 and
+      45 kB budgets by the glass's colours, the maths for custom accents on them and the styles;
+      the budgets are 37 and 47 kB now (`scripts/bundle_budget.py`).
+- [x] **Locally:**
+  - types; 302 frontend tests (the glass's contrast among them); the core's 902; clippy for
+    Windows with the app; the checkout's 15 tests;
+  - the accessibility sweep, 2,051 checks in 715 s, with glass on everywhere, plus the
+    see-through window over the lightest and darkest Acrylic in every theme, glass off as 2.4
+    had it with nothing blurred, off under reduced transparency and with Windows' switch off,
+    and the Appearance switch. Its only findings were the favicon this machine's Chromium asks
+    for, as before;
+  - the phone's end-to-end test, 40 of 43 checks, axe on every phone screen among them. The
+    other 3 are the screen's slow view: this machine's Chromium plays H.264, so the phone took
+    the live picture instead, which the test does not expect; CI's Chromium does not.
 
 ## Risks
 

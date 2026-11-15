@@ -30,7 +30,8 @@
   import { loadSeen, newestId, saveSeen } from './changes';
   import { loadSeenKeys, markSeen, unseen } from './insights';
   import { loadPrefs, prefs, profileSpec, tempText } from './prefs.svelte';
-  import { applyLook, savedLook, uiState } from './themes';
+  import { applyLook, applySeeThrough, savedLook, uiState } from './themes';
+  import { loadWindowLook, windowLook } from './window-look.svelte';
   import { isTab, view, VIEWS, type Tab } from './nav';
   import Sidebar, { type Dot } from './components/shell/Sidebar.svelte';
   import TopBar from './components/shell/TopBar.svelte';
@@ -145,7 +146,12 @@
   let pageHidden = $state(typeof document !== 'undefined' && document.hidden);
 
   // Theme and accent (P25), from the settings; the page state colours the header rail.
-  $effect(() => applyLook({ theme: prefs.theme, accent: prefs.accent, openOn: prefs.openOn }));
+  // Glass (2.5): the setting, unless Windows' own Transparency effects are off; the window is
+  // see-through only where the app made it so.
+  $effect(() =>
+    applyLook({ theme: prefs.theme, accent: prefs.accent, openOn: prefs.openOn, glass: prefs.glass !== false && windowLook.transparency }),
+  );
+  $effect(() => applySeeThrough(windowLook.seeThrough));
   const pageState = $derived(uiState(snap));
   $effect(() => {
     document.documentElement.dataset.state = pageState;
@@ -289,6 +295,7 @@
   onMount(() => {
     visited[tab] = true;
     void loadEdition();
+    void loadWindowLook();
     loadPawnIo();
     void loadPrefs()
       .then(() => {
@@ -633,7 +640,7 @@
 
   <div class="toasts" role="status" aria-live="polite">
     {#each toasts as t (t.key)}
-      <button type="button" class="toast" onclick={() => openSection('health', 'alerts')}>
+      <button type="button" class="toast glass-float" onclick={() => openSection('health', 'alerts')}>
         <b>{tempText(t.title)}</b>
         <span>{tempText(t.message)}</span>
       </button>

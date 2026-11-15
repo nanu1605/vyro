@@ -214,6 +214,17 @@
   .palette::backdrop {
     background: rgb(0 0 0 / 55%);
   }
+  /* Glass (2.5): a nearly solid pane, lit along its edge, without the blur other dialogs have:
+     each key changes the results, and the blur under them was redone at every one (typing went
+     from 28 to 37 ms a key on a slowed CPU). */
+  :global(:root[data-glass='on']) .palette {
+    background:
+      linear-gradient(180deg, var(--glass-sheen) 0, transparent 4rem),
+      color-mix(in srgb, var(--panel) 94%, transparent);
+    background-clip: padding-box;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
   .box {
     display: flex;
     flex-direction: column;

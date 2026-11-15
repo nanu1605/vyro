@@ -48,6 +48,18 @@
     pointer-events: auto;
     animation: pop var(--dur-2) var(--ease-out);
   }
+  /* Glass (2.5): frosted, lit along the top. */
+  :global(:root[data-glass='on']) .toast {
+    background:
+      linear-gradient(180deg, var(--glass-sheen) 0, transparent 2rem),
+      var(--glass-float);
+    background-clip: padding-box;
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow:
+      inset 0 1px 0 var(--glass-rim),
+      0 12px 28px -12px var(--shadow-color);
+  }
   @keyframes pop {
     from {
       opacity: 0;

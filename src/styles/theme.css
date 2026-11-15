@@ -161,6 +161,57 @@ body {
   border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
 }
 
+/* Glass (2.5): see-through panes over a colourful wash, with the light a pane of glass catches
+   along its top edge and a soft, deep drop. Everything here is under data-glass='on' (themes.ts
+   sets it from Settings → Appearance and the system's own transparency choice), so with it off
+   the page is 2.4's. Only layers that float over content blur what is under them (app.css);
+   cards sit on the soft wash, where a blur would look the same and cost frames. Contrast on
+   every surface is checked by themes.test.ts. */
+:root[data-glass='on'] {
+  --glass-blur: blur(24px) saturate(170%);
+  --glass-drop: 0 1px 2px rgb(0 0 0 / 8%), 0 22px 48px -26px var(--shadow-color);
+  /* A pane's edge: lit along the top, dimmer down the left. */
+  --glass-light: inset 0 1px 0 var(--glass-rim), inset 1px 0 0 var(--glass-rim-low);
+}
+/* The wash, larger and more colourful, so the glass has colour to show. It scrolls with the page,
+   as before (a fixed one repaints the window every scrolled frame). */
+:root[data-glass='on'] body {
+  background:
+    radial-gradient(70rem 22rem at 50% -12rem, var(--state-wash) 0%, transparent 70%),
+    radial-gradient(56rem 38rem at 4% -6rem, var(--glass-aurora-1) 0%, transparent 62%),
+    radial-gradient(50rem 36rem at 98% 0rem, var(--glass-aurora-2) 0%, transparent 60%),
+    radial-gradient(64rem 42rem at 56% 46rem, var(--glass-aurora-3) 0%, transparent 64%),
+    var(--bg);
+  background-repeat: no-repeat;
+}
+/* Over Windows' Acrylic (Windows 11, look.rs): the page's own colour lets the frosted desktop
+   through. The root is clear, so the body's background is the whole window's. */
+:root[data-glass='on'][data-window='see-through'] {
+  background: transparent;
+}
+:root[data-glass='on'][data-window='see-through'] body {
+  background:
+    radial-gradient(70rem 22rem at 50% -12rem, var(--state-wash) 0%, transparent 70%),
+    radial-gradient(56rem 38rem at 4% -6rem, var(--glass-aurora-1) 0%, transparent 62%),
+    radial-gradient(50rem 36rem at 98% 0rem, var(--glass-aurora-2) 0%, transparent 60%),
+    radial-gradient(64rem 42rem at 56% 46rem, var(--glass-aurora-3) 0%, transparent 64%),
+    var(--glass-base);
+  background-repeat: no-repeat;
+}
+:root[data-glass='on'] .panel {
+  border-color: var(--glass-line);
+  border-radius: calc(var(--radius) + 2px);
+  background:
+    linear-gradient(180deg, var(--glass-sheen) 0, transparent 3.5rem),
+    linear-gradient(180deg, var(--glass-card-top) 0%, var(--glass-card) 22%);
+  /* The edge is the line's own colour over the page, not the fill's. */
+  background-clip: padding-box;
+  box-shadow: var(--glass-light), var(--glass-drop);
+}
+:root[data-glass='on'] .panel:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--glass-line));
+}
+
 /* Scrollbars that sit back. */
 * {
   scrollbar-color: color-mix(in srgb, var(--muted) 35%, transparent) transparent;

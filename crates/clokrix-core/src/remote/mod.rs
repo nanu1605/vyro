@@ -204,6 +204,11 @@ pub struct RemoteInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub wake: Option<crate::actions::wake::WakeTarget>,
+    /// Glass effects (2.5): off when the PC has them off (its own switch, or Windows'
+    /// Transparency effects). Absent from an older PC, which reads as on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub glass: Option<bool>,
 }
 
 #[cfg(test)]

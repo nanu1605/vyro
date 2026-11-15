@@ -166,7 +166,7 @@
         <p class="empty">{emptyText}</p>
       {/if}
       {#if hover}
-        <div class="tip" style:left="{Math.min(Math.max(x(hover.ts) + 10, 0), Math.max(0, w - 190))}px">
+        <div class="tip glass-float" style:left="{Math.min(Math.max(x(hover.ts) + 10, 0), Math.max(0, w - 190))}px">
           <div class="when">{clock(hover.ts)}</div>
           {#each hover.rows as r (r.name)}
             <div class="row">

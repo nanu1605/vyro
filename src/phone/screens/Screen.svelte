@@ -1225,6 +1225,13 @@
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
   }
+  /* Glass (2.5): over the picture, lit along the top edge. */
+  :global(:root[data-glass='on']) .floating .tools {
+    border-radius: 18px;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 28%),
+      inset 1px 0 0 rgb(255 255 255 / 8%);
+  }
   /* Over the picture: one row of icons; their words stay for screen readers. */
   .floating .tools {
     grid-template-columns: repeat(auto-fit, minmax(2.75rem, 1fr));

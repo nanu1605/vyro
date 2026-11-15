@@ -68,6 +68,9 @@ fn main() {
             // The window starts hidden (tauri.conf.json); autostart passes --minimized to stay
             // in the tray.
             let minimized = std::env::args().any(|a| a == clokrix_core::autostart::MINIMIZED_ARG);
+            // The main window, built here so it can be see-through where Windows has its own
+            // Acrylic (2.5); still hidden until the page shows it.
+            look::main_window(app.handle())?;
             for note in carried.iter().chain(&migrate::after_start(app.handle())) {
                 log::info!("from Vyro: {note}");
             }
@@ -220,6 +223,7 @@ fn main() {
             whats_new::get_whats_new,
             whats_new::whats_new_seen,
             edition::get_edition,
+            look::window_look,
             edition::buy_pro,
             edition::enter_key,
             edition::release_pro,

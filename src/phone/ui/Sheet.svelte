@@ -53,6 +53,20 @@
     color: var(--text);
     box-shadow: 0 -24px 48px -24px var(--shadow-color);
   }
+  /* Glass (2.5): the sheet frosts the page under it, lit along its top edge; its dim stays a
+     plain one. */
+  :global(:root[data-glass='on']) .sheet {
+    border-color: var(--glass-line);
+    background:
+      linear-gradient(180deg, var(--glass-sheen) 0, transparent 4rem),
+      var(--glass-float);
+    background-clip: padding-box;
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow:
+      inset 0 1px 0 var(--glass-rim),
+      0 -24px 48px -24px var(--shadow-color);
+  }
   .sheet[open] {
     animation: up var(--dur-3) var(--ease-out);
   }

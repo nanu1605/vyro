@@ -35,7 +35,7 @@
 
   // The settings file corrects the first look (theme, accent) once loaded; the profile in force
   // sets the motion, as in the main window.
-  $effect(() => applyLook({ theme: prefs.theme, accent: prefs.accent, openOn: prefs.openOn }));
+  $effect(() => applyLook({ theme: prefs.theme, accent: prefs.accent, openOn: prefs.openOn, glass: prefs.glass !== false }));
   $effect(() => {
     document.documentElement.dataset.motion = profileSpec().motion;
   });

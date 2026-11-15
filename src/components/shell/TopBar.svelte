@@ -108,6 +108,16 @@
        frame. */
     background: color-mix(in srgb, var(--bg) 98%, transparent);
   }
+  /* Glass (2.5): frosted, as the cards scroll under it. */
+  :global(:root[data-glass='on']) .top {
+    border-bottom-color: var(--glass-line);
+    background:
+      linear-gradient(180deg, var(--glass-sheen) 0, transparent),
+      var(--glass-float);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: inset 0 -1px 0 var(--glass-rim-low);
+  }
   /* The page state (idle, gaming, warning, critical) as a line along the bar's foot. */
   .top::after {
     position: absolute;

@@ -36,6 +36,44 @@ pub fn gpu_crashes(since: i64) -> Vec<(i64, crate::gpu_tune::CrashKind)> {
     }
 }
 
+/// Windows' build number (`CurrentBuildNumber`), e.g. 26100; 0 where it cannot be read or off
+/// Windows.
+pub fn windows_build() -> u32 {
+    #[cfg(windows)]
+    {
+        use crate::winutil::{Key, HKEY_LOCAL_MACHINE};
+        Key::open(
+            HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Windows NT\CurrentVersion",
+        )
+        .and_then(|k| {
+            k.string("CurrentBuildNumber")
+                .or_else(|| k.string("CurrentBuild"))
+        })
+        .and_then(|b| b.trim().parse().ok())
+        .unwrap_or(0)
+    }
+    #[cfg(not(windows))]
+    0
+}
+
+/// Windows' "Transparency effects" (Settings → Personalisation → Colours); on where it cannot be
+/// read, as Windows has it by default.
+pub fn transparency_effects() -> bool {
+    #[cfg(windows)]
+    {
+        use crate::winutil::{Key, HKEY_CURRENT_USER};
+        Key::open(
+            HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+        )
+        .and_then(|k| k.dword("EnableTransparency"))
+        .is_none_or(|v| v != 0)
+    }
+    #[cfg(not(windows))]
+    true
+}
+
 /// The active power plan's name, e.g. "Balanced" (a benchmark run's setup); `None` where it
 /// cannot be read.
 pub fn power_plan() -> Option<String> {

@@ -60,6 +60,16 @@
     -webkit-backdrop-filter: blur(16px) saturate(150%);
     backdrop-filter: blur(16px) saturate(150%);
   }
+  /* Glass (2.5): frosted as before, lit along its top edge. */
+  :global(:root[data-glass='on']) .tabs {
+    border-top-color: var(--glass-line);
+    background:
+      linear-gradient(180deg, var(--glass-sheen) 0, transparent 1.5rem),
+      var(--glass-float);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: inset 0 1px 0 var(--glass-rim);
+  }
   /* The pill under the open tab's icon, sliding from tab to tab. */
   .pill {
     position: absolute;

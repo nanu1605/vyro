@@ -47,6 +47,9 @@ pub struct Settings {
     pub accent: Accent,
     /// Which tab the window opens on.
     pub open_on: OpenOn,
+    /// Glass effects (2.5): see-through surfaces, and on Windows 11 the window too. Off is 2.4's
+    /// look; on by default, so a settings file from before has it on.
+    pub glass: bool,
     /// My PC (P23).
     #[serde(deserialize_with = "crate::look::lenient")]
     pub my_pc: MyPc,
@@ -69,6 +72,7 @@ impl Default for Settings {
             theme: Theme::default(),
             accent: Accent::default(),
             open_on: OpenOn::default(),
+            glass: true,
             my_pc: MyPc::default(),
         }
     }
@@ -407,7 +411,7 @@ pub fn apply(app: &AppHandle, mut settings: Settings) -> Result<(), String> {
         None => Ok(()),
     };
     crate::gaming::apply_effective(app);
-    crate::look::paint(app, settings.theme);
+    crate::look::paint(app, settings.theme, settings.glass);
     if let Some(item) = app.try_state::<OverlayItem>() {
         let _ = item.0.set_checked(settings.overlay.enabled);
     }
@@ -578,6 +582,13 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
 
 /// Close button: hide to the tray instead of exiting, when the setting is on.
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
+    // Windows' Transparency effects may have changed while the window was away (2.5).
+    if let WindowEvent::Focused(true) = event {
+        if window.label() == "main" {
+            crate::look::refresh(window.app_handle());
+        }
+        return;
+    }
     let WindowEvent::CloseRequested { api, .. } = event else {
         return;
     };
@@ -671,6 +682,21 @@ mod tests {
         assert!(s.games.enabled);
         assert_eq!(s.games.default_profile, Some(Profile::Gaming));
         assert!(s.games.rules.is_empty());
+    }
+
+    /// 2.5: a settings file from 2.4 or before has Glass effects on; one that turned it off keeps
+    /// it off.
+    #[test]
+    fn settings_from_2_4_have_glass_on() {
+        let s: Settings =
+            serde_json::from_str(r#"{"profile":"gaming","theme":"daylight"}"#).unwrap();
+        assert!(s.glass);
+        assert_eq!(s.theme, Theme::Daylight);
+        let s: Settings = serde_json::from_str(r#"{"glass":false}"#).unwrap();
+        assert!(!s.glass);
+        assert!(serde_json::to_string(&Settings::default())
+            .unwrap()
+            .contains(r#""glass":true"#));
     }
 
     #[test]

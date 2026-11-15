@@ -8,6 +8,7 @@
   import ProLocked from './ProLocked.svelte';
   import { lockedSection } from '../edition.svelte';
   import { closeSettingsSection, openSettingsSection, settingsDialog } from '../settings-dialog.svelte';
+  import { windowLook } from '../window-look.svelte';
   import { getAutostart, getSensorTree, pickProfile, setAutostart, type OverlayCorner, type OverlaySettings } from '../ipc';
   import { activeProfile, game, prefs, profiles, savePrefs } from '../prefs.svelte';
   import OverlayPlate from './OverlayPlate.svelte';
@@ -40,7 +41,8 @@
     if (isHex(prefs.accent)) lastCustom = prefs.accent;
   });
   const customColour = $derived(custom ? prefs.accent : (lastCustom ?? accentFills(look, prefs.accent)[0]));
-  const previewAccent = (hex: string) => applyLook({ theme: prefs.theme, accent: hex as `#${string}`, openOn: prefs.openOn });
+  const previewAccent = (hex: string) =>
+    applyLook({ theme: prefs.theme, accent: hex as `#${string}`, openOn: prefs.openOn, glass: prefs.glass !== false && windowLook.transparency });
   const saveAccent = (hex: string) => void save('Accent', () => savePrefs({ accent: hex as `#${string}` }));
   let tree = $state.raw<SensorTree | null>(null);
   let error = $state<string | null>(null);
@@ -91,11 +93,14 @@
     if (next.length) void setOverlay({ metrics: next });
   }
   // Preview: the game being played, else the simulated one. Only while Settings shows: its graph
-  // draws up to 30 frames a second.
+  // draws up to 30 frames a second. Under another section's window it holds still (its graph
+  // stops once nothing moves), or the window's glass would blur it again at every frame (2.5).
+  let heldPreview: ReturnType<typeof overlayData> | null = null;
   const preview = $derived.by(() => {
     if (!snap || !active) return null;
+    if (popped && popped !== 'overlay' && heldPreview) return heldPreview;
     const g = snap.game ?? simGame(snap.ts, snap.gpu[0]?.usage ?? 80, Math.random);
-    return overlayData(prefs.overlay, snap, g);
+    return (heldPreview = overlayData(prefs.overlay, snap, g));
   });
   const setGames = (change: Partial<GameAutomation>) =>
     save('Game profiles', () => savePrefs({ games: { ...prefs.games, ...change } }));
@@ -212,6 +217,26 @@
             </label>
           {/each}
         </div>
+      </fieldset>
+      <fieldset>
+        <legend>Glass</legend>
+        <label class="check">
+          <input
+            type="checkbox"
+            class="switch"
+            role="switch"
+            checked={prefs.glass !== false && windowLook.transparency}
+            disabled={!windowLook.transparency}
+            onchange={(e) => void save('Glass effects', () => savePrefs({ glass: (e.currentTarget as HTMLInputElement).checked }))}
+          />
+          <span
+            >Glass effects<small
+              >{windowLook.transparency
+                ? 'See-through cards, bars and dialogs; on Windows 11, the desktop frosted behind the window. Off is the solid look.'
+                : 'Off in Windows (Transparency effects): turn it on in Windows Settings → Personalisation → Colours.'}</small
+            ></span
+          >
+        </label>
       </fieldset>
       <fieldset>
         <legend>Accent</legend>

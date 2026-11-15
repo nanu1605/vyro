@@ -39,6 +39,32 @@ dialog[open]::backdrop {
   }
 }
 
+/* Glass (2.5, theme.css): layers that float over content (every dialog, and what carries
+   .glass-float: toasts, menus, the editing bar) frost what is under them. The dim behind a
+   dialog stays a plain dim: blurring the whole window under Ctrl K made typing lag (2.0.2). */
+:root[data-glass='on'] dialog {
+  border: 1px solid var(--glass-line);
+  border-radius: calc(var(--radius) + 4px);
+}
+:root[data-glass='on'] dialog,
+:root[data-glass='on'] .glass-float {
+  background:
+    linear-gradient(180deg, var(--glass-sheen) 0, transparent 4rem),
+    var(--glass-float);
+  background-clip: padding-box;
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow:
+    var(--glass-light),
+    0 28px 64px -24px rgb(0 0 0 / 55%);
+}
+/* A section in its window is one pane: the card inside takes no second one. */
+:root[data-glass='on'] dialog .panel {
+  border-color: transparent;
+  background: none;
+  box-shadow: none;
+}
+
 /* Plain buttons share one look; components that style their own keep theirs (any class
    selector outranks these). */
 :where(button):not([role='tab']) {
@@ -121,4 +147,35 @@ input.switch:disabled {
   background: var(--accent-soft);
   box-shadow: inset 0 0 0 1px var(--accent-line);
   color: var(--text);
+}
+
+/* Glass controls (2.5): the segmented control and switches as pills of glass, the chosen
+   segment and a switch's knob lit along the top. */
+:root[data-glass='on'] .segmented {
+  border-color: var(--glass-line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 18%);
+}
+:root[data-glass='on'] .segmented button {
+  border-radius: 999px;
+}
+:root[data-glass='on'] .segmented button[aria-pressed='true'] {
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    inset 0 0 0 1px var(--accent-line),
+    0 2px 6px -2px rgb(0 0 0 / 40%);
+}
+:root[data-glass='on'] input.switch {
+  border-color: var(--glass-line);
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 25%);
+}
+:root[data-glass='on'] input.switch::after {
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 40%);
+}
+:root[data-glass='on'] input.switch:checked {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-fill) 70%, transparent);
 }

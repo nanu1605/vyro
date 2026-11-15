@@ -74,6 +74,18 @@
     font-variant-numeric: tabular-nums;
     text-shadow: 0 1px 2px rgb(0 0 0 / 70%);
   }
+  /* Glass effects (2.5): lit along the top edge, with a sheen fading down from it. The plate is
+     always dark, so the light is always white. */
+  :global(:root[data-glass='on']) .plate {
+    border-color: rgb(255 255 255 / 16%);
+    border-radius: 12px;
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 7%) 0, transparent 2.5rem),
+      var(--plate-bg);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 26%),
+      inset 1px 0 0 rgb(255 255 255 / 8%);
+  }
   .performance {
     width: 252px;
   }

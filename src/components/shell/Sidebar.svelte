@@ -176,6 +176,13 @@
     background: color-mix(in srgb, var(--panel) 82%, transparent);
     transition: width var(--dur-3) var(--ease-out);
   }
+  /* Glass (2.5): a pane over the wash, lit along its inner edge. Nothing scrolls under it, so it
+     needs no blur. */
+  :global(:root[data-glass='on']) .sidebar {
+    border-right-color: var(--glass-line);
+    background: var(--glass-bar);
+    box-shadow: inset -1px 0 0 var(--glass-rim-low);
+  }
   .rail {
     width: var(--sidebar-rail);
   }

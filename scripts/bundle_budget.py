@@ -27,14 +27,17 @@ BUDGETS = {
     # The phone companion (P26). 32 kB until 1.3; raised for a custom accent's colour maths
     # (color.ts: the page shows the PC's accent, any colour; ROADMAP 1.3.0). 34 kB until 2.2;
     # raised for the Clokrix logo, drawn in the page so its strokes follow the theme (ROADMAP 2.2.0).
-    "dist/remote.html": 35_000,
+    # 35 kB until 2.5; raised for the glass: each theme's glass colours, the maths that keeps a
+    # custom accent readable on them, and the glass's styles (ROADMAP 2.5.0).
+    "dist/remote.html": 37_000,
     # The phone app (1.4), served by the relay: the companion's readings plus pairing, the relay
     # link and its sealing (WebCrypto). The QR reader for scanning loads only when scanning.
     # 40 kB until 1.7; raised for the redesigned frame (the bar, the tabs at the bottom with their
     # icons, toasts, motion; ROADMAP 1.7.0), with every tab, the home screen, the offline states
     # and the sheets still lazy. 44 kB until 2.2; raised for the Clokrix logo in the bar, drawn in
-    # the page so its strokes follow the theme (ROADMAP 2.2.0).
-    "relay/public/index.html": 45_000,
+    # the page so its strokes follow the theme (ROADMAP 2.2.0). 45 kB until 2.5; raised for the
+    # glass, as the companion's (ROADMAP 2.5.0).
+    "relay/public/index.html": 47_000,
 }
 
 REF = re.compile(r'<(?:script|link)\b[^>]*?\b(?:src|href)="/?(assets/[^"]+\.(?:js|css))"')

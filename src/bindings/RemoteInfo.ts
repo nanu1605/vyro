@@ -22,4 +22,9 @@ device: string, expires: number,
  * So another PC can wake this one (1.5): only to phones through the relay, sealed, while
  * "Wake from phone" is on; never on the local page.
  */
-wake?: WakeTarget, };
+wake?: WakeTarget, 
+/**
+ * Glass effects (2.5): off when the PC has them off (its own switch, or Windows'
+ * Transparency effects). Absent from an older PC, which reads as on.
+ */
+glass?: boolean, };

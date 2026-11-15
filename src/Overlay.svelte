@@ -5,9 +5,14 @@
   import { onMount } from 'svelte';
   import OverlayPlate from './components/OverlayPlate.svelte';
   import { onOverlay, type OverlayData } from './ipc';
-  import { loadPrefs } from './prefs.svelte';
+  import { loadPrefs, prefs } from './prefs.svelte';
 
   let data = $state.raw<OverlayData | null>(null);
+
+  // Glass effects (2.5): the plate catches the light along its edge; never a blur, over a game.
+  $effect(() => {
+    document.documentElement.dataset.glass = prefs.glass !== false ? 'on' : 'off';
+  });
 
   onMount(() => {
     void loadPrefs().catch(() => {});

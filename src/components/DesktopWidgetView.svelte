@@ -208,6 +208,23 @@
   .solid {
     background: var(--panel);
   }
+  /* Glass effects (2.5): the App and Glass styles catch the light along their top edge, with a
+     sheen fading down from it. No blur: Windows' would fill the window's square corners. */
+  :global(:root[data-glass='on']) .desk {
+    border-radius: 18px;
+  }
+  :global(:root[data-glass='on']) .app,
+  :global(:root[data-glass='on']) .glass {
+    box-shadow:
+      inset 0 1px 0 var(--glass-rim),
+      inset 1px 0 0 var(--glass-rim-low);
+  }
+  :global(:root[data-glass='on']) .glass {
+    border-color: rgb(255 255 255 / 18%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 32%),
+      inset 1px 0 0 rgb(255 255 255 / 10%);
+  }
   .label {
     overflow: hidden;
     color: var(--muted);

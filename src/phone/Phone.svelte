@@ -226,7 +226,7 @@
           save(updatePc(pcs, room, { name: i.pc || (pcs.find((p) => p.room === room)?.name ?? ''), wake: i.wake?.mac }));
           if (link !== l) return;
           info = i;
-          applyLook({ theme: i.theme as ThemeId, accent: i.accent as AccentChoice, openOn: 'dashboard' });
+          applyLook({ theme: i.theme as ThemeId, accent: i.accent as AccentChoice, openOn: 'dashboard', glass: i.glass !== false });
         },
         onView: (v) => {
           if (link !== l) return;

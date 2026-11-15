@@ -63,6 +63,16 @@
     -webkit-backdrop-filter: blur(16px) saturate(150%);
     backdrop-filter: blur(16px) saturate(150%);
   }
+  /* Glass (2.5): frosted as before, lit along its lower edge. */
+  :global(:root[data-glass='on']) .bar {
+    border-bottom-color: var(--glass-line);
+    background:
+      linear-gradient(180deg, var(--glass-sheen) 0, transparent),
+      var(--glass-float);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: inset 0 -1px 0 var(--glass-rim-low);
+  }
   .row {
     display: flex;
     align-items: center;

@@ -107,23 +107,29 @@ export function fromLch(x: Lch): string {
   return toHex(r, g, b);
 }
 
-/** The least contrast `c` has on any of `surfaces`. */
-const worst = (c: string, surfaces: string[]) => Math.min(...surfaces.map((s) => contrast(c, s)));
+/** Contrast of two luminances, 1–21. */
+const ratio = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 
 /**
  * `color` as text on `surfaces`: unchanged when it reaches `min` on every one; otherwise the
  * same hue and chroma, lightened (dark surfaces) or darkened (light ones) just enough.
  */
 export function readableOn(color: string, surfaces: string[], min = 4.5): string {
-  if (worst(color, surfaces) >= min) return color;
+  // The surfaces' luminances once, not again at every step of the bisection.
+  const under = surfaces.map(luminance);
+  const worst = (c: string) => {
+    const l = luminance(c);
+    return Math.min(...under.map((u) => ratio(l, u)));
+  };
+  if (worst(color) >= min) return color;
   const lch = toLch(color);
-  const dark = surfaces.every((s) => luminance(s) < 0.18);
+  const dark = under.every((l) => l < 0.18);
   // Bisect the lightness between the colour's own and the end that reaches the most contrast.
   let ok = dark ? 1 : 0;
   let bad = lch.l;
   for (let i = 0; i < 24; i++) {
     const mid = (ok + bad) / 2;
-    if (worst(fromLch({ ...lch, l: mid }), surfaces) >= min) ok = mid;
+    if (worst(fromLch({ ...lch, l: mid })) >= min) ok = mid;
     else bad = mid;
   }
   return fromLch({ ...lch, l: ok });

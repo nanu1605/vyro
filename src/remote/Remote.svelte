@@ -73,7 +73,7 @@
   async function start(): Promise<void> {
     try {
       info = await getInfo();
-      applyLook({ theme: info.theme as ThemeId, accent: info.accent as AccentChoice, openOn: 'dashboard' });
+      applyLook({ theme: info.theme as ThemeId, accent: info.accent as AccentChoice, openOn: 'dashboard', glass: info.glass !== false });
       stage = 'live';
       void getView()
         .then(onView)
