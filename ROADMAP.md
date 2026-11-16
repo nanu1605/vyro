@@ -4793,11 +4793,22 @@ relay too".
       the phones' recent actions are now: Settings → Phone and remote → Activity. CI green on
       9f98111 (run 43742450335; every job). `main` fast-forwarded to it from 2.4.0's records,
       which put the Licence workflow in the Actions tab.
-- [ ] **Pro set up (the owner):** [`docs/pro.md`](docs/pro.md) → Setting it up, steps 1–6.
-- [ ] **2.5.0 released**, once Pro is set up.
-- [ ] **Relay deployed** from `main` after the release (the owner: "Deploy the relay too"), so
-      phones reaching the PC from anywhere get glass. The phone app changed since the deployed
-      relay (2990da0) only in its look and one `glass` setting it reads from the PC.
+- [x] **Pro set up (the owner):** [`docs/pro.md`](docs/pro.md) → Setting it up. The owner,
+      2026-11-16: "Pro is set up". Licence run 43807147856 deployed the checkout from `main`
+      (9f98111): all six secrets set, the signing key the private half of the public key builds
+      carry, its 15 tests passed. Whether the Razorpay keys it was deployed with are the Live ones
+      cannot be seen from here; the owner was asked to check, and to deploy again if not.
+- [x] **2.5.0 released** (2026-11-16). Release run 43807501098 on `main` (9f98111) tagged
+      `v2.5.0`, found the relay's address and Pro's checkout (its address and public key) in
+      `clokrix.exe`, and published the 14.19 MB `Clokrix_2.5.0_x64_en-US.msi`, `latest.json` and
+      checksums here and to `nanu1605/vyro-releases`. GitHub's own digests of the files published
+      here match the checksums the run printed (MSI `de6fe13b…`, `latest.json` `ba57102d…`); the
+      MSI and `latest.json` downloaded from `nanu1605/vyro-releases` have the same SHA-256, and
+      the `latest.json` installed copies read (`nanu1605/vyro-releases`' latest) offers 2.5.0 from
+      there. Unsigned, as before (SignPath is still the owner's).
+- [x] **Relay deployed** from `main` (9f98111) after the release (the owner: "Deploy the relay
+      too"): Relay run 43808970791 built the phone app, passed the relay's checks and tests, and
+      deployed it, so phones reaching the PC from anywhere get glass.
 
 ## Risks
 
