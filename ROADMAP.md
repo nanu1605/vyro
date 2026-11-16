@@ -4944,9 +4944,14 @@ how a buyer in India is told apart, and "₹10,000 including GST (Recommended)" 
 - [x] **The checkout deployed** on the owner's go above: Licence run 43873921333 on `main`
       (3a74d78) passed its tests and deployed, so the website and the payment page charge
       ₹10,000 in India and $100 elsewhere from now, whatever the app's version.
-- [ ] **The variables** (the owner): `CLOKRIX_RELAY_HOST` and `CLOKRIX_RELAY_URL`. The Relay run
+- [x] **The variables** (the owner): `CLOKRIX_RELAY_HOST` and `CLOKRIX_RELAY_URL`. The Relay run
       43873926536 on `main` (3a74d78) passed its tests and deployed on the workers.dev address
-      alone, as `CLOKRIX_RELAY_HOST` was not set yet; it runs again once it is.
+      alone, as `CLOKRIX_RELAY_HOST` was not set yet. The owner, then: "variables set".
+- [x] **The relay on the company's domain:** Relay run 43925501320 on `main` (3a74d78) passed its
+      tests and deployed; wrangler lists the workers.dev address and `CLOKRIX_RELAY_HOST` "(custom
+      domain)", the same Worker on both.
+- [ ] **CI's test build** with the new relay address built in: CI run 43875200395 on e50f16b, run
+      again now that `CLOKRIX_RELAY_URL` is set.
 - [ ] **Checked before the release** with the test build: Buy Pro's price, a phone paired anew
       through the new address, and a phone paired before still working.
 - [ ] **2.5.2 released**, on the owner's go.
