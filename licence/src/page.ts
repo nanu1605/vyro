@@ -3,7 +3,7 @@
 // Plain HTML in the system font, light or dark as the buyer's system is; the only script from
 // elsewhere is Razorpay's.
 
-import { PRICE, REFUND_DAYS } from './rules';
+import { PRICES, REFUND_DAYS, shownPrice, type Currency } from './rules';
 
 export function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -118,18 +118,30 @@ export function pageHeaders(nonce: string): Record<string, string> {
   };
 }
 
-const price = `$${PRICE.amount / 100}`;
+/** `/buy` in `currency`, the app's code kept. */
+function buyIn(currency: Currency, claim: string | null): string {
+  const q = new URLSearchParams(claim ? { c: claim } : {});
+  q.set('cur', currency.toLowerCase());
+  return `/buy?${q}`;
+}
 
-/** The page that takes the payment. Pay makes the order (`/order`) and opens Razorpay's checkout;
- * once paid, the checkout's answer comes here (`/paid`) as a form, and the key shows. */
-export function checkoutPage(o: { nonce: string; seller: string; keyId: string; claim: string | null }): string {
-  const options = { key: o.keyId, amount: PRICE.amount, currency: PRICE.currency, name: o.seller, description: 'Clokrix Pro: lifetime, one PC' };
+/** The page that takes the payment, at the price in `currency` (₹ for a buyer in India, $ for the
+ * rest; each can pay the other instead). Pay makes the order (`/order`) and opens Razorpay's
+ * checkout; once paid, the checkout's answer comes here (`/paid`) as a form, and the key shows. */
+export function checkoutPage(o: { nonce: string; seller: string; keyId: string; claim: string | null; currency: Currency }): string {
+  const p = PRICES[o.currency];
+  const price = shownPrice(o.currency);
+  const options = { key: o.keyId, amount: p.amount, currency: p.currency, name: o.seller, description: 'Clokrix Pro: lifetime, one PC' };
+  const other =
+    o.currency === 'INR'
+      ? `<a href="${esc(buyIn('USD', o.claim))}">Not in India? Pay ${shownPrice('USD')} instead.</a>`
+      : `<a href="${esc(buyIn('INR', o.claim))}">In India? Pay ${shownPrice('INR')} instead.</a>`;
   return page({
     title: 'Clokrix Pro',
     seller: o.seller,
     nonce: o.nonce,
     body: `<h1>Clokrix Pro</h1>
-<p class="price">${price} <span class="muted">once, for life</span></p>
+<p class="price">${price} <span class="muted">once, for life${o.currency === 'INR' ? ', including all taxes' : ''}</span></p>
 <ul>
   <li>Every part of Clokrix, not only the Dashboard</li>
   <li>On one PC; you can move it to another</li>
@@ -143,11 +155,13 @@ export function checkoutPage(o: { nonce: string; seller: string; keyId: string; 
 <button id="pay" type="button">Pay ${price}</button>
 <p class="muted after">${o.claim ? 'Clokrix turns Pro on by itself once you have paid. ' : ''}Sold by ${esc(o.seller)}; Razorpay
 takes the payment. <a href="/refunds">Refundable within ${REFUND_DAYS} days.</a></p>
+<p class="muted">${other}</p>
 <p id="err" class="err" role="alert"></p>
 <script nonce="${o.nonce}" src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script nonce="${o.nonce}">
   const options = ${JSON.stringify(options).replace(/</g, '\\u003c')};
   const claim = ${JSON.stringify(o.claim)};
+  const cur = ${JSON.stringify(o.currency)};
   const pay = document.getElementById('pay');
   const err = document.getElementById('err');
   options.handler = (r) => {
@@ -164,7 +178,7 @@ takes the payment. <a href="/refunds">Refundable within ${REFUND_DAYS} days.</a>
     }
     pay.disabled = true;
     try {
-      const res = await fetch('/order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ c: claim }) });
+      const res = await fetch('/order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ c: claim, cur }) });
       if (!res.ok) throw new Error(String(res.status));
       options.order_id = (await res.json()).order_id;
     } catch {

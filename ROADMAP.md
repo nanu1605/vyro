@@ -4908,6 +4908,44 @@ address (with the owner's Cloudflare name in it) is no longer in the app or show
       `nanu1605/vyro-releases` have the same SHA-256, and its latest `latest.json`, which
       installed copies read, offers 2.5.1 from there. Unsigned, as before.
 
+### 2.5.2: ₹10,000 in India, and the relay on the company's domain
+
+The owner, 2026-11-16: "move the relay to the company domain too. Also for India keep the pro for
+10,000 rupees (INR) and for rest of the countries keep it as 100$." Asked, they chose
+"clokrix-remote (Recommended)" for the relay's host, "Location, with a switch (Recommended)" for
+how a buyer in India is told apart, and "₹10,000 including GST (Recommended)" for taxes.
+
+- [x] **Two prices** (`licence/src/rules.ts`): ₹10,000 (1,000,000 paise) and $100. The payment
+      page shows rupees to a buyer whose connection Cloudflare places in India (`CF-IPCountry`,
+      else `request.cf.country`) and dollars to the rest, with a link to pay the other instead
+      (`/buy?cur=inr|usd`, the app's code kept), for travellers, VPNs and cards that pay one
+      currency only. The order is made in the currency the page shows; a payment gives a key at
+      either price in its own currency, and at nothing else. Rupees say "including all taxes".
+- [x] **The website** names the visitor's price on the home page and both in its terms ("₹10,000
+      in India, including all taxes, and $100 elsewhere"); a refund is of "the full price you
+      paid".
+- [x] **The app** (`edition::price_for`, `home_country`) names ₹10,000 on a PC whose Windows is
+      set to India (the registry's `Control Panel\International\Geo`), $100 elsewhere; 2.5.0 and
+      2.5.1 keep saying $100, and the page shows the price that applies.
+- [x] **The relay on the company's domain** (`relay.yml`, the owner's go for it: "move the relay
+      to the company domain too"): with `CLOKRIX_RELAY_HOST` set, it deploys with `--domain`,
+      beside its workers.dev address, which stays. It is the same Worker and the same rooms on
+      both, so no phone pairs again: phones paired before keep the old address, and PCs on
+      2.5.2 (with `CLOKRIX_RELAY_URL` the new address) and the phones paired with them use the
+      new one. `docs/remote.md` has the steps.
+- [x] **Version 2.5.2:** `scripts/set-version.py 2.5.2`; What's new in 2.5.2: Clokrix Pro in
+      rupees in India, and the phone app at Clokrix's own address (for the phone app too).
+- [x] **Checked:** the checkout's 27 tests (5 new: rupees in India and dollars elsewhere with the
+      other a click away, the buyer's choice winning, orders in the page's currency, payments in
+      rupees, the website's prices); the edition's tests with the price by country; the pages
+      served as deployed for a buyer in India and elsewhere, at 1280 and 390 wide, light and
+      dark: axe-core finds nothing, nothing scrolls sideways.
+- [ ] **The variables** (the owner): `CLOKRIX_RELAY_HOST` and `CLOKRIX_RELAY_URL`.
+- [ ] **Deployed:** the checkout (Licence) and the relay (Relay), on the owner's go above.
+- [ ] **Checked before the release** with the test build: Buy Pro's price, a phone paired anew
+      through the new address, and a phone paired before still working.
+- [ ] **2.5.2 released**, on the owner's go.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

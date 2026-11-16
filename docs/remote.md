@@ -246,6 +246,27 @@ to Clokrix (the updater offers it) and the phones pair at the new address.
 3. Once every PC runs Clokrix: **Workers & Pages → vyro-relay → Settings → Delete** (done
    2026-11-12).
 
+### On the company's domain (2.5.2)
+
+The relay is also served on a host of the company's domain (the owner, 2026-11-16: "move the
+relay to the company domain too"), so phones no longer show the workers.dev address, which
+carries the owner's Cloudflare name. It is the same Worker on both addresses, with the same
+rooms, so unlike 2.2's move nothing pairs again:
+
+- **Phones already paired** keep their pairings in the browser for the workers.dev address, and
+  keep using it; they reach PCs that moved to the new address, as both are the same relay.
+- **PCs on 2.5.2** connect through the new address, and the codes they show open the phone app
+  there. A phone app opened at the old address that scans such a code in the app is told it is
+  for another relay, and to open it with the camera app instead.
+- **The workers.dev address stays** for those phones and for PCs still on 2.5.1 or earlier.
+
+1. Set the repository variable `CLOKRIX_RELAY_HOST` to the host (the owner chose
+   `clokrix-remote` on the company's domain), which must be in the same Cloudflare account.
+2. Run the Relay workflow; it deploys with `--domain`, which adds the DNS record and the
+   certificate. If the deploy is refused on the domain, give the Cloudflare token the Zone
+   permissions Workers Routes: Edit and DNS: Edit for it.
+3. Set `CLOKRIX_RELAY_URL` to `https://<host>`, so that 2.5.2's builds carry it.
+
 ### A TURN server for the screen (2.0.1)
 
 The relay can give a PC's phones Cloudflare's TURN service for the screen, so a session works in

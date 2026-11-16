@@ -14,8 +14,13 @@ name: Relay
 # Needs, in the repository settings (Secrets and variables → Actions):
 #   secret   CLOUDFLARE_API_TOKEN    a token from the "Edit Cloudflare Workers" template
 #   secret   CLOUDFLARE_ACCOUNT_ID   the account's id (Workers & Pages → Overview, right side)
-# After the first deploy, set the variable CLOKRIX_RELAY_URL to the address it prints, so builds
-# carry it (ci.yml, release.yml).
+#   variable CLOKRIX_RELAY_HOST      optional (2.5.2): a host on a domain in the same Cloudflare
+#                                    account, such as clokrix-remote.example.com. The relay is then
+#                                    also there (wrangler adds the DNS record and certificate),
+#                                    beside its workers.dev address, which stays for phones paired
+#                                    through it and for apps that carry it.
+# After the first deploy, set the variable CLOKRIX_RELAY_URL to the address it prints (with
+# CLOKRIX_RELAY_HOST, https://<that host>), so builds carry it (ci.yml, release.yml).
 
 on:
   workflow_dispatch:
@@ -60,6 +65,15 @@ jobs:
             echo "::error::Set the secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID first (see this file's header)"
             exit 1
           fi
+      - name: The relay's own host, if set, is a host name
+        env:
+          RELAY_HOST: ${{ vars.CLOKRIX_RELAY_HOST }}
+        run: |
+          RELAY_HOST="${RELAY_HOST,,}"
+          if [ -n "$RELAY_HOST" ] && ! [[ "$RELAY_HOST" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]]; then
+            echo "::error::CLOKRIX_RELAY_HOST is a host name alone, like clokrix-remote.example.com (no https://, no path)"
+            exit 1
+          fi
       - run: pnpm install --frozen-lockfile
       - name: The phone app (relay/public)
         run: pnpm build:phone
@@ -73,9 +87,13 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_SEND_METRICS: 'false'
           DEPLOY_REF: ${{ inputs.ref || github.ref_name }}
+          RELAY_HOST: ${{ vars.CLOKRIX_RELAY_HOST }}
         run: |
           set -o pipefail  # a failed deploy fails the step, through tee
-          pnpm --dir relay exec wrangler deploy | tee deploy.log
+          RELAY_HOST="${RELAY_HOST,,}"
+          domain=()
+          if [ -n "$RELAY_HOST" ]; then domain+=(--domain "$RELAY_HOST"); fi
+          pnpm --dir relay exec wrangler deploy "${domain[@]}" | tee deploy.log
           url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -n 1)
           {
             echo "### Relay deployed"
@@ -86,5 +104,9 @@ jobs:
               echo "Address: $url"
               echo
               echo "Builds carry it once the repository variable CLOKRIX_RELAY_URL is set to it."
+            fi
+            if [ -n "$RELAY_HOST" ]; then
+              echo
+              echo "Also at https://$RELAY_HOST: from 2.5.2, set CLOKRIX_RELAY_URL to it, so builds carry it."
             fi
           } >> "$GITHUB_STEP_SUMMARY"

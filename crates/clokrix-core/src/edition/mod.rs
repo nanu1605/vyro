@@ -23,8 +23,36 @@ pub const DAY: i64 = 86_400;
 pub const TRIAL_DAYS: i64 = 7;
 /// An activation is looked at again with the checkout this often, when online.
 pub const CHECK_EVERY: i64 = 7 * DAY;
-/// What Pro costs, as said in the app (the checkout charges it).
-pub const PRICE: &str = "$100";
+/// What Pro costs, as said in the app: ₹10,000 in India (including all taxes), $100 elsewhere (the
+/// owner, 2026-11-16). The checkout charges by the buyer's connection, and offers the other.
+pub const PRICE_USD: &str = "$100";
+pub const PRICE_INR: &str = "₹10,000";
+
+/// The price to name on a PC whose Windows is set to `country` (ISO 3166).
+pub fn price_for(country: Option<&str>) -> &'static str {
+    if country.is_some_and(|c| c.trim().eq_ignore_ascii_case("IN")) {
+        PRICE_INR
+    } else {
+        PRICE_USD
+    }
+}
+
+/// The country Windows is set to (Settings → Time & language → Region → Country or region), as
+/// ISO 3166; "IN" from India's location number (113) where only that is kept.
+pub fn home_country() -> Option<String> {
+    #[cfg(windows)]
+    {
+        use crate::winutil::{Key, HKEY_CURRENT_USER};
+        let geo = Key::open(HKEY_CURRENT_USER, r"Control Panel\International\Geo")?;
+        geo.string("Name")
+            .filter(|n| !n.trim().is_empty())
+            .or_else(|| (geo.string("Nation")?.trim() == "113").then(|| "IN".to_owned()))
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
 
 /// What this PC is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -203,8 +231,15 @@ pub fn mask(key: &str) -> String {
     }
 }
 
-/// What the app shows, from what is kept.
-pub fn edition(s: &Stored, now: i64, pc: &str, key: Option<&[u8; 32]>, can_buy: bool) -> Edition {
+/// What the app shows, from what is kept; `price` as [`price_for`] names it.
+pub fn edition(
+    s: &Stored,
+    now: i64,
+    pc: &str,
+    key: Option<&[u8; 32]>,
+    can_buy: bool,
+    price: &str,
+) -> Edition {
     let tier = tier(s, now, pc, key);
     let trial_ends = key.and(s.trial_ends());
     Edition {
@@ -215,7 +250,7 @@ pub fn edition(s: &Stored, now: i64, pc: &str, key: Option<&[u8; 32]>, can_buy: 
         buying: s.claim.as_ref().is_some_and(|c| c.until > now),
         can_buy: can_buy && key.is_some(),
         ended_unseen: tier == Tier::Free && !s.ended_seen && trial_ends.is_some_and(|e| e <= now),
-        price: PRICE.into(),
+        price: price.into(),
     }
 }
 
@@ -284,29 +319,43 @@ mod tests {
         let t0 = 1_800_000_000;
         let mut s = Stored::default();
         s.start(t0);
-        let e = edition(&s, t0 + DAY, &pc(), Some(&key), true);
+        let e = edition(&s, t0 + DAY, &pc(), Some(&key), true, PRICE_USD);
         assert_eq!(e.tier, Tier::Trial);
         assert_eq!(e.trial_ends, Some(t0 + 7 * DAY));
         assert!(e.can_buy && !e.ended_unseen && e.key.is_none());
-        let e = edition(&s, t0 + 8 * DAY, &pc(), Some(&key), true);
+        let e = edition(&s, t0 + 8 * DAY, &pc(), Some(&key), true, PRICE_USD);
         assert_eq!(e.tier, Tier::Free);
         assert!(e.ended_unseen);
         s.ended_seen = true;
-        assert!(!edition(&s, t0 + 8 * DAY, &pc(), Some(&key), true).ended_unseen);
+        assert!(!edition(&s, t0 + 8 * DAY, &pc(), Some(&key), true, PRICE_USD).ended_unseen);
         s.key = Some("CLKX-ABCDE-FGHJK-MNPQR-STVWX".into());
         s.activation = Some(TOKEN.into());
-        let e = edition(&s, t0 + 8 * DAY, &pc(), Some(&key), true);
+        let e = edition(&s, t0 + 8 * DAY, &pc(), Some(&key), true, PRICE_USD);
         assert_eq!(e.tier, Tier::Pro);
         assert_eq!(e.key.as_deref(), Some("CLKX-•••••-•••••-•••••-STVWX"));
         s.claim = Some(Claim {
             code: new_claim(),
             until: t0 + 9 * DAY,
         });
-        assert!(edition(&s, t0 + 8 * DAY, &pc(), Some(&key), true).buying);
-        assert!(!edition(&s, t0 + 10 * DAY, &pc(), Some(&key), true).buying);
+        assert!(edition(&s, t0 + 8 * DAY, &pc(), Some(&key), true, PRICE_USD).buying);
+        assert!(!edition(&s, t0 + 10 * DAY, &pc(), Some(&key), true, PRICE_USD).buying);
         // No checkout built in: Pro, nothing to buy, no trial.
-        let e = edition(&s, t0, &pc(), None, true);
+        let e = edition(&s, t0, &pc(), None, true, PRICE_USD);
         assert_eq!((e.tier, e.can_buy, e.trial_ends), (Tier::Pro, false, None));
+    }
+
+    #[test]
+    fn names_rupees_in_india_and_dollars_elsewhere() {
+        assert_eq!(price_for(Some("IN")), "₹10,000");
+        assert_eq!(price_for(Some(" in ")), "₹10,000");
+        for c in [Some("US"), Some("GB"), Some(""), None] {
+            assert_eq!(price_for(c), "$100");
+        }
+        let s = Stored::default();
+        assert_eq!(
+            edition(&s, 0, &pc(), None, true, price_for(Some("IN"))).price,
+            "₹10,000"
+        );
     }
 
     #[test]

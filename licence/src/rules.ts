@@ -1,8 +1,36 @@
 // What Clokrix Pro costs, what its keys and codes look like, and how an activation is signed
 // (2.5). Pure functions, tested on their own.
 
-/** $100, once (Razorpay counts in the currency's smallest unit). */
-export const PRICE = { amount: 10000, currency: 'USD' } as const;
+/** What Clokrix Pro costs, once, in the currency's smallest unit as Razorpay counts it: ₹10,000 in
+ * India (including all taxes) and $100 elsewhere (the owner, 2026-11-16: "for India keep the pro
+ * for 10,000 rupees (INR) and for rest of the countries keep it as 100$"). */
+export const PRICES = {
+  INR: { amount: 1_000_000, currency: 'INR' },
+  USD: { amount: 10_000, currency: 'USD' },
+} as const;
+export type Currency = keyof typeof PRICES;
+
+/** The price shown first to a buyer in `country` (ISO 3166, as Cloudflare names the connection's
+ * country): rupees in India, dollars elsewhere. The buyer can pay the other instead. */
+export function currencyFor(country: string | null | undefined): Currency {
+  return country?.toUpperCase() === 'IN' ? 'INR' : 'USD';
+}
+
+/** `cur` as a buyer's choice of currency (`inr` or `usd`, any case), or null. */
+export function chosenCurrency(cur: unknown): Currency | null {
+  const c = typeof cur === 'string' ? cur.toUpperCase() : '';
+  return c === 'INR' || c === 'USD' ? c : null;
+}
+
+/** "₹10,000" or "$100". */
+export function shownPrice(c: Currency): string {
+  return c === 'INR' ? '₹10,000' : '$100';
+}
+
+/** `amount` in `currency` is Clokrix Pro's price in it. */
+export function isPrice(amount: number, currency: string): boolean {
+  return Object.values(PRICES).some((p) => p.amount === amount && p.currency === currency);
+}
 /** A key moves to another PC at most once in this long. */
 export const MOVE_DAYS = 30;
 /** A purchase is refunded in full if asked for within this long (the owner, 2026-11-16). */

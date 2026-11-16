@@ -43,6 +43,8 @@ pub struct EditionState {
     stored: Mutex<Stored>,
     /// The tier last told, to act once on a change.
     tier: Mutex<Tier>,
+    /// What Pro costs where Windows says this PC is (2.5.2): ₹10,000 in India, $100 elsewhere.
+    price: &'static str,
 }
 
 impl EditionState {
@@ -83,6 +85,7 @@ impl EditionState {
             key,
             stored: Mutex::new(stored),
             tier: Mutex::new(tier),
+            price: edition::price_for(edition::home_country().as_deref()),
         };
         if changed {
             this.save();
@@ -105,6 +108,7 @@ impl EditionState {
             &self.pc,
             self.key.as_ref(),
             checkout().is_some(),
+            self.price,
         )
     }
 

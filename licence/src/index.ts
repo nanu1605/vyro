@@ -3,12 +3,15 @@
 // The buyer's side, in a browser:
 //   GET  /, /terms, /privacy, /refunds, /delivery, /contact
 //                            the website: what Razorpay checks before it gives Live keys.
-//   GET  /buy[?c=<claim>]    the page that pays. `c` is the code of the app that opened it, which
-//                            then turns Pro on by itself.
+//   GET  /buy[?c=<claim>][&cur=inr|usd]
+//                            the page that pays. `c` is the code of the app that opened it, which
+//                            then turns Pro on by itself. ₹10,000 in India, $100 elsewhere, by the
+//                            connection's country; `cur` is the buyer's choice of the other.
 // With SITE set, those pages are only at SITE: asked for on another address (the workers.dev one
 // 2.5.0's app opens), they send the browser there, so Razorpay sees payments from the website's
 // own domain.
-//   POST /order              {c?}: a Razorpay order, made when Pay is pressed.
+//   POST /order              {c?, cur?}: a Razorpay order, made when Pay is pressed, at the price in
+//                            `cur` (INR or USD; by the buyer's country if not given).
 //   POST /paid               where Razorpay's checkout sends a payment: checked, then the key.
 //   POST /razorpay/webhook   Razorpay's own word of a payment (or refund), in case the page closed.
 // The app's side, as JSON:
@@ -21,7 +24,7 @@ import { capture, createOrder, getPayment, paidFor, type Payment, type Razorpay 
 import { checkoutPage, errorPage, pageHeaders, paidPage } from './page';
 import { isSitePage, sitePage, type Seller } from './site';
 import { LEDGER_NAME, type Ledger } from './ledger';
-import { hmacHex, isClaim, isPc, normalKey, same, signActivation, signingKey } from './rules';
+import { chosenCurrency, currencyFor, hmacHex, isClaim, isPc, normalKey, same, signActivation, signingKey, type Currency } from './rules';
 
 export { Ledger } from './ledger';
 
@@ -81,6 +84,13 @@ function siteOrigin(env: Env): string | null {
   } catch {
     return null;
   }
+}
+
+/** The buyer's currency: the one they chose (`cur`), else by their connection's country, as
+ * Cloudflare gives it in CF-IPCountry and in request.cf (the header first, so the tests can set
+ * it). Either way it picks only the price shown first: the page offers the other. */
+function currency(req: Request, chosen: unknown): Currency {
+  return chosenCurrency(chosen) ?? currencyFor(req.headers.get('CF-IPCountry') ?? (req.cf?.country as string | undefined));
 }
 
 function razorpay(env: Env): Razorpay | null {
@@ -149,7 +159,7 @@ export default {
 
     if (isSitePage(path)) {
       if (req.method !== 'GET' && req.method !== 'HEAD') return json(405, { error: 'not-allowed' });
-      return html(200, n, sitePage(path, s, n));
+      return html(200, n, sitePage(path, s, n, currency(req, null)));
     }
 
     if (path === '/buy') {
@@ -163,7 +173,7 @@ export default {
       const r = razorpay(env);
       if (!r) return html(503, n, errorPage(at, 'Not open yet', 'Clokrix Pro cannot be bought here yet.'));
       // The order is made when Pay is pressed, not for every look at the page.
-      return html(200, n, checkoutPage({ ...at, keyId: r.keyId, claim: c }));
+      return html(200, n, checkoutPage({ ...at, keyId: r.keyId, claim: c, currency: currency(req, url.searchParams.get('cur')) }));
     }
 
     if (path === '/order') {
@@ -176,7 +186,7 @@ export default {
       const claim = c as string | null;
       let order: string;
       try {
-        order = await createOrder(r, `clokrix-${n.slice(0, 20)}`, claim);
+        order = await createOrder(r, `clokrix-${n.slice(0, 20)}`, claim, currency(req, b?.cur));
       } catch {
         return json(502, { error: 'razorpay' });
       }

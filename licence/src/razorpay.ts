@@ -1,7 +1,7 @@
 // Razorpay's API, the parts the checkout uses (2.5): making an order, reading a payment, and
 // capturing one that was only authorised. Its signatures are checked in rules.ts.
 
-import { PRICE } from './rules';
+import { isPrice, PRICES, type Currency } from './rules';
 
 export interface Razorpay {
   /** https://api.razorpay.com, or the tests' stand-in. */
@@ -32,11 +32,12 @@ async function call<T>(r: Razorpay, method: string, path: string, body?: unknown
   return (await res.json()) as T;
 }
 
-/** A new order for Clokrix Pro; `claim` is the app's code, when the app started the purchase. */
-export async function createOrder(r: Razorpay, receipt: string, claim: string | null): Promise<string> {
+/** A new order for Clokrix Pro at its price in `currency`; `claim` is the app's code, when the app
+ * started the purchase. */
+export async function createOrder(r: Razorpay, receipt: string, claim: string | null, currency: Currency): Promise<string> {
   const notes: Record<string, string> = { product: 'clokrix-pro' };
   if (claim) notes.claim = claim;
-  const o = await call<{ id: string }>(r, 'POST', '/v1/orders', { ...PRICE, receipt, notes });
+  const o = await call<{ id: string }>(r, 'POST', '/v1/orders', { ...PRICES[currency], receipt, notes });
   if (typeof o.id !== 'string' || !o.id) throw new Error('Razorpay gave no order id');
   return o.id;
 }
@@ -50,7 +51,8 @@ export async function capture(r: Razorpay, p: Payment): Promise<Payment> {
   return call<Payment>(r, 'POST', `/v1/payments/${encodeURIComponent(p.id)}/capture`, { amount: p.amount, currency: p.currency });
 }
 
-/** Paid in full for this order: captured, $100 in US dollars. */
+/** Paid in full for this order: captured, at Clokrix Pro's price in rupees or in dollars. (Razorpay
+ * takes a payment for an order only at the order's own amount, which this checkout set.) */
 export function paidFor(p: Payment, orderId: string): boolean {
-  return p.status === 'captured' && p.order_id === orderId && p.amount === PRICE.amount && p.currency === PRICE.currency;
+  return p.status === 'captured' && p.order_id === orderId && isPrice(p.amount, p.currency);
 }

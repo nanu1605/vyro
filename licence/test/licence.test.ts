@@ -326,6 +326,71 @@ describe('one address asking too often', () => {
   });
 });
 
+describe('the price: ₹10,000 in India, $100 elsewhere', () => {
+  /** A buyer whose connection Cloudflare places in `country`. */
+  const at = (country: string) => ({ ...from(), 'CF-IPCountry': country });
+
+  it('is in rupees for a buyer in India, including all taxes, with dollars a click away', async () => {
+    const c = claimCode();
+    const page = await (await fetch(`${base}/buy?c=${c}`, { headers: at('IN') })).text();
+    expect(page).toContain('Pay ₹10,000');
+    expect(page).toContain('including all taxes');
+    expect(page).toContain(`href="/buy?c=${c}&amp;cur=usd">Not in India? Pay $100 instead.`);
+    expect(page).toContain('"amount":1000000,"currency":"INR"');
+    expect(page).not.toContain('Pay $100<');
+  });
+
+  it('is in dollars elsewhere, with rupees a click away, and the buyer\'s choice wins', async () => {
+    const page = await (await fetch(`${base}/buy`, { headers: at('US') })).text();
+    expect(page).toContain('Pay $100');
+    expect(page).toContain('href="/buy?cur=inr">In India? Pay ₹10,000 instead.');
+    expect(page).not.toContain('including all taxes');
+    const chosen = await (await fetch(`${base}/buy?cur=INR`, { headers: at('US') })).text();
+    expect(chosen).toContain('Pay ₹10,000');
+    expect(await (await fetch(`${base}/buy?cur=usd`, { headers: at('IN') })).text()).toContain('Pay $100');
+    // Not a currency it takes: the country decides.
+    expect(await (await fetch(`${base}/buy?cur=eur`, { headers: at('IN') })).text()).toContain('Pay ₹10,000');
+  });
+
+  it('makes the order in the currency the page shows, or by the country when none is sent', async () => {
+    const make = async (body: unknown, country: string) => {
+      const res = await fetch(`${base}/order`, { method: 'POST', headers: { ...at(country), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      expect(res.status).toBe(200);
+      const id = ((await res.json()) as { order_id: string }).order_id;
+      return orders.find((o) => o.id === id)!.body;
+    };
+    expect(await make({ c: null, cur: 'INR' }, 'US')).toMatchObject({ amount: 1000000, currency: 'INR' });
+    expect(await make({ c: null, cur: 'USD' }, 'IN')).toMatchObject({ amount: 10000, currency: 'USD' });
+    expect(await make({ c: null }, 'IN')).toMatchObject({ amount: 1000000, currency: 'INR' });
+    expect(await make({ c: null }, 'DE')).toMatchObject({ amount: 10000, currency: 'USD' });
+  });
+
+  it('paid in rupees gives a key; ₹100 or a dollar price in rupees does not', async () => {
+    const c = claimCode();
+    const p = payment(await order(c), { amount: 1000000, currency: 'INR' });
+    expect((await paid(p)).status).toBe(200);
+    expect((await claim(c)).status).toBe(200);
+    for (const x of [{ amount: 10000, currency: 'INR' }, { amount: 1000000, currency: 'USD' }]) {
+      const d = claimCode();
+      expect((await paid(payment(await order(d), x))).status).toBe(402);
+      expect((await claim(d)).status).toBe(404);
+    }
+  });
+
+  it('is named on the website: the visitor\'s on the home page, both in the terms', async () => {
+    const india = await (await fetch(`${base}/`, { headers: at('IN') })).text();
+    expect(india).toContain('Buy Pro, ₹10,000');
+    expect(india).toContain('Pro: ₹10,000, once, for life');
+    expect(india).toContain('₹10,000 in India, including all taxes, and $100 elsewhere');
+    expect(await (await fetch(`${base}/`, { headers: at('GB') })).text()).toContain('Buy Pro, $100');
+    const terms = await (await fetch(`${base}/terms`, { headers: at('GB') })).text();
+    expect(terms).toContain('₹10,000 in India, including all taxes, and $100 elsewhere');
+    expect(terms).toContain('lets you pay the other instead');
+    const refunds = await (await fetch(`${base}/refunds`, { headers: at('IN') })).text();
+    expect(refunds).toContain('refund the full price you paid');
+  });
+});
+
 describe('the website', () => {
   const PAGES = ['/', '/terms', '/privacy', '/refunds', '/delivery', '/contact'];
 

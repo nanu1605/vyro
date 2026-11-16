@@ -6,7 +6,7 @@
 // code.
 
 import { esc, page } from './page';
-import { MOVE_DAYS, PRICE, REFUND_DAYS } from './rules';
+import { MOVE_DAYS, REFUND_DAYS, shownPrice, type Currency } from './rules';
 
 /** Who sells Clokrix Pro and how to reach them. Any detail not set is left out. */
 export interface Seller {
@@ -16,7 +16,6 @@ export interface Seller {
   address?: string;
 }
 
-const price = `$${PRICE.amount / 100}`;
 const DOWNLOAD = 'https://github.com/nanu1605/vyro-releases/releases/latest';
 /** When these pages last changed in what they promise. */
 const UPDATED = '16 November 2026';
@@ -40,7 +39,11 @@ function policy(title: string, body: string): string {
 ${body}`;
 }
 
-function home(s: Seller): string {
+/** Both prices, said once: ₹10,000 in India, including all taxes, and $100 elsewhere. */
+const BOTH = `${shownPrice('INR')} in India, including all taxes, and ${shownPrice('USD')} elsewhere`;
+
+function home(s: Seller, c: Currency): string {
+  const price = shownPrice(c);
   return `<h1>Clokrix</h1>
 <p>A light hardware monitor for Windows: CPU and GPU speedometers, every sensor, history, health and alerts,
 fan control, GPU tuning, desktop widgets, a game overlay and a phone app. It reads the hardware directly,
@@ -54,6 +57,7 @@ is needed.</p>
 <h2>Free</h2>
 <p>The Dashboard, with its layouts and editing, and Settings.</p>
 <h2>Pro: ${price}, once, for life</h2>
+<p class="muted">${BOTH}.</p>
 <ul>
   <li>Everything: Health and alerts, Insights, Gaming, the Benchmark, Cooling (fan control), GPU tuning, History,
   My PC, every part of this PC, desktop widgets, the game overlay, profiles and the phone app.</li>
@@ -72,8 +76,9 @@ function terms(s: Seller): string {
 <p>A Clokrix Pro key. It turns on every part of Clokrix on one Windows PC at a time, for life, with every update.
 You can move it to another PC once every ${MOVE_DAYS} days, in Clokrix (Settings → Clokrix Pro).</p>
 <h2>Price and payment</h2>
-<p>Clokrix Pro costs ${price} (US dollars), paid once. There is no subscription and nothing renews. Razorpay takes
-the payment and emails you a receipt. The price is shown before you pay.</p>
+<p>Clokrix Pro costs ${BOTH} (in US dollars), paid once. There is no subscription and nothing
+renews. The payment page shows the price for where you are, and lets you pay the other instead.
+Razorpay takes the payment and emails you a receipt. The price is shown before you pay.</p>
 <h2>Trying it first</h2>
 <p>Every PC gets Pro free for 7 days from Clokrix's first start, with no card needed, so you can check that Clokrix
 works on your PC before you buy.</p>
@@ -125,8 +130,8 @@ function refunds(s: Seller): string {
   return policy(
     'Refunds and cancellation',
     `<h2>${REFUND_DAYS} days, no questions</h2>
-<p>If you ask within ${REFUND_DAYS} days of buying Clokrix Pro, we refund the full ${price}. You do not need to give a
-reason. To ask, ${writeTo(s)} with the payment id from Razorpay's receipt (it starts with <code>pay_</code>).</p>
+<p>If you ask within ${REFUND_DAYS} days of buying Clokrix Pro, we refund the full price you paid. You do not need to
+give a reason. To ask, ${writeTo(s)} with the payment id from Razorpay's receipt (it starts with <code>pay_</code>).</p>
 <p>The refund goes back to how you paid, through Razorpay. Banks usually show it within 5 to 7 working days.</p>
 <p>Once refunded, the key stops turning Pro on, and the PC goes back to Clokrix Free at its next check.</p>
 <h2>After ${REFUND_DAYS} days</h2>
@@ -164,7 +169,7 @@ function contact(s: Seller): string {
   return `<h1>Contact</h1>\n${lines.filter(Boolean).join('\n')}`;
 }
 
-const PAGES: Record<SitePath, { title: string; body: (s: Seller) => string }> = {
+const PAGES: Record<SitePath, { title: string; body: (s: Seller, c: Currency) => string }> = {
   '/': { title: 'Clokrix: a hardware monitor for Windows', body: home },
   '/terms': { title: 'Clokrix: terms of sale', body: terms },
   '/privacy': { title: 'Clokrix: privacy', body: privacy },
@@ -173,8 +178,8 @@ const PAGES: Record<SitePath, { title: string; body: (s: Seller) => string }> = 
   '/contact': { title: 'Clokrix: contact', body: contact },
 };
 
-/** One of the website's pages. */
-export function sitePage(path: SitePath, s: Seller, nonce: string): string {
+/** One of the website's pages, with the price in `c` (the visitor's) where it names one. */
+export function sitePage(path: SitePath, s: Seller, nonce: string, c: Currency): string {
   const p = PAGES[path];
-  return page({ title: p.title, body: p.body(s), nonce, seller: s.name, wide: true, index: true });
+  return page({ title: p.title, body: p.body(s, c), nonce, seller: s.name, wide: true, index: true });
 }

@@ -21,6 +21,22 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '2.5.2',
+    items: [
+      {
+        icon: 'sparkles',
+        title: 'Clokrix Pro in rupees in India',
+        text: 'In India, Clokrix Pro is now ₹10,000, including all taxes, paid in rupees; elsewhere it stays $100. The payment page shows the price for where you are, with a link to pay the other instead.',
+      },
+      {
+        icon: 'phone',
+        title: 'The phone app at Clokrix’s own address',
+        text: 'Phones you pair from now on open the phone app at Clokrix’s own address. Phones already paired keep working as they are, with nothing to do.',
+        phone: true,
+      },
+    ],
+  },
+  {
     version: '2.5.1',
     items: [
       {

@@ -94,10 +94,11 @@ Intel CPUs, the NCT679x and DDR4 on Intel have been checked on one PC so far
 Clokrix Free is the Dashboard, with its layouts and editing, and Settings. Clokrix Pro is
 everything else: Health and alerts, fan control, GPU tuning, History, the Benchmark, every part
 of this PC, desktop widgets, the game overlay and the phone app. It costs $100 once, for life, on
-one PC, and can move to another. Every PC gets Pro for 7 days from the first start of 2.5. Buy
-Pro (Settings → Clokrix Pro) opens the checkout in the browser, and Pro turns on by itself once
-it is paid. [`docs/pro.md`](docs/pro.md) explains the trial, one PC, what is sent, and the
-checkout's set-up. The code stays MIT or Apache-2.0, and a build without the checkout's settings
+one PC (₹10,000 in India, including all taxes, from 2.5.2), and can move to another. Every PC
+gets Pro for 7 days from the first start of 2.5. Buy Pro (Settings → Clokrix Pro) opens the
+checkout in the browser, and Pro turns on by itself once it is paid.
+[`docs/pro.md`](docs/pro.md) explains the trial, one PC, what is sent, and the checkout's
+set-up. The code stays MIT or Apache-2.0, and a build without the checkout's settings
 is Pro.
 
 ## Fan and pump control

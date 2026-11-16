@@ -9,8 +9,15 @@ Clokrix comes in two packages:
   Network, Displays, Devices, System, Processes, Sensors), desktop widgets, the game overlay,
   profiles and the phone app.
 
-Pro costs **$100, once, for life, on one PC**. Jainav Infotech Private Limited sells it, and
+Pro costs **$100, once, for life, on one PC**, and **₹10,000 in India** (including all taxes;
+the owner, 2026-11-16, from 2.5.2's checkout). Jainav Infotech Private Limited sells it, and
 Razorpay takes the payment.
+
+- **Which price:** the checkout shows rupees to a buyer whose connection Cloudflare places in
+  India, and dollars to the rest, with a link to pay the other instead (for travellers, VPNs and
+  cards that pay only one). The app names the price for the country Windows is set to (2.5.2;
+  2.5.0 and 2.5.1 say $100). The website names both.
+- **Taxes:** ₹10,000 includes all taxes; any GST comes out of it. $100 is charged as it is.
 
 ## The trial
 
@@ -38,7 +45,8 @@ views with a lock.
 
 1. **Buy Pro** (Settings → Clokrix Pro, or any Pro view) opens the checkout in the browser. The
    page link carries a one-time code the app made for this purchase.
-2. **Pay $100 there.** Razorpay's own checkout takes cards and the rest.
+2. **Pay ₹10,000 or $100 there.** Razorpay's own checkout takes cards and the rest (in rupees,
+   also UPI and netbanking, as the Razorpay account allows).
 3. **Pro turns on by itself.** While the page is open, the app asks the checkout every 5 seconds
    (for 30 minutes) whether the purchase is paid. Once it is, the app collects the key and turns
    Pro on.
