@@ -5,6 +5,8 @@
 export const PRICE = { amount: 10000, currency: 'USD' } as const;
 /** A key moves to another PC at most once in this long. */
 export const MOVE_DAYS = 30;
+/** A purchase is refunded in full if asked for within this long (the owner, 2026-11-16). */
+export const REFUND_DAYS = 14;
 /** Requests one address may make in a minute, beyond which it waits. */
 export const RATE_PER_MIN = 40;
 

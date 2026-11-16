@@ -1,8 +1,9 @@
 // The checkout's pages (2.5): the one that takes the payment, through Razorpay's own checkout, and
-// the one that shows the key once paid. Plain HTML in the system font, light or dark as the buyer's
-// system is; the only script from elsewhere is Razorpay's.
+// the one that shows the key once paid; and, since 2.5's website (site.ts), the pages around them.
+// Plain HTML in the system font, light or dark as the buyer's system is; the only script from
+// elsewhere is Razorpay's.
 
-import { PRICE } from './rules';
+import { PRICE, REFUND_DAYS } from './rules';
 
 export function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -10,45 +11,87 @@ export function esc(s: string): string {
 
 const STYLE = `
   :root { color-scheme: light dark; --bg: #f6f7fb; --card: rgb(255 255 255 / 72%); --text: #141821; --muted: #5b6475; --line: #d9dde6;
-    --accent: #2563eb; --wash-1: #d4e4fa; --wash-2: #e8def8; --wash-3: #d6f0e0; --rim: rgb(255 255 255 / 95%); --edge: rgb(23 32 43 / 11%); }
+    --accent: #2563eb; --on-accent: #fff; --wash-1: #d4e4fa; --wash-2: #e8def8; --wash-3: #d6f0e0; --rim: rgb(255 255 255 / 95%); --edge: rgb(23 32 43 / 11%); }
   @media (prefers-color-scheme: dark) { :root { --bg: #0b0f16; --card: rgb(18 24 34 / 70%); --text: #e8ecf3; --muted: #9aa4b5; --line: #263042;
-    --accent: #5aa2ff; --wash-1: #173470; --wash-2: #461a6c; --wash-3: #0b3f50; --rim: rgb(255 255 255 / 20%); --edge: rgb(255 255 255 / 9%); } }
+    --accent: #5aa2ff; --on-accent: #0b1220; --wash-1: #173470; --wash-2: #461a6c; --wash-3: #0b3f50; --rim: rgb(255 255 255 / 20%); --edge: rgb(255 255 255 / 9%); } }
   * { box-sizing: border-box; }
   /* Clokrix's glass (2.5): a pane over a colour wash, lit along its top edge. */
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; color: var(--text);
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; align-content: center; gap: 18px; padding: 16px; color: var(--text);
     background: radial-gradient(40rem 30rem at 10% 0%, var(--wash-1), transparent 65%), radial-gradient(36rem 28rem at 95% 20%, var(--wash-2), transparent 62%),
       radial-gradient(44rem 30rem at 50% 100%, var(--wash-3), transparent 65%), var(--bg);
     font: 16px/1.5 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif; }
   main { width: min(30rem, 100%); padding: 28px; border: 1px solid var(--edge); border-radius: 20px; background: var(--card); background-clip: padding-box;
     -webkit-backdrop-filter: blur(24px) saturate(170%); backdrop-filter: blur(24px) saturate(170%);
     box-shadow: inset 0 1px 0 var(--rim), 0 24px 56px -28px rgb(0 0 0 / 45%); }
+  main.wide { width: min(46rem, 100%); }
   h1 { margin: 0 0 4px; font-size: 1.4rem; }
+  h2 { margin: 22px 0 6px; font-size: 1.05rem; }
   .price { margin: 0 0 16px; font-size: 2rem; font-weight: 700; }
   ul { margin: 0 0 20px; padding-left: 1.2rem; color: var(--muted); }
+  li { margin-bottom: 4px; }
   p { margin: 0 0 12px; }
+  a { color: var(--accent); }
+  a:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; border-radius: 4px; }
   .muted { color: var(--muted); font-size: 0.88rem; }
-  button { width: 100%; padding: 12px 16px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  button { width: 100%; padding: 12px 16px; border: 0; border-radius: 10px; background: var(--accent); color: var(--on-accent); font: inherit; font-weight: 600; cursor: pointer; }
   button:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 8px; }
+  .button { display: inline-block; padding: 11px 18px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent); color: var(--on-accent);
+    font-weight: 600; text-decoration: none; }
+  .button.quiet { border-color: var(--line); background: transparent; color: var(--text); }
   .key { display: block; margin: 8px 0 12px; padding: 12px; border: 1px dashed var(--line); border-radius: 10px;
     font: 600 1.05rem/1.4 ui-monospace, 'Cascadia Mono', Consolas, monospace; text-align: center; user-select: all; overflow-wrap: anywhere; }
   .after { margin-top: 12px; }
   .err { color: #d14343; }
+  address { font-style: normal; white-space: pre-line; }
+  footer { width: min(46rem, 100%); text-align: center; color: var(--muted); font-size: 0.85rem; }
+  footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; margin-bottom: 4px; }
+  footer a { color: inherit; }
 `;
 
-function page(title: string, body: string, nonce: string): string {
+/** Each page's footer: the seller, and the way to every page Razorpay asks a website for. */
+function footer(seller: string): string {
+  const links = [
+    ['/', 'Clokrix'],
+    ['/buy', 'Buy Pro'],
+    ['/terms', 'Terms'],
+    ['/privacy', 'Privacy'],
+    ['/refunds', 'Refunds'],
+    ['/delivery', 'Delivery'],
+    ['/contact', 'Contact'],
+  ];
+  return `<footer>
+<nav aria-label="Clokrix and its policies">${links.map(([href, text]) => `<a href="${href}">${text}</a>`).join('')}</nav>
+<p>© ${new Date().getUTCFullYear()} ${esc(seller)}</p>
+</footer>`;
+}
+
+export interface Page {
+  title: string;
+  body: string;
+  nonce: string;
+  /** Who sells Clokrix Pro, as the footer names them. */
+  seller: string;
+  /** A page to read (the website's), not the narrow card of the checkout. */
+  wide?: boolean;
+  /** For search engines: the website's pages, not the checkout's own. */
+  index?: boolean;
+}
+
+export function page(p: Page): string {
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<title>${esc(title)}</title>
-<style nonce="${nonce}">${STYLE}</style>
+${p.index ? '' : '<meta name="robots" content="noindex">\n'}<title>${esc(p.title)}</title>
+<style nonce="${p.nonce}">${STYLE}</style>
 </head>
 <body>
-<main>
-${body}
+<main${p.wide ? ' class="wide"' : ''}>
+${p.body}
 </main>
+${footer(p.seller)}
 </body>
 </html>`;
 }
@@ -81,9 +124,11 @@ const price = `$${PRICE.amount / 100}`;
  * once paid, the checkout's answer comes here (`/paid`) as a form, and the key shows. */
 export function checkoutPage(o: { nonce: string; seller: string; keyId: string; claim: string | null }): string {
   const options = { key: o.keyId, amount: PRICE.amount, currency: PRICE.currency, name: o.seller, description: 'Clokrix Pro: lifetime, one PC' };
-  return page(
-    'Clokrix Pro',
-    `<h1>Clokrix Pro</h1>
+  return page({
+    title: 'Clokrix Pro',
+    seller: o.seller,
+    nonce: o.nonce,
+    body: `<h1>Clokrix Pro</h1>
 <p class="price">${price} <span class="muted">once, for life</span></p>
 <ul>
   <li>Every part of Clokrix, not only the Dashboard</li>
@@ -97,7 +142,7 @@ export function checkoutPage(o: { nonce: string; seller: string; keyId: string; 
 </form>
 <button id="pay" type="button">Pay ${price}</button>
 <p class="muted after">${o.claim ? 'Clokrix turns Pro on by itself once you have paid. ' : ''}Sold by ${esc(o.seller)}; Razorpay
-takes the payment.</p>
+takes the payment. <a href="/refunds">Refundable within ${REFUND_DAYS} days.</a></p>
 <p id="err" class="err" role="alert"></p>
 <script nonce="${o.nonce}" src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script nonce="${o.nonce}">
@@ -134,24 +179,24 @@ takes the payment.</p>
     rzp.open();
   });
 </script>`,
-    o.nonce,
-  );
+  });
 }
 
 /** The key, once paid. */
-export function paidPage(o: { nonce: string; key: string; fromApp: boolean }): string {
-  return page(
-    'Clokrix Pro: your key',
-    `<h1>Thank you</h1>
+export function paidPage(o: { nonce: string; seller: string; key: string; fromApp: boolean }): string {
+  return page({
+    title: 'Clokrix Pro: your key',
+    seller: o.seller,
+    nonce: o.nonce,
+    body: `<h1>Thank you</h1>
 <p>${o.fromApp ? 'Clokrix turns Pro on by itself in a moment. ' : ''}Your key:</p>
 <code class="key">${esc(o.key)}</code>
 <p class="muted">Keep it: you need it to set Pro up again after reinstalling Windows, or to move Pro to
 another PC. In Clokrix: Settings → Clokrix Pro → Enter key. Razorpay emails you a receipt.</p>`,
-    o.nonce,
-  );
+  });
 }
 
 /** Something went wrong, said plainly. */
-export function errorPage(nonce: string, title: string, text: string): string {
-  return page(title, `<h1>${esc(title)}</h1><p>${esc(text)}</p>`, nonce);
+export function errorPage(o: { nonce: string; seller: string }, title: string, text: string): string {
+  return page({ title, seller: o.seller, nonce: o.nonce, body: `<h1>${esc(title)}</h1><p>${esc(text)}</p>` });
 }

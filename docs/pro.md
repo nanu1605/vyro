@@ -80,6 +80,22 @@ Infotech Private Limited's account.
 
 Nothing else is sent.
 
+## The website
+
+The checkout also serves Clokrix's website, all naming Jainav Infotech Private Limited:
+
+- `/`: what Clokrix is, Free and Pro, the price, the trial, Download and Buy Pro;
+- `/terms`, `/privacy`, `/refunds` (a full refund within 14 days, on request; the owner,
+  2026-11-16), `/delivery` and `/contact` (the contact variables above);
+- `/buy`: the payment page, with the same links at its foot.
+
+With `CLOKRIX_SITE_HOST` set, these pages are served only there: asked for on the workers.dev
+address (which 2.5.0's Buy Pro opens), they send the browser to the website, the app's code
+kept. The app's own requests and Razorpay's webhook work on either address.
+
+The policy pages are a plain starting point, written from what Clokrix does; the owner checks
+them before giving the website to Razorpay.
+
 ## It is open source
 
 The lock is in Clokrix's public code (MIT or Apache-2.0), and a build without the checkout's
@@ -97,9 +113,20 @@ last two variables.
      secret.
    - **Webhooks:** add one to `<checkout>/razorpay/webhook`, with a secret of your choosing, for
      the events `payment.captured`, `order.paid` and `refund.processed`.
-2. **The website:** Razorpay asks for terms, refund and contact pages. Its Buy button links to
-   `<checkout>/buy`. Optionally, put the checkout on a domain of yours (Cloudflare → the Worker
-   → Domains & Routes).
+2. **The website:** Razorpay gives Live keys only after checking it, and takes live payments
+   only from its domain. The checkout serves it (see The website below), so it needs only an
+   address and the contact details:
+   - **The domain:** the company's domain in the same Cloudflare account as the relay (Cloudflare
+     → Add a domain). The website goes on a host of it, such as `clokrix.<company domain>`.
+   - **The variables** (GitHub → Settings → Secrets and variables → Actions → Variables):
+     `CLOKRIX_SITE_HOST` (the host alone, such as `clokrix.example.com`),
+     `CLOKRIX_CONTACT_EMAIL`, `CLOKRIX_CONTACT_PHONE` and `CLOKRIX_CONTACT_ADDRESS` (the
+     registered address, in lines). They go on a public website, as Razorpay asks.
+   - **Deploy** (step 5). The run's summary lists the website's pages. If the deploy is refused on
+     the domain, give the Cloudflare token (`CLOUDFLARE_API_TOKEN`) the Zone permissions Workers
+     Routes: Edit and DNS: Edit for that domain, and run it again.
+   - **In Razorpay:** give `https://<host>` as the business website, with its pages' addresses
+     when asked: `/terms`, `/privacy`, `/refunds`, `/delivery` and `/contact`.
 3. **The signing keys:** `node scripts/licence-keygen.mjs` prints a pair.
    - The private half goes into the GitHub secret `LICENCE_SIGNING_KEY`, and nowhere else.
    - The public half goes into the variable `CLOKRIX_LICENCE_PUBKEY`.
@@ -116,7 +143,10 @@ last two variables.
    - the key is refused on a second PC;
    - Move Pro here works there, and the first PC turns Free at its next check.
 
-   Then switch the Razorpay secrets to the Live keys and deploy again.
+   Then, once Razorpay has checked the website and given them, switch the Razorpay secrets to
+   the Live keys and deploy again. From then on, keys bought under Test keys (with Razorpay's
+   public test cards, the owner's own test included) no longer turn Pro on: a PC on one turns
+   Free at its next check, and 2.5.0 says the key's payment was refunded.
 7. **Release:** on "release 2.5.0", as before.
 
 The checkout's code and tests are in `licence/`. CI runs its tests with Razorpay played by a

@@ -1,8 +1,13 @@
-// Clokrix Pro's checkout and keys (2.5).
+// Clokrix Pro's checkout and keys (2.5), and Clokrix's website around them (site.ts).
 //
 // The buyer's side, in a browser:
+//   GET  /, /terms, /privacy, /refunds, /delivery, /contact
+//                            the website: what Razorpay checks before it gives Live keys.
 //   GET  /buy[?c=<claim>]    the page that pays. `c` is the code of the app that opened it, which
 //                            then turns Pro on by itself.
+// With SITE set, those pages are only at SITE: asked for on another address (the workers.dev one
+// 2.5.0's app opens), they send the browser there, so Razorpay sees payments from the website's
+// own domain.
 //   POST /order              {c?}: a Razorpay order, made when Pay is pressed.
 //   POST /paid               where Razorpay's checkout sends a payment: checked, then the key.
 //   POST /razorpay/webhook   Razorpay's own word of a payment (or refund), in case the page closed.
@@ -14,6 +19,7 @@
 
 import { capture, createOrder, getPayment, paidFor, type Payment, type Razorpay } from './razorpay';
 import { checkoutPage, errorPage, pageHeaders, paidPage } from './page';
+import { isSitePage, sitePage, type Seller } from './site';
 import { LEDGER_NAME, type Ledger } from './ledger';
 import { hmacHex, isClaim, isPc, normalKey, same, signActivation, signingKey } from './rules';
 
@@ -22,6 +28,13 @@ export { Ledger } from './ledger';
 interface Env {
   LEDGER: DurableObjectNamespace<Ledger>;
   SELLER?: string;
+  /** The website's address (https://host), where its pages are served; unset, they are served
+   * anywhere. */
+  SITE?: string;
+  /** How to reach the seller, for the website's pages. */
+  CONTACT_EMAIL?: string;
+  CONTACT_PHONE?: string;
+  CONTACT_ADDRESS?: string;
   /** Razorpay's API; the tests point it at their stand-in. */
   RAZORPAY_API?: string;
   RAZORPAY_KEY_ID?: string;
@@ -43,6 +56,31 @@ function nonce(): string {
 
 function html(status: number, n: string, body: string): Response {
   return new Response(body, { status, headers: pageHeaders(n) });
+}
+
+/** The checkout runs on Razorpay's Live keys: real payments. Keys bought before, under Test keys,
+ * then no longer turn Pro on (the owner, 2026-11-16: "Cancel test keys at go-live"). */
+function live(env: Env): boolean {
+  return (env.RAZORPAY_KEY_ID ?? '').startsWith('rzp_live_');
+}
+
+function seller(env: Env): Seller {
+  return {
+    name: env.SELLER || 'Clokrix',
+    email: env.CONTACT_EMAIL?.trim() || undefined,
+    phone: env.CONTACT_PHONE?.trim() || undefined,
+    address: env.CONTACT_ADDRESS?.trim() || undefined,
+  };
+}
+
+/** SITE's origin, or null when unset or not an address. */
+function siteOrigin(env: Env): string | null {
+  if (!env.SITE) return null;
+  try {
+    return new URL(env.SITE).origin;
+  } catch {
+    return null;
+  }
 }
 
 function razorpay(env: Env): Razorpay | null {
@@ -88,7 +126,7 @@ export default {
       }
       const payment = event.payload?.payment?.entity as unknown as Payment | undefined;
       if ((event.event === 'payment.captured' || event.event === 'order.paid') && payment?.order_id) {
-        if (paidFor(payment, payment.order_id)) await ledger.issue(payment.order_id, payment.id);
+        if (paidFor(payment, payment.order_id)) await ledger.issue(payment.order_id, payment.id, !live(env));
       } else if (event.event === 'refund.processed' || event.event === 'payment.refunded') {
         const id = (event.payload?.refund?.entity?.payment_id as string | undefined) ?? payment?.id;
         if (id) await ledger.revoke(id);
@@ -97,20 +135,35 @@ export default {
       return json(200, { ok: true });
     }
 
+    const s = seller(env);
+    const at = { nonce: n, seller: s.name };
+    const isPage = path === '/buy' || isSitePage(path);
+    const origin = siteOrigin(env);
+    // By host: Cloudflare, not this, sends http to https.
+    if (isPage && origin && url.host !== new URL(origin).host && (req.method === 'GET' || req.method === 'HEAD')) {
+      // 302, not 301: a browser would keep a permanent one even after the website moved.
+      return Response.redirect(`${origin}${path}${url.search}`, 302);
+    }
+
     if (!(await ledger.hit(ip))) return json(429, { error: 'too-many' });
 
-    if (path === '/' || path === '/buy') {
+    if (isSitePage(path)) {
+      if (req.method !== 'GET' && req.method !== 'HEAD') return json(405, { error: 'not-allowed' });
+      return html(200, n, sitePage(path, s, n));
+    }
+
+    if (path === '/buy') {
       if (req.method !== 'GET' && req.method !== 'HEAD') return json(405, { error: 'not-allowed' });
       const c = url.searchParams.get('c');
-      if (c !== null && !isClaim(c)) return html(400, n, errorPage(n, 'Not a Clokrix link', 'Open Buy Pro in Clokrix again.'));
+      if (c !== null && !isClaim(c)) return html(400, n, errorPage(at, 'Not a Clokrix link', 'Open Buy Pro in Clokrix again.'));
       if (c) {
         const key = await ledger.keyOf(c);
-        if (key) return html(200, n, paidPage({ nonce: n, key, fromApp: true }));
+        if (key) return html(200, n, paidPage({ ...at, key, fromApp: true }));
       }
       const r = razorpay(env);
-      if (!r) return html(503, n, errorPage(n, 'Not open yet', 'Clokrix Pro cannot be bought here yet.'));
+      if (!r) return html(503, n, errorPage(at, 'Not open yet', 'Clokrix Pro cannot be bought here yet.'));
       // The order is made when Pay is pressed, not for every look at the page.
-      return html(200, n, checkoutPage({ nonce: n, seller: env.SELLER || 'Clokrix', keyId: r.keyId, claim: c }));
+      return html(200, n, checkoutPage({ ...at, keyId: r.keyId, claim: c }));
     }
 
     if (path === '/order') {
@@ -134,26 +187,26 @@ export default {
     if (path === '/paid') {
       if (req.method !== 'POST') return json(405, { error: 'not-allowed' });
       const r = razorpay(env);
-      if (!r) return html(503, n, errorPage(n, 'Not open yet', 'Clokrix Pro cannot be bought here yet.'));
+      if (!r) return html(503, n, errorPage(at, 'Not open yet', 'Clokrix Pro cannot be bought here yet.'));
       const form = await req.formData().catch(() => null);
       const paymentId = String(form?.get('razorpay_payment_id') ?? '');
       const orderId = String(form?.get('razorpay_order_id') ?? '');
       const sig = String(form?.get('razorpay_signature') ?? '');
       const sorry = 'If you were charged, the key comes by itself within minutes: open Buy Pro in Clokrix again, or write to the seller with your Razorpay receipt.';
       if (!paymentId || !orderId || !same(await hmacHex(r.keySecret, `${orderId}|${paymentId}`), sig)) {
-        return html(400, n, errorPage(n, 'Payment not confirmed', sorry));
+        return html(400, n, errorPage(at, 'Payment not confirmed', sorry));
       }
-      if (!(await ledger.hasOrder(orderId))) return html(400, n, errorPage(n, 'Payment not confirmed', sorry));
+      if (!(await ledger.hasOrder(orderId))) return html(400, n, errorPage(at, 'Payment not confirmed', sorry));
       let paid: Payment | null;
       try {
         paid = await settled(r, paymentId, orderId);
       } catch {
-        return html(502, n, errorPage(n, 'Payment not confirmed yet', sorry));
+        return html(502, n, errorPage(at, 'Payment not confirmed yet', sorry));
       }
-      if (!paid) return html(402, n, errorPage(n, 'Payment not complete', sorry));
-      const l = await ledger.issue(orderId, paid.id);
-      if (!l) return html(400, n, errorPage(n, 'Payment not confirmed', sorry));
-      return html(200, n, paidPage({ nonce: n, key: l.key, fromApp: await ledger.fromApp(orderId) }));
+      if (!paid) return html(402, n, errorPage(at, 'Payment not complete', sorry));
+      const l = await ledger.issue(orderId, paid.id, !live(env));
+      if (!l) return html(400, n, errorPage(at, 'Payment not confirmed', sorry));
+      return html(200, n, paidPage({ ...at, key: l.key, fromApp: await ledger.fromApp(orderId) }));
     }
 
     const claimAt = /^\/claim\/([0-9a-f]{32})$/.exec(path);
@@ -171,9 +224,9 @@ export default {
       if (!key) return json(400, { error: 'key' });
       if (!isPc(pc)) return json(400, { error: 'pc' });
       if (path === '/release') return (await ledger.release(key, pc)) ? json(200, { ok: true }) : json(409, { error: 'not-here' });
-      if (path === '/check') return json(200, await ledger.check(key, pc));
+      if (path === '/check') return json(200, await ledger.check(key, pc, live(env)));
       if (!env.LICENCE_SIGNING_KEY) return json(503, { error: 'not-open' });
-      const a = await ledger.activate(key, pc, b?.move === true);
+      const a = await ledger.activate(key, pc, b?.move === true, live(env));
       if (!a.ok) return json(a.status, { error: a.error, ...(a.until ? { until: a.until } : {}) });
       const token = await signActivation(await signingKey(env.LICENCE_SIGNING_KEY), {
         v: 1,

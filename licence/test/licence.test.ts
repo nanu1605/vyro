@@ -5,12 +5,16 @@
 import { createServer, type Server } from 'node:http';
 import { createHmac, webcrypto } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { createTestHarness, type TestHarness } from 'wrangler';
+import { createTestHarness, type TestHarness, type TestHarnessOptions } from 'wrangler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const KEY_ID = 'rzp_test_clokrix';
+/** Razorpay's Live keys, as the checkout runs once Razorpay has checked the website. */
+const LIVE_KEY_ID = 'rzp_live_clokrix';
 const KEY_SECRET = 'test-key-secret';
 const HOOK_SECRET = 'test-webhook-secret';
+/** How the website says to reach the seller (constructed). */
+const CONTACT = { CONTACT_EMAIL: 'help@example.test', CONTACT_PHONE: '+91 00000 00000', CONTACT_ADDRESS: '1 <Test> Road\nPune, India' };
 
 interface Pay {
   id: string;
@@ -27,13 +31,39 @@ const orders: Array<{ id: string; body: { amount: number; currency: string; note
 const payments = new Map<string, Pay>();
 let captured = 0;
 let publicKey: webcrypto.CryptoKey;
+let api = '';
+let pkcs8 = '';
+
+/** The checkout as the tests run it: on `keyId`, with `vars` added to the usual. */
+function options(keyId = KEY_ID, vars: Record<string, string> = {}): TestHarnessOptions {
+  return {
+    workers: [
+      {
+        configPath: fileURLToPath(new URL('./wrangler.test.jsonc', import.meta.url)),
+        vars: { RAZORPAY_API: api, ...CONTACT, ...vars },
+        secrets: {
+          RAZORPAY_KEY_ID: keyId,
+          RAZORPAY_KEY_SECRET: KEY_SECRET,
+          RAZORPAY_WEBHOOK_SECRET: HOOK_SECRET,
+          LICENCE_SIGNING_KEY: pkcs8,
+        },
+      },
+    ],
+  };
+}
+
+/** The same checkout started again with other settings; its ledger is kept. */
+async function restart(keyId = KEY_ID, vars: Record<string, string> = {}): Promise<void> {
+  await server.update(options(keyId, vars));
+  base = (await server.listen()).url.toString().replace(/\/$/, '');
+}
 
 beforeAll(async () => {
   rzp = createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on('data', (c: Buffer) => chunks.push(c));
     req.on('end', () => {
-      const ok = req.headers.authorization === `Basic ${Buffer.from(`${KEY_ID}:${KEY_SECRET}`).toString('base64')}`;
+      const ok = [KEY_ID, LIVE_KEY_ID].some((id) => req.headers.authorization === `Basic ${Buffer.from(`${id}:${KEY_SECRET}`).toString('base64')}`);
       const send = (status: number, v: unknown) => res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(v));
       if (!ok) return send(401, { error: 'auth' });
       const url = req.url ?? '';
@@ -54,24 +84,11 @@ beforeAll(async () => {
   });
   await new Promise<void>((done) => rzp.listen(0, '127.0.0.1', done));
   const addr = rzp.address();
-  const api = `http://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}`;
+  api = `http://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}`;
   const pair = (await webcrypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify'])) as webcrypto.CryptoKeyPair;
   publicKey = pair.publicKey;
-  const pkcs8 = Buffer.from(await webcrypto.subtle.exportKey('pkcs8', pair.privateKey)).toString('base64');
-  server = createTestHarness({
-    workers: [
-      {
-        configPath: fileURLToPath(new URL('./wrangler.test.jsonc', import.meta.url)),
-        vars: { RAZORPAY_API: api },
-        secrets: {
-          RAZORPAY_KEY_ID: KEY_ID,
-          RAZORPAY_KEY_SECRET: KEY_SECRET,
-          RAZORPAY_WEBHOOK_SECRET: HOOK_SECRET,
-          LICENCE_SIGNING_KEY: pkcs8,
-        },
-      },
-    ],
-  });
+  pkcs8 = Buffer.from(await webcrypto.subtle.exportKey('pkcs8', pair.privateKey)).toString('base64');
+  server = createTestHarness(options());
   base = (await server.listen()).url.toString().replace(/\/$/, '');
 });
 
@@ -306,5 +323,113 @@ describe('one address asking too often', () => {
     for (let i = 0; i < 41; i++) statuses.push((await fetch(`${base}/claim/${code}`, { headers: ip })).status);
     expect(statuses.slice(0, 40).every((s) => s === 404)).toBe(true);
     expect(statuses[40]).toBe(429);
+  });
+});
+
+describe('the website', () => {
+  const PAGES = ['/', '/terms', '/privacy', '/refunds', '/delivery', '/contact'];
+
+  it('has every page Razorpay asks for, each naming the seller and leading to the others', async () => {
+    const ip = from();
+    for (const path of PAGES) {
+      const res = await fetch(`${base}${path}`, { headers: ip });
+      expect(res.status, path).toBe(200);
+      const page = await res.text();
+      expect(page, path).toContain('Test Seller');
+      for (const to of ['/buy', ...PAGES]) expect(page, `${path} → ${to}`).toContain(`href="${to}"`);
+    }
+  });
+
+  it('shows Clokrix Pro, its price and the download, and how refunds work', async () => {
+    const home = await (await fetch(`${base}/`, { headers: from() })).text();
+    expect(home).toContain('$100');
+    expect(home).toContain('Download for Windows');
+    expect(home).toContain('7 days');
+    const refunds = await (await fetch(`${base}/refunds`, { headers: from() })).text();
+    expect(refunds).toContain('within 14 days');
+    expect(refunds).toContain('help@example.test');
+  });
+
+  it('shows how to reach the seller, as set, and escaped', async () => {
+    const page = await (await fetch(`${base}/contact`, { headers: from() })).text();
+    expect(page).toContain('href="mailto:help@example.test"');
+    expect(page).toContain('href="tel:+910000000000"');
+    expect(page).toContain('1 &lt;Test&gt; Road');
+    expect(page).not.toContain('<Test>');
+  });
+
+  it('puts the policies next to the payment too', async () => {
+    const page = await (await fetch(`${base}/buy`, { headers: from() })).text();
+    expect(page).toContain('Pay $100');
+    for (const to of ['/terms', '/privacy', '/refunds', '/delivery', '/contact']) expect(page).toContain(`href="${to}"`);
+  });
+});
+
+describe('one address for the website', () => {
+  const SITE = 'https://clokrix.example.test';
+
+  it('sends its pages there, the app\'s code kept, and answers the app wherever it asks', async () => {
+    await restart(KEY_ID, { SITE });
+    try {
+      const c = claimCode();
+      const buy = await fetch(`${base}/buy?c=${c}`, { headers: from(), redirect: 'manual' });
+      expect(buy.status).toBe(302);
+      expect(buy.headers.get('location')).toBe(`${SITE}/buy?c=${c}`);
+      for (const path of ['/', '/terms', '/contact']) {
+        const res = await fetch(`${base}${path}`, { headers: from(), redirect: 'manual' });
+        expect(res.headers.get('location'), path).toBe(`${SITE}${path}`);
+      }
+      // At its own address, the website is served.
+      const there = await server.fetch(`${SITE}/terms`, { headers: from() });
+      expect(there.status).toBe(200);
+      expect(await there.text()).toContain('Terms of sale');
+      // The app's side and Razorpay's webhook are not pages: they work on any address.
+      expect((await claim(c)).status).toBe(404);
+      expect((await post('/check', { key: 'CLKX-AAAAA-AAAAA-AAAAA-AAAAA', pc: pcId() })).body).toEqual({ ok: false, reason: 'no-key' });
+      expect((await webhook({ event: 'payment.authorized' })).status).toBe(200);
+    } finally {
+      await restart();
+    }
+  });
+});
+
+describe('keys bought under Razorpay\'s Test keys', () => {
+  it('stop turning Pro on once the checkout runs on Live keys, and keys bought then work', async () => {
+    const testKey = await bought();
+    const pc = pcId();
+    expect((await post('/activate', { key: testKey, pc })).status).toBe(200);
+    await restart(LIVE_KEY_ID);
+    try {
+      expect((await post('/check', { key: testKey, pc })).body).toEqual({ ok: false, reason: 'revoked' });
+      const elsewhere = await post('/activate', { key: testKey, pc: pcId(), move: true });
+      expect(elsewhere.status).toBe(403);
+      expect(elsewhere.body.error).toBe('revoked');
+      const liveKey = await bought();
+      const livePc = pcId();
+      expect((await post('/activate', { key: liveKey, pc: livePc })).status).toBe(200);
+      expect((await post('/check', { key: liveKey, pc: livePc })).body).toEqual({ ok: true });
+    } finally {
+      await restart();
+    }
+    // Back on Test keys, it works again: the key was not deleted, only refused while Live.
+    expect((await post('/check', { key: testKey, pc })).body).toEqual({ ok: true });
+  });
+
+  it('count every key from before keys were marked', async () => {
+    const worker = server.getWorker();
+    const ledger = await worker.getDurableObjectStorage('LEDGER', { name: 'ledger' });
+    // The ledger as the first deploy made it, with a key in it.
+    await ledger.exec('ALTER TABLE licences DROP COLUMN test');
+    const key = 'CLKX-0AAAA-AAAAA-AAAAA-AAAAA';
+    await ledger.exec('INSERT INTO licences (lic, key, payment, issued) VALUES (?, ?, ?, ?)', 'firstdeploy00001', key, 'pay_first', 1);
+    await worker.evictDurableObject('LEDGER', { name: 'ledger' });
+    const pc = pcId();
+    expect((await post('/activate', { key, pc })).status).toBe(200);
+    await restart(LIVE_KEY_ID);
+    try {
+      expect((await post('/check', { key, pc })).body).toEqual({ ok: false, reason: 'revoked' });
+    } finally {
+      await restart();
+    }
   });
 });

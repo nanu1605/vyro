@@ -1,6 +1,10 @@
 // Every order and key (2.5), in one SQLite-backed Durable Object. An order is what the checkout
 // made with Razorpay; once paid it gets a licence: its key, and the one PC it is Pro on. Nothing
 // about the buyer is kept here: Razorpay has that.
+//
+// A licence bought while the checkout ran on Razorpay's Test keys is marked `test`: anyone can
+// pay there with Razorpay's public test cards. Once the checkout runs on Live keys, such a key no
+// longer turns Pro on (the owner, 2026-11-16: "Cancel test keys at go-live").
 
 import { DurableObject } from 'cloudflare:workers';
 import { MOVE_DAYS, newKey, RATE_PER_MIN } from './rules';
@@ -38,6 +42,10 @@ export class Ledger extends DurableObject<object> {
       );
       CREATE TABLE IF NOT EXISTS hits (ip TEXT NOT NULL, minute INTEGER NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (ip, minute));
     `);
+    // Added after the first deploy, when every key yet had been bought under Test keys: so they
+    // all count as test.
+    const cols = this.sql.exec<{ name: string }>('PRAGMA table_info(licences)').toArray();
+    if (!cols.some((c) => c.name === 'test')) this.sql.exec('ALTER TABLE licences ADD COLUMN test INTEGER NOT NULL DEFAULT 1');
   }
 
   private now(): number {
@@ -68,8 +76,8 @@ export class Ledger extends DurableObject<object> {
   }
 
   /** The order's licence, made now if the order has none: a page and the webhook for the same
-   * payment get the same key. */
-  issue(orderId: string, paymentId: string): Licence | null {
+   * payment get the same key. `test`: paid under Razorpay's Test keys. */
+  issue(orderId: string, paymentId: string, test: boolean): Licence | null {
     if (!this.hasOrder(orderId)) return null;
     return this.ctx.storage.transactionSync(() => {
       const had = this.sql.exec<{ lic: string | null }>('SELECT lic FROM orders WHERE id = ?', orderId).one().lic;
@@ -78,7 +86,7 @@ export class Ledger extends DurableObject<object> {
       const paid = this.sql.exec<{ lic: string }>('SELECT lic FROM licences WHERE payment = ?', paymentId).toArray()[0];
       const lic = paid?.lic ?? crypto.randomUUID().replace(/-/g, '').slice(0, 16);
       if (!paid) {
-        this.sql.exec('INSERT INTO licences (lic, key, payment, issued) VALUES (?, ?, ?, ?)', lic, newKey(), paymentId, this.now());
+        this.sql.exec('INSERT INTO licences (lic, key, payment, issued, test) VALUES (?, ?, ?, ?, ?)', lic, newKey(), paymentId, this.now(), test ? 1 : 0);
       }
       this.sql.exec('UPDATE orders SET lic = ? WHERE id = ?', lic, orderId);
       return this.licence(lic);
@@ -114,20 +122,26 @@ export class Ledger extends DurableObject<object> {
 
   private byKey(key: string) {
     return this.sql
-      .exec<{ lic: string; pc: string | null; moved: number | null; revoked: number | null }>(
-        'SELECT lic, pc, moved, revoked FROM licences WHERE key = ?',
+      .exec<{ lic: string; pc: string | null; moved: number | null; revoked: number | null; test: number }>(
+        'SELECT lic, pc, moved, revoked, test FROM licences WHERE key = ?',
         key,
       )
       .toArray()[0];
   }
 
+  /** Refunded, or bought under Test keys while the checkout is `live`: it turns nothing on. The app
+   * hears either as `revoked`, a word 2.5.0 already knows. */
+  private off(l: { revoked: number | null; test: number }, live: boolean): boolean {
+    return !!l.revoked || (live && !!l.test);
+  }
+
   /** Pro on `pc`: the PC the key is on already, or a key on none. With `move`, also a key on another
    * PC, at most once in MOVE_DAYS: that PC is then no longer Pro. */
-  activate(key: string, pc: string, move: boolean): Activated {
+  activate(key: string, pc: string, move: boolean, live: boolean): Activated {
     return this.ctx.storage.transactionSync((): Activated => {
       const l = this.byKey(key);
       if (!l) return { ok: false, status: 404, error: 'no-key' };
-      if (l.revoked) return { ok: false, status: 403, error: 'revoked' };
+      if (this.off(l, live)) return { ok: false, status: 403, error: 'revoked' };
       const now = this.now();
       if (l.pc && l.pc !== pc) {
         if (!move) return { ok: false, status: 409, error: 'in-use' };
@@ -149,10 +163,10 @@ export class Ledger extends DurableObject<object> {
   }
 
   /** Still Pro on `pc`? */
-  check(key: string, pc: string): Checked {
+  check(key: string, pc: string, live: boolean): Checked {
     const l = this.byKey(key);
     if (!l) return { ok: false, reason: 'no-key' };
-    if (l.revoked) return { ok: false, reason: 'revoked' };
+    if (this.off(l, live)) return { ok: false, reason: 'revoked' };
     if (l.pc === pc) return { ok: true };
     return { ok: false, reason: l.pc ? 'moved' : 'released' };
   }

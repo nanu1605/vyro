@@ -4816,6 +4816,46 @@ relay too".
       already said "Powered by Jainav Infotech Pvt Ltd", as asked for in 1.7.
 - [ ] **The checkout deployed with it:** Actions → Licence, on the owner's go.
 
+### 2.5: the website Razorpay checks, and test keys at go-live
+
+The owner, 2026-11-16: "razor pay needs a website link to provide live keys. Once they have
+verified then only they will share the live keys." So the checkout stays on Razorpay's Test keys
+for now, under 2.5.0's Buy Pro. Asked how to go ahead, they chose "Company domain on Cloudflare"
+(as "Subdomain of company site"), "Cancel test keys at go-live", "Keep 7 days" for the trial (no
+app change, no release), "14 days, on request" for refunds and "Email, phone and address" for
+the Contact page. The domain and contact details were not given: they are repository variables
+the owner sets, never in the code.
+
+- [x] **The website, served by the checkout** (`licence/src/site.ts`): `/` (Clokrix, Free and
+      Pro, $100 once, the trial, Download and Buy Pro), `/terms`, `/privacy`, `/refunds` (in full
+      within 14 days, on request), `/delivery` and `/contact` (the vars `CONTACT_EMAIL`,
+      `CONTACT_PHONE`, `CONTACT_ADDRESS`), each naming the seller, with a footer of all of them
+      on every page, the payment page's too; `/buy` is the payment page alone. The policies are a
+      plain starting point written from what Clokrix does, for the owner to check.
+- [x] **One address:** with the var `SITE`, the pages asked for on another host (the workers.dev
+      one 2.5.0's Buy Pro opens) go there, `?c=` kept (302, so a later move is not remembered by
+      browsers); the app's requests and the webhook work on either. Compared by host: Cloudflare
+      sends http to https.
+- [x] **Test keys at go-live:** each licence is marked `test` when bought while the key id is not
+      `rzp_live_`, and those from before the mark count as test (the column's default). While the
+      checkout runs on `rzp_live_` keys, `/activate` and `/check` answer them `revoked`, which
+      2.5.0 already reads ("This key's payment was refunded…"); back on Test keys they work again.
+- [x] **The Pay button in the dark** had white on light blue (2.6:1); its text is dark there now.
+- [x] **`licence.yml`** (the owner's go: this plan, approved): with `CLOKRIX_SITE_HOST` set, it
+      deploys with `--domain` and the vars `SITE` and `CONTACT_*` from `CLOKRIX_CONTACT_EMAIL`,
+      `_PHONE` and `_ADDRESS` (wrangler splits each at its first colon only), stops if a contact
+      variable is missing or the host is not a bare host name, and lists the website's pages in
+      its summary. `docs/pro.md` has the steps.
+- [x] **Checked:** the checkout's 22 tests (7 new: the pages, the contact details escaped, the
+      move to `SITE` with the API left alone, test keys refused under Live keys and working again
+      under Test, and a key from before the mark); and the pages served as deployed, at 1280 and
+      390 wide, light and dark: axe-core finds nothing on any of the seven, nothing scrolls
+      sideways.
+- [ ] **Deployed** (the owner): the domain in Cloudflare, the four variables, then Actions →
+      Licence; then the website's address to Razorpay.
+- [ ] **Live keys** (the owner, once Razorpay has checked): the Razorpay secrets switched, Licence
+      run again.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

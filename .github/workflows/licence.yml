@@ -16,6 +16,16 @@ name: Licence
 #   secret   LICENCE_SIGNING_KEY       node scripts/licence-keygen.mjs (its private half)
 # After the first deploy, set the variables CLOKRIX_LICENCE_URL to the address it prints and
 # CLOKRIX_LICENCE_PUBKEY to the key pair's public half, so builds carry them (ci.yml, release.yml).
+#
+# The website (2.5): the checkout also serves Clokrix's website, which Razorpay checks before it
+# gives Live keys. On a domain of the company's, in this Cloudflare account, with the variables:
+#   variable CLOKRIX_SITE_HOST         e.g. clokrix.example.com: the website and checkout's address
+#   variable CLOKRIX_CONTACT_EMAIL     the Contact page's email
+#   variable CLOKRIX_CONTACT_PHONE     the Contact page's phone
+#   variable CLOKRIX_CONTACT_ADDRESS   the company's registered address (lines as typed)
+# With CLOKRIX_SITE_HOST set, the deploy puts the Worker on that host too, and its pages asked for
+# on the workers.dev address go there. The contact details are needed then; without the host they
+# are optional.
 
 on:
   workflow_dispatch:
@@ -69,6 +79,22 @@ jobs:
             exit 1
           fi
           echo "Public key: $derived" >> "$GITHUB_STEP_SUMMARY"
+      - name: The website's details are set
+        env:
+          SITE_HOST: ${{ vars.CLOKRIX_SITE_HOST }}
+          CONTACT_EMAIL: ${{ vars.CLOKRIX_CONTACT_EMAIL }}
+          CONTACT_PHONE: ${{ vars.CLOKRIX_CONTACT_PHONE }}
+          CONTACT_ADDRESS: ${{ vars.CLOKRIX_CONTACT_ADDRESS }}
+        run: |
+          SITE_HOST="${SITE_HOST,,}"
+          if [ -n "$SITE_HOST" ] && { [ -z "$CONTACT_EMAIL" ] || [ -z "$CONTACT_PHONE" ] || [ -z "$CONTACT_ADDRESS" ]; }; then
+            echo "::error::CLOKRIX_SITE_HOST is set: set CLOKRIX_CONTACT_EMAIL, CLOKRIX_CONTACT_PHONE and CLOKRIX_CONTACT_ADDRESS too, for the Contact page Razorpay checks"
+            exit 1
+          fi
+          if [ -n "$SITE_HOST" ] && ! [[ "$SITE_HOST" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]]; then
+            echo "::error::CLOKRIX_SITE_HOST is a host name alone, like clokrix.example.com (no https://, no path)"
+            exit 1
+          fi
       - run: pnpm --dir licence install --frozen-lockfile
       - run: pnpm --dir licence check
       - run: pnpm --dir licence test
@@ -82,9 +108,21 @@ jobs:
           RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
           RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
           LICENCE_SIGNING_KEY: ${{ secrets.LICENCE_SIGNING_KEY }}
+          SITE_HOST: ${{ vars.CLOKRIX_SITE_HOST }}
+          CONTACT_EMAIL: ${{ vars.CLOKRIX_CONTACT_EMAIL }}
+          CONTACT_PHONE: ${{ vars.CLOKRIX_CONTACT_PHONE }}
+          CONTACT_ADDRESS: ${{ vars.CLOKRIX_CONTACT_ADDRESS }}
         run: |
           set -o pipefail  # a failed deploy fails the step, through tee
-          pnpm --dir licence exec wrangler deploy | tee deploy.log
+          # The website's address and details, as the Worker's vars (wrangler splits each at its first
+          # colon only, so an address keeps its own).
+          SITE_HOST="${SITE_HOST,,}"
+          site=()
+          if [ -n "$SITE_HOST" ]; then site+=(--domain "$SITE_HOST" --var "SITE:https://$SITE_HOST"); fi
+          for name in CONTACT_EMAIL CONTACT_PHONE CONTACT_ADDRESS; do
+            if [ -n "${!name}" ]; then site+=(--var "$name:${!name}"); fi
+          done
+          pnpm --dir licence exec wrangler deploy "${site[@]}" | tee deploy.log
           # The secrets go on after the code, each a new version of the Worker.
           for name in RAZORPAY_KEY_ID RAZORPAY_KEY_SECRET RAZORPAY_WEBHOOK_SECRET LICENCE_SIGNING_KEY; do
             printf '%s' "${!name}" | pnpm --dir licence exec wrangler secret put "$name" > /dev/null
@@ -99,5 +137,9 @@ jobs:
               echo "Address: $url (the page: $url/buy; Razorpay's webhook: $url/razorpay/webhook)"
               echo
               echo "Builds carry it once the repository variable CLOKRIX_LICENCE_URL is set to it."
+            fi
+            if [ -n "$SITE_HOST" ]; then
+              echo
+              echo "Website, for Razorpay: https://$SITE_HOST (terms: /terms, privacy: /privacy, refunds: /refunds, delivery: /delivery, contact: /contact; the payment page: /buy)"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
