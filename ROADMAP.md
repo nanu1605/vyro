@@ -4814,7 +4814,8 @@ relay too".
       company name is wrong, The company name is: Jainav Infotech Private Limited"). It had been
       "Jainan Infotech", after the owner's message quoted in decision 42. The phone app's footer
       already said "Powered by Jainav Infotech Pvt Ltd", as asked for in 1.7.
-- [ ] **The checkout deployed with it:** Actions → Licence, on the owner's go.
+- [x] **The checkout deployed with it:** the owner ran Licence on `main` (e3e694a), run
+      43817806452, with the website below.
 
 ### 2.5: the website Razorpay checks, and test keys at go-live
 
@@ -4851,10 +4852,14 @@ the owner sets, never in the code.
       under Test, and a key from before the mark); and the pages served as deployed, at 1280 and
       390 wide, light and dark: axe-core finds nothing on any of the seven, nothing scrolls
       sideways.
-- [ ] **Deployed** (the owner): the domain in Cloudflare, the four variables, then Actions →
-      Licence; then the website's address to Razorpay.
-- [ ] **Live keys** (the owner, once Razorpay has checked): the Razorpay secrets switched, Licence
-      run again.
+- [x] **Deployed** (the owner): the four variables set and Licence run on `main` (e3e694a), run
+      43817806452. Its tests passed, and wrangler put the checkout on the company's subdomain as a
+      custom domain, with `SITE` and the three contact vars, beside its workers.dev address.
+- [x] **Razorpay checked the website** and gave the Live keys (the owner, 2026-11-16: "got the
+      live keys").
+- [ ] **Live** (the owner): a webhook in Razorpay's Live mode (webhooks are kept per mode), the
+      three Razorpay secrets switched to the Live ones, Licence run again; then the payment window
+      shows no Test Mode mark.
 
 ## Risks
 

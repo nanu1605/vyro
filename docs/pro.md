@@ -143,8 +143,10 @@ last two variables.
    - the key is refused on a second PC;
    - Move Pro here works there, and the first PC turns Free at its next check.
 
-   Then, once Razorpay has checked the website and given them, switch the Razorpay secrets to
-   the Live keys and deploy again. From then on, keys bought under Test keys (with Razorpay's
+   Then, once Razorpay has checked the website and given them, go live: in Razorpay's Live
+   mode, add the webhook again (webhooks are kept per mode; same address and events, a new
+   secret), switch the three Razorpay secrets to the Live key id, key secret and that webhook
+   secret, and deploy again. From then on, keys bought under Test keys (with Razorpay's
    public test cards, the owner's own test included) no longer turn Pro on: a PC on one turns
    Free at its next check, and 2.5.0 says the key's payment was refunded.
 7. **Release:** on "release 2.5.0", as before.
