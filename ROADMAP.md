@@ -4857,9 +4857,12 @@ the owner sets, never in the code.
       custom domain, with `SITE` and the three contact vars, beside its workers.dev address.
 - [x] **Razorpay checked the website** and gave the Live keys (the owner, 2026-11-16: "got the
       live keys").
-- [ ] **Live** (the owner): a webhook in Razorpay's Live mode (webhooks are kept per mode), the
-      three Razorpay secrets switched to the Live ones, Licence run again; then the payment window
-      shows no Test Mode mark.
+- [ ] **Live:** a webhook in Razorpay's Live mode (webhooks are kept per mode) and the three
+      Razorpay secrets switched to the Live ones (the owner); then Licence run again on `main`
+      (e3e694a) on the owner's "deploy the checkout": run 43836707581 passed its tests and deployed
+      to both addresses with the contact address corrected. The key id is a secret, so the run
+      cannot show it is a Live one: open while the owner checks that the payment window shows no
+      Test Mode mark.
 
 ## Risks
 
