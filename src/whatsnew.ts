@@ -21,6 +21,16 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '2.5.1',
+    items: [
+      {
+        icon: 'sparkles',
+        title: 'Clokrix Pro on Clokrix’s website',
+        text: 'Buy Pro now opens Clokrix’s own website, and your key is checked there too. The terms, privacy, refunds (in full within 14 days) and how to reach us are at the foot of every page.',
+      },
+    ],
+  },
+  {
     version: '2.5.0',
     items: [
       {

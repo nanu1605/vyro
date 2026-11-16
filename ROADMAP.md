@@ -4874,6 +4874,30 @@ the owner sets, never in the code.
       the owner checked the payment window: "no test mode label, it's live". Keys bought under
       Test keys are refused from now on.
 
+### 2.5.1: the app on Clokrix's website
+
+The owner, 2026-11-16: "release 2.5.1". Nothing in the app had changed since 2.5.0 (the website,
+the Live keys and the seller's name are all the checkout's, deployed), so they were asked what
+2.5.1 should carry, and chose "Point app at website (Recommended)": `CLOKRIX_LICENCE_URL` set to
+the website, so that Buy Pro opens it directly, the app's requests go there, and the workers.dev
+address (with the owner's Cloudflare name in it) is no longer in the app or shown first.
+
+- [x] **Version 2.5.1:** `scripts/set-version.py 2.5.1`; What's new in 2.5.1: Clokrix Pro on
+      Clokrix's website (not for the phone app, which has no Buy Pro). The host is not written in
+      the code: it comes from the variable at build time.
+- [x] **A build stops on an address without its scheme** (`src-tauri/build.rs`): the app drops
+      such an address (`edition.rs`), which would have left a release Pro for everyone, and the
+      Release workflow's check (the address is in `clokrix.exe`) would not have noticed.
+- [x] **`docs/pro.md`:** the variable is the website from 2.5.1, starting `https://`; 2.5.0 keeps
+      the workers.dev address, which stays.
+- [ ] **The variable** (the owner): `CLOKRIX_LICENCE_URL` set to the website's `https://` address.
+- [ ] **Checked before the release** (the owner, with this commit's CI test build, which carries
+      the variable): Buy Pro opens the website, and a made-up key (`CLKX-00000-00000-00000-00000`)
+      under Settings → Clokrix Pro → Already have a key? is answered "That is not a Clokrix Pro
+      key", which only the checkout says: the app's requests reach it through the domain's
+      Cloudflare protection.
+- [ ] **2.5.1 released**, on the owner's go above.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

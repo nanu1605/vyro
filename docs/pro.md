@@ -91,7 +91,9 @@ The checkout also serves Clokrix's website, all naming Jainav Infotech Private L
 
 With `CLOKRIX_SITE_HOST` set, these pages are served only there: asked for on the workers.dev
 address (which 2.5.0's Buy Pro opens), they send the browser to the website, the app's code
-kept. The app's own requests and Razorpay's webhook work on either address.
+kept. The app's own requests and Razorpay's webhook work on either address. From 2.5.1,
+`CLOKRIX_LICENCE_URL` is the website, so Buy Pro opens it directly and the app's requests go
+there; 2.5.0 keeps using the workers.dev address, which must stay.
 
 The policy pages are a plain starting point, written from what Clokrix does; the owner checks
 them before giving the website to Razorpay.
@@ -136,7 +138,9 @@ last two variables.
      `LICENCE_SIGNING_KEY` (the Cloudflare secrets are the relay's).
 5. **Deploy:** Actions → Licence → Run workflow, on your go. It tests the checkout, checks that
    the signing key matches `CLOKRIX_LICENCE_PUBKEY`, deploys it, sets its secrets and prints its
-   address. Set the variable `CLOKRIX_LICENCE_URL` to that address.
+   address. Set the variable `CLOKRIX_LICENCE_URL` to that address, or, once the website is up,
+   to the website, `https://<host>` (as from 2.5.1). It must start with `https://`: a build
+   stops on an address without it.
 6. **Try it in Test mode:** a CI test build carries both variables once they are set, so its
    trial runs as a release's will. Buy with one of Razorpay's test cards and check:
    - Pro turns on by itself;
