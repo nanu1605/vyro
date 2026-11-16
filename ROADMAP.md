@@ -4940,8 +4940,13 @@ how a buyer in India is told apart, and "₹10,000 including GST (Recommended)" 
       rupees, the website's prices); the edition's tests with the price by country; the pages
       served as deployed for a buyer in India and elsewhere, at 1280 and 390 wide, light and
       dark: axe-core finds nothing, nothing scrolls sideways.
-- [ ] **The variables** (the owner): `CLOKRIX_RELAY_HOST` and `CLOKRIX_RELAY_URL`.
-- [ ] **Deployed:** the checkout (Licence) and the relay (Relay), on the owner's go above.
+- [x] **CI green on 3a74d78** (run 43871099342), and `main` fast-forwarded to it.
+- [x] **The checkout deployed** on the owner's go above: Licence run 43873921333 on `main`
+      (3a74d78) passed its tests and deployed, so the website and the payment page charge
+      ₹10,000 in India and $100 elsewhere from now, whatever the app's version.
+- [ ] **The variables** (the owner): `CLOKRIX_RELAY_HOST` and `CLOKRIX_RELAY_URL`. The Relay run
+      43873926536 on `main` (3a74d78) passed its tests and deployed on the workers.dev address
+      alone, as `CLOKRIX_RELAY_HOST` was not set yet; it runs again once it is.
 - [ ] **Checked before the release** with the test build: Buy Pro's price, a phone paired anew
       through the new address, and a phone paired before still working.
 - [ ] **2.5.2 released**, on the owner's go.
