@@ -9,8 +9,8 @@ Clokrix comes in two packages:
   Network, Displays, Devices, System, Processes, Sensors), desktop widgets, the game overlay,
   profiles and the phone app.
 
-Pro costs **$100, once, for life, on one PC**. Jainan Infotech sells it, and Razorpay takes
-the payment.
+Pro costs **$100, once, for life, on one PC**. Jainav Infotech Private Limited sells it, and
+Razorpay takes the payment.
 
 ## The trial
 
@@ -75,8 +75,8 @@ A key is Pro on one PC at a time:
 
 The checkout keeps orders, keys and the PC each key is on, and nothing about the buyer.
 
-**To Razorpay:** what the buyer types into its checkout. Razorpay keeps it under Jainan
-Infotech's account.
+**To Razorpay:** what the buyer types into its checkout. Razorpay keeps it under Jainav
+Infotech Private Limited's account.
 
 Nothing else is sent.
 

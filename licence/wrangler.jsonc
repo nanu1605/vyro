@@ -16,7 +16,7 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Ledger"] }],
   // Who sells it, as the checkout names them. The secrets RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET,
   // RAZORPAY_WEBHOOK_SECRET and LICENCE_SIGNING_KEY are set by the deploy (licence.yml).
-  "vars": { "SELLER": "Jainan Infotech" },
+  "vars": { "SELLER": "Jainav Infotech Private Limited" },
   // No request logs: it keeps nothing it does not need.
   "observability": { "enabled": false }
 }
