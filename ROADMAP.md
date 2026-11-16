@@ -4950,8 +4950,13 @@ how a buyer in India is told apart, and "₹10,000 including GST (Recommended)" 
 - [x] **The relay on the company's domain:** Relay run 43925501320 on `main` (3a74d78) passed its
       tests and deployed; wrangler lists the workers.dev address and `CLOKRIX_RELAY_HOST` "(custom
       domain)", the same Worker on both.
-- [ ] **CI's test build** with the new relay address built in: CI run 43875200395 on e50f16b, run
-      again now that `CLOKRIX_RELAY_URL` is set.
+- [x] **CI's test build** with the new relay address built in: CI run 43925983084 on faa3e35
+      (records only), whose Windows job says "Relay built in:" the new address; the run of
+      e50f16b started again for it was cancelled as the same build. Its first attempt failed one
+      test, `a_slow_connection_gets_less_and_stays_current` (the simulated 800 kbit/s link's queue
+      stayed at 464 ms against 250), which passed on the same code before and on the Windows job
+      run again; here it passes alone, in the whole suite and on a busy CPU (about 20 ms). Left
+      to its own investigation, not 2.5.2's.
 - [ ] **Checked before the release** with the test build: Buy Pro's price, a phone paired anew
       through the new address, and a phone paired before still working.
 - [ ] **2.5.2 released**, on the owner's go.
