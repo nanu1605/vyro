@@ -4598,15 +4598,25 @@ On `claude/vyro-2.0`.
       smoke test, the relay and phone app, accessibility: 1,998 checks in 596 s). The variables
       `CLOKRIX_LICENCE_URL` and `CLOKRIX_LICENCE_PUBKEY` are not set yet, so this test build is
       Pro throughout, as any build without the checkout is.
-- [ ] **The owner's set-up** ([`docs/pro.md`](docs/pro.md) → Setting it up):
+- [x] **The owner's set-up** ([`docs/pro.md`](docs/pro.md) → Setting it up), done
+      (2026-11-16):
   - Razorpay (international payments, keys, webhook);
-  - the website's pages and Buy button;
-  - the key pair, the secrets and the variables;
-  - the checkout deployed (on the owner's go);
-  - a purchase in Razorpay's Test mode end to end.
-- [ ] **Field check (the owner)** ([`docs/field-check-2.5.md`](docs/field-check-2.5.md)): the
-      window's animation; a test-mode purchase turning Pro on by itself; the key refused on a
-      second PC, then moved; Free this PC; the trial's end; the glass (§4).
+  - the website's pages and Buy button: the website on the company's subdomain, which Razorpay
+    checked before giving the Live keys (the 2.5 block of the website, below);
+  - the key pair, the secrets and the variables, and the checkout deployed (Licence run
+    43807147856; the owner: "Pro is set up");
+  - a purchase in Razorpay's Test mode end to end (the field check below, §3);
+  - live on the Live keys (Licence run 43836707581; the owner: "no test mode label, it's live").
+- [x] **Field check (the owner), reported done and passed** (2026-11-16: "all the field checks
+      done and passed"): [`docs/field-check-2.5.md`](docs/field-check-2.5.md), the window's
+      animation; a test-mode purchase turning Pro on by itself; the key refused on a second PC,
+      then moved; Free this PC; the trial's end; the glass (§4). No files came with it, as with
+      2.3's and 2.4's, so these stay open, each needing what only its PC gives:
+  - **the ASUS and the Gigabyte board on the allow-list** (2.3's and 2.4's items): each needs
+    the board's `clokrix-fans.json`, its `clokrix-fans-try-N.json` files and the header each
+    output moved, as an entry names its product, chip, revision and each header (decision 24);
+  - **1.6's question**, whether NVML takes offsets on GeForce: the `gpu tuning: … offsets
+    through NVML` or `NVAPI` line in `service.log`.
 
 The owner's fifth request (2026-11-14), planned and agreed (decision 44):
 
