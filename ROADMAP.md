@@ -4897,8 +4897,8 @@ address (with the owner's Cloudflare name in it) is no longer in the app or show
       variable changed, so that its test build carries the website for the check below.
 - [x] **Checked before the release** (the owner: "both checks passed"), with that test build: Buy
       Pro opens the website, and a made-up key (`CLKX-00000-00000-00000-00000`) under Settings →
-      Clokrix Pro → Already have a key? is answered "That is not a Clokrix Pro key", which only the
-      checkout says: the app's requests reach it through the domain's Cloudflare protection.
+      Clokrix Pro → Already have a key? is answered "That is not a Clokrix Pro key", which only
+      the checkout says: the app's requests reach it through the domain's Cloudflare protection.
 - [x] **2.5.1 released** (2026-11-16, on the owner's go: "release 2.5.1"). `main` fast-forwarded
       to 08c9f0a, and Release run 43846253655 tagged `v2.5.1`, found the relay's address and Pro's
       checkout in `clokrix.exe` ("Pro checkout built in:" the website's address) and published the
