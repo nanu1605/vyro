@@ -4994,6 +4994,12 @@ checked:
       Vyro 2.1.0 from the releases repository with `RELEASES_TOKEN`, so it keeps working. A
       private repository changes decisions 11 and 42 (free signing is for public open-source
       projects; "the lock is in the public code") and spends Actions minutes.
+- [x] **Checked:** the checkout's 31 tests (4 new: the Download button before the first release,
+      the manifest, the installer whole, in part and already had, the checksums, nothing else
+      from the bucket and nothing but reading, and update checks not counted against purchases);
+      the edition's test of Buy Pro again; `wrangler deploy --dry-run` lists the bucket's binding.
+      CI green on c900db8 (run 43936807472), whose Windows job fetched Vyro 2.1.0 the new way and
+      upgraded it; its test build is `clokrix-windows-c900db8…`.
 - [ ] **The checkout deployed** with the downloads, on the owner's go, after R2 is turned on.
 - [ ] **Checked before the release** with the test build: Buy Pro's price, Buy Pro again after
       closing the page, a phone paired anew through the new address, and a phone paired before
