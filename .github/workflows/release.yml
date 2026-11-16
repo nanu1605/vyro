@@ -33,6 +33,16 @@ name: Release
 # With RELEASES_REPO the installer and `latest.json` are also published there and installed
 # copies update from it (release downloads of a private repository need a sign-in); without
 # it they update from this repository's releases, which works only while it is public.
+# and, for downloads and updates from the company's own website (2.5.2), so that both
+# repositories can be private:
+#   variable CLOKRIX_SITE_HOST                   the website's host (licence.yml deploys it there)
+#   secret   CLOUDFLARE_API_TOKEN                as for the relay and the checkout
+#   secret   CLOUDFLARE_ACCOUNT_ID               as for the relay and the checkout
+# With it, the release goes into the R2 bucket clokrix-downloads (the checkout's deploy makes it)
+# and builds update from https://<host>/updates/latest.json; the website's Download button gives
+# the newest installer. The manifest names the newest release only, so a copy several versions
+# behind goes straight to it: each installer is the whole of Clokrix. RELEASES_REPO still gets
+# each release, for copies before 2.5.2, which read it: keep it public until they have updated.
 
 on:
   workflow_dispatch:
@@ -74,6 +84,8 @@ jobs:
           HAS_OLD_RELAY: ${{ vars.VYRO_RELAY_URL != '' }}
           HAS_RELAY: ${{ vars.CLOKRIX_RELAY_URL != '' }}
           HAS_LICENCE: ${{ vars.CLOKRIX_LICENCE_URL != '' && vars.CLOKRIX_LICENCE_PUBKEY != '' }}
+          SITE_HOST: ${{ vars.CLOKRIX_SITE_HOST }}
+          HAS_CLOUDFLARE: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         run: |
           if ($env:HAS_OLD_RELAY -eq 'true' -and $env:HAS_RELAY -ne 'true') {
             throw "set the variable CLOKRIX_RELAY_URL to the clokrix-relay address (the Relay workflow prints it); VYRO_RELAY_URL is no longer read"
@@ -102,8 +114,20 @@ jobs:
           if ($env:HAS_KEY -ne 'true') { throw "secret TAURI_SIGNING_PRIVATE_KEY is not set" }
           $hostRepo = if ($env:RELEASES_REPO) { $env:RELEASES_REPO.Trim() } else { $env:GITHUB_REPOSITORY }
           if ($env:RELEASES_REPO -and $env:HAS_RELEASES_TOKEN -ne 'true') { throw "RELEASES_REPO is set but the secret RELEASES_TOKEN is not" }
-          "Updates come from https://github.com/$hostRepo/releases" >> $env:GITHUB_STEP_SUMMARY
+          $site = "$env:SITE_HOST".Trim().ToLowerInvariant()
+          if ($site -and $site -notmatch '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$') {
+            throw "CLOKRIX_SITE_HOST is a host name alone, like clokrix.example.com (no https://, no path)"
+          }
+          if ($site -and -not $pre -and $env:HAS_CLOUDFLARE -ne 'true') {
+            throw "CLOKRIX_SITE_HOST is set: set the secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID too, to put the release on the website"
+          }
+          if ($site) {
+            "Updates come from https://$site/updates/latest.json" >> $env:GITHUB_STEP_SUMMARY
+          } else {
+            "Updates come from https://github.com/$hostRepo/releases" >> $env:GITHUB_STEP_SUMMARY
+          }
           "host=$hostRepo" >> $env:GITHUB_OUTPUT
+          "site=$site" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "prerelease=$(if ($pre) { '--prerelease' } else { '' })" >> $env:GITHUB_OUTPUT
@@ -130,13 +154,16 @@ jobs:
         env:
           UPDATER_PUBKEY: ${{ vars.UPDATER_PUBKEY || secrets.UPDATER_PUBKEY }}
           HOST_REPO: ${{ steps.version.outputs.host }}
+          SITE: ${{ steps.version.outputs.site }}
         run: |
+          # From the company's website when it is set (2.5.2), else from GitHub.
+          $endpoint = if ($env:SITE) { "https://$env:SITE/updates/latest.json" } else { "https://github.com/$env:HOST_REPO/releases/latest/download/latest.json" }
           @{
             bundle = @{ createUpdaterArtifacts = $true }
             plugins = @{
               updater = @{
                 pubkey = $env:UPDATER_PUBKEY.Trim()
-                endpoints = @("https://github.com/$env:HOST_REPO/releases/latest/download/latest.json")
+                endpoints = @($endpoint)
                 windows = @{ installMode = 'passive' }
               }
             }
@@ -282,6 +309,8 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           TAG: ${{ steps.version.outputs.tag }}
           HOST_REPO: ${{ steps.version.outputs.host }}
+          SITE: ${{ steps.version.outputs.site }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: |
           $msi = Get-Item target\release\bundle\msi\*.msi | Select-Object -First 1
           # Decision 28: under 60 MB from 1.1, as CI checks (this line still said 20 MB until 1.3).
@@ -289,7 +318,12 @@ jobs:
           $sig = (Get-Content -Raw "$($msi.FullName).sig").Trim()
           New-Item -ItemType Directory -Force release | Out-Null
           Copy-Item $msi.FullName release\
-          $url = "https://github.com/$env:HOST_REPO/releases/download/$env:TAG/$($msi.Name)"
+          # The installer on the company's website (2.5.2; a prerelease is only on GitHub).
+          $url = if ($env:SITE -and -not $env:PRERELEASE) {
+            "https://$env:SITE/download/$env:TAG/$($msi.Name)"
+          } else {
+            "https://github.com/$env:HOST_REPO/releases/download/$env:TAG/$($msi.Name)"
+          }
           $platform = @{ signature = $sig; url = $url }
           @{
             version = $env:VERSION
@@ -301,6 +335,41 @@ jobs:
             "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
           } | Set-Content -Encoding ascii release\SHA256SUMS.txt
           Get-Content release\SHA256SUMS.txt | Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
+
+      # Downloads and updates from the company's website (2.5.2): the installer and checksums first,
+      # the manifest last, so no copy hears of an installer before it is there; then the website is
+      # asked for them as a copy would, before anything is published on GitHub.
+      - name: Publish the downloads on the company's website
+        if: steps.version.outputs.site != '' && steps.version.outputs.prerelease == ''
+        shell: pwsh
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+          SITE: ${{ steps.version.outputs.site }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          pnpm --dir licence install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { throw "pnpm install (licence) failed" }
+          function Put($key, $path, $type) {
+            pnpm --dir licence exec wrangler r2 object put "clokrix-downloads/$key" --file $path --content-type $type --remote
+            if ($LASTEXITCODE -ne 0) { throw "could not put $key in the R2 bucket clokrix-downloads (the Licence workflow makes the bucket when it deploys)" }
+          }
+          $msi = Get-Item release\*.msi | Select-Object -First 1
+          Put "$env:TAG/$($msi.Name)" $msi.FullName 'application/x-msi'
+          Put "$env:TAG/SHA256SUMS.txt" (Resolve-Path release\SHA256SUMS.txt).Path 'text/plain; charset=utf-8'
+          Put 'latest.json' (Resolve-Path release\latest.json).Path 'application/json'
+          $m = Invoke-RestMethod "https://$env:SITE/updates/latest.json"
+          if ($m.version -ne $env:VERSION) {
+            throw "https://$env:SITE/updates/latest.json offers $($m.version), not $env:VERSION: deploy the checkout (Licence) from 2.5.2 or later first"
+          }
+          $got = Join-Path $env:RUNNER_TEMP 'from-website.msi'
+          Invoke-WebRequest "https://$env:SITE/download" -OutFile $got
+          $want = (Get-FileHash $msi.FullName -Algorithm SHA256).Hash
+          if ((Get-FileHash $got -Algorithm SHA256).Hash -ne $want) { throw "https://$env:SITE/download does not give this release's installer" }
+          "Downloads: https://$env:SITE/download gives $($msi.Name); updates: https://$env:SITE/updates/latest.json offers $env:VERSION" |
+            Tee-Object -Append -FilePath $env:GITHUB_STEP_SUMMARY
 
       # The downloads only: no source, no generated notes (they would link private commits).
       - name: Publish the downloads to the public releases repository

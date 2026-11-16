@@ -430,6 +430,98 @@ describe('the website', () => {
   });
 });
 
+describe('downloads and updates (2.5.2)', () => {
+  const TAG = 'v9.9.9';
+  const MSI = 'Clokrix_9.9.9_x64_en-US.msi';
+  /** An installer's bytes (constructed), long enough to ask for a part of. */
+  const bytes = new Uint8Array(4096).map((_, i) => (i * 7) % 256);
+  const manifest = {
+    version: '9.9.9',
+    notes: 'Clokrix 9.9.9',
+    pub_date: '2026-11-16T00:00:00Z',
+    platforms: {
+      'windows-x86_64': { signature: 'constructed', url: `https://clokrix.example.test/download/${TAG}/${MSI}` },
+      'windows-x86_64-msi': { signature: 'constructed', url: `https://clokrix.example.test/download/${TAG}/${MSI}` },
+    },
+  };
+  const bucket = async () => (await server.getWorker<{ DOWNLOADS: R2Bucket }>().getEnv()).DOWNLOADS;
+
+  it('lead the Download button to the releases repository until the first release is here', async () => {
+    const res = await fetch(`${base}/download`, { headers: from(), redirect: 'manual' });
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('https://github.com/nanu1605/vyro-releases/releases/latest');
+    expect((await fetch(`${base}/updates/latest.json`, { headers: from() })).status).toBe(404);
+    const home = await (await fetch(`${base}/`, { headers: from() })).text();
+    expect(home).toContain('href="/download"');
+  });
+
+  it('serve the newest release: its manifest, the installer whole or in part, and its checksums', async () => {
+    const b = await bucket();
+    await b.put(`${TAG}/${MSI}`, bytes);
+    await b.put(`${TAG}/SHA256SUMS.txt`, `abc  ${MSI}\n`);
+    await b.put('latest.json', JSON.stringify(manifest));
+    try {
+      const m = await fetch(`${base}/updates/latest.json`, { headers: from() });
+      expect(m.status).toBe(200);
+      expect(m.headers.get('cache-control')).toBe('no-store');
+      expect(await m.json()).toEqual(manifest);
+
+      // The Download button: the newest installer, on the address asked.
+      const latest = await fetch(`${base}/download`, { headers: from(), redirect: 'manual' });
+      expect(latest.status).toBe(302);
+      expect(latest.headers.get('location')).toBe(`${base}/download/${TAG}/${MSI}`);
+
+      const whole = await fetch(`${base}/download/${TAG}/${MSI}`, { headers: from() });
+      expect(whole.status).toBe(200);
+      expect(whole.headers.get('content-type')).toBe('application/x-msi');
+      expect(whole.headers.get('content-disposition')).toBe(`attachment; filename="${MSI}"`);
+      expect(new Uint8Array(await whole.arrayBuffer())).toEqual(bytes);
+      const etag = whole.headers.get('etag')!;
+      expect(etag).toBeTruthy();
+
+      // A download picked up where it stopped, and one already had.
+      const part = await fetch(`${base}/download/${TAG}/${MSI}`, { headers: { ...from(), Range: 'bytes=1000-1999' } });
+      expect(part.status).toBe(206);
+      expect(part.headers.get('content-range')).toBe('bytes 1000-1999/4096');
+      expect(new Uint8Array(await part.arrayBuffer())).toEqual(bytes.slice(1000, 2000));
+      const tail = await fetch(`${base}/download/${TAG}/${MSI}`, { headers: { ...from(), Range: 'bytes=-96' } });
+      expect(tail.headers.get('content-range')).toBe('bytes 4000-4095/4096');
+      const had = await fetch(`${base}/download/${TAG}/${MSI}`, { headers: { ...from(), 'If-None-Match': etag } });
+      expect(had.status).toBe(304);
+
+      const head = await fetch(`${base}/download/${TAG}/${MSI}`, { method: 'HEAD', headers: from() });
+      expect(head.status).toBe(200);
+      expect(head.headers.get('content-length')).toBe('4096');
+
+      const sums = await fetch(`${base}/download/${TAG}/SHA256SUMS.txt`, { headers: from() });
+      expect(sums.headers.get('content-type')).toBe('text/plain; charset=utf-8');
+      expect(await sums.text()).toContain(MSI);
+    } finally {
+      await b.delete(['latest.json', `${TAG}/${MSI}`, `${TAG}/SHA256SUMS.txt`]);
+    }
+  });
+
+  it('serve nothing else from the bucket, and only to read', async () => {
+    const b = await bucket();
+    await b.put('private/notes.txt', 'not a download');
+    try {
+      for (const path of ['/download/private/notes.txt', `/download/${TAG}`, `/download/${TAG}/`, '/download/v1.0/x.msi', `/download/${TAG}/a/b.msi`]) {
+        expect((await fetch(`${base}${path}`, { headers: from() })).status, path).toBe(404);
+      }
+      expect((await fetch(`${base}/updates/latest.json`, { method: 'POST', headers: from() })).status).toBe(405);
+      expect((await fetch(`${base}/download`, { method: 'DELETE', headers: from(), redirect: 'manual' })).status).toBe(405);
+    } finally {
+      await b.delete('private/notes.txt');
+    }
+  });
+
+  it('are not counted against purchases: every PC behind one address checks', async () => {
+    const ip = from();
+    for (let i = 0; i < 60; i++) expect((await fetch(`${base}/updates/latest.json`, { headers: ip })).status).toBe(404);
+    expect((await fetch(`${base}/claim/${claimCode()}`, { headers: ip })).status).toBe(404);
+  });
+});
+
 describe('one address for the website', () => {
   const SITE = 'https://clokrix.example.test';
 

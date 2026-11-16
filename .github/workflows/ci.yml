@@ -338,6 +338,10 @@ jobs:
       # "Start with Windows" and notification registration over (clokrix_core::rename).
       - name: Upgrade from Vyro 2.1.0, then uninstall
         shell: pwsh
+        env:
+          # The releases repository may be private (2.5.2): its token reads it then.
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          RELEASES_REPO: ${{ vars.RELEASES_REPO || 'nanu1605/vyro-releases' }}
         run: |
           function Tell($title, $text) {
             $t = (($text | Out-String).Trim() -replace '%', '%25' -replace "`r", '' -replace "`n", '%0A')
@@ -379,7 +383,12 @@ jobs:
             "$env:LOCALAPPDATA\app.clokrix.monitor" -ErrorAction SilentlyContinue
 
           $old = Join-Path $env:RUNNER_TEMP 'Vyro_2.1.0_x64_en-US.msi'
-          Invoke-WebRequest 'https://github.com/nanu1605/vyro-releases/releases/download/v2.1.0/Vyro_2.1.0_x64_en-US.msi' -OutFile $old
+          if ($env:GH_TOKEN) {
+            gh release download v2.1.0 --repo $env:RELEASES_REPO --pattern 'Vyro_2.1.0_x64_en-US.msi' --dir $env:RUNNER_TEMP --clobber
+            if ($LASTEXITCODE -ne 0) { throw "could not fetch Vyro 2.1.0 from $env:RELEASES_REPO with RELEASES_TOKEN" }
+          } else {
+            Invoke-WebRequest "https://github.com/$env:RELEASES_REPO/releases/download/v2.1.0/Vyro_2.1.0_x64_en-US.msi" -OutFile $old
+          }
           $hash = (Get-FileHash $old -Algorithm SHA256).Hash.ToLower()
           if ($hash -ne '2c25b49ec013444098f670ae2eae47e7e3a6d854891239955ffbeb174084f286') { throw "not the released Vyro 2.1.0 MSI: $hash" }
           Msi '/i' $old "$env:RUNNER_TEMP\vyro-install.log"

@@ -348,11 +348,13 @@ pub fn get_edition(state: tauri::State<'_, EditionState>) -> Edition {
     state.edition()
 }
 
-/// Buy Pro: opens the checkout in the browser with a new purchase's code, then waits for its key.
+/// Buy Pro: opens the checkout in the browser with a purchase's code, then waits for its key.
+/// Pressed again while one is waited for (its tab closed before paying), it opens that one again
+/// and waits afresh (2.5.2).
 #[tauri::command]
 pub fn buy_pro(app: AppHandle, state: tauri::State<'_, EditionState>) -> Result<Edition, String> {
     let checkout = checkout().ok_or("This build of Clokrix cannot be bought from.")?;
-    let code = edition::new_claim();
+    let code = lock(&state.stored).purchase_code(unix_now());
     open_in_browser(&checkout.buy_url(&code))?;
     state.change(|s| {
         s.claim = Some(Claim {

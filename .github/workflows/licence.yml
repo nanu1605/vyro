@@ -26,6 +26,12 @@ name: Licence
 # With CLOKRIX_SITE_HOST set, the deploy puts the Worker on that host too, and its pages asked for
 # on the workers.dev address go there. The contact details are needed then; without the host they
 # are optional.
+#
+# Downloads and updates (2.5.2): the website also serves Clokrix's installers and the updater's
+# manifest (/download, /updates/latest.json) from the R2 bucket clokrix-downloads, which the Release
+# workflow fills. The deploy makes the bucket when it is missing: R2 must be turned on in the
+# account (Cloudflare dashboard → R2 Object Storage), and the token's template ("Edit Cloudflare
+# Workers") includes R2's permission.
 
 on:
   workflow_dispatch:
@@ -122,6 +128,13 @@ jobs:
           for name in CONTACT_EMAIL CONTACT_PHONE CONTACT_ADDRESS; do
             if [ -n "${!name}" ]; then site+=(--var "$name:${!name}"); fi
           done
+          # The downloads' bucket (2.5.2), which the Worker is bound to.
+          if ! pnpm --dir licence exec wrangler r2 bucket info clokrix-downloads > /dev/null 2>&1; then
+            if ! pnpm --dir licence exec wrangler r2 bucket create clokrix-downloads; then
+              echo "::error::Could not make the R2 bucket clokrix-downloads: turn R2 on in the Cloudflare dashboard (R2 Object Storage), and check the API token may edit R2"
+              exit 1
+            fi
+          fi
           pnpm --dir licence exec wrangler deploy "${site[@]}" | tee deploy.log
           # The secrets go on after the code, each a new version of the Worker.
           for name in RAZORPAY_KEY_ID RAZORPAY_KEY_SECRET RAZORPAY_WEBHOOK_SECRET LICENCE_SIGNING_KEY; do
@@ -141,5 +154,7 @@ jobs:
             if [ -n "$SITE_HOST" ]; then
               echo
               echo "Website, for Razorpay: https://$SITE_HOST (terms: /terms, privacy: /privacy, refunds: /refunds, delivery: /delivery, contact: /contact; the payment page: /buy)"
+              echo
+              echo "Downloads: https://$SITE_HOST/download (the newest installer); updates: https://$SITE_HOST/updates/latest.json"
             fi
           } >> "$GITHUB_STEP_SUMMARY"

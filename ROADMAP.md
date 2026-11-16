@@ -25,7 +25,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 8 | Installer | **WiX (MSI)**; bundles `PawnIO_setup.exe` and runs `-install -silent` when PawnIO is missing or older | default |
 | 9 | Extra Super-I/O coverage | Nuvoton NCT6687D first (MSI AM5), then NCT67xx + ITE IT87xx: the NCT679x in 2.1, the ITE IT8620E–IT8698E in 2.3, the second ITE chip of Gigabyte boards in 2.4 | done |
 | 10 | Low-level hardware access | **PawnIO** (signed, free, HVCI-compatible) replaces our own KMDF driver | decided |
-| 11 | Code signing | **SignPath Foundation** or **Certum Open Source** (no EV certificate). From 2.0 a release signs itself through SignPath once its four settings are in the repository ([`docs/signing.md`](docs/signing.md)); making the repository public and applying are the owner's | decided |
+| 11 | Code signing | **SignPath Foundation** or **Certum Open Source** (no EV certificate). From 2.0 a release signs itself through SignPath once its four settings are in the repository ([`docs/signing.md`](docs/signing.md)); making the repository public and applying are the owner's. Both sign public open-source projects only; the owner asked on 2026-11-16 for the repository to be private ("make the vyro repo private"), after which signing is a paid service | decided |
 | 12 | Source availability | **Open source**; license MIT OR Apache-2.0 (LICENSE files added in P11; can still change before the repo goes public) | default |
 | 13 | Privilege split (P8) | **LocalSystem service `VyroService`** runs the whole engine (sensors, history, health, alerts) and serves it over `\\.\pipe\vyro-engine`; the app runs unelevated and falls back to an in-process engine without the privileged sensors when the service is missing | decided |
 | 14 | GPU visual | Own stylized parameterized **WebGL** model; no third-party photos; offline | decided |
@@ -56,7 +56,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 39 | Voice from the phone | The phone's voice reaches the PC two ways (1.7; the owner's report, 2026-10-21: a WhatsApp Web voice note sent through the phone's screen recorded nothing, as it records the PC's microphone and the phone's never reached the PC; the owner's choice, "clips and live mic"). Windows adds a microphone only through a driver Microsoft has signed (an EV certificate and a partner account Clokrix does not have), so Clokrix ships none. A **clip** recorded on the phone is kept on the PC (AAC through Windows' own encoder, or WAV without one; named by Clokrix, never the phone; 5 minutes at most; deleted after 7 days) and put on the clipboard as a file, only when the phone sends one, so Paste in a chat attaches it. The **live microphone** plays into a virtual cable the owner installs (VB-CABLE, VoiceMeeter or Virtual Audio Cable, found by name, never bundled); while it plays, the cable's recording side is Windows' default microphone (an option, on by default) through `IPolicyConfig`, an interface Windows does not document but has kept since Windows 7 (EarTrumpet and SoundSwitch use it). The defaults it replaced are kept in a file first and put back when the microphone stops, the session ends or Clokrix closes, or at the next start after a crash; a role the owner changed meanwhile is left alone. Both need the Screen permission and a session on; the live microphone the direct connection | decided |
 | 40 | Notifications on the phone | A phone may get notifications with its app closed (2.0; the owner's choice, 2026-10-27): it turns them on for each PC and chooses what about (alerts as Windows shows them, low batteries, game summaries, the PC going quiet), and only it turns them on; any paired phone may, as they concern only it. Web Push: the browser's subscription goes to the PC sealed; the PC seals each notification for it (RFC 8291) and the relay posts it to the browser's push service (Google's, Apple's, Mozilla's or Microsoft's only) signed with a key the relay makes and keeps (VAPID, RFC 8292), at a limited rate. "Stopped answering" is sealed ahead of time and left with the relay, sent when the PC's connection ends or its pings stop without its "leaving", and it is not back within two minutes | decided |
 | 41 | TURN for the screen | Where a phone has no direct path to the PC (most mobile networks; the owner, 2026-10-28: "can we cast without any time constraint?"), its screen session may go through Cloudflare's TURN service instead of the slow view (2.0.1): only where the relay's owner set a TURN key and listed the PC's room (`TURN_ROOMS`, or `*`), as the relay is shared by every installed Clokrix and Cloudflare charges past 1,000 GB a month. The relay gets day-long credentials with the key, which never leaves it, and hands them to a phone of a listed room; the picture stays encrypted end to end, the TURN server passing packets it cannot read. The slow view stays for where there is neither | decided |
-| 42 | Clokrix Free and Pro | Free is the Dashboard and Settings' own sections; Pro is everything, $100 once, for life, on one PC, with a 7-day trial from the first start of 2.5 for new and updated installs alike. Sold by Jainav Infotech Private Limited through Razorpay, from a checkout of Clokrix's own on Cloudflare (`licence/`) that binds each key to one PC and signs an activation the app checks offline. The code stays open source (MIT OR Apache-2.0): the lock is in the public code, and a build without the checkout's settings is Pro (2.5; the owner, 2026-11-13: "I will sell this product so there will be 2 packages", "He will pay on the jainan infotech website using razorpay platform. And once he has paid the pro version should be activated for lifetime. Price: 100 USD.", "only 7 days free trial", one PC per purchase; [`docs/pro.md`](docs/pro.md)) | decided |
+| 42 | Clokrix Free and Pro | Free is the Dashboard and Settings' own sections; Pro is everything, $100 once, for life, on one PC, with a 7-day trial from the first start of 2.5 for new and updated installs alike. Sold by Jainav Infotech Private Limited through Razorpay, from a checkout of Clokrix's own on Cloudflare (`licence/`) that binds each key to one PC and signs an activation the app checks offline. The code stays open source (MIT OR Apache-2.0): the lock is in the public code, and a build without the checkout's settings is Pro (2.5; the owner, 2026-11-13: "I will sell this product so there will be 2 packages", "He will pay on the jainan infotech website using razorpay platform. And once he has paid the pro version should be activated for lifetime. Price: 100 USD.", "only 7 days free trial", one PC per purchase; [`docs/pro.md`](docs/pro.md)). The owner, 2026-11-16: "make the vyro repo private and also make the vyro-release private": once they are, the code is no longer public (what was published stays under its licence), and downloads and updates come from the company's website (2.5.2) | decided |
 | 43 | Settings sections in a window | A section named in Settings' list opens in a centred window over the page, growing out of its name and shrinking back into it; Ctrl K and the links that name a section open it the same way (2.5; the owner, 2026-11-13: "That section should pop out of the screen also add animations to it", and chose the centred window) | decided |
 | 44 | Glass | Every theme turns to iOS-like glass: see-through panes over a more colourful wash, lit along their top edge, with layers that float over content (menus, toasts, the top bar, the phone's bars and sheets) frosting what is under them, and windows solid panes lit the same way (decision 45); cards do not blur, since the soft wash under them would look the same. On Windows 11 (build 22523 and later) the window itself turns see-through, with Windows' Acrylic frosting the desktop behind it; AMOLED's black stays black. Settings → Appearance → Glass effects, on by default, turns it off, as do Windows' Transparency effects and a system's request for less transparency; off is 2.4's look exactly. Desktop widgets, the game overlay, the phone app, the LAN page and the checkout page take it too (2.5; the owner, 2026-11-14: "Add IOS like glass effect in whole clokrix including relay, which will make clokrix to look premium.", and chose the see-through window on Windows 11 and all six themes with a switch) | decided |
 | 45 | Settings as tiles | Settings is a search box and six tiles (Appearance; Gaming and overlay; Phone and remote; Startup and units; Updates; Clokrix Pro), each saying its state in a line; a tile opens its group in decision 43's window, grown out of the tile. The search finds any one setting by its name or a word it goes by, and opens its window on it, ringed; Ctrl K too. A setting says what it does in a line, the rest behind "More"; the less used ones are under "Advanced"; Phone and remote is in tabs. Windows (every dialog) are solid panes with glass's sheen and lit edge, frosting nothing: the blur was redone at every frame they grew (2.5; the owner, 2026-11-15: "The settings pop out animation is very laggy." and "The setting page attached in the screenshot has too much on the page which makes the settings page very user-unfriendly. Please share ideas to make it more user-friendly.", and chose tiles that pop out with all four tidy-ups: six groups, shorter text, the advanced parts folded, search). The tiles fill the page's width, 3, 2 or 1 across by the page's own width, and grow a little on a wide screen (the owner, the same day: "the settings page is now good but the cards are in the left aligned which does not look good, make the cards size dynamic so they covers the screen according to the screen size.", and chose "Fill the width") | decided |
@@ -4957,9 +4957,49 @@ how a buyer in India is told apart, and "₹10,000 including GST (Recommended)" 
       stayed at 464 ms against 250), which passed on the same code before and on the Windows job
       run again; here it passes alone, in the whole suite and on a busy CPU (about 20 ms). Left
       to its own investigation, not 2.5.2's.
-- [ ] **Checked before the release** with the test build: Buy Pro's price, a phone paired anew
-      through the new address, and a phone paired before still working.
-- [ ] **2.5.2 released**, on the owner's go.
+
+The owner, 2026-11-16, later: "some new features: 1. make the vyro repo private and also make the
+vyro-release private. 2. If vyro-release become private how can we distribute updates? 3. even if
+the client is on 2.0.0 version for example and latest update is 3.0.0 and in between there are
+multiple updates then too the cloktrix should update directly from 2.0.0 to 3.0.0, skipping
+between updates. 4. When i click buy pro in the app and after i redirected to browser, if i close
+the browser tab and before paying and then again go to clokrix app the "Buy pro" button is not
+clickable, even if i restart the clokrix app". Taken into 2.5.2, whose test build was not yet
+checked:
+
+- [x] **Buy Pro opens the purchase waited for again** (4): a purchase opened in the browser is
+      waited for 30 minutes, kept across restarts, and Buy Pro was greyed out all that time. Now
+      it stays pressable: pressed again, it opens the same purchase (`Stored::purchase_code`),
+      whose page shows the key if it was paid meanwhile, so nothing is bought twice; the wait
+      starts again. The note under it says so ("Closed the page? Buy Pro opens it again.").
+- [x] **Downloads and updates from the company's website** (2): the Release workflow puts each
+      release in the R2 bucket `clokrix-downloads` (`vX.Y.Z/` the MSI and checksums, then
+      `latest.json`), asks the website for them as a copy would, and only then publishes on
+      GitHub. The checkout's Worker serves them on every address it answers on, before its
+      purchase rate limit (`licence/src/downloads.ts`): `/updates/latest.json`, which 2.5.2 and
+      later read; `/download`, the newest installer, for the website's Download button (the
+      releases repository's latest until the first release is in the bucket); and
+      `/download/<tag>/<file>`, whole or in part. The Licence deploy makes the bucket when it is
+      missing; R2 must be on in the Cloudflare account. `RELEASES_REPO` still gets each release,
+      for copies before 2.5.2.
+- [x] **Straight to the newest** (3): already so, and kept so. `latest.json` names only the newest
+      release; each MSI is the whole of Clokrix under one upgrade code, so it replaces any older
+      one; What's new shows every skipped version's notes (`whats_new::decide`, since 1.7.0); and
+      CI installs Vyro 2.1.0 and upgrades it to the build under test, skipping every version
+      between. Said in What's new in 2.5.2, README and CONTRIBUTING.
+- [x] **Making the repositories private** (1) is the owner's, in GitHub's settings, in the order
+      CONTRIBUTING.md → Releasing gives: 2.5.2 released from the website; installed copies given
+      time to reach it (a copy still older once `RELEASES_REPO` is private cannot update itself,
+      and needs the website's installer); then the releases repository; then this one. CI reads
+      Vyro 2.1.0 from the releases repository with `RELEASES_TOKEN`, so it keeps working. A
+      private repository changes decisions 11 and 42 (free signing is for public open-source
+      projects; "the lock is in the public code") and spends Actions minutes.
+- [ ] **The checkout deployed** with the downloads, on the owner's go, after R2 is turned on.
+- [ ] **Checked before the release** with the test build: Buy Pro's price, Buy Pro again after
+      closing the page, a phone paired anew through the new address, and a phone paired before
+      still working.
+- [ ] **2.5.2 released**, on the owner's go; then the website's Download button and
+      `/updates/latest.json` give it.
 
 ## Risks
 

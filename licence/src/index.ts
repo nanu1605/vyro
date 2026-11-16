@@ -19,10 +19,13 @@
 //   POST /activate           {key, pc, move?}: Pro on this PC; answers a signed activation.
 //   POST /release            {key, pc}: the key off this PC, for another to take.
 //   POST /check              {key, pc}: still Pro here? (not if moved, released or refunded).
+// Clokrix itself (2.5.2, downloads.ts), from the R2 bucket the Release workflow fills:
+//   GET  /download, /download/<tag>/<file>, /updates/latest.json
 
 import { capture, createOrder, getPayment, paidFor, type Payment, type Razorpay } from './razorpay';
 import { checkoutPage, errorPage, pageHeaders, paidPage } from './page';
 import { isSitePage, sitePage, type Seller } from './site';
+import { download, isDownload } from './downloads';
 import { LEDGER_NAME, type Ledger } from './ledger';
 import { chosenCurrency, currencyFor, hmacHex, isClaim, isPc, normalKey, same, signActivation, signingKey, type Currency } from './rules';
 
@@ -30,6 +33,8 @@ export { Ledger } from './ledger';
 
 interface Env {
   LEDGER: DurableObjectNamespace<Ledger>;
+  /** Clokrix's installers and the updater's manifest (2.5.2); the Release workflow fills it. */
+  DOWNLOADS?: R2Bucket;
   SELLER?: string;
   /** The website's address (https://host), where its pages are served; unset, they are served
    * anywhere. */
@@ -144,6 +149,9 @@ export default {
       // Anything else signed is taken and left alone, so Razorpay does not send it again.
       return json(200, { ok: true });
     }
+
+    // Downloads and update checks: on every address, and not counted against purchases.
+    if (isDownload(path)) return download(req, env.DOWNLOADS);
 
     const s = seller(env);
     const at = { nonce: n, seller: s.name };

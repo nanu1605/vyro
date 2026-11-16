@@ -1,5 +1,7 @@
 //! Updates (P11): release builds carry the Tauri updater's public key and look for a newer
-//! signed MSI in the repository's latest GitHub release (`latest.json`). Other builds (CI
+//! signed MSI in `latest.json`: on Clokrix's website from 2.5.2 (`licence/src/downloads.ts`), on
+//! the releases repository's latest GitHub release before. It names the newest release only, so
+//! a copy several versions behind goes straight to it. Other builds (CI
 //! artifacts, local builds) have no updater configured and never check. A check fetches only
 //! that file; installing runs the MSI (`msiexec /passive`, one UAC prompt), which replaces app
 //! and service and starts Clokrix again.
@@ -175,11 +177,11 @@ pub(crate) async fn check(app: &AppHandle, auto: bool) -> UpdateStatus {
 fn describe(e: &tauri_plugin_updater::Error) -> String {
     use tauri_plugin_updater::Error;
     match e {
-        // The release file answered with an error status: no release there yet, or a private
-        // repository (its downloads need a sign-in).
+        // The release file answered with an error status: no release there yet, or (before
+        // 2.5.2, from GitHub) a private repository, whose downloads need a sign-in.
         Error::ReleaseNotFound => "no release information found on the update server".into(),
         Error::Reqwest(_) | Error::Network(_) => {
-            "could not reach GitHub; check the internet connection".into()
+            "could not reach the update server; check the internet connection".into()
         }
         e => e.to_string(),
     }

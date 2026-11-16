@@ -49,7 +49,8 @@ views with a lock.
    also UPI and netbanking, as the Razorpay account allows).
 3. **Pro turns on by itself.** While the page is open, the app asks the checkout every 5 seconds
    (for 30 minutes) whether the purchase is paid. Once it is, the app collects the key and turns
-   Pro on.
+   Pro on. Closed the page before paying? Buy Pro opens the same purchase again (2.5.2; before
+   it, the button stayed greyed out for those 30 minutes, across restarts too).
 4. **The page shows the key.** Keep it: it sets Pro up again after reinstalling Windows, and it
    moves Pro to another PC. Razorpay emails a receipt.
 
@@ -148,7 +149,10 @@ last two variables.
    the signing key matches `CLOKRIX_LICENCE_PUBKEY`, deploys it, sets its secrets and prints its
    address. Set the variable `CLOKRIX_LICENCE_URL` to that address, or, once the website is up,
    to the website, `https://<host>` (as from 2.5.1). It must start with `https://`: a build
-   stops on an address without it.
+   stops on an address without it. From 2.5.2 the deploy also makes the R2 bucket
+   `clokrix-downloads`, from which the website gives Clokrix's installers and updates
+   (CONTRIBUTING.md → Releasing): turn R2 on in the Cloudflare dashboard (R2 Object Storage)
+   before that deploy.
 6. **Try it in Test mode:** a CI test build carries both variables once they are set, so its
    trial runs as a release's will. Buy with one of Razorpay's test cards and check:
    - Pro turns on by itself;

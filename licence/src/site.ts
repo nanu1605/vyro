@@ -16,7 +16,8 @@ export interface Seller {
   address?: string;
 }
 
-const DOWNLOAD = 'https://github.com/nanu1605/vyro-releases/releases/latest';
+/** The newest installer, from this website (downloads.ts). */
+const DOWNLOAD = '/download';
 /** When these pages last changed in what they promise. */
 const UPDATED = '16 November 2026';
 

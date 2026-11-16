@@ -6,5 +6,6 @@
   "compatibility_date": "2026-09-01",
   "durable_objects": { "bindings": [{ "name": "LEDGER", "class_name": "Ledger" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Ledger"] }],
+  "r2_buckets": [{ "binding": "DOWNLOADS", "bucket_name": "clokrix-downloads-test" }],
   "vars": { "SELLER": "Test Seller" }
 }

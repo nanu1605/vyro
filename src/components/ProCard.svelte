@@ -66,10 +66,10 @@
     {#if e.tier !== 'pro'}
       <p class="price"><b>{e.price}</b> once, for life, on one PC; it can move to another.</p>
       {#if e.buying}
-        <p class="note" role="status">Waiting for your payment in the browser. Pro turns on by itself once it is paid.</p>
+        <p class="note" role="status">Waiting for your payment in the browser; Pro turns on by itself once it is paid. Closed the page? Buy Pro opens it again.</p>
       {/if}
       <div class="actions">
-        <button type="button" class="primary" disabled={busy || !e.canBuy || e.buying} onclick={() => void buy()}>Buy Pro</button>
+        <button type="button" class="primary" disabled={busy || !e.canBuy} onclick={() => void buy()}>Buy Pro</button>
       </div>
       <form
         class="key"

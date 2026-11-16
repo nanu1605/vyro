@@ -14,6 +14,9 @@
   },
   // SQLite-backed, as the free plan requires.
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Ledger"] }],
+  // Clokrix's installers and the updater's manifest (2.5.2, src/downloads.ts): the Release
+  // workflow puts each release here; licence.yml makes the bucket if it is missing.
+  "r2_buckets": [{ "binding": "DOWNLOADS", "bucket_name": "clokrix-downloads" }],
   // Who sells it, as the checkout names them. The secrets RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET,
   // RAZORPAY_WEBHOOK_SECRET and LICENCE_SIGNING_KEY are set by the deploy (licence.yml).
   "vars": { "SELLER": "Jainav Infotech Private Limited" },

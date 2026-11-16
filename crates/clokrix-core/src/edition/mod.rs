@@ -136,6 +136,17 @@ impl Stored {
     pub fn trial_ends(&self) -> Option<i64> {
         self.trial_started.map(|t| t + TRIAL_DAYS * DAY)
     }
+
+    /// The code Buy Pro opens the checkout with (2.5.2): the purchase still waited for, opened
+    /// again (its checkout page shows the key if it was paid meanwhile, so it is never bought
+    /// twice), else a new one. Buy Pro stayed greyed out while one was waited for, half an hour
+    /// and across restarts, so a checkout tab closed before paying could not be opened again.
+    pub fn purchase_code(&self, now: i64) -> String {
+        self.claim
+            .as_ref()
+            .filter(|c| c.until > now)
+            .map_or_else(new_claim, |c| c.code.clone())
+    }
 }
 
 /// What an activation says (signed by the checkout, `licence/src/rules.ts`).
@@ -369,5 +380,24 @@ mod tests {
         let c = new_claim();
         assert_eq!(c.len(), 32);
         assert_ne!(c, new_claim());
+    }
+
+    /// Buy Pro again while a purchase is waited for opens that purchase, not a new one; once
+    /// its wait is over, a new one.
+    #[test]
+    fn buy_pro_again_opens_the_purchase_waited_for() {
+        let mut s = Stored::default();
+        let first = s.purchase_code(1000);
+        assert_eq!(first.len(), 32);
+        assert_ne!(first, s.purchase_code(1000));
+        s.claim = Some(Claim {
+            code: first.clone(),
+            until: 2800,
+        });
+        assert_eq!(s.purchase_code(1000), first);
+        assert_eq!(s.purchase_code(2799), first);
+        let after = s.purchase_code(2800);
+        assert_eq!(after.len(), 32);
+        assert_ne!(after, first);
     }
 }

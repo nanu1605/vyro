@@ -44,10 +44,10 @@
   {/if}
   <p class="price"><b>{e?.price ?? '$100'}</b> once, for life, on this PC.</p>
   {#if e?.buying}
-    <p class="status" role="status">Waiting for your payment in the browser. Pro turns on by itself once it is paid.</p>
+    <p class="status" role="status">Waiting for your payment in the browser; Pro turns on by itself once it is paid. Closed the page? Buy Pro opens it again.</p>
   {/if}
   <div class="actions">
-    <button type="button" class="primary" disabled={!e?.canBuy || e?.buying} onclick={() => void buy()}>Buy Pro</button>
+    <button type="button" class="primary" disabled={!e?.canBuy} onclick={() => void buy()}>Buy Pro</button>
     <button type="button" onclick={onkey}>Enter a key</button>
   </div>
   {#if error}<p class="err" role="alert">{error}</p>{/if}

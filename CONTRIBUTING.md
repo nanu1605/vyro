@@ -105,3 +105,35 @@ public repository that holds no code: create it with a README, set the variable
 `RELEASES_REPO` to its `owner/name`, and add the secret `RELEASES_TOKEN`, a fine-grained token
 with Contents read and write on that repository only. The address is built into each release,
 so copies installed before it was set keep looking in the old place until updated by hand.
+
+### Downloads and updates from the website (2.5.2)
+
+From 2.5.2 releases come from the company's own website, so both repositories can be private.
+With the variable `CLOKRIX_SITE_HOST` set (the website's host, as for the checkout) and the
+Cloudflare secrets, the Release workflow puts the MSI and `SHA256SUMS.txt` in the R2 bucket
+`clokrix-downloads` under `vX.Y.Z/`, then `latest.json`, and builds the app to read
+`https://<host>/updates/latest.json`. The checkout's Worker serves them
+(`licence/src/downloads.ts`): `/download` is the newest installer, for the website's Download
+button. Before the first release
+of this kind, deploy the checkout once (Licence workflow): it makes the bucket. R2 has to be turned
+on in the Cloudflare account first (dashboard → R2 Object Storage); its free allowance (10 GB
+stored, downloads not charged) holds hundreds of releases.
+
+`latest.json` names only the newest release, and each MSI is the whole of Clokrix with the same
+upgrade code, so a copy several versions behind installs the newest in one step. What's new then
+shows the notes of every version it skipped. CI's upgrade check installs Vyro 2.1.0 and upgrades
+it straight to the build under test.
+
+Making the repositories private, in this order:
+
+1. Release 2.5.2 or later from the website, as above. `RELEASES_REPO` still gets each release:
+   copies before 2.5.2 read it, and update from it to the newest.
+2. Wait until installed copies have moved to 2.5.2 or later (they look daily). Any copy still
+   older once the releases repository is private can no longer update itself; it needs the
+   installer from the website's Download button, which keeps its settings.
+3. Make `RELEASES_REPO` private (its Settings → General → Danger Zone → Change visibility). CI
+   reads Vyro 2.1.0 from it with `RELEASES_TOKEN`.
+4. Make this repository private the same way. Public forks stay public, and GitHub Actions minutes
+   on a private repository count against the account's allowance (Windows minutes at twice the
+   rate). Free code signing (SignPath Foundation, decision 11) is for public open-source
+   projects only.

@@ -50,11 +50,12 @@ added fan and pump control, so far only on the MSI B650M GAMING PLUS WIFI (MS-7E
 ## Install
 
 Releases are published by the Release workflow (see [CONTRIBUTING](CONTRIBUTING.md#releasing)):
-install `Clokrix_<version>_x64_en-US.msi` from the latest release. Installed copies look for a new
-release daily and update themselves from Settings → Updates (one administrator prompt; app and
-service are both replaced). The first time Clokrix starts after an update it shows what's new in
-that version, once; Settings → Updates opens it again. Every CI run also uploads a test build,
-`clokrix-windows-<commit>`, which never updates itself.
+install `Clokrix_<version>_x64_en-US.msi` from the website's Download button (from 2.5.2; the latest
+GitHub release before). Installed copies look for a new release daily and update themselves from
+Settings → Updates (one administrator prompt; app and service are both replaced), straight to the
+newest however many versions behind they are. The first time Clokrix starts after an update it shows
+what's new in that version, once; Settings → Updates opens it again. Every CI run also uploads a
+test build, `clokrix-windows-<commit>`, which never updates itself.
 
 The MSI installs Clokrix for all users with a Start-menu entry, installs the signed
 [PawnIO](https://github.com/namazso/PawnIO) driver silently if it is missing (it reads CPU

@@ -34,6 +34,16 @@ export const NOTES: Release[] = [
         text: 'Phones you pair from now on open the phone app at Clokrix’s own address. Phones already paired keep working as they are, with nothing to do.',
         phone: true,
       },
+      {
+        icon: 'sparkles',
+        title: 'Buy Pro opens the payment page again',
+        text: 'Closed the payment page before paying? Buy Pro opens the same purchase again, at once, rather than waiting half an hour. If it was paid meanwhile, the page shows your key, so nothing is bought twice.',
+      },
+      {
+        icon: 'sparkles',
+        title: 'Updates from Clokrix’s website',
+        text: 'Clokrix now downloads its updates from Clokrix’s own website. However many versions behind a PC is, it goes straight to the newest in one update.',
+      },
     ],
   },
   {
