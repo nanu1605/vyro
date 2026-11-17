@@ -5000,7 +5000,14 @@ checked:
       the edition's test of Buy Pro again; `wrangler deploy --dry-run` lists the bucket's binding.
       CI green on c900db8 (run 43936807472), whose Windows job fetched Vyro 2.1.0 the new way and
       upgraded it; its test build is `clokrix-windows-c900db8…`.
-- [ ] **The checkout deployed** with the downloads, on the owner's go, after R2 is turned on.
+- [x] **The checkout deployed** with the downloads. R2 was already on in the account (the owner,
+      2026-11-17, a screenshot of R2 Object Storage with the company's own buckets), and the
+      owner: "deploy the checkout". `main` fast-forwarded to 395a7c4 and Licence run on it, run
+      44030897361: the 31 tests passed, the deploy made the bucket `clokrix-downloads` (the token
+      may edit R2) and bound it as `DOWNLOADS`, on the workers.dev address and the website alike.
+      Until 2.5.2 is in the bucket, the website's Download button leads to the releases
+      repository and `/updates/latest.json` answers "No release yet." (no copy reads it before
+      2.5.2). This session's network does not reach the website, so the owner opens both.
 - [ ] **Checked before the release** with the test build: Buy Pro's price, Buy Pro again after
       closing the page, a phone paired anew through the new address, and a phone paired before
       still working.
