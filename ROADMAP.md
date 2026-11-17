@@ -5008,11 +5008,21 @@ checked:
       Until 2.5.2 is in the bucket, the website's Download button leads to the releases
       repository and `/updates/latest.json` answers "No release yet." (no copy reads it before
       2.5.2). This session's network does not reach the website, so the owner opens both.
-- [ ] **Checked before the release** with the test build: Buy Pro's price, Buy Pro again after
-      closing the page, a phone paired anew through the new address, and a phone paired before
-      still working.
-- [ ] **2.5.2 released**, on the owner's go; then the website's Download button and
-      `/updates/latest.json` give it.
+- [ ] **Checked on the release** (the owner gave the go before reporting them): Buy Pro's price,
+      Buy Pro again after closing the page, a phone paired anew through the new address, and a
+      phone paired before still working.
+- [x] **2.5.2 released** (2026-11-17, on the owner's go: "release 2.5.2"). `main` fast-forwarded
+      to eeb3e18 (CI green, run 44031177747), and Release run 44034384651 tagged `v2.5.2`, found
+      the relay's address (the company's domain) and Pro's checkout (the website) in
+      `clokrix.exe`, and put the 14.88 MB `Clokrix_2.5.2_x64_en-US.msi`, its checksums and then
+      `latest.json` in the bucket. Before publishing anywhere else it read the website's
+      `/updates/latest.json` (2.5.2) and downloaded `/download`, whose SHA-256 matched the MSI's.
+      Then it published the same files here and to `nanu1605/vyro-releases`. GitHub's digests
+      here match the run's checksums (MSI `6a37e782…`, `latest.json` `909b3c5a…`); the files
+      downloaded from `nanu1605/vyro-releases` have the same SHA-256, and its latest
+      `latest.json`, which copies before 2.5.2 read, offers 2.5.2 with the installer on the
+      website. The MSI unpacked: `clokrix.exe` reads its updates from the website's
+      `/updates/latest.json`. Unsigned, as before.
 
 ## Risks
 
