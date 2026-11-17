@@ -226,6 +226,20 @@ async function open(browser, url, { width, theme, motion = 'no-preference', init
       } catch {
         /* the page works without it */
       }
+      // Card grids as drawn (2.5.2): the Dashboard's and the views' grids place their cards from a
+      // ResizeObserver, which runs in each frame before it is drawn. A reading that changed a
+      // card's height in the task just before a check was not placed yet there, and is never
+      // drawn so (CI run 44036215535: Power grew a line onto the GPU card under it). The checks
+      // measure once the next frame's observers have run, this one after the grids' own (each
+      // made earlier), which an overlap that stays drawn still fails.
+      window.__a11yDrawn = () =>
+        new Promise((done) => {
+          const ro = new ResizeObserver(() => {
+            ro.disconnect();
+            done();
+          });
+          ro.observe(document.documentElement);
+        });
       if (extra) Function(extra)();
     },
     [theme, accent, glass, init ?? ''],
@@ -245,7 +259,8 @@ async function open(browser, url, { width, theme, motion = 'no-preference', init
  * line (the owner's report: "lot of empty spaces in between").
  */
 async function cardsPacked(page, where) {
-  const found = await page.evaluate(() => {
+  const found = await page.evaluate(async () => {
+    await window.__a11yDrawn();
     const bad = [];
     for (const g of document.querySelectorAll('[role="tabpanel"]:not([hidden]) .card-grid')) {
       const gr = g.getBoundingClientRect();
@@ -280,7 +295,8 @@ async function cardsPacked(page, where) {
 
 /** The Dashboard's widgets: inside their grid, none on another (2.0.2: after the window resized). */
 async function widgetsPacked(page, where) {
-  const found = await page.evaluate(() => {
+  const found = await page.evaluate(async () => {
+    await window.__a11yDrawn();
     const bad = [];
     for (const g of document.querySelectorAll('[role="tabpanel"]:not([hidden]) .dash-grid')) {
       const gr = g.getBoundingClientRect();
@@ -652,7 +668,8 @@ async function sweepDashboard(browser, theme, width, shows = 'owner') {
   await tab(page, 'Dashboard');
   await page.waitForTimeout(800);
   const where = `Dashboard (${shows}) · ${theme} ${width}px`;
-  const found = await page.evaluate(() => {
+  const found = await page.evaluate(async () => {
+    await window.__a11yDrawn();
     const bad = [];
     const cells = [...document.querySelectorAll('.dash-grid .dash-cell')];
     if (cells.length < 10) bad.push(`only ${cells.length} widgets shown`);

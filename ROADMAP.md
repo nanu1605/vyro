@@ -5023,6 +5023,20 @@ checked:
       `latest.json`, which copies before 2.5.2 read, offers 2.5.2 with the installer on the
       website. The MSI unpacked: `clokrix.exe` reads its updates from the website's
       `/updates/latest.json`. Unsigned, as before.
+- [x] **The accessibility sweep measures card grids as drawn.** CI on the release's record
+      (dc73742, run 44036215535) failed once on code that had passed an hour before: "Dashboard
+      (narrow) · daylight 920px: "Power" and "Simulated · Discrete" overlap". The Dashboard and
+      the views place their cards from a ResizeObserver, which runs in each frame before it is
+      drawn; a reading that wraps one of Power's rows (here "CPU package" has 11 px to spare, and
+      CI's browser sets text a little differently) makes it a line taller, and a check in the
+      task right after that saw it on the GPU card under it, before the frame placed it. Made to
+      happen here: the same message, 19 px, Power's span 68 where it needs 76; two frames later
+      nothing. The sweep's three grid checks now measure once the next frame's observers have run
+      (`scripts/a11y.mjs`, `__a11yDrawn`), and still fail an overlap that stays drawn (Power's
+      span cut short: 131 px). No change to the app: nothing was drawn overlapping. The whole
+      sweep run here with it: 2162 checks, none on a grid; its only three findings were this
+      machine's Chromium asking the preview for `/favicon.ico` on its first pages, which CI's
+      headless browser does not.
 
 ## Risks
 
