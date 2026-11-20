@@ -13,6 +13,10 @@ before.
 
 ## What only the owner can do
 
+Both repositories have been private since 2026-11-20 (the owner's choice), so SignPath
+Foundation cannot sign Clokrix now; the steps below apply only if this repository is made public
+again. A private repository signs with a paid certificate instead (decision 11).
+
 SignPath Foundation signs only open-source projects whose builds it can trace to their source:
 
 1. **Make the repository public.** It is already licensed MIT OR Apache-2.0 (`LICENSE-MIT`,

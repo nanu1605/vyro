@@ -107,9 +107,10 @@ there; 2.5.0 keeps using the workers.dev address, which must stay.
 The policy pages are a plain starting point, written from what Clokrix does; the owner checks
 them before giving the website to Razorpay.
 
-## It is open source
+## The code
 
-The lock is in Clokrix's public code (MIT or Apache-2.0), and a build without the checkout's
+The code was public under MIT or Apache-2.0 until 2026-11-20, when the owner made the repository
+private; copies published before then stay under those licences. A build without the checkout's
 settings is Pro: forks, local builds and CI builds before the settings are set. The official
 builds carry them. A copy of the code takes another name and logo (README → License).
 

@@ -446,10 +446,11 @@ describe('downloads and updates (2.5.2)', () => {
   };
   const bucket = async () => (await server.getWorker<{ DOWNLOADS: R2Bucket }>().getEnv()).DOWNLOADS;
 
-  it('lead the Download button to the releases repository until the first release is here', async () => {
+  it('say there is no release yet until the first release is here', async () => {
     const res = await fetch(`${base}/download`, { headers: from(), redirect: 'manual' });
-    expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toBe('https://github.com/nanu1605/vyro-releases/releases/latest');
+    expect(res.status).toBe(404);
+    expect(res.headers.get('location')).toBeNull();
+    expect(await res.text()).toBe('No release yet.');
     expect((await fetch(`${base}/updates/latest.json`, { headers: from() })).status).toBe(404);
     const home = await (await fetch(`${base}/`, { headers: from() })).text();
     expect(home).toContain('href="/download"');

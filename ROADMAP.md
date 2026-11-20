@@ -5037,6 +5037,27 @@ checked:
       sweep run here with it: 2162 checks, none on a grid; its only three findings were this
       machine's Chromium asking the preview for `/favicon.ico` on its first pages, which CI's
       headless browser does not.
+- [x] **Both repositories private** (2026-11-20, the owner: "I have made both the repositories
+      private."), three days after 2.5.2 rather than the couple of weeks suggested. What it
+      changes:
+      - A copy still before 2.5.2 can no longer update itself: it reads the releases
+        repository's `latest.json`, which now needs a sign-in. The website's Download installs
+        over it and keeps its settings.
+      - `/download` led to the releases repository until the first release was in the bucket;
+        it now says "No release yet.", as `/updates/latest.json` does (`licence/src/downloads.ts`;
+        no difference while 2.5.2 is there; it goes out with the next Licence deploy). The
+        checkout's 31 tests pass.
+      - Unchanged: CI fetches Vyro 2.1.0 with `RELEASES_TOKEN`, as it already did; Release
+        checks the website, not GitHub, and publishes with tokens, so it still publishes here
+        and to the releases repository, now a private copy; 2.5.2 and later read the website.
+      - Signing: SignPath Foundation is for public projects (decision 11); `docs/signing.md` and
+        `docs/pro.md` say so.
+      - Actions minutes are now billed. CI run 44045894811 (1325fe9 on `main`) took 19 minutes
+        on Windows and 15, 5, 3 and 1 on Linux: about $0.33 at GitHub's prices ($0.010 a
+        Windows minute, $0.006 a Linux one), against $12 a month included on GitHub Free ($18 on
+        Pro), so about 36 runs. CI runs on every push, a change runs it twice (the branch, then
+        `main`), and half the commits since October changed only the records. Running it less is
+        a workflow change, so it waits for the owner's go.
 
 ## Risks
 

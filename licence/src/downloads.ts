@@ -15,9 +15,6 @@
 
 /** The bucket's key of the manifest; a release's files are under `<tag>/`. */
 export const MANIFEST = 'latest.json';
-/** Where the Download button leads until the first release is in the bucket: the releases
- * repository, while it is public. */
-export const BEFORE_FIRST = 'https://github.com/nanu1605/vyro-releases/releases/latest';
 const TAG = /^v\d{1,4}\.\d{1,4}\.\d{1,4}$/;
 const FILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
@@ -76,7 +73,8 @@ export async function download(req: Request, bucket: R2Bucket | undefined): Prom
 
   if (path === '/updates/latest.json' || path === '/download') {
     const m = bucket ? await bucket.get(MANIFEST) : null;
-    if (!m && path === '/download') return new Response(null, { status: 302, headers: { Location: BEFORE_FIRST, 'Cache-Control': 'no-store' } });
+    // Before the first release is here, both say so. The releases repository has been private
+    // since 2026-11-20 (the owner: "I have made both the repositories private.").
     if (!m) return plain(404, 'No release yet.');
     const text = await m.text();
     if (path === '/updates/latest.json') {

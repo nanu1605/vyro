@@ -134,6 +134,9 @@ Making the repositories private, in this order:
 3. Make `RELEASES_REPO` private (its Settings → General → Danger Zone → Change visibility). CI
    reads Vyro 2.1.0 from it with `RELEASES_TOKEN`.
 4. Make this repository private the same way. Public forks stay public, and GitHub Actions minutes
-   on a private repository count against the account's allowance (Windows minutes at twice the
-   rate). Free code signing (SignPath Foundation, decision 11) is for public open-source
+   on a private repository count against the account's allowance (a Windows minute costs more
+   than a Linux one). Free code signing (SignPath Foundation, decision 11) is for public open-source
    projects only.
+
+Both were made private on 2026-11-20. `RELEASES_REPO` still gets each release, as a private copy
+that no installed copy reads any more.
