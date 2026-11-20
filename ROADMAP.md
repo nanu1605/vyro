@@ -5066,6 +5066,8 @@ checked:
       nor on tags. About a quarter of the runs before. CI green on a861d0a (run 44722388063), the
       first on the private repository: its Windows job fetched Vyro 2.1.0 from the private
       releases repository with `RELEASES_TOKEN` and upgraded it.
+      The change itself: CI green on d1ac735 (run 44754626583, which the workflow's change ran);
+      `main` fast-forwarded to it, and no run started there.
 
 ## Risks
 
