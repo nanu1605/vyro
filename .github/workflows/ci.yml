@@ -1,8 +1,23 @@
 name: CI
 
+# On a push to any branch but main, unless it changes only the records and docs below; on a pull
+# request; and by hand (Actions → CI → Run workflow). Both repositories have been private since
+# 2026-11-20, so each run spends the account's Actions allowance, and no commit is run twice:
+# main is only fast-forwarded to a commit that passed here on its branch, and Release builds and
+# checks what it publishes itself. No tests read these files (the owner's "Go", 2026-11-20).
 on:
   push:
+    branches-ignore: [main]
+    paths-ignore:
+      - ROADMAP.md
+      - README.md
+      - CONTRIBUTING.md
+      - CLAUDE.md
+      - V2_PLAN.md
+      - PROJECT_PLAN.md
+      - docs/**
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read

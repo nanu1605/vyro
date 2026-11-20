@@ -20,6 +20,12 @@ pnpm a11y                                # axe-core on every tab, theme and widt
 python3 scripts/third_party.py --check   # after adding or updating a dependency
 ```
 
+CI runs them on each push to a branch other than `main`, unless the push changes only the records
+and docs (`ROADMAP.md`, `README.md`, `CONTRIBUTING.md`, `docs/` and the plans; no test reads
+them), on pull requests, and by hand (Actions → CI → Run workflow). `main` is fast-forwarded only
+to commits that passed on their branch, so CI does not run there again. The repository is
+private, so each run spends the account's Actions allowance (about $0.35–0.40 a run in 2026-11).
+
 `pnpm a11y` drives the browser preview with Playwright; install its browser once with
 `pnpm exec playwright install chromium`. A change that stores something new in a state file
 goes through `clokrix_core::files` (atomic writes, damaged files set aside). If it changes a

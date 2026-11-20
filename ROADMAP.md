@@ -5058,6 +5058,14 @@ checked:
         Pro), so about 36 runs. CI runs on every push, a change runs it twice (the branch, then
         `main`), and half the commits since October changed only the records. Running it less is
         a workflow change, so it waits for the owner's go.
+- [x] **CI runs once per change** (the owner: "Go", 2026-11-20, to running it less). `ci.yml`
+      runs on a push to any branch but `main`, unless the push changes only `ROADMAP.md`,
+      `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, the two plans or `docs/` (no test or build
+      reads them); on pull requests; and by hand. Not on `main`, which is fast-forwarded only to
+      commits that passed on their branch (Release builds and checks what it publishes itself),
+      nor on tags. About a quarter of the runs before. CI green on a861d0a (run 44722388063), the
+      first on the private repository: its Windows job fetched Vyro 2.1.0 from the private
+      releases repository with `RELEASES_TOKEN` and upgraded it.
 
 ## Risks
 
