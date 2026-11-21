@@ -5120,7 +5120,12 @@ release.
       ("storage: drive scan: a pass took N ms", at most once in 5 minutes), now as time spent on
       that thread. Tests: a slow scan does not hold up the caller, one runs at a time, and a
       panic fails only its own scan.
-- [ ] CI green on the fixes.
+- [x] **CI green on e4cbd38** (run 44880488361; Linux, Windows with the smoke test, the clean
+      install and the upgrade from Vyro 2.1.0, the relay and phone app with the end-to-end test,
+      the checkout, accessibility). Locally: fmt, clippy (Linux and windows-gnu), 903 core
+      tests. The clean install read 27 sensors; the old code read 27 on a861d0a (run
+      44722388063) and 29 on d1ac735 (run 44754626583), what is read at that moment varying
+      between runners. `main` fast-forwarded to it.
 
 ## Risks
 
