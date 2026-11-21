@@ -5097,11 +5097,10 @@ checked:
       and the Worker went out still bound to `clokrix-downloads` as `DOWNLOADS`, on the website
       and its workers.dev address. With 2.5.2 in the bucket, nothing a visitor sees changed.
 
-### After 2.5.2: two fixes from the owner's service.log
+### 2.5.3: two fixes from the owner's service.log
 
 The owner sent their PC's `service.log` (2026-11-21) for 1.6's NVML question (2.5's open items
-above). Two faults were in it besides, and the owner said "fix both". Both go out with the next
-release.
+above). Two faults were in it besides, and the owner said "fix both". Both go out in 2.5.3.
 
 - [x] **The Snipping Tool is not a game** (`gaming/foreground.rs`). Windows 11's Snipping Tool
       draws its screenshot overlay over the whole monitor, so each screenshot made it the game
@@ -5126,6 +5125,9 @@ release.
       tests. The clean install read 27 sensors; the old code read 27 on a861d0a (run
       44722388063) and 29 on d1ac735 (run 44754626583), what is read at that moment varying
       between runners. `main` fast-forwarded to it.
+- [x] **Version 2.5.3** (the owner, 2026-11-21: "release 2.5.3"): `scripts/set-version.py
+      2.5.3`; What's new in 2.5.3: screenshots are not games, readings on time. Both are this
+      PC's, so neither is marked for the phone app.
 
 ## Risks
 

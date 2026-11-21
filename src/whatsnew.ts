@@ -21,6 +21,21 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '2.5.3',
+    items: [
+      {
+        icon: 'sparkles',
+        title: 'Screenshots are not games',
+        text: 'Taking a screenshot with Windows’ Snipping Tool no longer counts as a game: Clokrix no longer switches to the Gaming profile for it or records a gaming session.',
+      },
+      {
+        icon: 'gauge',
+        title: 'Readings on time',
+        text: 'Clokrix reads your drives on the side now, so the other readings never wait for them. On some PCs every fifth update came almost half a second late.',
+      },
+    ],
+  },
+  {
     version: '2.5.2',
     items: [
       {
