@@ -3714,7 +3714,13 @@ any time constraint?". On `claude/vyro-2.0`; 2.0.1 and the relay deploy on the o
       every room is offered none and the screen goes as before. Cloudflare took 19 new or changed
       files; the 17 hashed scripts and styles among them carry the same names as a local build
       of 8c53592. The live relay can't be reached from here.
-- [ ] TURN turned on (the owner's): a TURN key and the three secrets ([`docs/remote.md`](docs/remote.md)).
+- [x] TURN turned on (the owner's): a TURN key and the three secrets ([`docs/remote.md`](docs/remote.md)).
+      The owner, 2026-11-21, after asking whether the company's VPS could run one for free: "let's
+      go with TURN for now later we can use VPS. Variables set on cloudflare". Cloudflare's TURN
+      service, then; a TURN server of the company's own (coturn, the relay making its credentials
+      from a shared secret) is for later.
+- [ ] Checked on the phone: on mobile data the screen shows the full picture, and its line ends
+      "through the TURN server".
 - [x] Field check: on mobile data and on Wi-Fi, the details say "through the TURN server" or show
       the picture's size and rate (on Wi-Fi without TURN: if it is still the slow view, Settings →
       Remote's firewall line); Disconnect on the iPhone and on headphones; the iPhone's battery.
