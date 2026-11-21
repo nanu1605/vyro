@@ -29,6 +29,7 @@ use windows::Win32::System::Ioctl::{
 use windows::Win32::System::SystemInformation::GetSystemWindowsDirectoryW;
 use windows::Win32::System::IO::DeviceIoControl;
 
+use super::background::{Asked, Background};
 use super::{build, descriptor, pdh_instance, snapshot_of, sort, temperature_descriptor, RawDrive};
 use crate::info::{DriveInfo, VolumeInfo};
 use crate::live::pdh::{Counter, Query};
@@ -482,12 +483,37 @@ impl Rates {
     }
 }
 
-/// Live storage: rates every tick, health / temperature / volumes every [`REFRESH`].
+/// What each drive is asked on one scan: `plan[i]` for `\\.\PhysicalDrive{i}`.
+type Plan = [Smart; MAX_DRIVES as usize];
+
+/// One scan's answers: each drive found, with what it was asked, and when the scan started.
+struct Scan {
+    at: Instant,
+    drives: Vec<(u32, RawDrive, Smart)>,
+}
+
+/// Reads the volumes and every drive, as `plan` asks.
+fn scan(plan: Plan, at: Instant) -> Scan {
+    let (vols, system_disk) = volumes();
+    let drives = (0..MAX_DRIVES)
+        .zip(plan)
+        .filter_map(|(index, smart)| {
+            read(index, smart, &vols, system_disk).map(|raw| (index, raw, smart))
+        })
+        .collect();
+    Scan { at, drives }
+}
+
+/// Live storage: rates every tick, health / temperature / volumes every [`REFRESH`], read on a
+/// thread of its own ([`Background`]) so the tick never waits for the drives.
 #[derive(Default)]
 pub struct StorageProvider {
     drives: BTreeMap<u32, Tracked>,
     rates: Option<Rates>,
+    /// When the last scan was asked for.
     last_refresh: Option<Instant>,
+    /// None: scans are read in the tick (the thread could not be started, or is gone).
+    scanner: Option<Background<(Plan, Instant), Scan>>,
 }
 
 impl StorageProvider {
@@ -495,20 +521,37 @@ impl StorageProvider {
         Self::default()
     }
 
-    fn refresh(&mut self, reg: &mut Registry) {
-        let now = Instant::now();
-        let (vols, system_disk) = volumes();
-        let mut seen = Vec::new();
-        for index in 0..MAX_DRIVES {
-            let prev = self.drives.get(&index);
+    /// What each drive is asked on a scan starting `now`: health when it is due (spinning disks
+    /// rarely), and the rest every time; a drive not seen yet, everything.
+    fn plan(&self, now: Instant) -> Plan {
+        std::array::from_fn(|i| {
+            let prev = u32::try_from(i).ok().and_then(|i| self.drives.get(&i));
             let hdd = prev.is_some_and(|t| t.info.ssd == Some(false));
             let due = prev
                 .and_then(|t| t.last_smart)
                 .is_none_or(|at| now - at >= if hdd { HDD_SMART } else { REFRESH });
-            let smart = if due { Smart::Read } else { Smart::Skip };
-            let Some(mut raw) = read(index, smart, &vols, system_disk) else {
-                continue;
-            };
+            if due {
+                Smart::Read
+            } else {
+                Smart::Skip
+            }
+        })
+    }
+
+    /// Reads the drives now, in the tick (at start, and when the thread is gone).
+    fn refresh(&mut self, reg: &mut Registry) {
+        let now = Instant::now();
+        let s = scan(self.plan(now), now);
+        self.apply(reg, s);
+        self.last_refresh = Some(now);
+    }
+
+    /// Takes in a finished scan: drives updated, added (their sensors registered) or removed.
+    fn apply(&mut self, reg: &mut Registry, scan: Scan) {
+        let now = scan.at;
+        let mut seen = Vec::new();
+        for (index, mut raw, smart) in scan.drives {
+            let due = smart == Smart::Read;
             seen.push(index);
             if let Some(t) = self.drives.get_mut(&index) {
                 // Keep the last health data when this pass skipped or could not re-read it.
@@ -550,7 +593,6 @@ impl StorageProvider {
             }
             keep
         });
-        self.last_refresh = Some(now);
     }
 }
 
@@ -610,12 +652,37 @@ impl Provider for StorageProvider {
         if self.drives.is_empty() && self.rates.is_none() {
             return Err("no physical drives found".into());
         }
+        match Background::start(
+            "clokrix-storage-scan",
+            "storage: drive scan",
+            |(plan, at)| scan(plan, at),
+        ) {
+            Ok(b) => self.scanner = Some(b),
+            Err(e) => {
+                log::warn!("storage: no thread for the drive scan, so it is read in the tick: {e}")
+            }
+        }
         Ok(())
     }
 
     fn poll(&mut self, reg: &mut Registry, snap: &mut SensorSnapshot) -> Result<(), BoxError> {
+        match self.scanner.as_mut().and_then(Background::take) {
+            Some(Ok(s)) => self.apply(reg, s),
+            Some(Err(e)) => log::warn!("storage: a drive scan failed: {e}"),
+            None => {}
+        }
         if self.last_refresh.is_none_or(|t| t.elapsed() >= REFRESH) {
-            self.refresh(reg);
+            let now = Instant::now();
+            let plan = self.plan(now);
+            match self.scanner.as_mut().map(|b| b.ask((plan, now))) {
+                Some(Asked::Started) => self.last_refresh = Some(now),
+                // The last scan is still going: asked again once it is in.
+                Some(Asked::Busy) => {}
+                Some(Asked::Gone(_)) | None => {
+                    self.scanner = None;
+                    self.refresh(reg);
+                }
+            }
         }
         let rates = self.rates.as_ref().map(Rates::sample).unwrap_or_default();
         for (index, t) in &self.drives {

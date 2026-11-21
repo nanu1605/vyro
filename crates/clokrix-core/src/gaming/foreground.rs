@@ -39,6 +39,9 @@ const NOT_GAMES: &[&str] = &[
     "startmenuexperiencehost.exe",
     "textinputhost.exe",
     "screenclippinghost.exe",
+    // Windows 11's Snipping Tool: its screenshot overlay covers the monitor (the owner's log,
+    // 2026-11-21: 24 sessions of it, one for each screenshot).
+    "snippingtool.exe",
     "dwm.exe",
     "chrome.exe",
     "msedge.exe",
@@ -300,6 +303,10 @@ mod tests {
         assert!(!plain(&fg(10, "Game.exe", windowed)));
         assert!(!plain(&fg(10, "EXPLORER.EXE", MON)));
         assert!(!plain(&fg(10, "chrome.exe", MON)));
+        assert!(
+            !plain(&fg(10, "SnippingTool.exe", MON)),
+            "a screenshot's overlay"
+        );
         assert!(!plain(&fg(1, "Game.exe", MON)), "Clokrix itself");
         let mut desktop = fg(10, "Game.exe", MON);
         desktop.class = "WorkerW".into();

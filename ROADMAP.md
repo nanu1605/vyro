@@ -5097,6 +5097,31 @@ checked:
       and the Worker went out still bound to `clokrix-downloads` as `DOWNLOADS`, on the website
       and its workers.dev address. With 2.5.2 in the bucket, nothing a visitor sees changed.
 
+### After 2.5.2: two fixes from the owner's service.log
+
+The owner sent their PC's `service.log` (2026-11-21) for 1.6's NVML question (2.5's open items
+above). Two faults were in it besides, and the owner said "fix both". Both go out with the next
+release.
+
+- [x] **The Snipping Tool is not a game** (`gaming/foreground.rs`). Windows 11's Snipping Tool
+      draws its screenshot overlay over the whole monitor, so each screenshot made it the game
+      followed: 24 times in the log ("gaming: capturing SnippingTool.exe"). Each time the Gaming
+      profile came into force (games get it by default) and stayed while the tool kept running.
+      Windows 10's overlay (`ScreenClippingHost.exe`) was already left out; `SnippingTool.exe`
+      now is too. A game the owner saves by name still counts. Test: its overlay is not a game.
+- [x] **The drives are read on a thread of their own** (`storage/win.rs`,
+      `storage/background.rs`). Every 5 s the storage provider read the volumes and each drive
+      in the poller's tick, and the snapshot (every reading in it) waited for it: about 390 ms
+      on the owner's PC (327 to 1,312 ms over 1,403 lines; two NVMe drives and a spinning disk),
+      so every fifth update came that much late. The scan now runs on its own thread, one at a
+      time; the tick takes in the last finished one and reads only the disks' rates itself. The
+      first scan is still read at start, so the drives are there in the first snapshot; without
+      the thread, the scan is read in the tick as before. A scan over 250 ms is still logged
+      ("storage: drive scan: a pass took N ms", at most once in 5 minutes), now as time spent on
+      that thread. Tests: a slow scan does not hold up the caller, one runs at a time, and a
+      panic fails only its own scan.
+- [ ] CI green on the fixes.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on
