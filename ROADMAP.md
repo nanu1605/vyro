@@ -5128,6 +5128,15 @@ above). Two faults were in it besides, and the owner said "fix both". Both go ou
 - [x] **Version 2.5.3** (the owner, 2026-11-21: "release 2.5.3"): `scripts/set-version.py
       2.5.3`; What's new in 2.5.3: screenshots are not games, readings on time. Both are this
       PC's, so neither is marked for the phone app.
+- [x] **2.5.3 released** (2026-11-21, on the owner's go: "release 2.5.3"). CI green on e713c62
+      (run 44891019426), `main` fast-forwarded to it, and Release run 44892866230 tagged
+      `v2.5.3`, found the relay's address and Pro's checkout in `clokrix.exe`, and put the
+      14.92 MB `Clokrix_2.5.3_x64_en-US.msi`, its checksums and then `latest.json` in the bucket.
+      It then read the website's `/updates/latest.json` (2.5.3) and downloaded `/download`, whose
+      SHA-256 matched the MSI's, and published the same files here and to the private copy in
+      `nanu1605/vyro-releases`. GitHub's digests here: MSI `98d63c3d…`, `latest.json`
+      `17510e44…`, `SHA256SUMS.txt` `25f6b59b…`. Unsigned, as before. Installed copies of
+      2.5.2 update to it from the website at their next check.
 
 ## Risks
 
