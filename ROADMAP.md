@@ -3719,8 +3719,13 @@ any time constraint?". On `claude/vyro-2.0`; 2.0.1 and the relay deploy on the o
       go with TURN for now later we can use VPS. Variables set on cloudflare". Cloudflare's TURN
       service, then; a TURN server of the company's own (coturn, the relay making its credentials
       from a shared secret) is for later.
-- [ ] Checked on the phone: on mobile data the screen shows the full picture, and its line ends
-      "through the TURN server".
+- [x] Checked on the phone: on mobile data the screen shows the full picture, and its line ends
+      "through the TURN server". The owner, 2026-11-21: "all secrets, checked on mobile data and it
+      works. The resolution is 1280x720". All three are secrets, so relay deploys keep them.
+      1280×720 is the step for a connection carrying about 1.2 to 2.4 Mbit/s
+      (`screen/producer.rs` → `step`: the whole 1080p from 2 Mbit/s sent, 85 % of what the
+      connection carries); the phone's line gives that figure ("of the N the connection
+      carries"), and the picture goes up a step 5 s after the connection allows it.
 - [x] Field check: on mobile data and on Wi-Fi, the details say "through the TURN server" or show
       the picture's size and rate (on Wi-Fi without TURN: if it is still the slow view, Settings →
       Remote's firewall line); Disconnect on the iPhone and on headphones; the iPhone's battery.
