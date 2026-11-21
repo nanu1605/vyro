@@ -3719,6 +3719,8 @@ any time constraint?". On `claude/vyro-2.0`; 2.0.1 and the relay deploy on the o
       company's VPS could run one for free: "let's go with TURN for now later we can use VPS.
       Variables set on cloudflare". Cloudflare's TURN service, then; a TURN server of the
       company's own (coturn, the relay making its credentials from a shared secret) is for later.
+      Put aside, the owner, 2026-11-21: "let's leave ASUS fan field check and the VPS TURN server
+      for now".
 - [x] Checked on the phone: on mobile data the screen shows the full picture, and its line ends
       "through the TURN server". The owner, 2026-11-21: "all secrets, checked on mobile data and it
       works. The resolution is 1280x720". All three are secrets, so relay deploys keep them.
@@ -4388,7 +4390,11 @@ everything build" (2026-11-11), answering what was left to build. Built from tha
       on GeForce, stays open.
 - [ ] **The ASUS board on the allow-list**, from its tries, then the control field check on it
       (decision 24). It needs the board's `clokrix-fans.json`, its `clokrix-fans-try-N.json`
-      files and the header each output moved: none came with the field check.
+      files and the header each output moved: none came with the field check. The owner,
+      2026-11-21: "Let's do the ASUS fan control field check", then "i don't have an asus PC with
+      me rn", then "let's leave ASUS fan field check and the VPS TURN server for now". Put aside,
+      then; when the ASUS PC is at hand, CI builds a fresh `clokrix-fans` (run by hand), and
+      [`docs/field-check-2.3.md`](docs/field-check-2.3.md) §2 has the steps.
 - [x] **Version 2.3.0** (the owner, 2026-11-12: "release 2.3.0"; no field check was reported
       before it, so the two items above stay open): `scripts/set-version.py 2.3.0`; What's new in
       2.3.0: Gigabyte boards' sensors, more memory timings, GPU tuning on more GeForce cards. All
