@@ -5068,6 +5068,10 @@ checked:
       releases repository with `RELEASES_TOKEN` and upgraded it.
       The change itself: CI green on d1ac735 (run 44754626583, which the workflow's change ran);
       `main` fast-forwarded to it, and no run started there.
+- [x] **The checkout deployed again** (the owner, 2026-11-21: "deploy the checkout"), for the
+      Download button above: Licence run 44875575461 on `main` at 38bbb7d. The 31 tests passed,
+      and the Worker went out still bound to `clokrix-downloads` as `DOWNLOADS`, on the website
+      and its workers.dev address. With 2.5.2 in the bucket, nothing a visitor sees changed.
 
 ## Risks
 
