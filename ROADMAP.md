@@ -5008,9 +5008,10 @@ checked:
       Until 2.5.2 is in the bucket, the website's Download button leads to the releases
       repository and `/updates/latest.json` answers "No release yet." (no copy reads it before
       2.5.2). This session's network does not reach the website, so the owner opens both.
-- [ ] **Checked on the release** (the owner gave the go before reporting them): Buy Pro's price,
+- [x] **Checked on the release** (the owner gave the go before reporting them): Buy Pro's price,
       Buy Pro again after closing the page, a phone paired anew through the new address, and a
-      phone paired before still working.
+      phone paired before still working. The owner, 2026-11-21: "all four checks done and
+      passed".
 - [x] **2.5.2 released** (2026-11-17, on the owner's go: "release 2.5.2"). `main` fast-forwarded
       to eeb3e18 (CI green, run 44031177747), and Release run 44034384651 tagged `v2.5.2`, found
       the relay's address (the company's domain) and Pro's checkout (the website) in
