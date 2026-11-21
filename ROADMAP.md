@@ -3714,8 +3714,8 @@ any time constraint?". On `claude/vyro-2.0`; 2.0.1 and the relay deploy on the o
       every room is offered none and the screen goes as before. Cloudflare took 19 new or changed
       files; the 17 hashed scripts and styles among them carry the same names as a local build
       of 8c53592. The live relay can't be reached from here.
-- [x] TURN turned on (the owner's): a TURN key and the three secrets ([`docs/remote.md`](docs/remote.md)).
-      The owner, 2026-11-21, after asking whether the company's VPS could run one for free: "let's
+- [x] TURN turned on (the owner's): a TURN key and the three secrets
+      ([`docs/remote.md`](docs/remote.md)). The owner, 2026-11-21, after asking whether the company's VPS could run one for free: "let's
       go with TURN for now later we can use VPS. Variables set on cloudflare". Cloudflare's TURN
       service, then; a TURN server of the company's own (coturn, the relay making its credentials
       from a shared secret) is for later.
