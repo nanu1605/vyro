@@ -49,11 +49,12 @@ goes on the list of boards Clokrix may drive.
 2. Right-click `clokrix-fans.exe` → **Run as administrator**, with nothing after it. It writes
    nothing: it lists each PWM output by number (the `pwm` column, 0 to 6) with its mode, duty and
    the RPM of the fan input with the same number, and saves `clokrix-fans.json`.
-3. For each output that has a fan on it, open a command prompt as administrator in that folder and
-   run `clokrix-fans.exe --try N 40`, N from the `pwm` column. For 10 seconds that
-   output runs at 40 %, then the board's own settings come back. Note which fan slowed down or
-   sped up (CPU_FAN, CHA_FAN1, AIO_PUMP and so on, as printed on the board). After each, rename
-   `clokrix-fans-try.json` to `clokrix-fans-try-N.json`.
+3. For each output in the table, open a command prompt as administrator in that folder and
+   run `clokrix-fans.exe --try N 100`, N from the `pwm` column. For 10 seconds that
+   output runs at full speed, then the board's own settings come back: nothing slows down, so a
+   pump is never starved, and the fan that got loud is easy to tell. Note which it was (CPU_FAN,
+   CHA_FAN1, AIO_PUMP and so on, as printed on the board), or nothing. After each, rename
+   `clokrix-fans-try.json` to `clokrix-fans-try-N.json`. (Until 2026-11-21 this said 40 %.)
 4. If a fan does not come back, or the window was closed during a test: run
    `clokrix-fans.exe --restore`. A restart also gives the BIOS its settings back.
 5. In the app, Cooling still says the board is not validated, and nothing it does changes a fan.
