@@ -4633,7 +4633,13 @@ On `claude/vyro-2.0`.
     the board's `clokrix-fans.json`, its `clokrix-fans-try-N.json` files and the header each
     output moved, as an entry names its product, chip, revision and each header (decision 24);
   - **1.6's question**, whether NVML takes offsets on GeForce: the `gpu tuning: … offsets
-    through NVML` or `NVAPI` line in `service.log`.
+    through NVML` or `NVAPI` line in `service.log`. Half answered: the owner sent their PC's
+    `service.log` (2026-11-21; 22 starts, 2.2.0 on 2026-11-11 to 2.5.2 today). On its GeForce
+    RTX 5060 Ti (Blackwell), drivers 621.14 and 621.24, NVML gives both ranges at every start:
+    core −1000 to +1000 MHz, memory −2000 to +6000 MHz, power 84 to 111 %; "offsets through
+    NVML, NVAPI's at hand". Nothing was applied in that time (no "GPU tuning turned on" and no
+    "applied" line), so whether NVML then takes an offset it gives a range for is still open:
+    applying a preset shows it (a `NVML refused the … offset (…); NVAPI sets it` line if not).
 
 The owner's fifth request (2026-11-14), planned and agreed (decision 44):
 
