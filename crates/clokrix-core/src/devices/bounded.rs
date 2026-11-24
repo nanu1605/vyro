@@ -133,10 +133,12 @@ mod tests {
     fn a_read_that_hangs_holds_nothing_up_and_is_not_started_twice() {
         static READ: Bounded<Vec<u8>> = Bounded::new("a test read");
         static STARTED: AtomicUsize = AtomicUsize::new(0);
-        let wait = Duration::from_millis(100);
+        // A wait that ends in vain, and one long enough for a read that answers at once even on
+        // a busy runner (it ends as the answer comes).
+        let (wait, long) = (Duration::from_millis(100), Duration::from_secs(10));
 
         // A read that answers at once.
-        assert_eq!(run(&READ, wait, || vec![1]), [1]);
+        assert_eq!(run(&READ, long, || vec![1]), [1]);
 
         // One that hangs: the caller gets the answer before it, in about `wait`.
         let (release, held) = mpsc::channel::<()>();
@@ -176,7 +178,7 @@ mod tests {
             std::thread::yield_now();
         }
         assert_eq!(READ.state.lock().unwrap().last.as_deref(), Some(&[2][..]));
-        assert_eq!(run(&READ, wait, || vec![3]), [3]);
+        assert_eq!(run(&READ, long, || vec![3]), [3]);
     }
 
     #[test]
@@ -198,26 +200,37 @@ mod tests {
     }
 
     /// Reads started together run side by side: the list waits for the slowest, not the sum.
+    /// Each read here waits for the other to have started, so both answer only if they run at
+    /// the same time; one after the other, the first gives up waiting and answers 0. (Timing two
+    /// naps instead failed on a busy runner: 808 ms for two of 300 ms side by side.)
     #[test]
     fn reads_started_together_run_side_by_side() {
         static A: Bounded<u8> = Bounded::new("read a");
         static B: Bounded<u8> = Bounded::new("read b");
-        let nap = Duration::from_millis(300);
-        let start = Instant::now();
+        let meet = Duration::from_secs(5);
+        let (a_started, a_seen) = mpsc::channel::<()>();
+        let (b_started, b_seen) = mpsc::channel::<()>();
         let a = A.start(move || {
-            std::thread::sleep(nap);
-            1
+            a_started.send(()).unwrap();
+            if b_seen.recv_timeout(meet).is_ok() {
+                1
+            } else {
+                0
+            }
         });
         let b = B.start(move || {
-            std::thread::sleep(nap);
-            2
+            b_started.send(()).unwrap();
+            if a_seen.recv_timeout(meet).is_ok() {
+                2
+            } else {
+                0
+            }
         });
-        let until = Instant::now() + Duration::from_secs(5);
-        assert_eq!((A.wait(a, until), B.wait(b, until)), (1, 2));
-        assert!(
-            start.elapsed() < nap * 2,
-            "{:?} for two reads of {nap:?}",
-            start.elapsed()
+        let until = Instant::now() + meet * 4;
+        assert_eq!(
+            (A.wait(a, until), B.wait(b, until)),
+            (1, 2),
+            "each read found the other going"
         );
     }
 }

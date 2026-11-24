@@ -5171,6 +5171,14 @@ drive scan did. The owner, 2026-11-24, told so: "fix the AMD CPU and network one
       at a time, the late count starting again after it; waiting is only for a piece that was
       started. Locally: fmt, clippy (Linux and windows-gnu), 906 core tests; the new timing
       tests 50 times in a row, and 30 more with every core busy, without a failure.
+- [x] **Two timing tests made sure** (`devices/bounded.rs`). CI run 45400732593 on 3b3904e
+      failed three tests on Windows, none in code this change touches (no test starts the live
+      providers): two of the device list's bounded reads and the screen's slow connection (the
+      same test that failed once in 2.5.2's test build). The runner was starved: two reads of a
+      300 ms nap side by side took 808 ms. A read that answers at once is now given 10 s, not
+      the 100 ms meant for one that hangs (the wait ends as it answers); and side by side is now
+      shown by each read waiting for the other to have started, not by the clock. Each passed
+      30 times in a row with every core busy here.
 
 ## Risks
 
