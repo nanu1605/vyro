@@ -5179,6 +5179,10 @@ drive scan did. The owner, 2026-11-24, told so: "fix the AMD CPU and network one
       the 100 ms meant for one that hangs (the wait ends as it answers); and side by side is now
       shown by each read waiting for the other to have started, not by the clock. Each passed
       30 times in a row with every core busy here.
+- [x] **CI green on 8155ab1** (run 45403112731; Linux, Windows with the smoke test, the clean
+      install and the upgrade from Vyro 2.1.0, the relay and phone app with the end-to-end test,
+      the checkout, accessibility), the screen's slow connection among them. `main`
+      fast-forwarded to it. Nothing is released: it goes out with the next version.
 
 ## Risks
 
