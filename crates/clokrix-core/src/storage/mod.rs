@@ -4,8 +4,6 @@
 //! Everything here is pure so each rule is tested on Linux.
 
 pub mod ata;
-#[cfg(any(windows, test))]
-mod background;
 pub mod nvme;
 #[cfg(windows)]
 mod win;

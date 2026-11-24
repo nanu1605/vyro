@@ -35,6 +35,7 @@ use super::{
     channel, kind, listed, rssi_quality, security, sort, standard, utilization, valid_host,
     PingWindow, Rates, DEFAULT_PING_HOST,
 };
+use crate::background::{Asked, Background, Sample, Sampler};
 use crate::info::{LocalOnly, NetAdapterInfo, WifiInfo};
 use crate::lock;
 use crate::provider::{BoxError, Provider};
@@ -676,15 +677,54 @@ struct Keys {
     up: SensorKey,
 }
 
-/// Live network: counters every tick, addresses / primary route / Wi-Fi every few seconds.
+/// Longest a tick waits for the counters; ones that take longer are used at the next tick. The
+/// owner's log (2026-11-21) had the network's poll at up to 2,782 ms.
+const WAIT: Duration = Duration::from_millis(50);
+/// Ticks in a row the last rates stand in while the counters are late (then `null`).
+const MAX_LATE: u32 = 5;
+/// How often the addresses, the primary route and Wi-Fi are read again.
+const REFRESH: Duration = Duration::from_secs(3);
+
+/// Addresses, the primary route and Wi-Fi.
+struct Details {
+    addrs: HashMap<u32, Addrs>,
+    primary: Option<u32>,
+    wifi: HashMap<u128, WifiInfo>,
+}
+
+fn details(wlan: Option<&mut Wlan>) -> Details {
+    Details {
+        addrs: addresses(),
+        primary: primary_index(),
+        wifi: wlan.map(Wlan::links).unwrap_or_default(),
+    }
+}
+
+/// The interfaces' counters, and when they were read (seconds from `started`).
+fn counters(started: Instant) -> (Vec<IfRow>, f64) {
+    let t = started.elapsed().as_secs_f64();
+    (if_rows(), t)
+}
+
+/// Live network: counters every tick, addresses / primary route / Wi-Fi every few seconds, each
+/// read on a thread of its own so a slow read never holds up the other readings.
 pub struct NetworkProvider {
     rates: Rates,
     started: Instant,
     addrs: HashMap<u32, Addrs>,
     primary: Option<u32>,
+    /// Kept here only while [`Details`] are read in the tick.
     wlan: Option<Wlan>,
     wifi: HashMap<u128, WifiInfo>,
     last_refresh: Option<Instant>,
+    /// Reads the [`Details`]; `None`: they are read in the tick.
+    details: Option<Background<(), Details>>,
+    /// Reads the counters; `None`: they are read in the tick.
+    counters: Option<Sampler<(), (Vec<IfRow>, f64)>>,
+    /// The adapters as the last counters showed them; the tick adds the ping.
+    shown: Vec<NetworkSnapshot>,
+    /// The last counters' outcome, given again while they are late.
+    outcome: Result<(), String>,
     keys: HashMap<u32, Keys>,
     ping_keys: Option<(SensorKey, SensorKey)>,
     stop: Arc<AtomicBool>,
@@ -707,6 +747,10 @@ impl NetworkProvider {
             wlan: None,
             wifi: HashMap::new(),
             last_refresh: None,
+            details: None,
+            counters: None,
+            shown: Vec::new(),
+            outcome: Ok(()),
             keys: HashMap::new(),
             ping_keys: None,
             stop: Arc::new(AtomicBool::new(false)),
@@ -714,11 +758,94 @@ impl NetworkProvider {
         }
     }
 
+    /// Reads the [`Details`] in the tick.
     fn refresh(&mut self) {
-        self.addrs = addresses();
-        self.primary = primary_index();
-        self.wifi = self.wlan.as_mut().map(Wlan::links).unwrap_or_default();
+        let d = details(self.wlan.as_mut());
+        self.apply_details(d);
         self.last_refresh = Some(Instant::now());
+    }
+
+    fn apply_details(&mut self, d: Details) {
+        self.addrs = d.addrs;
+        self.primary = d.primary;
+        self.wifi = d.wifi;
+    }
+
+    /// Rates and the adapters' list from one read of the counters, into the registry and
+    /// [`Self::shown`].
+    fn apply_counters(&mut self, reg: &mut Registry, rows: Vec<IfRow>, t: f64) {
+        let rows: Vec<IfRow> = rows
+            .into_iter()
+            .filter(|r| is_listed(r, &self.addrs))
+            .collect();
+        let ids: Vec<String> = rows.iter().map(|r| format!("if{}", r.index)).collect();
+        self.rates.retain(&ids);
+
+        let mut shown = Vec::with_capacity(rows.len());
+        for (row, id) in rows.iter().zip(ids) {
+            let (down, up) = self.rates.update(&id, row.rx, row.tx, t);
+            let keys = self.keys.entry(row.index).or_insert_with(|| {
+                let r = |reg: &mut Registry, what: &str, label: &str| {
+                    reg.register(
+                        SensorDesc::new(
+                            format!("network.{id}.{what}"),
+                            Group::Network,
+                            format!("{} {label}", row.alias),
+                            Unit::Megabit,
+                            Source::Os,
+                        )
+                        .with_history(),
+                    )
+                };
+                Keys {
+                    down: r(reg, "down", "Download"),
+                    up: r(reg, "up", "Upload"),
+                }
+            });
+            let wifi = self.wifi.get(&row.guid);
+            let link = row.up.then_some(row.link_mbps).flatten();
+            shown.push(NetworkSnapshot {
+                id,
+                adapter: row.alias.clone(),
+                kind: kind(row.if_type),
+                connected: row.up,
+                primary: self.primary == Some(row.index),
+                down_mbps: reg.set(keys.down, down),
+                up_mbps: reg.set(keys.up, up),
+                utilization_pct: utilization(down, up, link),
+                link_mbps: link,
+                received_mb: Some(row.rx as f64 / 1e6),
+                sent_mb: Some(row.tx as f64 / 1e6),
+                ping_ms: None,
+                packet_loss_pct: None,
+                wifi_signal_pct: wifi.and_then(|w| w.signal_pct),
+                wifi_rssi_dbm: wifi.and_then(|w| w.rssi_dbm),
+                wifi_channel: wifi.and_then(|w| w.channel),
+                wifi_band: wifi.and_then(|w| w.band.clone()),
+            });
+        }
+        shown.sort_by_key(|n| {
+            (
+                !n.primary,
+                !n.connected,
+                n.kind != NetKind::Ethernet,
+                n.adapter.clone(),
+            )
+        });
+        self.shown = shown;
+    }
+
+    /// No counters to go by: the adapters stay listed, without rates.
+    fn drop_rates(&mut self, reg: &mut Registry) {
+        for k in self.keys.values() {
+            reg.set(k.down, None);
+            reg.set(k.up, None);
+        }
+        for n in &mut self.shown {
+            n.down_mbps = None;
+            n.up_mbps = None;
+            n.utilization_pct = None;
+        }
     }
 }
 
@@ -730,8 +857,6 @@ impl Drop for NetworkProvider {
         }
     }
 }
-
-const REFRESH: Duration = Duration::from_secs(3);
 
 impl Provider for NetworkProvider {
     fn name(&self) -> &'static str {
@@ -758,20 +883,46 @@ impl Provider for NetworkProvider {
         if if_rows().is_empty() {
             return Err("GetIfTable2 returned no interfaces".into());
         }
+        let mut wlan = self.wlan.take();
+        match Background::start(
+            "clokrix-net-details",
+            "network: addresses and Wi-Fi",
+            move |()| details(wlan.as_mut()),
+        ) {
+            Ok(b) => self.details = Some(b),
+            Err(e) => {
+                log::warn!("network: addresses and Wi-Fi are read in the tick (no thread: {e})");
+                self.wlan = Wlan::open();
+            }
+        }
+        let started = self.started;
+        match Sampler::start("clokrix-net-counters", "network: counters", move |()| {
+            counters(started)
+        }) {
+            Ok(s) => self.counters = Some(s),
+            Err(e) => log::warn!("network: the counters are read in the tick (no thread: {e})"),
+        }
         Ok(())
     }
 
     fn poll(&mut self, reg: &mut Registry, snap: &mut SensorSnapshot) -> Result<(), BoxError> {
-        if self.last_refresh.is_none_or(|t| t.elapsed() >= REFRESH) {
-            self.refresh();
+        match self.details.as_mut().and_then(Background::take) {
+            Some(Ok(d)) => self.apply_details(d),
+            Some(Err(e)) => log::warn!("network: reading the addresses and Wi-Fi failed: {e}"),
+            None => {}
         }
-        let t = self.started.elapsed().as_secs_f64();
-        let rows: Vec<IfRow> = if_rows()
-            .into_iter()
-            .filter(|r| is_listed(r, &self.addrs))
-            .collect();
-        let ids: Vec<String> = rows.iter().map(|r| format!("if{}", r.index)).collect();
-        self.rates.retain(&ids);
+        if self.last_refresh.is_none_or(|t| t.elapsed() >= REFRESH) {
+            match self.details.as_mut().map(|b| b.ask(())) {
+                Some(Asked::Started) => self.last_refresh = Some(Instant::now()),
+                Some(Asked::Busy) => {}
+                Some(Asked::Gone(())) | None => {
+                    if self.details.take().is_some() {
+                        self.wlan = Wlan::open();
+                    }
+                    self.refresh();
+                }
+            }
+        }
 
         snap.ping = ping_snapshot();
         if let Some((k_rtt, k_loss)) = self.ping_keys {
@@ -779,57 +930,38 @@ impl Provider for NetworkProvider {
             reg.set(k_loss, snap.ping.loss_pct);
         }
 
-        for (row, id) in rows.iter().zip(ids) {
-            let (down, up) = self.rates.update(&id, row.rx, row.tx, t);
-            let keys = self.keys.entry(row.index).or_insert_with(|| {
-                let r = |reg: &mut Registry, what: &str, label: &str| {
-                    reg.register(
-                        SensorDesc::new(
-                            format!("network.{id}.{what}"),
-                            Group::Network,
-                            format!("{} {label}", row.alias),
-                            Unit::Megabit,
-                            Source::Os,
-                        )
-                        .with_history(),
-                    )
-                };
-                Keys {
-                    down: r(reg, "down", "Download"),
-                    up: r(reg, "up", "Upload"),
+        let sample = match self.counters.as_mut() {
+            Some(s) => s.tick((), WAIT),
+            None => Sample::Came(Ok(counters(self.started))),
+        };
+        match sample {
+            Sample::Came(Ok((rows, t))) => {
+                self.apply_counters(reg, rows, t);
+                self.outcome = Ok(());
+            }
+            Sample::Came(Err(e)) => self.outcome = Err(format!("reading the counters failed: {e}")),
+            Sample::Late(n) if n > MAX_LATE => {
+                if n == MAX_LATE + 1 {
+                    self.drop_rates(reg);
                 }
-            });
-            let wifi = self.wifi.get(&row.guid);
-            let primary = self.primary == Some(row.index);
-            let link = row.up.then_some(row.link_mbps).flatten();
-            snap.network.push(NetworkSnapshot {
-                id,
-                adapter: row.alias.clone(),
-                kind: kind(row.if_type),
-                connected: row.up,
-                primary,
-                down_mbps: reg.set(keys.down, down),
-                up_mbps: reg.set(keys.up, up),
-                utilization_pct: utilization(down, up, link),
-                link_mbps: link,
-                received_mb: Some(row.rx as f64 / 1e6),
-                sent_mb: Some(row.tx as f64 / 1e6),
-                ping_ms: primary.then_some(snap.ping.rtt_ms).flatten(),
-                packet_loss_pct: primary.then_some(snap.ping.loss_pct).flatten(),
-                wifi_signal_pct: wifi.and_then(|w| w.signal_pct),
-                wifi_rssi_dbm: wifi.and_then(|w| w.rssi_dbm),
-                wifi_channel: wifi.and_then(|w| w.channel),
-                wifi_band: wifi.and_then(|w| w.band.clone()),
-            });
+                self.outcome = Err(format!(
+                    "no reading of the counters in more than {MAX_LATE} updates"
+                ));
+            }
+            Sample::Late(_) => {}
+            Sample::Gone => {
+                self.counters = None;
+                let (rows, t) = counters(self.started);
+                self.apply_counters(reg, rows, t);
+                self.outcome = Ok(());
+            }
         }
-        snap.network.sort_by_key(|n| {
-            (
-                !n.primary,
-                !n.connected,
-                n.kind != NetKind::Ethernet,
-                n.adapter.clone(),
-            )
-        });
-        Ok(())
+
+        snap.network.clone_from(&self.shown);
+        for n in snap.network.iter_mut().filter(|n| n.primary) {
+            n.ping_ms = snap.ping.rtt_ms;
+            n.packet_loss_pct = snap.ping.loss_pct;
+        }
+        self.outcome.clone().map_err(Into::into)
     }
 }

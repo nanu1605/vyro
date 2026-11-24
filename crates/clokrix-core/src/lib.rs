@@ -6,6 +6,8 @@ pub mod actions;
 pub mod alerts;
 pub mod amd;
 pub mod autostart;
+#[cfg(any(windows, test))]
+mod background;
 pub mod bench;
 pub mod changes;
 pub mod cpu_msr;

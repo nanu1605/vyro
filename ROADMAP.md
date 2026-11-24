@@ -5138,6 +5138,40 @@ above). Two faults were in it besides, and the owner said "fix both". Both go ou
       `17510e44…`, `SHA256SUMS.txt` `25f6b59b…`. Unsigned, as before. Installed copies of
       2.5.2 update to it from the website at their next check.
 
+### After 2.5.3: the AMD CPU's and the network's reads on threads of their own
+
+The same `service.log` (2.5.3 above) had two more providers holding up every snapshot, as the
+drive scan did. The owner, 2026-11-24, told so: "fix the AMD CPU and network ones too".
+
+- [x] **One helper for work off the poller's thread** (`background.rs`, moved from
+      `storage/background.rs`): `Background` as before, for work done every few seconds and
+      used when it comes in (the drive scan; now also the network's addresses and Wi-Fi), and
+      `Sampler`, for a reading wanted at every tick. The tick starts its reading and waits up to
+      50 ms for it, so a quick one is as fresh as when it was read in the tick; one that takes
+      longer is used at the next tick, and the tick goes on with the last readings. When a late
+      reading and the tick's own both come in, the newer one is used: power, clocks and network
+      rates then come from the whole span since the reading used before. A reading over 250 ms
+      is still logged, at most once in 5 minutes, as time on its thread.
+- [x] **The AMD CPU read on a thread of its own** (`amd/win.rs`). The log had 80 lines
+      "provider amd-cpu: a poll took N ms", about 340 ms on average and up to 1,217 ms; as only
+      one line in 5 minutes is written, slow polls came more often than that. The temperatures,
+      the package energy and the pinned reads (each logical processor's APERF, each core's energy
+      and VID) now run on that thread; the tick works the readings out. After 5 ticks in a row
+      without a reading, the CPU's readings are unavailable (and the provider says so) until one
+      comes. The log line is now "amd-cpu: reading: a pass took N ms".
+- [x] **The network read on threads of its own** (`network/win.rs`). The log had 12 lines, about
+      1,050 ms on average and up to 2,782 ms. The counters, read every tick, go as the CPU's;
+      after 5 late ticks the adapters stay listed without rates. The addresses, the primary
+      route and Wi-Fi, read every 3 s, go as the drive scan. Without a thread, each is read in
+      the tick as before. Log lines: "network: counters: …" and "network: addresses and Wi-Fi:
+      …".
+- Not changed: the Intel CPU provider reads the same way as the AMD one, but no log has it
+  slow (the owner's PC is AMD); the GPU's one slow poll in the log (717 ms) was a single one.
+- [x] **Tests:** a quick reading comes in its own tick; a slow one is used at a later tick, one
+      at a time, the late count starting again after it; waiting is only for a piece that was
+      started. Locally: fmt, clippy (Linux and windows-gnu), 906 core tests; the new timing
+      tests 50 times in a row, and 30 more with every core busy, without a failure.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

@@ -29,8 +29,8 @@ use windows::Win32::System::Ioctl::{
 use windows::Win32::System::SystemInformation::GetSystemWindowsDirectoryW;
 use windows::Win32::System::IO::DeviceIoControl;
 
-use super::background::{Asked, Background};
 use super::{build, descriptor, pdh_instance, snapshot_of, sort, temperature_descriptor, RawDrive};
+use crate::background::{Asked, Background};
 use crate::info::{DriveInfo, VolumeInfo};
 use crate::live::pdh::{Counter, Query};
 use crate::provider::{BoxError, Provider};
