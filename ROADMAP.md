@@ -5186,6 +5186,15 @@ drive scan did. The owner, 2026-11-24, told so: "fix the AMD CPU and network one
 - [x] **Version 2.5.4** (the owner, 2026-11-25: "release 2.5.4"): `scripts/set-version.py
       2.5.4`; What's new in 2.5.4: more readings on time. It is this PC's, so it is not marked
       for the phone app.
+- [x] **The screen's slow connection made sure** (`screen/tests.rs`). CI run 45612209721 on
+      c6d44c7 failed `a_slow_connection_gets_less_and_stays_current` on Windows a third time: the
+      phone got no picture (44 in run 45400732593; a queue of 464 ms in 2.5.2's test build). The
+      test's stand-ins for the phone and its network are threads that must run on time, and on a
+      busy runner they waited behind the other tests' threads, passing the PC's packets on late
+      or losing them. On Linux, the test at the lowest priority behind 8 busy loops on 4 cores
+      failed 12 times in 16; with only the stand-ins raised (the PC's threads left at the
+      lowest), it passed 20 times in 20. On Windows they now run at a higher priority for the
+      test. Nothing in the app changed.
 
 ## Risks
 

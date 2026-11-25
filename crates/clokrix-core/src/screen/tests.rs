@@ -1078,9 +1078,45 @@ impl Encode for SizedEncoder {
 /// How long a packet waited in [`slow_link`]'s queue, and when it came.
 type Waits = std::sync::Arc<std::sync::Mutex<Vec<(Instant, Duration)>>>;
 
+/// Runs `f` on this thread ahead of the other tests' busy threads: for the test's stand-ins for
+/// the phone and its network, by which the PC is judged. The tests run side by side, and on
+/// Windows a thread waking from a wait can stay behind busy ones for hundreds of milliseconds
+/// (two reads of 300 ms side by side took 808 ms in CI run 45400732593). The stand-ins then pass
+/// on the PC's packets late or lose them, and answer late: the PC is told too late to send less,
+/// and the phone gets few pictures or none, as in CI runs 45400732593 and 45612209721. On Linux,
+/// the test at the lowest priority behind 8 busy loops on 4 cores failed 12 times in 16; with
+/// only the stand-ins raised (the PC's threads left at the lowest), it passed 20 times in 20.
+/// Linux itself favours threads that mostly wait, and raising one there needs a privilege that
+/// a test does not have.
+fn ahead<R>(f: impl FnOnce() -> R) -> R {
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::Threading::{
+            GetCurrentThread, GetThreadPriority, SetThreadPriority, THREAD_PRIORITY,
+            THREAD_PRIORITY_HIGHEST,
+        };
+        // SAFETY: the pseudo-handle for the current thread needs no closing. Failure just leaves
+        // the priority unchanged.
+        let previous = unsafe { GetThreadPriority(GetCurrentThread()) };
+        let raised =
+            unsafe { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST) }.is_ok();
+        let r = f();
+        if raised {
+            // SAFETY: as above; restores the value read before.
+            unsafe {
+                let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY(previous));
+            }
+        }
+        r
+    }
+    #[cfg(not(windows))]
+    f()
+}
+
 /// A link from the PC to the phone that carries `bps` and holds up to half a second of packets,
 /// as a mobile network does; beyond that they are lost. The phone's packets pass as they come.
-/// Returns the address the phone sends to, and each packet's wait in the queue.
+/// Returns the address the phone sends to, and each packet's wait in the queue. Its threads run
+/// [`ahead`].
 fn slow_link(
     pc: SocketAddr,
     bps: u64,
@@ -1101,49 +1137,60 @@ fn slow_link(
             Arc::clone(&phone),
             Arc::clone(stop),
         );
-        std::thread::spawn(move || {
-            let mut buf = vec![0u8; 2000];
-            near.set_read_timeout(Some(Duration::from_millis(20)))
-                .unwrap();
-            while !stop.load(Ordering::SeqCst) {
-                if let Ok((n, from)) = near.recv_from(&mut buf) {
-                    *phone.lock().unwrap() = Some(from);
-                    let _ = far.send_to(&buf[..n], pc);
-                }
-            }
-        });
+        std::thread::Builder::new()
+            .name("slow-link-up".into())
+            .spawn(move || {
+                ahead(|| {
+                    let mut buf = vec![0u8; 2000];
+                    near.set_read_timeout(Some(Duration::from_millis(20)))
+                        .unwrap();
+                    while !stop.load(Ordering::SeqCst) {
+                        if let Ok((n, from)) = near.recv_from(&mut buf) {
+                            *phone.lock().unwrap() = Some(from);
+                            let _ = far.send_to(&buf[..n], pc);
+                        }
+                    }
+                });
+            })
+            .unwrap();
     }
     {
         let (waits, stop) = (Arc::clone(&waits), Arc::clone(stop));
-        std::thread::spawn(move || {
-            let mut queue = std::collections::VecDeque::<(Instant, Vec<u8>)>::new();
-            let mut free = Instant::now();
-            let mut buf = vec![0u8; 2000];
-            while !stop.load(Ordering::SeqCst) {
-                let now = Instant::now();
-                while queue.front().is_some_and(|(at, _)| *at <= now) {
-                    let (_, p) = queue.pop_front().unwrap();
-                    if let Some(to) = *phone.lock().unwrap() {
-                        let _ = near.send_to(&p, to);
+        std::thread::Builder::new()
+            .name("slow-link-down".into())
+            .spawn(move || {
+                ahead(|| {
+                    let mut queue = std::collections::VecDeque::<(Instant, Vec<u8>)>::new();
+                    let mut free = Instant::now();
+                    let mut buf = vec![0u8; 2000];
+                    while !stop.load(Ordering::SeqCst) {
+                        let now = Instant::now();
+                        while queue.front().is_some_and(|(at, _)| *at <= now) {
+                            let (_, p) = queue.pop_front().unwrap();
+                            if let Some(to) = *phone.lock().unwrap() {
+                                let _ = near.send_to(&p, to);
+                            }
+                        }
+                        let wait = queue.front().map_or(Duration::from_millis(5), |(at, _)| {
+                            at.saturating_duration_since(now)
+                        });
+                        far.set_read_timeout(Some(wait.max(Duration::from_micros(200))))
+                            .unwrap();
+                        if let Ok((n, _)) = far.recv_from(&mut buf) {
+                            let now = Instant::now();
+                            let gone = free.max(now)
+                                + Duration::from_secs_f64((n * 8) as f64 / bps as f64);
+                            let wait = gone - now;
+                            if wait <= HOLDS {
+                                free = gone;
+                                queue.push_back((gone, buf[..n].to_vec()));
+                                waits.lock().unwrap().push((now, wait));
+                            }
+                        }
                     }
-                }
-                let wait = queue.front().map_or(Duration::from_millis(5), |(at, _)| {
-                    at.saturating_duration_since(now)
                 });
-                far.set_read_timeout(Some(wait.max(Duration::from_micros(200))))
-                    .unwrap();
-                if let Ok((n, _)) = far.recv_from(&mut buf) {
-                    let now = Instant::now();
-                    let gone = free.max(now) + Duration::from_secs_f64((n * 8) as f64 / bps as f64);
-                    let wait = gone - now;
-                    if wait <= HOLDS {
-                        free = gone;
-                        queue.push_back((gone, buf[..n].to_vec()));
-                        waits.lock().unwrap().push((now, wait));
-                    }
-                }
-            }
-        });
+            })
+            .unwrap();
     }
     (addr, waits)
 }
@@ -1197,21 +1244,24 @@ fn a_slow_connection_gets_less_and_stays_current() {
             Arc::clone(&stop),
             Arc::clone(&reports),
         );
-        std::thread::spawn(move || {
-            let status = |s: producer::Status| {
-                if let producer::Status::Report(r) = s {
-                    reports.lock().unwrap().push(r);
-                }
-            };
-            producer::drive(
-                &session,
-                &producer::Settings::default(),
-                &stop,
-                &status,
-                TestScreen::new(64, 36),
-                |_, _, fps, bitrate| Ok(SizedEncoder { fps, bitrate, n: 0 }),
-            )
-        })
+        std::thread::Builder::new()
+            .name("pc-producer".into())
+            .spawn(move || {
+                let status = |s: producer::Status| {
+                    if let producer::Status::Report(r) = s {
+                        reports.lock().unwrap().push(r);
+                    }
+                };
+                producer::drive(
+                    &session,
+                    &producer::Settings::default(),
+                    &stop,
+                    &status,
+                    TestScreen::new(64, 36),
+                    |_, _, fps, bitrate| Ok(SizedEncoder { fps, bitrate, n: 0 }),
+                )
+            })
+            .unwrap()
     };
     phone
         .sdp_api()
@@ -1221,35 +1271,38 @@ fn a_slow_connection_gets_less_and_stays_current() {
     let until = started + Duration::from_secs(16);
     let mut got = Vec::new();
     let mut buf = vec![0u8; 2000];
-    while Instant::now() < until {
-        let deadline = loop {
-            match phone.poll_output().unwrap() {
-                Output::Timeout(t) => break t,
-                Output::Transmit(t) => {
-                    sock.send_to(&t.contents, t.destination).unwrap();
+    // The phone runs ahead of the other tests too.
+    ahead(|| {
+        while Instant::now() < until {
+            let deadline = loop {
+                match phone.poll_output().unwrap() {
+                    Output::Timeout(t) => break t,
+                    Output::Transmit(t) => {
+                        sock.send_to(&t.contents, t.destination).unwrap();
+                    }
+                    Output::Event(Event::MediaData(_)) => got.push(Instant::now()),
+                    Output::Event(_) => {}
                 }
-                Output::Event(Event::MediaData(_)) => got.push(Instant::now()),
-                Output::Event(_) => {}
-            }
-        };
-        let wait = deadline
-            .saturating_duration_since(Instant::now())
-            .clamp(Duration::from_millis(1), Duration::from_millis(10));
-        sock.set_read_timeout(Some(wait)).unwrap();
-        let input = match sock.recv_from(&mut buf) {
-            Ok((len, source)) => Input::Receive(
-                Instant::now(),
-                Receive {
-                    proto: Protocol::Udp,
-                    source,
-                    destination: local,
-                    contents: buf[..len].try_into().unwrap(),
-                },
-            ),
-            Err(_) => Input::Timeout(Instant::now()),
-        };
-        phone.handle_input(input).unwrap();
-    }
+            };
+            let wait = deadline
+                .saturating_duration_since(Instant::now())
+                .clamp(Duration::from_millis(1), Duration::from_millis(10));
+            sock.set_read_timeout(Some(wait)).unwrap();
+            let input = match sock.recv_from(&mut buf) {
+                Ok((len, source)) => Input::Receive(
+                    Instant::now(),
+                    Receive {
+                        proto: Protocol::Udp,
+                        source,
+                        destination: local,
+                        contents: buf[..len].try_into().unwrap(),
+                    },
+                ),
+                Err(_) => Input::Timeout(Instant::now()),
+            };
+            phone.handle_input(input).unwrap();
+        }
+    });
     stop.store(true, Ordering::SeqCst);
     producing.join().unwrap().unwrap();
     let reports = reports.lock().unwrap().clone();
