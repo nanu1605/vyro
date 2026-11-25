@@ -5138,7 +5138,7 @@ above). Two faults were in it besides, and the owner said "fix both". Both go ou
       `17510e44…`, `SHA256SUMS.txt` `25f6b59b…`. Unsigned, as before. Installed copies of
       2.5.2 update to it from the website at their next check.
 
-### After 2.5.3: the AMD CPU's and the network's reads on threads of their own
+### 2.5.4: the AMD CPU's and the network's reads on threads of their own
 
 The same `service.log` (2.5.3 above) had two more providers holding up every snapshot, as the
 drive scan did. The owner, 2026-11-24, told so: "fix the AMD CPU and network ones too".
@@ -5182,7 +5182,10 @@ drive scan did. The owner, 2026-11-24, told so: "fix the AMD CPU and network one
 - [x] **CI green on 8155ab1** (run 45403112731; Linux, Windows with the smoke test, the clean
       install and the upgrade from Vyro 2.1.0, the relay and phone app with the end-to-end test,
       the checkout, accessibility), the screen's slow connection among them. `main`
-      fast-forwarded to it. Nothing is released: it goes out with the next version.
+      fast-forwarded to it. It goes out in 2.5.4.
+- [x] **Version 2.5.4** (the owner, 2026-11-25: "release 2.5.4"): `scripts/set-version.py
+      2.5.4`; What's new in 2.5.4: more readings on time. It is this PC's, so it is not marked
+      for the phone app.
 
 ## Risks
 

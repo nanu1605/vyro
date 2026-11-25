@@ -21,6 +21,16 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '2.5.4',
+    items: [
+      {
+        icon: 'gauge',
+        title: 'More readings on time',
+        text: 'Clokrix now reads AMD processors and network connections on the side too, as it has your drives since 2.5.3, so a slow read no longer holds up the other readings. On some PCs an update came almost three seconds late.',
+      },
+    ],
+  },
+  {
     version: '2.5.3',
     items: [
       {
