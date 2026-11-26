@@ -5241,6 +5241,11 @@ logical processor in the poller's tick.
       is logged as "intel-cpu: reading: a pass took N ms".
 - [x] **Checked locally:** fmt, clippy for Windows (windows-gnu). No test starts the live
       providers, and CI's Windows runner has no PawnIO, so it has run on no Intel PC yet.
+- [x] **CI green on 7aa0a2e** (run 45777494653; Linux, Windows with the smoke test, the clean
+      install and the upgrade from Vyro 2.1.0, the relay and phone app with the end-to-end test,
+      the checkout, accessibility). Its uploads were taken again, the old files deleted: the
+      test build, the phone app screens and the H.264, kept to 2026-11-29. It goes out in the
+      next version, on the owner's go; `main` stays at 2.5.4 until then.
 
 ## Risks
 
