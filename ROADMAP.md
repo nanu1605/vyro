@@ -5226,6 +5226,22 @@ drive scan did. The owner, 2026-11-24, told so: "fix the AMD CPU and network one
       requests run CI with read-only contents and no secrets, and the deploy and release
       workflows start only by hand or on a tag.
 
+### After 2.5.4: the Intel CPU's reads on a thread of their own
+
+The owner, 2026-11-26: "continue". The two items still open (the ASUS and Gigabyte boards) need
+the boards; this one needs none. 2.5.4 left the Intel CPU as it was because no log had it slow
+(the owner's PC is AMD), but it reads the same way the AMD CPU did: one pinned sweep over every
+logical processor in the poller's tick.
+
+- [x] **The Intel CPU read on a thread of its own** (`intel_cpu/win.rs`), as the AMD CPU's in
+      2.5.4. The package's thermal status, the energy counters and the pinned reads (each
+      logical processor's APERF, each core's thermal status and voltage) run on that thread;
+      the tick works the readings out, as before. After 5 ticks in a row without a reading, the
+      CPU's readings are unavailable (and the provider says so) until one comes. A slow reading
+      is logged as "intel-cpu: reading: a pass took N ms".
+- [x] **Checked locally:** fmt, clippy for Windows (windows-gnu). No test starts the live
+      providers, and CI's Windows runner has no PawnIO, so it has run on no Intel PC yet.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

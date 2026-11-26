@@ -1,8 +1,10 @@
 //! `IntelCpuProvider`: reads Intel Core sensors through PawnIO. Without PawnIO (or on other
 //! CPUs) `init` fails and the provider stays off for the session; the CPU fields it owns remain
-//! `null`.
+//! `null`. The reads run on a thread of their own ([`Sampler`]), as the AMD CPU's: they are the
+//! same kind of pinned sweep over every logical processor, which on the owner's AMD PC
+//! (2026-11-21) took about 340 ms at times, up to 1,217 ms, while every other reading waited.
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use super::{
     core_names, dts_temp, package_temp, perf_status_volts, power_limited, prochot, supported,
@@ -10,24 +12,25 @@ use super::{
     MSR_IA32_THERM_STATUS, MSR_PKG_ENERGY_STATUS, MSR_PP0_ENERGY_STATUS, MSR_PP1_ENERGY_STATUS,
     MSR_RAPL_POWER_UNIT, MSR_TEMPERATURE_TARGET,
 };
+use crate::background::{Sample, Sampler};
 use crate::cpu_msr::{energy_unit, watts, Rate};
 use crate::hwid::{cpuid, topology};
 use crate::pawnio::{on_cpu, urgent, Handle, Module};
 use crate::provider::{BoxError, Provider};
 use crate::registry::{Group, Registry, SensorDesc, SensorKey, Source, Unit};
-use crate::snapshot::SensorSnapshot;
+use crate::snapshot::{CpuSnapshot, SensorSnapshot};
 
 /// Package or cores power above this is a counter glitch, not a reading.
 const MAX_PACKAGE_W: f64 = 1000.0;
 const MAX_GRAPHICS_W: f64 = 200.0;
-
-struct Thread {
-    cpu: u32,
-    aperf: Rate,
-}
+/// Longest a tick waits for the CPU's reading; one that takes longer is used at the next tick.
+const WAIT: Duration = Duration::from_millis(50);
+/// Ticks in a row the last reading stands in while the next is late (then `null`).
+const MAX_LATE: u32 = 5;
 
 struct Core {
-    threads: Vec<Thread>,
+    /// Each logical processor's APERF.
+    aperf: Vec<Rate>,
     tjmax: Option<f64>,
     name: String,
     key: Option<SensorKey>,
@@ -50,9 +53,106 @@ struct Keys {
     effective: SensorKey,
 }
 
-pub struct IntelCpuProvider {
-    io: Option<Handle>,
+/// One reading of the CPU, raw: the arithmetic happens in the tick.
+struct Raw {
+    /// The package's thermal status.
+    pkg_status: Option<u64>,
+    /// The package's, the cores' and the graphics' energy counters (`None` without RAPL, and the
+    /// graphics' without a graphics plane in use).
+    package: Option<u64>,
+    cores: Option<u64>,
+    graphics: Option<u64>,
+    /// When the energy counters were read, in seconds from the reader's start.
+    t: f64,
+    /// Per core, per logical processor; `None` where the thread could not be pinned to it.
+    threads: Vec<Vec<Option<ThreadRead>>>,
+}
+
+/// The reads, done on the reading thread.
+struct Reader {
+    io: Handle,
     start: Instant,
+    /// Whether to read the energy counters, and the graphics' too.
+    rapl: bool,
+    graphics: bool,
+    /// Each core's logical processors.
+    cpus: Vec<Vec<u32>>,
+}
+
+impl Reader {
+    fn read(&self) -> Raw {
+        let io = &self.io;
+        // Package-scoped registers: any processor will do.
+        let pkg_status = msr(io, MSR_IA32_PACKAGE_THERM_STATUS);
+        let t = self.start.elapsed().as_secs_f64();
+        let energy = |on: bool, index: u32| if on { msr(io, index) } else { None };
+        let package = energy(self.rapl, MSR_PKG_ENERGY_STATUS);
+        let cores = energy(self.rapl, MSR_PP0_ENERGY_STATUS);
+        let graphics = energy(self.rapl && self.graphics, MSR_PP1_ENERGY_STATUS);
+        // Per core: thermal status and voltage from the core's first thread; APERF from every
+        // thread. The pinned reads run as one time-critical sweep.
+        let threads = urgent(|| {
+            self.cpus
+                .iter()
+                .map(|cpus| {
+                    cpus.iter()
+                        .enumerate()
+                        .map(|(i, &cpu)| {
+                            on_cpu(cpu, || ThreadRead {
+                                aperf: msr(io, MSR_IA32_APERF),
+                                t: self.start.elapsed().as_secs_f64(),
+                                core: (i == 0).then(|| {
+                                    (
+                                        msr(io, MSR_IA32_THERM_STATUS),
+                                        msr(io, MSR_IA32_PERF_STATUS),
+                                    )
+                                }),
+                            })
+                        })
+                        .collect()
+                })
+                .collect()
+        });
+        Raw {
+            pkg_status,
+            package,
+            cores,
+            graphics,
+            t,
+            threads,
+        }
+    }
+}
+
+/// What the snapshot shows, from the last reading: it stands in while a reading is late.
+#[derive(Default)]
+struct Shown {
+    temp_package: Option<f64>,
+    temp_per_core: Vec<f64>,
+    power_pkg_w: Option<f64>,
+    power_core_w: Option<f64>,
+    vid_core: Option<f64>,
+    mhz_effective: Option<f64>,
+    throttle_thermal: Option<bool>,
+    throttle_power_limit: Option<bool>,
+}
+
+impl Shown {
+    fn fill(&self, cpu: &mut CpuSnapshot) {
+        cpu.temp_package = self.temp_package;
+        cpu.temp_per_core.clone_from(&self.temp_per_core);
+        cpu.power_pkg_w = self.power_pkg_w;
+        cpu.power_core_w = self.power_core_w;
+        cpu.vid_core = self.vid_core;
+        cpu.mhz_effective = self.mhz_effective;
+        cpu.throttle_thermal = self.throttle_thermal;
+        cpu.throttle_power_limit = self.throttle_power_limit;
+    }
+}
+
+pub struct IntelCpuProvider {
+    /// Takes the readings on a thread of its own.
+    reader: Option<Sampler<(), Raw>>,
     /// The package's TjMax; `None` when unreadable (no temperatures then).
     tjmax: Option<f64>,
     /// Joules per RAPL increment; `None` without RAPL (no power then).
@@ -62,13 +162,15 @@ pub struct IntelCpuProvider {
     graphics: Rate,
     cores: Vec<Core>,
     keys: Option<Keys>,
+    shown: Shown,
+    /// The last reading's outcome, given again while one is late.
+    outcome: Result<(), String>,
 }
 
 impl IntelCpuProvider {
     pub fn new() -> Self {
         Self {
-            io: None,
-            start: Instant::now(),
+            reader: None,
             tjmax: None,
             unit: None,
             package: Rate::default(),
@@ -76,6 +178,8 @@ impl IntelCpuProvider {
             graphics: Rate::default(),
             cores: Vec::new(),
             keys: None,
+            shown: Shown::default(),
+            outcome: Ok(()),
         }
     }
 }
@@ -93,6 +197,128 @@ fn msr(io: &Handle, index: u32) -> Option<u64> {
 fn sensor(reg: &mut Registry, id: String, name: String, unit: Unit, history: bool) -> SensorKey {
     let d = SensorDesc::new(id, Group::Cpu, name, unit, Source::Driver);
     reg.register(if history { d.with_history() } else { d })
+}
+
+impl IntelCpuProvider {
+    /// Works out the readings from one raw reading, into the registry and [`Shown`].
+    fn apply(&mut self, reg: &mut Registry, raw: Raw) -> Result<(), String> {
+        let Some(k) = &self.keys else {
+            return Err("poll before init".into());
+        };
+        let Raw {
+            pkg_status,
+            package: package_energy,
+            cores: cores_energy,
+            graphics: graphics_energy,
+            t,
+            threads,
+        } = raw;
+        let unit = self.unit;
+        let energy = |rate: &mut Rate, raw: Option<u64>, max_w: f64| {
+            let unit = unit?;
+            watts(rate.update(raw?, t, 32), unit, max_w)
+        };
+        let package_w = energy(&mut self.package, package_energy, MAX_PACKAGE_W);
+        let cores_w = energy(&mut self.cores_energy, cores_energy, MAX_PACKAGE_W);
+        let graphics_w = energy(&mut self.graphics, graphics_energy, MAX_GRAPHICS_W);
+
+        let mut temps = Vec::with_capacity(self.cores.len());
+        let mut vids = Vec::new();
+        let mut effective = Vec::new();
+        let mut hot = pkg_status.map(prochot);
+        for (n, (core, reads)) in self.cores.iter_mut().zip(threads).enumerate() {
+            for (aperf_rate, read) in core.aperf.iter_mut().zip(reads) {
+                let Some(ThreadRead {
+                    aperf,
+                    t,
+                    core: extra,
+                }) = read
+                else {
+                    continue;
+                };
+                if let Some(hz) = aperf.and_then(|a| aperf_rate.update(a, t, 64)) {
+                    effective.push(hz / 1e6);
+                }
+                let Some((status, perf)) = extra else {
+                    continue;
+                };
+                if let Some(s) = status {
+                    hot = Some(hot.unwrap_or(false) || prochot(s));
+                }
+                match status.zip(core.tjmax).and_then(|(s, tj)| dts_temp(s, tj)) {
+                    Some(t) => {
+                        let key = *core.key.get_or_insert_with(|| {
+                            sensor(
+                                reg,
+                                format!("cpu.core{n}.temp"),
+                                core.name.clone(),
+                                Unit::Celsius,
+                                false,
+                            )
+                        });
+                        temps.push(reg.set(key, Some(t)).unwrap_or(t));
+                    }
+                    // A core that read before and does not now shows nothing, not its last value.
+                    None => {
+                        if let Some(key) = core.key {
+                            reg.set(key, None);
+                        }
+                    }
+                }
+                if let Some(v) = perf.and_then(perf_status_volts) {
+                    vids.push(v);
+                }
+            }
+        }
+        let shown = &mut self.shown;
+        let package = pkg_status
+            .zip(self.tjmax)
+            .and_then(|(s, tj)| dts_temp(s, tj));
+        shown.temp_package = reg.set(k.package, package_temp(package, &temps));
+        // Per-core temperatures only when every core read: the list is in core order.
+        shown.temp_per_core = if temps.len() == self.cores.len() {
+            temps
+        } else {
+            Vec::new()
+        };
+        shown.power_pkg_w = reg.set(k.power_package, package_w);
+        shown.power_core_w = reg.set(k.power_cores, cores_w);
+        if let Some(key) = k.power_graphics {
+            reg.set(key, graphics_w);
+        }
+        shown.vid_core = reg.set(k.vid, vids.iter().copied().reduce(f64::max));
+        #[allow(clippy::cast_precision_loss)]
+        let avg =
+            (!effective.is_empty()).then(|| effective.iter().sum::<f64>() / effective.len() as f64);
+        shown.mhz_effective = reg.set(k.effective, avg);
+        shown.throttle_thermal = hot;
+        shown.throttle_power_limit = pkg_status.map(power_limited);
+
+        if shown.temp_package.is_none() && shown.power_pkg_w.is_none() && pkg_status.is_none() {
+            return Err("no Intel sensor readable".into());
+        }
+        Ok(())
+    }
+
+    /// No reading to show: every sensor unavailable.
+    fn clear(&mut self, reg: &mut Registry) {
+        if let Some(k) = &self.keys {
+            let keys = [
+                k.package,
+                k.power_package,
+                k.power_cores,
+                k.vid,
+                k.effective,
+            ]
+            .into_iter()
+            .chain(k.power_graphics)
+            .chain(self.cores.iter().filter_map(|c| c.key));
+            for key in keys {
+                reg.set(key, None);
+            }
+        }
+        self.shown = Shown::default();
+    }
 }
 
 impl Provider for IntelCpuProvider {
@@ -132,14 +358,7 @@ impl Provider for IntelCpuProvider {
             .iter()
             .zip(names)
             .map(|(c, name)| Core {
-                threads: c
-                    .logical
-                    .iter()
-                    .map(|&cpu| Thread {
-                        cpu,
-                        aperf: Rate::default(),
-                    })
-                    .collect(),
+                aperf: vec![Rate::default(); c.logical.len()],
                 // Each core's own TjMax where it reads, as Linux `coretemp` takes it.
                 tjmax: on_cpu(c.logical[0], || msr(&io, MSR_TEMPERATURE_TARGET))
                     .flatten()
@@ -149,6 +368,7 @@ impl Provider for IntelCpuProvider {
                 key: None,
             })
             .collect();
+        let cpus: Vec<Vec<u32>> = cores.iter().map(|c| c.logical.clone()).collect();
 
         let r = |reg: &mut Registry, id: &str, name: &str, unit| {
             sensor(reg, id.into(), name.into(), unit, true)
@@ -172,130 +392,47 @@ impl Provider for IntelCpuProvider {
             self.unit,
             self.cores.len(),
         );
-        self.io = Some(io);
+        let reader = Reader {
+            io,
+            start: Instant::now(),
+            rapl: self.unit.is_some(),
+            graphics,
+            cpus,
+        };
+        self.reader = Some(Sampler::start(
+            "clokrix-intel-cpu",
+            "intel-cpu: reading",
+            move |()| reader.read(),
+        )?);
         Ok(())
     }
 
     fn poll(&mut self, reg: &mut Registry, snap: &mut SensorSnapshot) -> Result<(), BoxError> {
-        let (Some(io), Some(k)) = (&self.io, &self.keys) else {
-            return Err("poll before init".into());
+        let sample = match self.reader.as_mut() {
+            Some(r) => r.tick((), WAIT),
+            None => return Err("poll before init".into()),
         };
-        let cpu = &mut snap.cpu;
-
-        // Package-scoped registers: any processor will do.
-        let pkg_status = msr(io, MSR_IA32_PACKAGE_THERM_STATUS);
-        let now = self.start.elapsed().as_secs_f64();
-        let energy = |rate: &mut Rate, index: u32, max_w: f64| {
-            let unit = self.unit?;
-            let raw = msr(io, index)?;
-            watts(rate.update(raw, now, 32), unit, max_w)
-        };
-        let package_w = energy(&mut self.package, MSR_PKG_ENERGY_STATUS, MAX_PACKAGE_W);
-        let cores_w = energy(&mut self.cores_energy, MSR_PP0_ENERGY_STATUS, MAX_PACKAGE_W);
-        let graphics_w = k
-            .power_graphics
-            .and_then(|_| energy(&mut self.graphics, MSR_PP1_ENERGY_STATUS, MAX_GRAPHICS_W));
-
-        // Per core: thermal status and voltage from the core's first thread; APERF from every
-        // thread. The pinned reads run as one time-critical sweep; the arithmetic happens after.
-        let start = self.start;
-        let reads: Vec<Vec<Option<ThreadRead>>> = urgent(|| {
-            self.cores
-                .iter()
-                .map(|core| {
-                    core.threads
-                        .iter()
-                        .enumerate()
-                        .map(|(i, th)| {
-                            on_cpu(th.cpu, || ThreadRead {
-                                aperf: msr(io, MSR_IA32_APERF),
-                                t: start.elapsed().as_secs_f64(),
-                                core: (i == 0).then(|| {
-                                    (
-                                        msr(io, MSR_IA32_THERM_STATUS),
-                                        msr(io, MSR_IA32_PERF_STATUS),
-                                    )
-                                }),
-                            })
-                        })
-                        .collect()
-                })
-                .collect()
-        });
-        let mut temps = Vec::with_capacity(self.cores.len());
-        let mut vids = Vec::new();
-        let mut effective = Vec::new();
-        let mut hot = pkg_status.map(prochot);
-        for (n, (core, reads)) in self.cores.iter_mut().zip(reads).enumerate() {
-            for (th, read) in core.threads.iter_mut().zip(reads) {
-                let Some(ThreadRead {
-                    aperf,
-                    t,
-                    core: extra,
-                }) = read
-                else {
-                    continue;
-                };
-                if let Some(hz) = aperf.and_then(|a| th.aperf.update(a, t, 64)) {
-                    effective.push(hz / 1e6);
+        match sample {
+            Sample::Came(raw) => {
+                self.outcome = raw
+                    .map_err(|e| format!("a reading failed: {e}"))
+                    .and_then(|raw| self.apply(reg, raw));
+            }
+            Sample::Late(n) if n > MAX_LATE => {
+                if n == MAX_LATE + 1 {
+                    self.clear(reg);
                 }
-                let Some((status, perf)) = extra else {
-                    continue;
-                };
-                if let Some(s) = status {
-                    hot = Some(hot.unwrap_or(false) || prochot(s));
-                }
-                match status.zip(core.tjmax).and_then(|(s, tj)| dts_temp(s, tj)) {
-                    Some(t) => {
-                        let key = *core.key.get_or_insert_with(|| {
-                            sensor(
-                                reg,
-                                format!("cpu.core{n}.temp"),
-                                core.name.clone(),
-                                Unit::Celsius,
-                                false,
-                            )
-                        });
-                        temps.push(reg.set(key, Some(t)).unwrap_or(t));
-                    }
-                    // A core that read before and does not now shows nothing, not its last value.
-                    None => {
-                        if let Some(key) = core.key {
-                            reg.set(key, None);
-                        }
-                    }
-                }
-                if let Some(v) = perf.and_then(perf_status_volts) {
-                    vids.push(v);
-                }
+                self.outcome = Err(format!(
+                    "no reading from the CPU in more than {MAX_LATE} updates"
+                ));
+            }
+            Sample::Late(_) => {}
+            Sample::Gone => {
+                self.clear(reg);
+                self.outcome = Err("the reading thread stopped".into());
             }
         }
-        let package = pkg_status
-            .zip(self.tjmax)
-            .and_then(|(s, tj)| dts_temp(s, tj));
-        cpu.temp_package = reg.set(k.package, package_temp(package, &temps));
-        // Per-core temperatures only when every core read: the list is in core order.
-        cpu.temp_per_core = if temps.len() == self.cores.len() {
-            temps
-        } else {
-            Vec::new()
-        };
-        cpu.power_pkg_w = reg.set(k.power_package, package_w);
-        cpu.power_core_w = reg.set(k.power_cores, cores_w);
-        if let Some(key) = k.power_graphics {
-            reg.set(key, graphics_w);
-        }
-        cpu.vid_core = reg.set(k.vid, vids.iter().copied().reduce(f64::max));
-        #[allow(clippy::cast_precision_loss)]
-        let avg =
-            (!effective.is_empty()).then(|| effective.iter().sum::<f64>() / effective.len() as f64);
-        cpu.mhz_effective = reg.set(k.effective, avg);
-        cpu.throttle_thermal = hot;
-        cpu.throttle_power_limit = pkg_status.map(power_limited);
-
-        if cpu.temp_package.is_none() && cpu.power_pkg_w.is_none() && pkg_status.is_none() {
-            return Err("no Intel sensor readable".into());
-        }
-        Ok(())
+        self.shown.fill(&mut snap.cpu);
+        self.outcome.clone().map_err(Into::into)
     }
 }
