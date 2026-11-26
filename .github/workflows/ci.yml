@@ -122,12 +122,16 @@ jobs:
         run: node scripts/relay-e2e.mjs
       - name: Phone app screens
         if: always()
+        # Files kept for reading, not a check: when GitHub's storage for them is full, the run
+        # goes on without them (the owner, 2026-11-26: "go with option 1, change the CI"). Kept
+        # 3 days, so that it fills less.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: phone-app-screens-${{ github.sha }}
           path: shots/
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 3
 
   licence:
     name: Pro checkout and keys (Linux)
@@ -196,11 +200,13 @@ jobs:
         run: Get-Content screen-2560.h264.txt -TotalCount 80 -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@v4
         if: always()
+        # For reading, not a check, as the phone app screens: the install checks below still run.
+        continue-on-error: true
         with:
           name: screen-h264-${{ github.sha }}
           path: screen-2560.h264*
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 3
       - name: A voice clip pasted into a real browser (1.7)
         # The clip as the app makes it (AAC through Media Foundation) on the clipboard as a file,
         # Ctrl+V pressed as the phone's Paste key presses it: the page must receive the file.
@@ -490,7 +496,10 @@ jobs:
           Copy-Item target\release\clokrix.exe dist-win\clokrix.exe
           Copy-Item target\release\bundle\msi\*.msi dist-win\
       - uses: actions/upload-artifact@v4
+        # The test build, for field checks: download it within 3 days. Not a check itself, as the
+        # phone app screens.
+        continue-on-error: true
         with:
           name: clokrix-windows-${{ github.sha }}
           path: dist-win/
-          retention-days: 14
+          retention-days: 3

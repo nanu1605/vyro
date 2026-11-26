@@ -5195,6 +5195,15 @@ drive scan did. The owner, 2026-11-24, told so: "fix the AMD CPU and network one
       failed 12 times in 16; with only the stand-ins raised (the PC's threads left at the
       lowest), it passed 20 times in 20. On Windows they now run at a higher priority for the
       test. Nothing in the app changed.
+- [x] **CI goes on when its storage is full** (`ci.yml`). Runs 45612209721 and 45618759200 had
+      their uploads refused: "Artifact storage quota has been hit". On c941a34 every test passed,
+      the screen's slow connection on Windows among them, but the Windows job stopped at its
+      first upload, before the MSI, the clean install and the upgrade from Vyro 2.1.0. The owner,
+      2026-11-26: "go with option 1, change the CI". The three uploads (the phone app screens,
+      the H.264 for reading, the test build) are for reading, not checks: a refused one no longer
+      stops the run, and each is kept 3 days instead of 14. A field check's test build is to be
+      downloaded within those 3 days. The Release workflow's uploads (for signing only) are as
+      they were.
 
 ## Risks
 
