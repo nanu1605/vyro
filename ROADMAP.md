@@ -5270,7 +5270,10 @@ gives keys, the owner: "build the key page".
       licence tests; the page in light and dark at phone width. `docs/pro.md` → Keys given, not
       sold.
 - [x] **CI green on 62ebb58** (run 45784985654; every job, the checkout's tests among them).
-- [ ] **Deploy,** on the owner's go, once they have set `KEY_PAGE_PASSPHRASE`.
+- [x] **Deployed** (2026-11-26, on the owner's go: "deploy the licence"). `main` fast-forwarded
+      to 2f3e74f (the Intel CPU's thread came with it, unreleased), then Licence run 45789213374
+      from `main`: the passphrase set and long enough, the 35 tests, the deploy, its secrets.
+      This session cannot reach the website, so the page was not opened from here.
 
 ## Risks
 
