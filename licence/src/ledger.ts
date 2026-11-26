@@ -12,7 +12,7 @@
 // in under: a hash of the setup passphrase, so a new passphrase starts the setup again.
 
 import { DurableObject } from 'cloudflare:workers';
-import { CHALLENGE_SECONDS, MOVE_DAYS, newKey, RATE_PER_MIN, WRONG_PER_HOUR } from './rules';
+import { CHALLENGE_SECONDS, MAX_DEVICES, MOVE_DAYS, newKey, RATE_PER_MIN, WRONG_PER_HOUR } from './rules';
 
 export const LEDGER_NAME = 'ledger';
 
@@ -128,11 +128,15 @@ export class Ledger extends DurableObject<object> {
     return this.sql.exec<Passkey & Record<string, string | number>>('SELECT id, rp, spki, alg, count, setup FROM passkeys WHERE setup = ?', setup).toArray();
   }
 
-  /** The owner's passkey, let in under `setup`: false if one already is (one device per setup). */
-  addPasskey(p: Passkey): boolean {
+  /** A passkey let in under `setup`: the `first` (set up with the passphrase) only while none
+   * is, another only while one is and fewer than MAX_DEVICES are. False otherwise, or if the
+   * passkey is already kept. */
+  addPasskey(p: Passkey, first: boolean): boolean {
     return this.ctx.storage.transactionSync(() => {
-      if (this.passkeys(p.setup).length > 0) return false;
-      this.sql.exec('INSERT OR REPLACE INTO passkeys (id, rp, spki, alg, count, setup, created) VALUES (?, ?, ?, ?, ?, ?, ?)', p.id, p.rp, p.spki, p.alg, p.count, p.setup, this.now());
+      const n = this.passkeys(p.setup).length;
+      if (first ? n > 0 : n === 0 || n >= MAX_DEVICES) return false;
+      if (this.sql.exec('SELECT 1 FROM passkeys WHERE id = ?', p.id).toArray().length > 0) return false;
+      this.sql.exec('INSERT INTO passkeys (id, rp, spki, alg, count, setup, created) VALUES (?, ?, ?, ?, ?, ?, ?)', p.id, p.rp, p.spki, p.alg, p.count, p.setup, this.now());
       return true;
     });
   }

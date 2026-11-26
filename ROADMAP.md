@@ -5315,6 +5315,27 @@ which anyone could be told, or read from GitHub's secrets through a workflow wit
       the 37 tests (the key page's 6 among them), the deploy, its secrets. The page now asks to
       be set up on the owner's PC; this session cannot reach the website to open it.
 
+### After 2.5.4: a backup device for the key page
+
+The owner, 2026-11-26, asked what a factory reset does: a passkey kept only on the PC goes with
+it, and with it the key page until a new passphrase and a deploy. Offered a backup device, the
+owner: "A backup device for the key page".
+
+- [x] **Add another device** (`/give/add/start`, `/give/add/finish`): after a sign-in with a
+      device set up, which gives the challenge the new passkey answers (its own kind, `add`), a
+      second passkey is kept under the same setup: a phone, a password manager that syncs, or
+      a security key. Up to 5 (`MAX_DEVICES`); an added device adds too. The browser is told
+      the devices already set up, so it offers another. The setup passphrase still sets up the
+      first device only, and a new passphrase still drops every device. The sign-in's and the
+      new passkey's checks are the ones setup and sign-in use, now shared.
+- [x] **Tests** (38 licence tests): not added without a sign-in, with the passphrase, with
+      another device's signature, or with a challenge for setup or sign-in or one too old; added
+      after a sign-in, not twice from one ceremony; both devices sign in; up to 5, the sixth
+      refused; an add challenge does not sign in. Checks broken on purpose one at a time (the
+      sign-in before adding, the challenge's kind, the limit) each failed a test. In Chromium,
+      with virtual authenticators: set up on a "PC", a backup added (2 devices), the PC's passkey
+      removed as a reset would, and the backup alone signed in and got a key.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

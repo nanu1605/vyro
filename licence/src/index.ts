@@ -32,6 +32,9 @@
 //   POST /give/start, /give/key
 //                            a sign-in with the passkey, checked (fingerprint, face or PIN); then a
 //                            new key.
+//   POST /give/add/start, /give/add/finish
+//                            another device's passkey (up to MAX_DEVICES), after a sign-in with one
+//                            set up.
 // Clokrix itself (2.5.2, downloads.ts), from the R2 bucket the Release workflow fills:
 //   GET  /download, /download/<tag>/<file>, /updates/latest.json
 
@@ -40,7 +43,7 @@ import { checkoutPage, errorPage, keyPage, pageHeaders, paidPage } from './page'
 import { ALGS, authData, bytes, clientData, freshChallenge, newChallenge, ours, publicKey, signed, vouched } from './webauthn';
 import { isSitePage, sitePage, type Seller } from './site';
 import { download, isDownload } from './downloads';
-import { LEDGER_NAME, type Ledger } from './ledger';
+import { LEDGER_NAME, type Ledger, type Passkey } from './ledger';
 import {
   b64url,
   chosenCurrency,
@@ -48,6 +51,7 @@ import {
   hmacHex,
   isClaim,
   isPc,
+  MAX_DEVICES,
   MIN_PASSPHRASE,
   normalKey,
   same,
@@ -278,6 +282,58 @@ export default {
       if (!open) return json(503, { error: 'not-open' });
       const b = (await body(req)) ?? {};
 
+      // Every passkey set up (on any of the checkout's addresses), and those for this website.
+      const all = await ledger.passkeys(setup);
+      const passkeys = all.filter((p) => p.rp === rpId);
+      // The same name for everyone, and a random user id: nothing about the owner.
+      const making = async (kind: 'create' | 'add') => ({
+        challenge: await newChallenge(set, kind, now),
+        rp: { id: rpId, name: 'Clokrix' },
+        user: { id: b64url(crypto.getRandomValues(new Uint8Array(16))), name: 'Clokrix Pro keys' },
+        algs: ALGS,
+        exclude: all.map((p) => p.id),
+      });
+
+      /** A passkey this browser just made, for a challenge of `kind` (`create` at setup, `add` for
+       * another device): the passkey to keep, or why it is refused. */
+      const made = async (kind: 'create' | 'add'): Promise<Passkey | string> => {
+        const id = typeof b.id === 'string' && /^[A-Za-z0-9_-]{16,1364}$/.test(b.id) ? b.id : null;
+        const spki = bytes(b.spki);
+        const auth = bytes(b.authenticatorData);
+        const client = bytes(b.clientDataJSON);
+        const alg = typeof b.alg === 'number' ? b.alg : NaN;
+        if (!id || !spki || !auth || !client) return 'body';
+        const c = clientData(client);
+        if (!c || !ours(c, 'webauthn.create', url.origin) || !(await freshChallenge(set, kind, c.challenge, now))) return 'ceremony';
+        const a = authData(auth);
+        if (!a || !(await vouched(a, rpId))) return 'authenticator';
+        if (!(await publicKey(spki, alg))) return 'algorithm';
+        if (!(await ledger.useChallenge(c.challenge))) return 'ceremony';
+        return { id, rp: rpId, spki: b64url(spki), alg, count: a.count, setup };
+      };
+
+      /** A sign-in with a passkey set up here: the passkey, once all is checked and the
+       * challenge used; null if it is not one. No wait after failures: a passkey's signature
+       * cannot be guessed, and a wait would let anyone keep the owner out. */
+      const signedIn = async (): Promise<Passkey | null> => {
+        const pk = passkeys.find((p) => p.id === b.id);
+        const auth = bytes(b.authenticatorData);
+        const client = bytes(b.clientDataJSON);
+        const sig = bytes(b.signature, 1024);
+        if (!pk || !auth || !client || !sig) return null;
+        const c = clientData(client);
+        if (!c || !ours(c, 'webauthn.get', url.origin) || !(await freshChallenge(set, 'get', c.challenge, now))) return null;
+        const a = authData(auth);
+        const key = await publicKey(unb64(pk.spki), pk.alg);
+        if (!a || !key || !(await vouched(a, rpId)) || !(await signed(key, pk.alg, auth, client, sig))) return null;
+        // A counter that did not go up is a copy of the passkey (authenticators without one say 0).
+        if ((a.count !== 0 || pk.count !== 0) && a.count <= pk.count) return null;
+        // Last, once all else holds: a sign-in sent again finds its challenge used.
+        if (!(await ledger.useChallenge(c.challenge))) return null;
+        await ledger.setCount(pk.id, a.count);
+        return pk;
+      };
+
       if (path === '/give/setup/start' || path === '/give/setup/finish') {
         // Waiting, the right passphrase is refused too: otherwise the wait would not slow guessing.
         if (!(await ledger.passphraseTaken())) return json(429, { error: 'wait' });
@@ -285,60 +341,37 @@ export default {
           await ledger.wrongPassphrase();
           return json(403, { error: 'passphrase' });
         }
-        if ((await ledger.passkeys(setup)).length > 0) return json(409, { error: 'set-up' });
-        if (path === '/give/setup/start') {
-          const challenge = await newChallenge(set, 'create', now);
-          // The same name for everyone, and a random user id: nothing about the owner.
-          const user = { id: b64url(crypto.getRandomValues(new Uint8Array(16))), name: 'Clokrix Pro keys' };
-          return json(200, { challenge, rp: { id: rpId, name: 'Clokrix' }, user, algs: ALGS });
-        }
-        const id = typeof b.id === 'string' && /^[A-Za-z0-9_-]{16,1364}$/.test(b.id) ? b.id : null;
-        const spki = bytes(b.spki);
-        const auth = bytes(b.authenticatorData);
-        const client = bytes(b.clientDataJSON);
-        const alg = typeof b.alg === 'number' ? b.alg : NaN;
-        if (!id || !spki || !auth || !client) return json(400, { error: 'body' });
-        const c = clientData(client);
-        if (!c || !ours(c, 'webauthn.create', url.origin) || !(await freshChallenge(set, 'create', c.challenge, now))) {
-          return json(400, { error: 'ceremony' });
-        }
-        const a = authData(auth);
-        if (!a || !(await vouched(a, rpId))) return json(400, { error: 'authenticator' });
-        if (!(await publicKey(spki, alg))) return json(400, { error: 'algorithm' });
-        if (!(await ledger.useChallenge(c.challenge))) return json(400, { error: 'ceremony' });
-        const added = await ledger.addPasskey({ id, rp: rpId, spki: b64url(spki), alg, count: a.count, setup });
-        return added ? json(200, { ok: true }) : json(409, { error: 'set-up' });
+        // The passphrase sets up the first device only; more are added from a device set up.
+        if (all.length > 0) return json(409, { error: 'set-up' });
+        if (path === '/give/setup/start') return json(200, await making('create'));
+        const p = await made('create');
+        if (typeof p === 'string') return json(400, { error: p });
+        return (await ledger.addPasskey(p, true)) ? json(200, { ok: true }) : json(409, { error: 'set-up' });
       }
 
-      const passkeys = (await ledger.passkeys(setup)).filter((p) => p.rp === rpId);
       if (path === '/give/start') {
         if (passkeys.length === 0) return json(409, { error: 'not-set-up' });
         return json(200, { challenge: await newChallenge(set, 'get', now), rpId, ids: passkeys.map((p) => p.id) });
       }
 
       if (path === '/give/key') {
-        // No wait after failures here: a passkey's signature cannot be guessed, and a wait would
-        // let anyone keep the owner out.
-        const pk = passkeys.find((p) => p.id === b.id);
-        const auth = bytes(b.authenticatorData);
-        const client = bytes(b.clientDataJSON);
-        const sig = bytes(b.signature, 1024);
-        if (!pk || !auth || !client || !sig) return json(403, { error: 'passkey' });
-        const c = clientData(client);
-        if (!c || !ours(c, 'webauthn.get', url.origin) || !(await freshChallenge(set, 'get', c.challenge, now))) {
-          return json(403, { error: 'ceremony' });
-        }
-        const a = authData(auth);
-        const key = await publicKey(unb64(pk.spki), pk.alg);
-        if (!a || !key || !(await vouched(a, rpId)) || !(await signed(key, pk.alg, auth, client, sig))) {
-          return json(403, { error: 'passkey' });
-        }
-        // A counter that did not go up is a copy of the passkey (authenticators without one say 0).
-        if ((a.count !== 0 || pk.count !== 0) && a.count <= pk.count) return json(403, { error: 'passkey' });
-        // Last, once all else holds: a sign-in sent again finds its challenge used.
-        if (!(await ledger.useChallenge(c.challenge))) return json(403, { error: 'ceremony' });
-        await ledger.setCount(pk.id, a.count);
+        if (!(await signedIn())) return json(403, { error: 'passkey' });
         return json(200, { key: (await ledger.give()).key });
+      }
+
+      // Another device (2.5.5; the owner, 2026-11-26: "A backup device for the key page"): only
+      // after a sign-in with a device set up, which gives the challenge the new passkey answers.
+      if (path === '/give/add/start') {
+        if (!(await signedIn())) return json(403, { error: 'passkey' });
+        if (all.length >= MAX_DEVICES) return json(409, { error: 'devices' });
+        return json(200, await making('add'));
+      }
+
+      if (path === '/give/add/finish') {
+        const p = await made('add');
+        if (typeof p === 'string') return json(400, { error: p });
+        if (!(await ledger.addPasskey(p, false))) return json(409, { error: 'devices' });
+        return json(200, { ok: true, devices: all.length + 1 });
       }
 
       return json(404, { error: 'not-found' });

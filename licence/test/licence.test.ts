@@ -622,7 +622,7 @@ describe('the key page (2.5.5)', () => {
   async function signInBody(d: Device, o: { flags?: number; origin?: string; type?: string; challenge?: string; count?: number; rp?: string } = {}) {
     const start = await post('/give/start', {});
     expect(start.status).toBe(200);
-    expect(start.body.ids).toEqual([d.id]);
+    expect(start.body.ids).toContain(d.id);
     if (d.counts) d.count++;
     const cd = client(o.type ?? 'webauthn.get', o.challenge ?? (start.body.challenge as string), o.origin ?? base);
     const ad = authenticator(o.flags ?? 0x05, o.count ?? d.count, o.rp);
@@ -632,6 +632,34 @@ describe('the key page (2.5.5)', () => {
 
   async function signIn(d: Device, o: Parameters<typeof signInBody>[1] = {}) {
     return post('/give/key', await signInBody(d, o));
+  }
+
+  /** A challenge made here as the checkout makes one (the time, random bytes, a MAC with the
+   * setup passphrase), for `kind` at `at`. */
+  function challengeFor(kind: string, at: number, passphrase = PASSPHRASE): string {
+    const body = Buffer.alloc(20);
+    body.writeUInt32BE(at);
+    body.set(webcrypto.getRandomValues(new Uint8Array(16)), 4);
+    const tag = createHmac('sha256', passphrase).update(Buffer.concat([Buffer.from(kind), body])).digest().subarray(0, 16);
+    return b64u(Buffer.concat([body, tag]));
+  }
+
+  /** Another device's new passkey, as the page sends it, answering `challenge`. */
+  async function addBody(d: Device, challenge: string): Promise<Record<string, unknown>> {
+    return {
+      id: d.id,
+      spki: await d.spki(),
+      alg: d.alg,
+      authenticatorData: b64u(authenticator(0x45, 0)),
+      clientDataJSON: b64u(client('webauthn.create', challenge)),
+    };
+  }
+
+  /** `d` added after a sign-in by `by`. */
+  async function add(by: Device, d: Device): Promise<{ status: number; body: Record<string, unknown> }> {
+    const start = await post('/give/add/start', await signInBody(by));
+    if (start.status !== 200) return start;
+    return post('/give/add/finish', await addBody(d, start.body.challenge as string));
   }
 
   async function page(): Promise<{ status: number; page: string }> {
@@ -725,19 +753,12 @@ describe('the key page (2.5.5)', () => {
       expect((await signIn(device, { challenge: b64u(webcrypto.getRandomValues(new Uint8Array(32))) })).status).toBe(403);
       expect((await signIn(device, { count: 1 })).status).toBe(403);
       expect((await signIn(device)).status).toBe(200);
-      // Challenges, made here as the checkout makes them (the time, random bytes, a MAC with the
-      // setup passphrase): good for 5 minutes, for their own ceremony only.
-      const made = (kind: string, at: number) => {
-        const body = Buffer.alloc(20);
-        body.writeUInt32BE(at);
-        body.set(webcrypto.getRandomValues(new Uint8Array(16)), 4);
-        const tag = createHmac('sha256', PASSPHRASE).update(Buffer.concat([Buffer.from(kind), body])).digest().subarray(0, 16);
-        return b64u(Buffer.concat([body, tag]));
-      };
+      // Challenges are good for 5 minutes, for their own ceremony only.
       const now = Math.floor(Date.now() / 1000);
-      expect((await signIn(device, { challenge: made('get', now) })).status).toBe(200);
-      expect((await signIn(device, { challenge: made('get', now - 301) })).status).toBe(403);
-      expect((await signIn(device, { challenge: made('create', now) })).status).toBe(403);
+      expect((await signIn(device, { challenge: challengeFor('get', now) })).status).toBe(200);
+      expect((await signIn(device, { challenge: challengeFor('get', now - 301) })).status).toBe(403);
+      expect((await signIn(device, { challenge: challengeFor('create', now) })).status).toBe(403);
+      expect((await signIn(device, { challenge: challengeFor('add', now) })).status).toBe(403);
     } finally {
       await restart();
     }
@@ -754,6 +775,43 @@ describe('the key page (2.5.5)', () => {
       const ledger = await server.getWorker().getDurableObjectStorage('LEDGER', { name: 'ledger' });
       const rows = (await ledger.exec('SELECT payment, test FROM licences WHERE key = ?', key)) as Array<Record<string, unknown>>;
       expect(rows).toEqual([{ payment: expect.stringMatching(/^given:/), test: 0 }]);
+    } finally {
+      await restart();
+    }
+  });
+
+  it('adds another device only after a sign-in with one set up, up to 5', async () => {
+    await restart(KEY_ID, {}, open);
+    try {
+      const phone = await Device.make(-8, false);
+      // Not without a sign-in: none, the passphrase, or another device's signature.
+      expect((await post('/give/add/start', {})).status).toBe(403);
+      expect((await post('/give/add/start', { passphrase: PASSPHRASE })).status).toBe(403);
+      const forged = await signInBody(device);
+      const cd = Buffer.from(forged.clientDataJSON, 'base64url');
+      const ad = Buffer.from(forged.authenticatorData, 'base64url');
+      forged.signature = b64u(await phone.sign(Buffer.concat([ad, sha(cd)])));
+      expect((await post('/give/add/start', forged)).status).toBe(403);
+      // Nor with a challenge not given for adding: setup's, a sign-in's, or one too old.
+      const now = Math.floor(Date.now() / 1000);
+      for (const ch of [challengeFor('create', now), challengeFor('get', now), challengeFor('add', now - 301)]) {
+        expect((await post('/give/add/finish', await addBody(phone, ch))).status).toBe(400);
+      }
+
+      // After a sign-in: the start names the devices set up, so the browser offers another.
+      const start = await post('/give/add/start', await signInBody(device));
+      expect(start.status).toBe(200);
+      expect(start.body.exclude).toEqual([device.id]);
+      const body = await addBody(phone, start.body.challenge as string);
+      expect(await post('/give/add/finish', body)).toEqual({ status: 200, body: { ok: true, devices: 2 } });
+      expect((await post('/give/add/finish', body)).status).toBe(400);
+      // Either device signs in now; the passphrase still sets up nothing.
+      expect((await signIn(phone)).status).toBe(200);
+      expect((await signIn(device)).status).toBe(200);
+      expect((await setUp(await Device.make())).body).toEqual({ error: 'set-up' });
+      // An added device adds too, up to 5 in all.
+      for (let n = 3; n <= 5; n++) expect((await add(phone, await Device.make())).body).toEqual({ ok: true, devices: n });
+      expect((await post('/give/add/start', await signInBody(device))).body).toEqual({ error: 'devices' });
     } finally {
       await restart();
     }

@@ -35,6 +35,8 @@ const STYLE = `
   .muted { color: var(--muted); font-size: 0.88rem; }
   button { width: 100%; padding: 12px 16px; border: 0; border-radius: 10px; background: var(--accent); color: var(--on-accent); font: inherit; font-weight: 600; cursor: pointer; }
   button:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+  button.quiet { margin-top: 10px; border: 1px solid var(--line); background: transparent; color: var(--text); }
+  button:disabled { opacity: 0.6; cursor: default; }
   .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 8px; }
   .button { display: inline-block; padding: 11px 18px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent); color: var(--on-accent);
     font-weight: 600; text-decoration: none; }
@@ -230,7 +232,10 @@ once it has checked you (fingerprint, face or PIN), signs in here.</p>
 </form>`
     : `<h1>Sign in</h1>
 <p>With the passkey set up on this device.</p>
-<form id="go"><button type="submit">Sign in</button></form>`;
+<form id="go"><button type="submit">Sign in</button></form>
+<button id="add" class="quiet" type="button">Add another device</button>
+<p class="muted after">Another device (your phone, a password manager or a security key) can
+sign in here too, as a backup. Adding one asks this device first.</p>`;
   return page({
     title: 'Clokrix',
     seller: o.seller,
@@ -244,6 +249,7 @@ once it has checked you (fingerprint, face or PIN), signs in here.</p>
   it: it is not shown again, and each sign-in makes a new one.</p>
   <p><a href="/give">Sign in again</a></p>
 </div>
+<p id="done" class="after" role="status"></p>
 <p id="err" class="err after" role="alert"></p>
 <script nonce="${o.nonce}">
   const setup = ${JSON.stringify(setup)};
@@ -255,6 +261,8 @@ once it has checked you (fingerprint, face or PIN), signs in here.</p>
     wait: 'Too many wrong passphrases: try again in an hour.',
     'set-up': 'A device is already set up here.',
     'not-set-up': 'No device is set up here yet.',
+    passkey: 'That sign-in was refused. Try again.',
+    devices: 'This page has as many devices as it takes (5).',
   };
   async function api(path, body) {
     const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -262,14 +270,15 @@ once it has checked you (fingerprint, face or PIN), signs in here.</p>
     if (!r.ok) throw new Error(said[j.error] || 'That did not work. Try again.');
     return j;
   }
-  async function setUp(passphrase) {
-    const o = await api('/give/setup/start', { passphrase });
+  // A new passkey for the options the checkout gave, sent as it takes one, with extra.
+  async function make(o, finish, extra) {
     const c = await navigator.credentials.create({
       publicKey: {
         challenge: dec(o.challenge),
         rp: o.rp,
         user: { id: dec(o.user.id), name: o.user.name, displayName: o.user.name },
         pubKeyCredParams: o.algs.map((alg) => ({ type: 'public-key', alg })),
+        excludeCredentials: o.exclude.map((id) => ({ type: 'public-key', id: dec(id) })),
         authenticatorSelection: { userVerification: 'required', residentKey: 'preferred' },
         attestation: 'none',
         timeout: 120000,
@@ -278,17 +287,21 @@ once it has checked you (fingerprint, face or PIN), signs in here.</p>
     const r = c.response;
     const spki = r.getPublicKey && r.getPublicKey();
     if (!spki) throw new Error('This browser cannot set a passkey up here: try Edge or Chrome.');
-    await api('/give/setup/finish', {
-      passphrase,
+    return api(finish, {
+      ...extra,
       id: enc(c.rawId),
       spki: enc(spki),
       alg: r.getPublicKeyAlgorithm(),
       authenticatorData: enc(r.getAuthenticatorData()),
       clientDataJSON: enc(r.clientDataJSON),
     });
+  }
+  async function setUp(passphrase) {
+    await make(await api('/give/setup/start', { passphrase }), '/give/setup/finish', { passphrase });
     location.reload();
   }
-  async function signIn() {
+  // A sign-in with a device set up, as the checkout takes it.
+  async function signature() {
     const o = await api('/give/start', {});
     const c = await navigator.credentials.get({
       publicKey: {
@@ -300,33 +313,52 @@ once it has checked you (fingerprint, face or PIN), signs in here.</p>
       },
     });
     const r = c.response;
-    const got = await api('/give/key', {
+    return {
       id: enc(c.rawId),
       authenticatorData: enc(r.authenticatorData),
       clientDataJSON: enc(r.clientDataJSON),
       signature: enc(r.signature),
-    });
+    };
+  }
+  async function addDevice() {
+    const o = await api('/give/add/start', await signature());
+    const added = await make(o, '/give/add/finish', {});
+    document.getElementById('done').textContent =
+      'The other device is set up: ' + added.devices + ' devices can sign in here now.';
+  }
+  async function signIn() {
+    const got = await api('/give/key', await signature());
     document.getElementById('key').textContent = got.key;
     document.getElementById('ask').hidden = true;
     document.getElementById('got').hidden = false;
   }
-  document.getElementById('go').addEventListener('submit', async (e) => {
-    e.preventDefault();
+  async function run(button, work) {
     err.textContent = '';
+    document.getElementById('done').textContent = '';
     if (!window.PublicKeyCredential) {
       err.textContent = 'This browser cannot use passkeys.';
       return;
     }
-    const button = e.target.querySelector('button');
     button.disabled = true;
     try {
-      await (setup ? setUp(document.getElementById('passphrase').value) : signIn());
+      await work();
     } catch (x) {
-      err.textContent = x && x.name === 'NotAllowedError' ? 'Cancelled, or this device has no passkey for this page.' : x.message;
+      err.textContent =
+        x && x.name === 'NotAllowedError'
+          ? 'Cancelled, or this device has no passkey for this page.'
+          : x && x.name === 'InvalidStateError'
+            ? 'That device is already set up here: choose another.'
+            : x.message;
     } finally {
       button.disabled = false;
     }
+  }
+  document.getElementById('go').addEventListener('submit', (e) => {
+    e.preventDefault();
+    run(e.target.querySelector('button'), () => (setup ? setUp(document.getElementById('passphrase').value) : signIn()));
   });
+  const add = document.getElementById('add');
+  if (add) add.addEventListener('click', () => run(add, addDevice));
 </script>`,
   });
 }

@@ -43,6 +43,9 @@ export const MIN_PASSPHRASE = 20;
 /** Wrong passphrases the key page's setup takes in an hour, from anyone; then it takes none, the
  * right one too, until the oldest of them is an hour old. */
 export const WRONG_PER_HOUR = 20;
+/** Devices the key page gives keys to, at most: the first, set up with the passphrase, and
+ * those added from it (a phone, a password manager, a security key), as backups. */
+export const MAX_DEVICES = 5;
 /** A passkey ceremony's challenge is good once, for this long. */
 export const CHALLENGE_SECONDS = 300;
 
