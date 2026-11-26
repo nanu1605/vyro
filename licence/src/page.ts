@@ -234,8 +234,14 @@ once it has checked you (fingerprint, face or PIN), signs in here.</p>
 <p>With the passkey set up on this device.</p>
 <form id="go"><button type="submit">Sign in</button></form>
 <button id="add" class="quiet" type="button">Add another device</button>
-<p class="muted after">Another device (your phone, a password manager or a security key) can
-sign in here too, as a backup. Adding one asks this device first.</p>`;
+<p id="about" class="muted after">Another device (your phone, a password manager or a security
+key) can sign in here too, as a backup. Adding one asks this device first.</p>
+<div id="next" class="after" hidden>
+  <p>This device has checked you. Now the other one, within 5 minutes: in the window that opens,
+  pick your phone (scan its QR code, with Bluetooth on in both it and this PC), a password
+  manager or a security key. Not this PC's own Windows Hello: it is set up already.</p>
+  <button id="other" type="button">Set up the other device</button>
+</div>`;
   return page({
     title: 'Clokrix',
     seller: o.seller,
@@ -263,6 +269,9 @@ sign in here too, as a backup. Adding one asks this device first.</p>`;
     'not-set-up': 'No device is set up here yet.',
     passkey: 'That sign-in was refused. Try again.',
     devices: 'This page has as many devices as it takes (5).',
+    ceremony: 'That took over 5 minutes, or was done already: choose Add another device again.',
+    authenticator: 'That device did not check you (fingerprint, face or PIN): pick one that does.',
+    algorithm: 'That device makes a kind of passkey this page does not take: pick another.',
   };
   async function api(path, body) {
     const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -320,9 +329,22 @@ sign in here too, as a backup. Adding one asks this device first.</p>`;
       signature: enc(r.signature),
     };
   }
+  // Adding a device takes two clicks: this device signs in, then the other makes its passkey. A
+  // click each, so the browser's window for the second opens on a click of its own, with this
+  // page in front, and the words between say what to pick in it.
+  let adding = null;
   async function addDevice() {
-    const o = await api('/give/add/start', await signature());
-    const added = await make(o, '/give/add/finish', {});
+    adding = await api('/give/add/start', await signature());
+    document.getElementById('add').hidden = true;
+    document.getElementById('about').hidden = true;
+    document.getElementById('next').hidden = false;
+  }
+  async function addOther() {
+    const added = await make(adding, '/give/add/finish', {});
+    adding = null;
+    document.getElementById('next').hidden = true;
+    document.getElementById('add').hidden = false;
+    document.getElementById('about').hidden = false;
     document.getElementById('done').textContent =
       'The other device is set up: ' + added.devices + ' devices can sign in here now.';
   }
@@ -332,7 +354,13 @@ sign in here too, as a backup. Adding one asks this device first.</p>`;
     document.getElementById('ask').hidden = true;
     document.getElementById('got').hidden = false;
   }
-  async function run(button, work) {
+  // The browser's own reason, without the link Chrome adds to it.
+  const why = (x) => {
+    const m = String((x && x.message) || '').split(' See:')[0].trim();
+    return m ? ' (The browser said: ' + m + ')' : '';
+  };
+  // The third argument says what a refused or closed browser window means at this step.
+  async function run(button, work, cancelled) {
     err.textContent = '';
     document.getElementById('done').textContent = '';
     if (!window.PublicKeyCredential) {
@@ -345,20 +373,30 @@ sign in here too, as a backup. Adding one asks this device first.</p>`;
     } catch (x) {
       err.textContent =
         x && x.name === 'NotAllowedError'
-          ? 'Cancelled, or this device has no passkey for this page.'
+          ? cancelled + why(x)
           : x && x.name === 'InvalidStateError'
-            ? 'That device is already set up here: choose another.'
-            : x.message;
+            ? 'That device is already set up here: pick another.'
+            : x && x.name && x.name !== 'Error'
+              ? 'That did not work.' + why(x)
+              : x.message;
     } finally {
       button.disabled = false;
     }
   }
+  const signInCancelled = 'Signing in on this device did not finish: cancelled, timed out, or this device has no passkey for this page.';
+  const otherCancelled = 'The other device was not set up: cancelled, timed out, or it could not be reached. A phone needs Bluetooth on, on both it and this PC; or pick a password manager or a security key. Then choose Set up the other device again.';
   document.getElementById('go').addEventListener('submit', (e) => {
     e.preventDefault();
-    run(e.target.querySelector('button'), () => (setup ? setUp(document.getElementById('passphrase').value) : signIn()));
+    run(
+      e.target.querySelector('button'),
+      () => (setup ? setUp(document.getElementById('passphrase').value) : signIn()),
+      setup ? 'Setting up this device did not finish: cancelled or timed out.' : signInCancelled,
+    );
   });
   const add = document.getElementById('add');
-  if (add) add.addEventListener('click', () => run(add, addDevice));
+  if (add) add.addEventListener('click', () => run(add, addDevice, signInCancelled));
+  const other = document.getElementById('other');
+  if (other) other.addEventListener('click', () => run(other, addOther, otherCancelled));
 </script>`,
   });
 }

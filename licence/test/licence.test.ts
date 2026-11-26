@@ -714,6 +714,12 @@ describe('the key page (2.5.5)', () => {
       const after = await page();
       expect(after.page).toContain('>Sign in</button>');
       expect(after.page).not.toContain('Set up this device');
+      // Adding a device is two clicks: the second, for the other device, waits hidden.
+      expect(after.page).toContain('<div id="next" class="after" hidden>');
+      expect(after.page).toContain('>Set up the other device</button>');
+      // Still nothing on the page says what it gives (a security key is a device to sign in with).
+      const asks = after.page.slice(after.page.indexOf('<main'), after.page.indexOf('<div id="got"'));
+      expect(asks.replace(/security\s+key/g, '')).not.toMatch(/\bkeys?\b/i);
       expect((await setUp(await Device.make())).body).toEqual({ error: 'set-up' });
       // The old way, the passphrase alone, gives nothing.
       expect((await fetch(`${base}/give`, { method: 'POST', headers: from(), body: new URLSearchParams({ passphrase: PASSPHRASE }) })).status).toBe(405);

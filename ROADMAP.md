@@ -5340,7 +5340,32 @@ owner: "A backup device for the key page".
       to 7cf5a63, then Licence run 45834371360 from `main`: the passphrase set and long enough,
       the 38 tests (the key page's 7 among them), the deploy, its secrets. The owner's PC stays
       set up; this session cannot reach the website to open it.
-- [ ] **The owner adds a backup device** from their PC: `/give`, Sign in, Add another device.
+- [ ] **The owner adds a backup device** from their PC: `/give`, Add another device, then Set
+      up the other device.
+
+### After 2.5.4: adding a device, in two clicks
+
+The owner, 2026-11-26, after the deploy: "cannot add, it says: Cancelled, or this device has no
+passkey for this page." That is the browser's NotAllowedError, which says only that a ceremony
+was refused, closed or timed out, at either step: this PC's sign-in or the other device's
+passkey. The page ran both from one click, the second right after the first's Windows window
+closed, and its words named only the first.
+
+- [x] **Two clicks** (`licence/src/page.ts`): Add another device signs in on this device; then
+      the page says what to pick in the browser's window (a phone, with Bluetooth on in both;
+      a password manager; a security key; not this PC's Windows Hello) and offers **Set up the
+      other device**, so that window opens on a click of its own, with the page in front. The
+      sign-in's challenge serves for 5 minutes and is used only once the other device is set
+      up, so the second click can be tried again. No change to the checkout's routes.
+- [x] **Words by step:** a step that does not finish says which (this device's sign-in, or the
+      other device), with the browser's own reason; a challenge too old, a device that did not
+      check the person, or a kind of passkey not taken each say so.
+- [x] **Tests** (38 licence tests; the sign-in page carries the second step, hidden, and still
+      names no keys). In Chromium, with virtual authenticators: sign in, then the PC picked
+      again (refused: "That device is already set up here: pick another."), then a security
+      key on the same sign-in (2 devices), the PC's passkey removed, the backup alone signed
+      in; a device without a passkey got the first step's words.
+- [ ] **CI**, then **Deploy** on the owner's go; then the owner adds the backup.
 
 ## Risks
 
