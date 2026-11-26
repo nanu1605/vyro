@@ -5366,7 +5366,10 @@ closed, and its words named only the first.
       key on the same sign-in (2 devices), the PC's passkey removed, the backup alone signed
       in; a device without a passkey got the first step's words.
 - [x] **CI green on 46d0c91** (run 45868799390; every job, the checkout's tests among them).
-- [ ] **Deploy** on the owner's go; then the owner adds the backup.
+- [x] **Deployed** (2026-11-26, on the owner's go: "deploy the licence"). `main` fast-forwarded
+      to 819b792, then Licence run 45876550365 from `main`: the passphrase set, the 38 tests,
+      the deploy, its secrets; no key in the log.
+- [ ] **The owner adds the backup:** `/give`, Add another device, then Set up the other device.
 
 ## Risks
 
