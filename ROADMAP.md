@@ -5269,6 +5269,7 @@ gives keys, the owner: "build the key page".
       bought one; after 20 wrong ones the right one is refused. Locally: `pnpm check` and the 35
       licence tests; the page in light and dark at phone width. `docs/pro.md` → Keys given, not
       sold.
+- [x] **CI green on 62ebb58** (run 45784985654; every job, the checkout's tests among them).
 - [ ] **Deploy,** on the owner's go, once they have set `KEY_PAGE_PASSPHRASE`.
 
 ## Risks
