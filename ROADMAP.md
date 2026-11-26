@@ -5335,6 +5335,8 @@ owner: "A backup device for the key page".
       sign-in before adding, the challenge's kind, the limit) each failed a test. In Chromium,
       with virtual authenticators: set up on a "PC", a backup added (2 devices), the PC's passkey
       removed as a reset would, and the backup alone signed in and got a key.
+- [x] **CI green on d5789d0** (run 45802853294; every job, the checkout's tests among them).
+- [ ] **Deploy,** on the owner's go; then the owner adds a backup device from their PC.
 
 ## Risks
 
