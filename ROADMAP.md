@@ -5365,7 +5365,8 @@ closed, and its words named only the first.
       again (refused: "That device is already set up here: pick another."), then a security
       key on the same sign-in (2 devices), the PC's passkey removed, the backup alone signed
       in; a device without a passkey got the first step's words.
-- [ ] **CI**, then **Deploy** on the owner's go; then the owner adds the backup.
+- [x] **CI green on 46d0c91** (run 45868799390; every job, the checkout's tests among them).
+- [ ] **Deploy** on the owner's go; then the owner adds the backup.
 
 ## Risks
 
