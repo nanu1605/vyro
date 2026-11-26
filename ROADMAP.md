@@ -5309,6 +5309,7 @@ which anyone could be told, or read from GitHub's secrets through a workflow wit
       its use once) each failed a test. In Chromium with a virtual authenticator:
       the wrong passphrase said so, setup, sign-in, the key shown; another browser's device got
       none.
+- [x] **CI green on e340dc0** (run 45791934724; every job, the checkout's tests among them).
 - [ ] **Deploy,** on the owner's go. The page then asks to be set up on their PC.
 
 ## Risks
