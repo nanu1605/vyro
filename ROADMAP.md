@@ -5204,6 +5204,19 @@ drive scan did. The owner, 2026-11-24, told so: "fix the AMD CPU and network one
       stops the run, and each is kept 3 days instead of 14. A field check's test build is to be
       downloaded within those 3 days. The Release workflow's uploads (for signing only) are as
       they were.
+- [x] **CI green on 43a5495** (run 45768087623; Linux, Windows with the smoke test, the clean
+      install and the upgrade from Vyro 2.1.0, the relay and phone app with the end-to-end test,
+      the checkout, accessibility), the screen's slow connection on Windows among them. Its
+      uploads were still refused, and the run went on past them, as meant. `main` fast-forwarded
+      to it.
+- [x] **2.5.4 released** (2026-11-26, on the owner's go: "release 2.5.4"). Release run
+      45771566581 tagged `v2.5.4` on 43a5495, found the relay's address and Pro's checkout in
+      `clokrix.exe`, and put the 14.99 MB `Clokrix_2.5.4_x64_en-US.msi`, its checksums and then
+      `latest.json` in the bucket. It then read the website's `/updates/latest.json` (2.5.4) and
+      downloaded `/download`, whose SHA-256 matched the MSI's, and published the same files here
+      and to the private copy in `nanu1605/vyro-releases`. GitHub's digests here: MSI
+      `7251df5c…`, `latest.json` `326f7ed0…`, `SHA256SUMS.txt` `1adc8cc3…`. Unsigned, as before.
+      Installed copies of 2.5.2 and later update to it from the website at their next check.
 
 ## Risks
 
