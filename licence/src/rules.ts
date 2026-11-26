@@ -37,6 +37,12 @@ export const MOVE_DAYS = 30;
 export const REFUND_DAYS = 14;
 /** Requests one address may make in a minute, beyond which it waits. */
 export const RATE_PER_MIN = 40;
+/** The key page's passphrase is at least this long (2.5.5): it is all that stands between the
+ * page and a key. */
+export const MIN_PASSPHRASE = 20;
+/** Wrong passphrases the key page takes in an hour, from anyone; then it takes none, the right
+ * one too, until the oldest of them is an hour old. */
+export const WRONG_PER_HOUR = 20;
 
 /** Crockford's base32: no I, L, O or U, so a key read aloud or typed is not misread. */
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -95,6 +101,12 @@ export function same(a: string, b: string): boolean {
   let d = 0;
   for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return d === 0;
+}
+
+/** The passphrase typed is the one set: compared in the same time whatever either holds, their
+ * lengths too. */
+export async function samePassphrase(typed: string, set: string): Promise<boolean> {
+  return same(await hmacHex('clokrix-key-page', typed), await hmacHex('clokrix-key-page', set));
 }
 
 /** What an activation says: this licence is Pro on this PC. */

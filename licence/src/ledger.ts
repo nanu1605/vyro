@@ -5,9 +5,12 @@
 // A licence bought while the checkout ran on Razorpay's Test keys is marked `test`: anyone can
 // pay there with Razorpay's public test cards. Once the checkout runs on Live keys, such a key no
 // longer turns Pro on (the owner, 2026-11-16: "Cancel test keys at go-live").
+//
+// A key given on the key page (2.5.5), not sold, has no order: its payment is `given:` and a
+// random id, and it is never test, so it turns Pro on whichever keys the checkout runs on.
 
 import { DurableObject } from 'cloudflare:workers';
-import { MOVE_DAYS, newKey, RATE_PER_MIN } from './rules';
+import { MOVE_DAYS, newKey, RATE_PER_MIN, WRONG_PER_HOUR } from './rules';
 
 export const LEDGER_NAME = 'ledger';
 
@@ -41,6 +44,7 @@ export class Ledger extends DurableObject<object> {
         pc TEXT, activated INTEGER, moved INTEGER, revoked INTEGER
       );
       CREATE TABLE IF NOT EXISTS hits (ip TEXT NOT NULL, minute INTEGER NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (ip, minute));
+      CREATE TABLE IF NOT EXISTS wrong (at INTEGER NOT NULL);
     `);
     // Added after the first deploy, when every key yet had been bought under Test keys: so they
     // all count as test.
@@ -91,6 +95,26 @@ export class Ledger extends DurableObject<object> {
       this.sql.exec('UPDATE orders SET lic = ? WHERE id = ?', lic, orderId);
       return this.licence(lic);
     });
+  }
+
+  /** A key given, not sold (the key page). */
+  give(): Licence {
+    const lic = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+    const payment = `given:${crypto.randomUUID()}`;
+    this.sql.exec('INSERT INTO licences (lic, key, payment, issued, test) VALUES (?, ?, ?, ?, 0)', lic, newKey(), payment, this.now());
+    return this.licence(lic)!;
+  }
+
+  /** The key page takes a passphrase now: fewer than WRONG_PER_HOUR wrong ones in the last hour. */
+  passphraseTaken(limit = WRONG_PER_HOUR): boolean {
+    const hourAgo = this.now() - 3600;
+    this.sql.exec('DELETE FROM wrong WHERE at <= ?', hourAgo);
+    return this.sql.exec<{ n: number }>('SELECT count(*) AS n FROM wrong').one().n < limit;
+  }
+
+  /** One more wrong passphrase on the key page. */
+  wrongPassphrase(): void {
+    this.sql.exec('INSERT INTO wrong (at) VALUES (?)', this.now());
   }
 
   private licence(lic: string): Licence | null {

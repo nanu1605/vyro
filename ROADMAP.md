@@ -5247,6 +5247,30 @@ logical processor in the poller's tick.
       test build, the phone app screens and the H.264, kept to 2026-11-29. It goes out in the
       next version, on the owner's go; `main` stays at 2.5.4 until then.
 
+### After 2.5.4: the key page
+
+The owner, 2026-11-26: "give me a pro key which i can use it for mysef". A key exists only once
+the checkout makes it, and it made one only for a paid order. Offered buying one or a page that
+gives keys, the owner: "build the key page".
+
+- [x] **The key page** (`licence/`, `/give`): for the passphrase in the new GitHub secret
+      `KEY_PAGE_PASSPHRASE` (at least 20 characters), a new key, recorded as given: its payment
+      is `given:` and a random id, and it is never test, so it works on Live keys. Unset or
+      short, the page is closed. After 20 wrong passphrases in an hour it takes none, the right
+      one too, until the oldest is an hour old. Nothing links to it; it is kept from search
+      engines and caches. The key shows in the browser only, never in a log (the repository's
+      Actions logs are public while it is).
+- [x] **The deploy** (`licence.yml`, part of the go above): it checks the passphrase's length,
+      sets it on the Worker (or "closed" when the secret is unset, which closes the page), and
+      says in its summary whether the page is open.
+- [x] **Tests:** closed without a passphrase or with one of 19 characters; the form; a wrong or
+      empty passphrase gives no key; the right one, with spaces round it too, gives a new key
+      each time, recorded as given; the key turns Pro on, on Live keys too, and moves as a
+      bought one; after 20 wrong ones the right one is refused. Locally: `pnpm check` and the 35
+      licence tests; the page in light and dark at phone width. `docs/pro.md` → Keys given, not
+      sold.
+- [ ] **Deploy,** on the owner's go, once they have set `KEY_PAGE_PASSPHRASE`.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

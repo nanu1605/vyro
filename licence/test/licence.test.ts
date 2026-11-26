@@ -34,8 +34,8 @@ let publicKey: webcrypto.CryptoKey;
 let api = '';
 let pkcs8 = '';
 
-/** The checkout as the tests run it: on `keyId`, with `vars` added to the usual. */
-function options(keyId = KEY_ID, vars: Record<string, string> = {}): TestHarnessOptions {
+/** The checkout as the tests run it: on `keyId`, with `vars` and `secrets` added to the usual. */
+function options(keyId = KEY_ID, vars: Record<string, string> = {}, secrets: Record<string, string> = {}): TestHarnessOptions {
   return {
     workers: [
       {
@@ -46,6 +46,7 @@ function options(keyId = KEY_ID, vars: Record<string, string> = {}): TestHarness
           RAZORPAY_KEY_SECRET: KEY_SECRET,
           RAZORPAY_WEBHOOK_SECRET: HOOK_SECRET,
           LICENCE_SIGNING_KEY: pkcs8,
+          ...secrets,
         },
       },
     ],
@@ -53,8 +54,8 @@ function options(keyId = KEY_ID, vars: Record<string, string> = {}): TestHarness
 }
 
 /** The same checkout started again with other settings; its ledger is kept. */
-async function restart(keyId = KEY_ID, vars: Record<string, string> = {}): Promise<void> {
-  await server.update(options(keyId, vars));
+async function restart(keyId = KEY_ID, vars: Record<string, string> = {}, secrets: Record<string, string> = {}): Promise<void> {
+  await server.update(options(keyId, vars, secrets));
   base = (await server.listen()).url.toString().replace(/\/$/, '');
 }
 
@@ -545,6 +546,104 @@ describe('one address for the website', () => {
       expect((await claim(c)).status).toBe(404);
       expect((await post('/check', { key: 'CLKX-AAAAA-AAAAA-AAAAA-AAAAA', pc: pcId() })).body).toEqual({ ok: false, reason: 'no-key' });
       expect((await webhook({ event: 'payment.authorized' })).status).toBe(200);
+    } finally {
+      await restart();
+    }
+  });
+});
+
+describe('the key page (2.5.5)', () => {
+  /** The key page's passphrase (constructed). */
+  const PASSPHRASE = 'a passphrase for the tests only';
+  const open = { KEY_PAGE_PASSPHRASE: PASSPHRASE };
+  /** Wrong passphrases sent so far: every test here counts against the same hour. */
+  let wrong = 0;
+
+  async function give(passphrase: string, ip = from()): Promise<{ status: number; page: string }> {
+    const res = await fetch(`${base}/give`, { method: 'POST', headers: ip, body: new URLSearchParams({ passphrase }) });
+    if (res.status === 403) wrong++;
+    return { status: res.status, page: await res.text() };
+  }
+
+  async function ledgerRow(key: string): Promise<Record<string, unknown>> {
+    const ledger = await server.getWorker().getDurableObjectStorage('LEDGER', { name: 'ledger' });
+    const rows = (await ledger.exec('SELECT payment, test, revoked FROM licences WHERE key = ?', key)) as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(1);
+    return rows[0]!;
+  }
+
+  it('is closed without a passphrase, or with one shorter than 20 characters', async () => {
+    expect((await fetch(`${base}/give`, { headers: from() })).status).toBe(503);
+    expect((await give(PASSPHRASE)).status).toBe(503);
+    await restart(KEY_ID, {}, { KEY_PAGE_PASSPHRASE: 'nineteen characters' });
+    try {
+      expect((await fetch(`${base}/give`, { headers: from() })).status).toBe(503);
+      const short = await give('nineteen characters');
+      expect(short.status).toBe(503);
+      expect(keyIn(short.page)).toBeNull();
+    } finally {
+      await restart();
+    }
+  });
+
+  it('gives a key for the passphrase only, kept from search engines and caches', async () => {
+    await restart(KEY_ID, {}, open);
+    try {
+      const res = await fetch(`${base}/give`, { headers: from() });
+      expect(res.status).toBe(200);
+      expect(res.headers.get('Cache-Control')).toBe('no-store');
+      const form = await res.text();
+      expect(form).toContain('<meta name="robots" content="noindex">');
+      expect(form).toContain('type="password"');
+      expect(keyIn(form)).toBeNull();
+
+      const no = await give('not the passphrase at all, no');
+      expect(no.status).toBe(403);
+      expect(no.page).toContain('That is not the passphrase.');
+      expect(keyIn(no.page)).toBeNull();
+      expect((await give('')).status).toBe(403);
+
+      const yes = await give(PASSPHRASE);
+      expect(yes.status).toBe(200);
+      const key = keyIn(yes.page)!;
+      expect(key).not.toBeNull();
+      // Pasted with a space either side, it is still the passphrase; each press is a new key.
+      const again = keyIn((await give(` ${PASSPHRASE} `)).page);
+      expect(again).not.toBeNull();
+      expect(again).not.toBe(key);
+      expect(await ledgerRow(key)).toMatchObject({ test: 0, revoked: null, payment: expect.stringMatching(/^given:/) });
+      expect((await fetch(`${base}/give`, { method: 'PUT', headers: from() })).status).toBe(405);
+    } finally {
+      await restart();
+    }
+  });
+
+  it('gives a key that turns Pro on as a bought one, on Live keys too', async () => {
+    await restart(LIVE_KEY_ID, {}, open);
+    try {
+      const key = keyIn((await give(PASSPHRASE)).page)!;
+      const a = pcId();
+      const on = await post('/activate', { key, pc: a });
+      expect(on.status).toBe(200);
+      expect(typeof on.body.activation).toBe('string');
+      expect((await post('/check', { key, pc: a })).body).toEqual({ ok: true });
+      expect(await post('/activate', { key, pc: pcId() })).toEqual({ status: 409, body: { error: 'in-use' } });
+      expect((await post('/activate', { key, pc: pcId(), move: true })).status).toBe(200);
+    } finally {
+      await restart();
+    }
+  });
+
+  it('takes no passphrase, not even the right one, after 20 wrong ones in an hour', async () => {
+    await restart(KEY_ID, {}, open);
+    try {
+      // From addresses of their own, so the limit met is the passphrase's, not one address's.
+      while (wrong < 20) expect((await give(`wrong passphrase number ${wrong}`)).status).toBe(403);
+      const late = await give(PASSPHRASE);
+      expect(late.status).toBe(429);
+      expect(late.page).toContain('try again in an hour');
+      expect(keyIn(late.page)).toBeNull();
+      expect((await give('one more wrong passphrase')).status).toBe(429);
     } finally {
       await restart();
     }

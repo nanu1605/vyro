@@ -19,15 +19,33 @@
 //   POST /activate           {key, pc, move?}: Pro on this PC; answers a signed activation.
 //   POST /release            {key, pc}: the key off this PC, for another to take.
 //   POST /check              {key, pc}: still Pro here? (not if moved, released or refunded).
+// The seller's side (2.5.5), in a browser:
+//   GET  /give, POST /give   a key given, not sold, for the passphrase in KEY_PAGE_PASSPHRASE
+//                            (the owner, 2026-11-26: "build the key page"). Closed without one of
+//                            at least MIN_PASSPHRASE characters; WRONG_PER_HOUR wrong ones in an
+//                            hour close it for the rest of that hour.
 // Clokrix itself (2.5.2, downloads.ts), from the R2 bucket the Release workflow fills:
 //   GET  /download, /download/<tag>/<file>, /updates/latest.json
 
 import { capture, createOrder, getPayment, paidFor, type Payment, type Razorpay } from './razorpay';
-import { checkoutPage, errorPage, pageHeaders, paidPage } from './page';
+import { checkoutPage, errorPage, givenPage, givePage, pageHeaders, paidPage } from './page';
 import { isSitePage, sitePage, type Seller } from './site';
 import { download, isDownload } from './downloads';
 import { LEDGER_NAME, type Ledger } from './ledger';
-import { chosenCurrency, currencyFor, hmacHex, isClaim, isPc, normalKey, same, signActivation, signingKey, type Currency } from './rules';
+import {
+  chosenCurrency,
+  currencyFor,
+  hmacHex,
+  isClaim,
+  isPc,
+  MIN_PASSPHRASE,
+  normalKey,
+  same,
+  samePassphrase,
+  signActivation,
+  signingKey,
+  type Currency,
+} from './rules';
 
 export { Ledger } from './ledger';
 
@@ -49,6 +67,9 @@ interface Env {
   RAZORPAY_KEY_SECRET?: string;
   RAZORPAY_WEBHOOK_SECRET?: string;
   LICENCE_SIGNING_KEY?: string;
+  /** The key page's passphrase (2.5.5); unset or shorter than MIN_PASSPHRASE, the page is
+   * closed. */
+  KEY_PAGE_PASSPHRASE?: string;
 }
 
 function json(status: number, body: unknown): Response {
@@ -155,7 +176,7 @@ export default {
 
     const s = seller(env);
     const at = { nonce: n, seller: s.name };
-    const isPage = path === '/buy' || isSitePage(path);
+    const isPage = path === '/buy' || path === '/give' || isSitePage(path);
     const origin = siteOrigin(env);
     // By host: Cloudflare, not this, sends http to https.
     if (isPage && origin && url.host !== new URL(origin).host && (req.method === 'GET' || req.method === 'HEAD')) {
@@ -225,6 +246,24 @@ export default {
       const l = await ledger.issue(orderId, paid.id, !live(env));
       if (!l) return html(400, n, errorPage(at, 'Payment not confirmed', sorry));
       return html(200, n, paidPage({ ...at, key: l.key, fromApp: await ledger.fromApp(orderId) }));
+    }
+
+    if (path === '/give') {
+      if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'POST') return json(405, { error: 'not-allowed' });
+      const set = (env.KEY_PAGE_PASSPHRASE ?? '').trim();
+      if (set.length < MIN_PASSPHRASE) return html(503, n, errorPage(at, 'Not open', 'No keys are given here.'));
+      if (req.method !== 'POST') return html(200, n, givePage(at));
+      // Waiting, the right passphrase is refused too: otherwise the wait would not slow guessing.
+      if (!(await ledger.passphraseTaken())) {
+        return html(429, n, givePage({ ...at, said: 'Too many wrong passphrases: try again in an hour.' }));
+      }
+      const form = await req.formData().catch(() => null);
+      const typed = form?.get('passphrase');
+      if (typeof typed !== 'string' || !(await samePassphrase(typed.trim(), set))) {
+        await ledger.wrongPassphrase();
+        return html(403, n, givePage({ ...at, said: 'That is not the passphrase.' }));
+      }
+      return html(200, n, givenPage({ ...at, key: (await ledger.give()).key }));
     }
 
     const claimAt = /^\/claim\/([0-9a-f]{32})$/.exec(path);

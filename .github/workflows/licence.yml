@@ -14,6 +14,8 @@ name: Licence
 #   secret   RAZORPAY_KEY_SECRET       the same key's secret
 #   secret   RAZORPAY_WEBHOOK_SECRET   the secret of the webhook to <address>/razorpay/webhook
 #   secret   LICENCE_SIGNING_KEY       node scripts/licence-keygen.mjs (its private half)
+#   secret   KEY_PAGE_PASSPHRASE       optional (2.5.5): the key page's passphrase (<address>/give),
+#                                      at least 20 characters; unset, the deploy closes the page
 # After the first deploy, set the variables CLOKRIX_LICENCE_URL to the address it prints and
 # CLOKRIX_LICENCE_PUBKEY to the key pair's public half, so builds carry them (ci.yml, release.yml).
 #
@@ -74,6 +76,14 @@ jobs:
             echo "::error::Set the six secrets named in this file's header first"
             exit 1
           fi
+      - name: The key page's passphrase is long enough
+        env:
+          KEY_PAGE_PASSPHRASE: ${{ secrets.KEY_PAGE_PASSPHRASE }}
+        run: |
+          if [ -n "$KEY_PAGE_PASSPHRASE" ] && [ "${#KEY_PAGE_PASSPHRASE}" -lt 20 ]; then
+            echo "::error::KEY_PAGE_PASSPHRASE is shorter than 20 characters: the key page would stay closed"
+            exit 1
+          fi
       - name: The signing key matches the public key builds carry
         env:
           LICENCE_SIGNING_KEY: ${{ secrets.LICENCE_SIGNING_KEY }}
@@ -114,6 +124,7 @@ jobs:
           RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
           RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
           LICENCE_SIGNING_KEY: ${{ secrets.LICENCE_SIGNING_KEY }}
+          KEY_PAGE_PASSPHRASE: ${{ secrets.KEY_PAGE_PASSPHRASE }}
           SITE_HOST: ${{ vars.CLOKRIX_SITE_HOST }}
           CONTACT_EMAIL: ${{ vars.CLOKRIX_CONTACT_EMAIL }}
           CONTACT_PHONE: ${{ vars.CLOKRIX_CONTACT_PHONE }}
@@ -140,6 +151,9 @@ jobs:
           for name in RAZORPAY_KEY_ID RAZORPAY_KEY_SECRET RAZORPAY_WEBHOOK_SECRET LICENCE_SIGNING_KEY; do
             printf '%s' "${!name}" | pnpm --dir licence exec wrangler secret put "$name" > /dev/null
           done
+          # The key page (2.5.5): its passphrase, or a word too short to be one, which closes it
+          # (the owner, 2026-11-26: "build the key page").
+          printf '%s' "${KEY_PAGE_PASSPHRASE:-closed}" | pnpm --dir licence exec wrangler secret put KEY_PAGE_PASSPHRASE > /dev/null
           url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -n 1)
           {
             echo "### Checkout deployed"
@@ -156,5 +170,11 @@ jobs:
               echo "Website, for Razorpay: https://$SITE_HOST (terms: /terms, privacy: /privacy, refunds: /refunds, delivery: /delivery, contact: /contact; the payment page: /buy)"
               echo
               echo "Downloads: https://$SITE_HOST/download (the newest installer); updates: https://$SITE_HOST/updates/latest.json"
+            fi
+            echo
+            if [ -n "$KEY_PAGE_PASSPHRASE" ]; then
+              echo "Key page: open, at /give on the website (keys given, not sold)."
+            else
+              echo "Key page: closed (the secret KEY_PAGE_PASSPHRASE is not set)."
             fi
           } >> "$GITHUB_STEP_SUMMARY"

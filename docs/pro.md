@@ -73,6 +73,20 @@ A key is Pro on one PC at a time:
     works once every 30 days.
 - **Refund:** a refunded payment's key stops working (Razorpay's webhook tells the checkout).
 
+## Keys given, not sold (2.5.5)
+
+The seller can give a key without a sale, for the owner's own PCs or for testers (the owner,
+2026-11-26: "build the key page"):
+
+1. Open `/give` on the website. Nothing links to it, and search engines are told to leave it out.
+2. Type the passphrase: the GitHub secret `KEY_PAGE_PASSPHRASE`, at least 20 characters. It is
+   set on the checkout at each deploy; without it, the deploy closes the page.
+3. **Make a key** shows a new key, once. Each press makes another.
+
+A given key works as a bought one: one PC at a time, Move Pro here, and on Live keys too. It has
+no order, payment or receipt: the checkout records it as given. After 20 wrong passphrases in an
+hour, the page takes none, the right one too, until the oldest is an hour old.
+
 ## What is sent, and to whom
 
 **To the checkout** (Clokrix's own Cloudflare Worker, `licence/`):
@@ -110,7 +124,9 @@ them before giving the website to Razorpay.
 ## The code
 
 The code was public under MIT or Apache-2.0 until 2026-11-20, when the owner made the repository
-private; copies published before then stay under those licences. A build without the checkout's
+private, and public again from 2026-11-26 for a while (the owner: "for sometime i have made vyro
+repo public until the quota is reset"); copies published while it was public stay under those
+licences. A build without the checkout's
 settings is Pro: forks, local builds and CI builds before the settings are set. The official
 builds carry them. A copy of the code takes another name and logo (README → License).
 
@@ -145,7 +161,8 @@ last two variables.
    - Make it once: a new pair turns off every activation signed with the old one.
 4. **GitHub** (Settings → Secrets and variables → Actions):
    - secrets `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` and
-     `LICENCE_SIGNING_KEY` (the Cloudflare secrets are the relay's).
+     `LICENCE_SIGNING_KEY` (the Cloudflare secrets are the relay's);
+   - optional (2.5.5): the secret `KEY_PAGE_PASSPHRASE`, for the key page (Keys given, not sold).
 5. **Deploy:** Actions → Licence → Run workflow, on your go. It tests the checkout, checks that
    the signing key matches `CLOKRIX_LICENCE_PUBKEY`, deploys it, sets its secrets and prints its
    address. Set the variable `CLOKRIX_LICENCE_URL` to that address, or, once the website is up,

@@ -43,6 +43,10 @@ const STYLE = `
     font: 600 1.05rem/1.4 ui-monospace, 'Cascadia Mono', Consolas, monospace; text-align: center; user-select: all; overflow-wrap: anywhere; }
   .after { margin-top: 12px; }
   .err { color: #d14343; }
+  label { display: block; margin: 0 0 6px; font-weight: 600; }
+  input { width: 100%; margin: 0 0 14px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: transparent;
+    color: var(--text); font: inherit; }
+  input:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
   address { font-style: normal; white-space: pre-line; }
   footer { width: min(46rem, 100%); text-align: center; color: var(--muted); font-size: 0.85rem; }
   footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; margin-bottom: 4px; }
@@ -207,6 +211,39 @@ export function paidPage(o: { nonce: string; seller: string; key: string; fromAp
 <code class="key">${esc(o.key)}</code>
 <p class="muted">Keep it: you need it to set Pro up again after reinstalling Windows, or to move Pro to
 another PC. In Clokrix: Settings → Clokrix Pro → Enter key. Razorpay emails you a receipt.</p>`,
+  });
+}
+
+/** The key page (2.5.5): for the seller, a key given, not sold. `said`: why the last try gave
+ * none. */
+export function givePage(o: { nonce: string; seller: string; said?: string }): string {
+  return page({
+    title: 'Clokrix Pro: give a key',
+    seller: o.seller,
+    nonce: o.nonce,
+    body: `<h1>Give a Clokrix Pro key</h1>
+<p>For ${esc(o.seller)} only: a key given, not sold. It turns Pro on as a bought one does.</p>
+<form method="post" action="/give">
+  <label for="passphrase">Passphrase</label>
+  <input id="passphrase" name="passphrase" type="password" autocomplete="current-password" required>
+  <button type="submit">Make a key</button>
+</form>
+${o.said ? `<p class="err after" role="alert">${esc(o.said)}</p>` : ''}`,
+  });
+}
+
+/** A key just given. */
+export function givenPage(o: { nonce: string; seller: string; key: string }): string {
+  return page({
+    title: 'Clokrix Pro: a key given',
+    seller: o.seller,
+    nonce: o.nonce,
+    body: `<h1>A Clokrix Pro key</h1>
+<code class="key">${esc(o.key)}</code>
+<p class="muted">Given, not sold: no payment or receipt goes with it. Like a bought key, it is Pro
+on one PC at a time and can move to another. In Clokrix: Settings → Clokrix Pro → Enter key. Keep
+it: this page does not show it again, and each press of Make a key makes a new one.</p>
+<p><a href="/give">Give another</a></p>`,
   });
 }
 
