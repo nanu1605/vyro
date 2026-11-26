@@ -5310,7 +5310,10 @@ which anyone could be told, or read from GitHub's secrets through a workflow wit
       the wrong passphrase said so, setup, sign-in, the key shown; another browser's device got
       none.
 - [x] **CI green on e340dc0** (run 45791934724; every job, the checkout's tests among them).
-- [ ] **Deploy,** on the owner's go. The page then asks to be set up on their PC.
+- [x] **Deployed** (2026-11-26, on the owner's go: "deploy the licence"). `main` fast-forwarded
+      to 2553046, then Licence run 45798461175 from `main`: the passphrase set and long enough,
+      the 37 tests (the key page's 6 among them), the deploy, its secrets. The page now asks to
+      be set up on the owner's PC; this session cannot reach the website to open it.
 
 ## Risks
 
