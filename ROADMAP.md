@@ -5217,6 +5217,14 @@ drive scan did. The owner, 2026-11-24, told so: "fix the AMD CPU and network one
       and to the private copy in `nanu1605/vyro-releases`. GitHub's digests here: MSI
       `7251df5c…`, `latest.json` `326f7ed0…`, `SHA256SUMS.txt` `1adc8cc3…`. Unsigned, as before.
       Installed copies of 2.5.2 and later update to it from the website at their next check.
+- [x] **CI's old files deleted** (2026-11-26). The owner: "for sometime i have made vyro repo
+      public until the quota is reset. Also you can delete the old artifacts if the storage is
+      full". All 171 of this repo's Actions artifacts (2.14 GB: 51 test builds, 63 sets of phone
+      app screens, 57 H.264 files, 12 to 24 November, all from before 2.5.4) were deleted, so
+      none are left to count when the repo is private again. With the repo public, the tree and
+      its history were searched for keys and tokens (none), and the workflows read: fork pull
+      requests run CI with read-only contents and no secrets, and the deploy and release
+      workflows start only by hand or on a tag.
 
 ## Risks
 
