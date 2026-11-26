@@ -5336,7 +5336,11 @@ owner: "A backup device for the key page".
       with virtual authenticators: set up on a "PC", a backup added (2 devices), the PC's passkey
       removed as a reset would, and the backup alone signed in and got a key.
 - [x] **CI green on d5789d0** (run 45802853294; every job, the checkout's tests among them).
-- [ ] **Deploy,** on the owner's go; then the owner adds a backup device from their PC.
+- [x] **Deployed** (2026-11-26, on the owner's go: "deploy the licence"). `main` fast-forwarded
+      to 7cf5a63, then Licence run 45834371360 from `main`: the passphrase set and long enough,
+      the 38 tests (the key page's 7 among them), the deploy, its secrets. The owner's PC stays
+      set up; this session cannot reach the website to open it.
+- [ ] **The owner adds a backup device** from their PC: `/give`, Sign in, Add another device.
 
 ## Risks
 
