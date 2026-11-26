@@ -7,10 +7,12 @@
 // longer turns Pro on (the owner, 2026-11-16: "Cancel test keys at go-live").
 //
 // A key given on the key page (2.5.5), not sold, has no order: its payment is `given:` and a
-// random id, and it is never test, so it turns Pro on whichever keys the checkout runs on.
+// random id, and it is never test, so it turns Pro on whichever keys the checkout runs on. The
+// page gives one only to the owner's passkey (webauthn.ts), kept here with the setup it was let
+// in under: a hash of the setup passphrase, so a new passphrase starts the setup again.
 
 import { DurableObject } from 'cloudflare:workers';
-import { MOVE_DAYS, newKey, RATE_PER_MIN, WRONG_PER_HOUR } from './rules';
+import { CHALLENGE_SECONDS, MOVE_DAYS, newKey, RATE_PER_MIN, WRONG_PER_HOUR } from './rules';
 
 export const LEDGER_NAME = 'ledger';
 
@@ -26,6 +28,17 @@ export type Activated =
   | { ok: false; status: number; error: 'no-key' | 'revoked' | 'in-use' | 'moved-recently'; until?: number };
 
 export type Checked = { ok: true } | { ok: false; reason: 'no-key' | 'revoked' | 'moved' | 'released' };
+
+/** The owner's passkey: its credential id, the website it is for, its public key (SPKI, base64url)
+ * and algorithm, its signature counter, and the setup it was let in under. */
+export interface Passkey {
+  id: string;
+  rp: string;
+  spki: string;
+  alg: number;
+  count: number;
+  setup: string;
+}
 
 const DAY = 86_400;
 
@@ -45,6 +58,11 @@ export class Ledger extends DurableObject<object> {
       );
       CREATE TABLE IF NOT EXISTS hits (ip TEXT NOT NULL, minute INTEGER NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (ip, minute));
       CREATE TABLE IF NOT EXISTS wrong (at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS passkeys (
+        id TEXT PRIMARY KEY, rp TEXT NOT NULL, spki TEXT NOT NULL, alg INTEGER NOT NULL, count INTEGER NOT NULL, setup TEXT NOT NULL,
+        created INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS used (value TEXT PRIMARY KEY, at INTEGER NOT NULL);
     `);
     // Added after the first deploy, when every key yet had been bought under Test keys: so they
     // all count as test.
@@ -103,6 +121,37 @@ export class Ledger extends DurableObject<object> {
     const payment = `given:${crypto.randomUUID()}`;
     this.sql.exec('INSERT INTO licences (lic, key, payment, issued, test) VALUES (?, ?, ?, ?, 0)', lic, newKey(), payment, this.now());
     return this.licence(lic)!;
+  }
+
+  /** The passkeys let in under `setup`. */
+  passkeys(setup: string): Passkey[] {
+    return this.sql.exec<Passkey & Record<string, string | number>>('SELECT id, rp, spki, alg, count, setup FROM passkeys WHERE setup = ?', setup).toArray();
+  }
+
+  /** The owner's passkey, let in under `setup`: false if one already is (one device per setup). */
+  addPasskey(p: Passkey): boolean {
+    return this.ctx.storage.transactionSync(() => {
+      if (this.passkeys(p.setup).length > 0) return false;
+      this.sql.exec('INSERT OR REPLACE INTO passkeys (id, rp, spki, alg, count, setup, created) VALUES (?, ?, ?, ?, ?, ?, ?)', p.id, p.rp, p.spki, p.alg, p.count, p.setup, this.now());
+      return true;
+    });
+  }
+
+  /** A sign-in's signature counter, kept so that a copied passkey's sign-in is refused. */
+  setCount(id: string, count: number): void {
+    this.sql.exec('UPDATE passkeys SET count = ? WHERE id = ?', count, id);
+  }
+
+  /** A complete ceremony's challenge, marked used: false if it was already (a ceremony sent
+   * again). Kept only as long as a challenge is good. */
+  useChallenge(value: string): boolean {
+    return this.ctx.storage.transactionSync(() => {
+      const now = this.now();
+      this.sql.exec('DELETE FROM used WHERE at < ?', now - CHALLENGE_SECONDS - 60);
+      if (this.sql.exec('SELECT 1 FROM used WHERE value = ?', value).toArray().length > 0) return false;
+      this.sql.exec('INSERT INTO used (value, at) VALUES (?, ?)', value, now);
+      return true;
+    });
   }
 
   /** The key page takes a passphrase now: fewer than WRONG_PER_HOUR wrong ones in the last hour. */

@@ -3,7 +3,7 @@
 // with the same secrets the Worker is given.
 
 import { createServer, type Server } from 'node:http';
-import { createHmac, webcrypto } from 'node:crypto';
+import { createHash, createHmac, webcrypto } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createTestHarness, type TestHarness, type TestHarnessOptions } from 'wrangler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -553,97 +553,241 @@ describe('one address for the website', () => {
 });
 
 describe('the key page (2.5.5)', () => {
-  /** The key page's passphrase (constructed). */
+  /** The setup passphrase (constructed). */
   const PASSPHRASE = 'a passphrase for the tests only';
   const open = { KEY_PAGE_PASSPHRASE: PASSPHRASE };
-  /** Wrong passphrases sent so far: every test here counts against the same hour. */
+  /** Wrong setup passphrases sent so far: every test here counts against the same hour. */
   let wrong = 0;
+  const b64u = (b: Uint8Array | ArrayBuffer) => Buffer.from(b instanceof ArrayBuffer ? new Uint8Array(b) : b).toString('base64url');
+  const sha = (b: Uint8Array) => createHash('sha256').update(b).digest();
 
-  async function give(passphrase: string, ip = from()): Promise<{ status: number; page: string }> {
-    const res = await fetch(`${base}/give`, { method: 'POST', headers: ip, body: new URLSearchParams({ passphrase }) });
-    if (res.status === 403) wrong++;
+  /** A passkey as an authenticator keeps one: ES256 (DER signatures) or EdDSA; with a signature
+   * counter, or, as some (Windows Hello among them) without, always 0. */
+  class Device {
+    id = b64u(webcrypto.getRandomValues(new Uint8Array(32)));
+    count = 0;
+    private constructor(
+      readonly alg: number,
+      private keys: webcrypto.CryptoKeyPair,
+      readonly counts: boolean,
+    ) {}
+    static async make(alg: -7 | -8 = -7, counts = true): Promise<Device> {
+      const params = alg === -7 ? { name: 'ECDSA', namedCurve: 'P-256' } : { name: 'Ed25519' };
+      return new Device(alg, (await webcrypto.subtle.generateKey(params, true, ['sign', 'verify'])) as webcrypto.CryptoKeyPair, counts);
+    }
+    async spki(): Promise<string> {
+      return b64u(await webcrypto.subtle.exportKey('spki', this.keys.publicKey));
+    }
+    async sign(data: Uint8Array): Promise<Buffer> {
+      if (this.alg === -8) return Buffer.from(await webcrypto.subtle.sign('Ed25519', this.keys.privateKey, data));
+      const raw = Buffer.from(await webcrypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, this.keys.privateKey, data));
+      // As authenticators give it: DER, each half without leading zeros and positive.
+      const int = (x: Buffer) => {
+        let i = 0;
+        while (i < x.length - 1 && x[i] === 0) i++;
+        const v = x.subarray(i);
+        const body = v[0]! & 0x80 ? Buffer.concat([Buffer.from([0]), v]) : v;
+        return Buffer.concat([Buffer.from([2, body.length]), body]);
+      };
+      const seq = Buffer.concat([int(raw.subarray(0, 32)), int(raw.subarray(32))]);
+      return Buffer.concat([Buffer.from([0x30, seq.length]), seq]);
+    }
+  }
+
+  const rpId = () => new URL(base).hostname;
+  /** The authenticator's data: the website's hash, the flags (present 1, verified 4), the
+   * counter. */
+  function authenticator(flags: number, count: number, rp = rpId()): Buffer {
+    const c = Buffer.alloc(4);
+    c.writeUInt32BE(count);
+    return Buffer.concat([sha(Buffer.from(rp)), Buffer.from([flags]), c]);
+  }
+  const client = (type: string, challenge: string, origin = base) => Buffer.from(JSON.stringify({ type, challenge, origin, crossOrigin: false }));
+
+  async function setUp(d: Device, passphrase = PASSPHRASE): Promise<{ status: number; body: Record<string, unknown> }> {
+    const start = await post('/give/setup/start', { passphrase });
+    if (start.status === 403) wrong++;
+    if (start.status !== 200) return start;
+    return post('/give/setup/finish', {
+      passphrase,
+      id: d.id,
+      spki: await d.spki(),
+      alg: d.alg,
+      authenticatorData: b64u(authenticator(0x45, 0)),
+      clientDataJSON: b64u(client('webauthn.create', start.body.challenge as string)),
+    });
+  }
+
+  /** A sign-in by `d`, as its browser sends it; `o` changes one part of it. */
+  async function signInBody(d: Device, o: { flags?: number; origin?: string; type?: string; challenge?: string; count?: number; rp?: string } = {}) {
+    const start = await post('/give/start', {});
+    expect(start.status).toBe(200);
+    expect(start.body.ids).toEqual([d.id]);
+    if (d.counts) d.count++;
+    const cd = client(o.type ?? 'webauthn.get', o.challenge ?? (start.body.challenge as string), o.origin ?? base);
+    const ad = authenticator(o.flags ?? 0x05, o.count ?? d.count, o.rp);
+    const sig = await d.sign(Buffer.concat([ad, sha(cd)]));
+    return { id: d.id, authenticatorData: b64u(ad), clientDataJSON: b64u(cd), signature: b64u(sig) };
+  }
+
+  async function signIn(d: Device, o: Parameters<typeof signInBody>[1] = {}) {
+    return post('/give/key', await signInBody(d, o));
+  }
+
+  async function page(): Promise<{ status: number; page: string }> {
+    const res = await fetch(`${base}/give`, { headers: from() });
     return { status: res.status, page: await res.text() };
   }
 
-  async function ledgerRow(key: string): Promise<Record<string, unknown>> {
-    const ledger = await server.getWorker().getDurableObjectStorage('LEDGER', { name: 'ledger' });
-    const rows = (await ledger.exec('SELECT payment, test, revoked FROM licences WHERE key = ?', key)) as Array<Record<string, unknown>>;
-    expect(rows).toHaveLength(1);
-    return rows[0]!;
-  }
+  let device: Device;
 
   it('is closed without a passphrase, or with one shorter than 20 characters', async () => {
-    expect((await fetch(`${base}/give`, { headers: from() })).status).toBe(503);
-    expect((await give(PASSPHRASE)).status).toBe(503);
+    expect((await page()).status).toBe(503);
+    expect((await post('/give/setup/start', { passphrase: PASSPHRASE })).status).toBe(503);
+    expect((await post('/give/start', {})).status).toBe(503);
     await restart(KEY_ID, {}, { KEY_PAGE_PASSPHRASE: 'nineteen characters' });
     try {
-      expect((await fetch(`${base}/give`, { headers: from() })).status).toBe(503);
-      const short = await give('nineteen characters');
-      expect(short.status).toBe(503);
-      expect(keyIn(short.page)).toBeNull();
+      expect((await page()).status).toBe(503);
+      expect((await post('/give/setup/start', { passphrase: 'nineteen characters' })).status).toBe(503);
     } finally {
       await restart();
     }
   });
 
-  it('gives a key for the passphrase only, kept from search engines and caches', async () => {
+  it('sets up one device, with the passphrase only, then offers only to sign in', async () => {
     await restart(KEY_ID, {}, open);
     try {
-      const res = await fetch(`${base}/give`, { headers: from() });
-      expect(res.status).toBe(200);
-      expect(res.headers.get('Cache-Control')).toBe('no-store');
-      const form = await res.text();
-      expect(form).toContain('<meta name="robots" content="noindex">');
-      expect(form).toContain('type="password"');
-      expect(keyIn(form)).toBeNull();
+      const first = await page();
+      expect(first.status).toBe(200);
+      expect(first.page).toContain('<meta name="robots" content="noindex">');
+      expect(first.page).toContain('Set up this device');
+      // Nothing on the page says what it gives.
+      expect(first.page.slice(first.page.indexOf('<main'), first.page.indexOf('<div id="got"'))).not.toMatch(/\bkeys?\b/i);
+      expect(await post('/give/start', {})).toEqual({ status: 409, body: { error: 'not-set-up' } });
 
-      const no = await give('not the passphrase at all, no');
-      expect(no.status).toBe(403);
-      expect(no.page).toContain('That is not the passphrase.');
-      expect(keyIn(no.page)).toBeNull();
-      expect((await give('')).status).toBe(403);
+      device = await Device.make();
+      expect((await setUp(device, 'not the passphrase at all, no')).status).toBe(403);
+      // The ceremony must be this page's, for this website, with the owner checked.
+      const start = await post('/give/setup/start', { passphrase: PASSPHRASE });
+      const finish = (o: { origin?: string; flags?: number; alg?: number }) =>
+        device.spki().then((spki) =>
+          post('/give/setup/finish', {
+            passphrase: PASSPHRASE,
+            id: device.id,
+            spki,
+            alg: o.alg ?? -7,
+            authenticatorData: b64u(authenticator(o.flags ?? 0x45, 0)),
+            clientDataJSON: b64u(client('webauthn.create', start.body.challenge as string, o.origin)),
+          }),
+        );
+      expect((await finish({ origin: 'https://elsewhere.example' })).status).toBe(400);
+      expect((await setUp(device)).body).toEqual({ ok: true });
 
-      const yes = await give(PASSPHRASE);
-      expect(yes.status).toBe(200);
-      const key = keyIn(yes.page)!;
-      expect(key).not.toBeNull();
-      // Pasted with a space either side, it is still the passphrase; each press is a new key.
-      const again = keyIn((await give(` ${PASSPHRASE} `)).page);
-      expect(again).not.toBeNull();
-      expect(again).not.toBe(key);
-      expect(await ledgerRow(key)).toMatchObject({ test: 0, revoked: null, payment: expect.stringMatching(/^given:/) });
-      expect((await fetch(`${base}/give`, { method: 'PUT', headers: from() })).status).toBe(405);
+      const after = await page();
+      expect(after.page).toContain('>Sign in</button>');
+      expect(after.page).not.toContain('Set up this device');
+      expect((await setUp(await Device.make())).body).toEqual({ error: 'set-up' });
+      // The old way, the passphrase alone, gives nothing.
+      expect((await fetch(`${base}/give`, { method: 'POST', headers: from(), body: new URLSearchParams({ passphrase: PASSPHRASE }) })).status).toBe(405);
+      expect((await post('/give/key', { passphrase: PASSPHRASE })).status).toBe(403);
     } finally {
       await restart();
     }
   });
 
-  it('gives a key that turns Pro on as a bought one, on Live keys too', async () => {
+  it('gives a key to the device set up, once it has checked the owner, once per sign-in', async () => {
+    await restart(KEY_ID, {}, open);
+    try {
+      const ok = await signIn(device);
+      expect(ok.status).toBe(200);
+      const key = ok.body.key as string;
+      expect(keyIn(key)).toBe(key);
+      const again = await signIn(device);
+      expect(again.body.key).not.toBe(key);
+
+      // A sign-in sent again, by someone who saw it, gives nothing.
+      const seen = await signInBody(device);
+      expect((await post('/give/key', seen)).status).toBe(200);
+      expect((await post('/give/key', seen)).status).toBe(403);
+      // Signed by another device, under this one's name.
+      const other = await Device.make();
+      const forged = await signInBody(device);
+      const cd = Buffer.from(forged.clientDataJSON, 'base64url');
+      const ad = Buffer.from(forged.authenticatorData, 'base64url');
+      forged.signature = b64u(await other.sign(Buffer.concat([ad, sha(cd)])));
+      expect((await post('/give/key', forged)).status).toBe(403);
+      // Not checked (present only), from another page, another website, another ceremony, or an
+      // unknown challenge; and a counter that did not go up (a copy of the passkey).
+      expect((await signIn(device, { flags: 0x01 })).status).toBe(403);
+      expect((await signIn(device, { origin: 'https://elsewhere.example' })).status).toBe(403);
+      expect((await signIn(device, { rp: 'elsewhere.example' })).status).toBe(403);
+      expect((await signIn(device, { type: 'webauthn.create' })).status).toBe(403);
+      expect((await signIn(device, { challenge: b64u(webcrypto.getRandomValues(new Uint8Array(32))) })).status).toBe(403);
+      expect((await signIn(device, { count: 1 })).status).toBe(403);
+      expect((await signIn(device)).status).toBe(200);
+      // Challenges, made here as the checkout makes them (the time, random bytes, a MAC with the
+      // setup passphrase): good for 5 minutes, for their own ceremony only.
+      const made = (kind: string, at: number) => {
+        const body = Buffer.alloc(20);
+        body.writeUInt32BE(at);
+        body.set(webcrypto.getRandomValues(new Uint8Array(16)), 4);
+        const tag = createHmac('sha256', PASSPHRASE).update(Buffer.concat([Buffer.from(kind), body])).digest().subarray(0, 16);
+        return b64u(Buffer.concat([body, tag]));
+      };
+      const now = Math.floor(Date.now() / 1000);
+      expect((await signIn(device, { challenge: made('get', now) })).status).toBe(200);
+      expect((await signIn(device, { challenge: made('get', now - 301) })).status).toBe(403);
+      expect((await signIn(device, { challenge: made('create', now) })).status).toBe(403);
+    } finally {
+      await restart();
+    }
+  });
+
+  it('gives a key that turns Pro on as a bought one, on Live keys too, recorded as given', async () => {
     await restart(LIVE_KEY_ID, {}, open);
     try {
-      const key = keyIn((await give(PASSPHRASE)).page)!;
+      const key = (await signIn(device)).body.key as string;
       const a = pcId();
-      const on = await post('/activate', { key, pc: a });
-      expect(on.status).toBe(200);
-      expect(typeof on.body.activation).toBe('string');
+      expect((await post('/activate', { key, pc: a })).status).toBe(200);
       expect((await post('/check', { key, pc: a })).body).toEqual({ ok: true });
       expect(await post('/activate', { key, pc: pcId() })).toEqual({ status: 409, body: { error: 'in-use' } });
-      expect((await post('/activate', { key, pc: pcId(), move: true })).status).toBe(200);
+      const ledger = await server.getWorker().getDurableObjectStorage('LEDGER', { name: 'ledger' });
+      const rows = (await ledger.exec('SELECT payment, test FROM licences WHERE key = ?', key)) as Array<Record<string, unknown>>;
+      expect(rows).toEqual([{ payment: expect.stringMatching(/^given:/), test: 0 }]);
     } finally {
       await restart();
     }
   });
 
-  it('takes no passphrase, not even the right one, after 20 wrong ones in an hour', async () => {
-    await restart(KEY_ID, {}, open);
+  it('starts setup again under a new passphrase: the old device then gives nothing', async () => {
+    const next = { KEY_PAGE_PASSPHRASE: 'another passphrase for the tests' };
+    await restart(KEY_ID, {}, next);
     try {
-      // From addresses of their own, so the limit met is the passphrase's, not one address's.
-      while (wrong < 20) expect((await give(`wrong passphrase number ${wrong}`)).status).toBe(403);
-      const late = await give(PASSPHRASE);
-      expect(late.status).toBe(429);
-      expect(late.page).toContain('try again in an hour');
-      expect(keyIn(late.page)).toBeNull();
-      expect((await give('one more wrong passphrase')).status).toBe(429);
+      expect((await page()).page).toContain('Set up this device');
+      expect(await post('/give/start', {})).toEqual({ status: 409, body: { error: 'not-set-up' } });
+      const stale = await post('/give/key', { id: device.id, authenticatorData: 'AA', clientDataJSON: 'AA', signature: 'AA' });
+      expect(stale.status).toBe(403);
+      // An EdDSA passkey without a counter, as some authenticators make: a sign-in sent again is
+      // refused by its challenge, used once, alone.
+      const ed = await Device.make(-8, false);
+      expect((await setUp(ed, next.KEY_PAGE_PASSPHRASE)).body).toEqual({ ok: true });
+      expect((await signIn(ed)).status).toBe(200);
+      const seen = await signInBody(ed);
+      expect((await post('/give/key', seen)).status).toBe(200);
+      expect((await post('/give/key', seen)).status).toBe(403);
+      expect((await signIn(ed)).status).toBe(200);
+    } finally {
+      await restart();
+    }
+  });
+
+  it('takes no setup passphrase, not even the right one, after 20 wrong ones in an hour', async () => {
+    const fresh = 'a third passphrase for the tests';
+    await restart(KEY_ID, {}, { KEY_PAGE_PASSPHRASE: fresh });
+    try {
+      while (wrong < 20) expect((await setUp(await Device.make(), `wrong passphrase number ${wrong}`)).status).toBe(403);
+      expect(await post('/give/setup/start', { passphrase: fresh })).toEqual({ status: 429, body: { error: 'wait' } });
+      expect((await post('/give/setup/start', { passphrase: 'one more wrong passphrase' })).status).toBe(429);
     } finally {
       await restart();
     }

@@ -14,8 +14,10 @@ name: Licence
 #   secret   RAZORPAY_KEY_SECRET       the same key's secret
 #   secret   RAZORPAY_WEBHOOK_SECRET   the secret of the webhook to <address>/razorpay/webhook
 #   secret   LICENCE_SIGNING_KEY       node scripts/licence-keygen.mjs (its private half)
-#   secret   KEY_PAGE_PASSPHRASE       optional (2.5.5): the key page's passphrase (<address>/give),
-#                                      at least 20 characters; unset, the deploy closes the page
+#   secret   KEY_PAGE_PASSPHRASE       optional (2.5.5): the key page's setup passphrase, at least
+#                                      20 characters: it sets up the owner's passkey at
+#                                      <address>/give, which then gives keys. Unset, the deploy
+#                                      closes the page; a new one starts its setup again.
 # After the first deploy, set the variables CLOKRIX_LICENCE_URL to the address it prints and
 # CLOKRIX_LICENCE_PUBKEY to the key pair's public half, so builds carry them (ci.yml, release.yml).
 #
@@ -173,7 +175,7 @@ jobs:
             fi
             echo
             if [ -n "$KEY_PAGE_PASSPHRASE" ]; then
-              echo "Key page: open, at /give on the website (keys given, not sold)."
+              echo "Key page: open, at /give on the website: set up your passkey there once, then sign in with it for each key."
             else
               echo "Key page: closed (the secret KEY_PAGE_PASSPHRASE is not set)."
             fi

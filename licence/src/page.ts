@@ -214,36 +214,120 @@ another PC. In Clokrix: Settings → Clokrix Pro → Enter key. Razorpay emails 
   });
 }
 
-/** The key page (2.5.5): for the seller, a key given, not sold. `said`: why the last try gave
- * none. */
-export function givePage(o: { nonce: string; seller: string; said?: string }): string {
-  return page({
-    title: 'Clokrix Pro: give a key',
-    seller: o.seller,
-    nonce: o.nonce,
-    body: `<h1>Give a Clokrix Pro key</h1>
-<p>For ${esc(o.seller)} only: a key given, not sold. It turns Pro on as a bought one does.</p>
-<form method="post" action="/give">
-  <label for="passphrase">Passphrase</label>
+/** The key page (2.5.5): `setup` to set this device's passkey up with the setup passphrase, then
+ * `sign-in`, where the passkey (fingerprint, face or PIN) gets a key. Worded so a visitor learns
+ * nothing from it: it names no keys until one is given. */
+export function keyPage(o: { nonce: string; seller: string; mode: 'setup' | 'sign-in' }): string {
+  const setup = o.mode === 'setup';
+  const body = setup
+    ? `<h1>Set up</h1>
+<p>Type the setup passphrase, then set up this device's passkey. From then on, only this device,
+once it has checked you (fingerprint, face or PIN), signs in here.</p>
+<form id="go">
+  <label for="passphrase">Setup passphrase</label>
   <input id="passphrase" name="passphrase" type="password" autocomplete="current-password" required>
-  <button type="submit">Make a key</button>
-</form>
-${o.said ? `<p class="err after" role="alert">${esc(o.said)}</p>` : ''}`,
-  });
-}
-
-/** A key just given. */
-export function givenPage(o: { nonce: string; seller: string; key: string }): string {
+  <button type="submit">Set up this device</button>
+</form>`
+    : `<h1>Sign in</h1>
+<p>With the passkey set up on this device.</p>
+<form id="go"><button type="submit">Sign in</button></form>`;
   return page({
-    title: 'Clokrix Pro: a key given',
+    title: 'Clokrix',
     seller: o.seller,
     nonce: o.nonce,
-    body: `<h1>A Clokrix Pro key</h1>
-<code class="key">${esc(o.key)}</code>
-<p class="muted">Given, not sold: no payment or receipt goes with it. Like a bought key, it is Pro
-on one PC at a time and can move to another. In Clokrix: Settings → Clokrix Pro → Enter key. Keep
-it: this page does not show it again, and each press of Make a key makes a new one.</p>
-<p><a href="/give">Give another</a></p>`,
+    body: `<div id="ask">${body}</div>
+<div id="got" hidden>
+  <h1>A Clokrix Pro key</h1>
+  <code id="key" class="key"></code>
+  <p class="muted">Given, not sold: no payment or receipt goes with it. Like a bought key, it is Pro
+  on one PC at a time and can move to another. In Clokrix: Settings → Clokrix Pro → Enter key. Keep
+  it: it is not shown again, and each sign-in makes a new one.</p>
+  <p><a href="/give">Sign in again</a></p>
+</div>
+<p id="err" class="err after" role="alert"></p>
+<script nonce="${o.nonce}">
+  const setup = ${JSON.stringify(setup)};
+  const err = document.getElementById('err');
+  const enc = (b) => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
+  const dec = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+  const said = {
+    passphrase: 'That is not the setup passphrase.',
+    wait: 'Too many wrong passphrases: try again in an hour.',
+    'set-up': 'A device is already set up here.',
+    'not-set-up': 'No device is set up here yet.',
+  };
+  async function api(path, body) {
+    const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(said[j.error] || 'That did not work. Try again.');
+    return j;
+  }
+  async function setUp(passphrase) {
+    const o = await api('/give/setup/start', { passphrase });
+    const c = await navigator.credentials.create({
+      publicKey: {
+        challenge: dec(o.challenge),
+        rp: o.rp,
+        user: { id: dec(o.user.id), name: o.user.name, displayName: o.user.name },
+        pubKeyCredParams: o.algs.map((alg) => ({ type: 'public-key', alg })),
+        authenticatorSelection: { userVerification: 'required', residentKey: 'preferred' },
+        attestation: 'none',
+        timeout: 120000,
+      },
+    });
+    const r = c.response;
+    const spki = r.getPublicKey && r.getPublicKey();
+    if (!spki) throw new Error('This browser cannot set a passkey up here: try Edge or Chrome.');
+    await api('/give/setup/finish', {
+      passphrase,
+      id: enc(c.rawId),
+      spki: enc(spki),
+      alg: r.getPublicKeyAlgorithm(),
+      authenticatorData: enc(r.getAuthenticatorData()),
+      clientDataJSON: enc(r.clientDataJSON),
+    });
+    location.reload();
+  }
+  async function signIn() {
+    const o = await api('/give/start', {});
+    const c = await navigator.credentials.get({
+      publicKey: {
+        challenge: dec(o.challenge),
+        rpId: o.rpId,
+        allowCredentials: o.ids.map((id) => ({ type: 'public-key', id: dec(id) })),
+        userVerification: 'required',
+        timeout: 120000,
+      },
+    });
+    const r = c.response;
+    const got = await api('/give/key', {
+      id: enc(c.rawId),
+      authenticatorData: enc(r.authenticatorData),
+      clientDataJSON: enc(r.clientDataJSON),
+      signature: enc(r.signature),
+    });
+    document.getElementById('key').textContent = got.key;
+    document.getElementById('ask').hidden = true;
+    document.getElementById('got').hidden = false;
+  }
+  document.getElementById('go').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    err.textContent = '';
+    if (!window.PublicKeyCredential) {
+      err.textContent = 'This browser cannot use passkeys.';
+      return;
+    }
+    const button = e.target.querySelector('button');
+    button.disabled = true;
+    try {
+      await (setup ? setUp(document.getElementById('passphrase').value) : signIn());
+    } catch (x) {
+      err.textContent = x && x.name === 'NotAllowedError' ? 'Cancelled, or this device has no passkey for this page.' : x.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+</script>`,
   });
 }
 

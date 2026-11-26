@@ -19,20 +19,30 @@
 //   POST /activate           {key, pc, move?}: Pro on this PC; answers a signed activation.
 //   POST /release            {key, pc}: the key off this PC, for another to take.
 //   POST /check              {key, pc}: still Pro here? (not if moved, released or refunded).
-// The seller's side (2.5.5), in a browser:
-//   GET  /give, POST /give   a key given, not sold, for the passphrase in KEY_PAGE_PASSPHRASE
-//                            (the owner, 2026-11-26: "build the key page"). Closed without one of
-//                            at least MIN_PASSPHRASE characters; WRONG_PER_HOUR wrong ones in an
-//                            hour close it for the rest of that hour.
+// The seller's side (2.5.5), in a browser: keys given, not sold (the owner, 2026-11-26: "build
+// the key page"), only to the owner's own device (webauthn.ts; the owner: "Use some safety and
+// privacy so only i can generate the key in whole jainav infotech"). Closed without a
+// KEY_PAGE_PASSPHRASE of at least MIN_PASSPHRASE characters.
+//   GET  /give               sets up the device's passkey, with that passphrase, while none is
+//                            set up; then signs in with it.
+//   POST /give/setup/start, /give/setup/finish
+//                            the passkey made and kept: with the passphrase, while none is set up.
+//                            WRONG_PER_HOUR wrong passphrases in an hour close setup for the rest
+//                            of it.
+//   POST /give/start, /give/key
+//                            a sign-in with the passkey, checked (fingerprint, face or PIN); then a
+//                            new key.
 // Clokrix itself (2.5.2, downloads.ts), from the R2 bucket the Release workflow fills:
 //   GET  /download, /download/<tag>/<file>, /updates/latest.json
 
 import { capture, createOrder, getPayment, paidFor, type Payment, type Razorpay } from './razorpay';
-import { checkoutPage, errorPage, givenPage, givePage, pageHeaders, paidPage } from './page';
+import { checkoutPage, errorPage, keyPage, pageHeaders, paidPage } from './page';
+import { ALGS, authData, bytes, clientData, freshChallenge, newChallenge, ours, publicKey, signed, vouched } from './webauthn';
 import { isSitePage, sitePage, type Seller } from './site';
 import { download, isDownload } from './downloads';
 import { LEDGER_NAME, type Ledger } from './ledger';
 import {
+  b64url,
   chosenCurrency,
   currencyFor,
   hmacHex,
@@ -43,7 +53,9 @@ import {
   same,
   samePassphrase,
   signActivation,
+  setupId,
   signingKey,
+  unb64,
   type Currency,
 } from './rules';
 
@@ -248,22 +260,88 @@ export default {
       return html(200, n, paidPage({ ...at, key: l.key, fromApp: await ledger.fromApp(orderId) }));
     }
 
-    if (path === '/give') {
-      if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'POST') return json(405, { error: 'not-allowed' });
+    if (path === '/give' || path.startsWith('/give/')) {
       const set = (env.KEY_PAGE_PASSPHRASE ?? '').trim();
-      if (set.length < MIN_PASSPHRASE) return html(503, n, errorPage(at, 'Not open', 'No keys are given here.'));
-      if (req.method !== 'POST') return html(200, n, givePage(at));
-      // Waiting, the right passphrase is refused too: otherwise the wait would not slow guessing.
-      if (!(await ledger.passphraseTaken())) {
-        return html(429, n, givePage({ ...at, said: 'Too many wrong passphrases: try again in an hour.' }));
+      const open = set.length >= MIN_PASSPHRASE;
+      // A passkey belongs to the setup passphrase it was let in under: a new one starts again.
+      const setup = await setupId(set);
+      // The website a passkey is for, as the browser sees it.
+      const rpId = url.hostname;
+      const now = Math.floor(Date.now() / 1000);
+      if (path === '/give') {
+        if (req.method !== 'GET' && req.method !== 'HEAD') return json(405, { error: 'not-allowed' });
+        if (!open) return html(503, n, errorPage(at, 'Not open', 'Nothing is here.'));
+        const ready = (await ledger.passkeys(setup)).some((p) => p.rp === rpId);
+        return html(200, n, keyPage({ ...at, mode: ready ? 'sign-in' : 'setup' }));
       }
-      const form = await req.formData().catch(() => null);
-      const typed = form?.get('passphrase');
-      if (typeof typed !== 'string' || !(await samePassphrase(typed.trim(), set))) {
-        await ledger.wrongPassphrase();
-        return html(403, n, givePage({ ...at, said: 'That is not the passphrase.' }));
+      if (req.method !== 'POST') return json(405, { error: 'not-allowed' });
+      if (!open) return json(503, { error: 'not-open' });
+      const b = (await body(req)) ?? {};
+
+      if (path === '/give/setup/start' || path === '/give/setup/finish') {
+        // Waiting, the right passphrase is refused too: otherwise the wait would not slow guessing.
+        if (!(await ledger.passphraseTaken())) return json(429, { error: 'wait' });
+        if (typeof b.passphrase !== 'string' || !(await samePassphrase(b.passphrase.trim(), set))) {
+          await ledger.wrongPassphrase();
+          return json(403, { error: 'passphrase' });
+        }
+        if ((await ledger.passkeys(setup)).length > 0) return json(409, { error: 'set-up' });
+        if (path === '/give/setup/start') {
+          const challenge = await newChallenge(set, 'create', now);
+          // The same name for everyone, and a random user id: nothing about the owner.
+          const user = { id: b64url(crypto.getRandomValues(new Uint8Array(16))), name: 'Clokrix Pro keys' };
+          return json(200, { challenge, rp: { id: rpId, name: 'Clokrix' }, user, algs: ALGS });
+        }
+        const id = typeof b.id === 'string' && /^[A-Za-z0-9_-]{16,1364}$/.test(b.id) ? b.id : null;
+        const spki = bytes(b.spki);
+        const auth = bytes(b.authenticatorData);
+        const client = bytes(b.clientDataJSON);
+        const alg = typeof b.alg === 'number' ? b.alg : NaN;
+        if (!id || !spki || !auth || !client) return json(400, { error: 'body' });
+        const c = clientData(client);
+        if (!c || !ours(c, 'webauthn.create', url.origin) || !(await freshChallenge(set, 'create', c.challenge, now))) {
+          return json(400, { error: 'ceremony' });
+        }
+        const a = authData(auth);
+        if (!a || !(await vouched(a, rpId))) return json(400, { error: 'authenticator' });
+        if (!(await publicKey(spki, alg))) return json(400, { error: 'algorithm' });
+        if (!(await ledger.useChallenge(c.challenge))) return json(400, { error: 'ceremony' });
+        const added = await ledger.addPasskey({ id, rp: rpId, spki: b64url(spki), alg, count: a.count, setup });
+        return added ? json(200, { ok: true }) : json(409, { error: 'set-up' });
       }
-      return html(200, n, givenPage({ ...at, key: (await ledger.give()).key }));
+
+      const passkeys = (await ledger.passkeys(setup)).filter((p) => p.rp === rpId);
+      if (path === '/give/start') {
+        if (passkeys.length === 0) return json(409, { error: 'not-set-up' });
+        return json(200, { challenge: await newChallenge(set, 'get', now), rpId, ids: passkeys.map((p) => p.id) });
+      }
+
+      if (path === '/give/key') {
+        // No wait after failures here: a passkey's signature cannot be guessed, and a wait would
+        // let anyone keep the owner out.
+        const pk = passkeys.find((p) => p.id === b.id);
+        const auth = bytes(b.authenticatorData);
+        const client = bytes(b.clientDataJSON);
+        const sig = bytes(b.signature, 1024);
+        if (!pk || !auth || !client || !sig) return json(403, { error: 'passkey' });
+        const c = clientData(client);
+        if (!c || !ours(c, 'webauthn.get', url.origin) || !(await freshChallenge(set, 'get', c.challenge, now))) {
+          return json(403, { error: 'ceremony' });
+        }
+        const a = authData(auth);
+        const key = await publicKey(unb64(pk.spki), pk.alg);
+        if (!a || !key || !(await vouched(a, rpId)) || !(await signed(key, pk.alg, auth, client, sig))) {
+          return json(403, { error: 'passkey' });
+        }
+        // A counter that did not go up is a copy of the passkey (authenticators without one say 0).
+        if ((a.count !== 0 || pk.count !== 0) && a.count <= pk.count) return json(403, { error: 'passkey' });
+        // Last, once all else holds: a sign-in sent again finds its challenge used.
+        if (!(await ledger.useChallenge(c.challenge))) return json(403, { error: 'ceremony' });
+        await ledger.setCount(pk.id, a.count);
+        return json(200, { key: (await ledger.give()).key });
+      }
+
+      return json(404, { error: 'not-found' });
     }
 
     const claimAt = /^\/claim\/([0-9a-f]{32})$/.exec(path);

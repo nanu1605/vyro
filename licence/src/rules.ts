@@ -40,9 +40,11 @@ export const RATE_PER_MIN = 40;
 /** The key page's passphrase is at least this long (2.5.5): it is all that stands between the
  * page and a key. */
 export const MIN_PASSPHRASE = 20;
-/** Wrong passphrases the key page takes in an hour, from anyone; then it takes none, the right
- * one too, until the oldest of them is an hour old. */
+/** Wrong passphrases the key page's setup takes in an hour, from anyone; then it takes none, the
+ * right one too, until the oldest of them is an hour old. */
 export const WRONG_PER_HOUR = 20;
+/** A passkey ceremony's challenge is good once, for this long. */
+export const CHALLENGE_SECONDS = 300;
 
 /** Crockford's base32: no I, L, O or U, so a key read aloud or typed is not misread. */
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -107,6 +109,12 @@ export function same(a: string, b: string): boolean {
  * lengths too. */
 export async function samePassphrase(typed: string, set: string): Promise<boolean> {
   return same(await hmacHex('clokrix-key-page', typed), await hmacHex('clokrix-key-page', set));
+}
+
+/** What the key page's passkeys are let in under: the setup passphrase's hash, so that a new
+ * passphrase starts the setup again. */
+export async function setupId(passphrase: string): Promise<string> {
+  return hmacHex('clokrix-key-page-setup', passphrase);
 }
 
 /** What an activation says: this licence is Pro on this PC. */

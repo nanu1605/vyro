@@ -5275,6 +5275,42 @@ gives keys, the owner: "build the key page".
       from `main`: the passphrase set and long enough, the 35 tests, the deploy, its secrets.
       This session cannot reach the website, so the page was not opened from here.
 
+### After 2.5.4: the key page for the owner's device only
+
+The owner, 2026-11-26: "there is no safety, anyone can generate the key. Use some safety and
+privacy so only i can generate the key in whole jainav infotech". A key took the passphrase,
+which anyone could be told, or read from GitHub's secrets through a workflow with write access.
+
+- [x] **A passkey, not a passphrase** (`licence/src/webauthn.ts`, `/give`). The passphrase now
+      only sets up one device's passkey, while none is set up; after that, a key takes a sign-in
+      with that passkey, which the device gives only once it has checked the owner (fingerprint,
+      face or PIN: Windows Hello). Checked on the checkout with WebCrypto, no library: the
+      browser's word of the ceremony (its kind, this page's origin, not in a frame, a challenge
+      the checkout made in the last 5 minutes and not used before), the authenticator's data
+      (this website, the user present and verified), the signature (ES256, EdDSA or RS256), and
+      a counter that must go up where the authenticator keeps one. A passkey belongs to the
+      passphrase it was set up
+      under: a new passphrase and a deploy start the setup again. Challenges carry their time and
+      a MAC instead of being kept, and are marked used only once a ceremony is complete, so asking
+      for many keeps no one out. No wait after a failed sign-in either (a signature cannot be
+      guessed, and a wait would let anyone keep the owner out); 20 wrong setup passphrases in an
+      hour still close setup.
+- [x] **Privacy:** the page names no keys until one is given ("Set up", then "Sign in"); the
+      passkey's name is the same for everyone and its user id random; the checkout keeps only
+      its public key. Nothing about the owner reaches any service.
+- [x] **Tests** (37 licence tests): setup only with the passphrase, for one device, on this
+      page's origin; then sign-in only; the old passphrase form gives nothing; a key per sign-in,
+      on Live keys too, recorded as given; refused: a sign-in sent again (also from a device
+      without a counter, by its challenge alone), another device's signature, the user not
+      verified, another origin, another website, the wrong ceremony, an unknown challenge, a
+      counter that did not go up, a challenge over 5 minutes old or another ceremony's; a new
+      passphrase starts again and the old device gives nothing; an EdDSA passkey. Checks broken
+      on purpose one at a time (the owner verified, the signature, the challenge's MAC, its age,
+      its use once) each failed a test. In Chromium with a virtual authenticator:
+      the wrong passphrase said so, setup, sign-in, the key shown; another browser's device got
+      none.
+- [ ] **Deploy,** on the owner's go. The page then asks to be set up on their PC.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

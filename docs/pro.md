@@ -76,16 +76,30 @@ A key is Pro on one PC at a time:
 ## Keys given, not sold (2.5.5)
 
 The seller can give a key without a sale, for the owner's own PCs or for testers (the owner,
-2026-11-26: "build the key page"):
+2026-11-26: "build the key page"). Only the owner's own device gives one, once it has checked
+them (the owner: "Use some safety and privacy so only i can generate the key in whole jainav
+infotech"):
 
-1. Open `/give` on the website. Nothing links to it, and search engines are told to leave it out.
-2. Type the passphrase: the GitHub secret `KEY_PAGE_PASSPHRASE`, at least 20 characters. It is
-   set on the checkout at each deploy; without it, the deploy closes the page.
-3. **Make a key** shows a new key, once. Each press makes another.
+1. **Set up, once:** open `/give` on the website on your PC, type the setup passphrase (the
+   GitHub secret `KEY_PAGE_PASSPHRASE`, at least 20 characters) and choose **Set up this device**.
+   Windows asks for your fingerprint, face or PIN (Windows Hello) and keeps a passkey for the
+   page on this PC. Only one device is set up; from then on the passphrase gives nothing.
+2. **Each key:** open `/give` on that PC and choose **Sign in**. Windows checks you again, and
+   the page shows a new key, once.
 
-A given key works as a bought one: one PC at a time, Move Pro here, and on Live keys too. It has
-no order, payment or receipt: the checkout records it as given. After 20 wrong passphrases in an
-hour, the page takes none, the right one too, until the oldest is an hour old.
+Anyone else who opens the page sees only Sign in, which gives them nothing: their device has no
+passkey for it. The passphrase in GitHub sets up a device only while none is set up. To start
+again (a new PC, or a passphrase someone may have seen), change `KEY_PAGE_PASSPHRASE` and deploy:
+the page then asks to be set up again, and the old device gives nothing more.
+
+Nothing about the owner is kept or sent: the passkey's name is "Clokrix Pro keys" and its user
+id is random; the checkout keeps only its public key. A given key works as a bought one: one PC
+at a time, Move Pro here, and on Live keys too. It has no order, payment or receipt: the checkout
+records it as given. After 20 wrong setup passphrases in an hour, setup takes none, the right one
+too, until the oldest is an hour old.
+
+What the page cannot stop: someone who controls the company's GitHub or Cloudflare account can
+change what is deployed. Keep both to yourself, with two-factor sign-in.
 
 ## What is sent, and to whom
 
@@ -162,7 +176,8 @@ last two variables.
 4. **GitHub** (Settings → Secrets and variables → Actions):
    - secrets `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` and
      `LICENCE_SIGNING_KEY` (the Cloudflare secrets are the relay's);
-   - optional (2.5.5): the secret `KEY_PAGE_PASSPHRASE`, for the key page (Keys given, not sold).
+   - optional (2.5.5): the secret `KEY_PAGE_PASSPHRASE`, the key page's setup passphrase (Keys
+     given, not sold).
 5. **Deploy:** Actions → Licence → Run workflow, on your go. It tests the checkout, checks that
    the signing key matches `CLOKRIX_LICENCE_PUBKEY`, deploys it, sets its secrets and prints its
    address. Set the variable `CLOKRIX_LICENCE_URL` to that address, or, once the website is up,
