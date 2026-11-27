@@ -5447,7 +5447,10 @@ meant a new passphrase and a deploy, which cut off every device, the PC too.
       named; a stale pass said, the list closed for a new sign-in; the PC removes the phone,
       which then cannot sign in; set up again, the phone removes itself; the PC still signs in;
       no page errors.
-- [ ] **Deployed**: on the owner's go.
+- [x] **CI green on 819a508** (run 45994867110; every job, the checkout's tests among them).
+- [x] **Deployed** (2026-11-27, on the owner's go: "deploy the licence"). `main` fast-forwarded
+      to 819a508, then Licence run 45997664386 from `main`: the passphrase set, the 41 tests,
+      the deploy (version 4064438c), its secrets; no key in the log.
 
 ## Risks
 
