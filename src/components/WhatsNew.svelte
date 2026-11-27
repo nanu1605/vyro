@@ -6,8 +6,10 @@
   import Cpu from '@lucide/svelte/icons/cpu';
   import Fan from '@lucide/svelte/icons/fan';
   import Gauge from '@lucide/svelte/icons/gauge';
+  import Car from '@lucide/svelte/icons/car';
   import Mic from '@lucide/svelte/icons/mic';
   import MonitorSmartphone from '@lucide/svelte/icons/monitor-smartphone';
+  import Palette from '@lucide/svelte/icons/palette';
   import Power from '@lucide/svelte/icons/power';
   import Smartphone from '@lucide/svelte/icons/smartphone';
   import Sparkles from '@lucide/svelte/icons/sparkles';
@@ -36,6 +38,8 @@
     screen: MonitorSmartphone,
     mic: Mic,
     sparkles: Sparkles,
+    lighting: Palette,
+    wheel: Car,
   };
 
   const version = $derived(current || NOTES[0]?.version || '');

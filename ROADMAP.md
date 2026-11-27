@@ -60,6 +60,9 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 43 | Settings sections in a window | A section named in Settings' list opens in a centred window over the page, growing out of its name and shrinking back into it; Ctrl K and the links that name a section open it the same way (2.5; the owner, 2026-11-13: "That section should pop out of the screen also add animations to it", and chose the centred window) | decided |
 | 44 | Glass | Every theme turns to iOS-like glass: see-through panes over a more colourful wash, lit along their top edge, with layers that float over content (menus, toasts, the top bar, the phone's bars and sheets) frosting what is under them, and windows solid panes lit the same way (decision 45); cards do not blur, since the soft wash under them would look the same. On Windows 11 (build 22523 and later) the window itself turns see-through, with Windows' Acrylic frosting the desktop behind it; AMOLED's black stays black. Settings → Appearance → Glass effects, on by default, turns it off, as do Windows' Transparency effects and a system's request for less transparency; off is 2.4's look exactly. Desktop widgets, the game overlay, the phone app, the LAN page and the checkout page take it too (2.5; the owner, 2026-11-14: "Add IOS like glass effect in whole clokrix including relay, which will make clokrix to look premium.", and chose the see-through window on Windows 11 and all six themes with a switch) | decided |
 | 45 | Settings as tiles | Settings is a search box and six tiles (Appearance; Gaming and overlay; Phone and remote; Startup and units; Updates; Clokrix Pro), each saying its state in a line; a tile opens its group in decision 43's window, grown out of the tile. The search finds any one setting by its name or a word it goes by, and opens its window on it, ringed; Ctrl K too. A setting says what it does in a line, the rest behind "More"; the less used ones are under "Advanced"; Phone and remote is in tabs. Windows (every dialog) are solid panes with glass's sheen and lit edge, frosting nothing: the blur was redone at every frame they grew (2.5; the owner, 2026-11-15: "The settings pop out animation is very laggy." and "The setting page attached in the screenshot has too much on the page which makes the settings page very user-unfriendly. Please share ideas to make it more user-friendly.", and chose tiles that pop out with all four tidy-ups: six groups, shorter text, the advanced parts folded, search). The tiles fill the page's width, 3, 2 or 1 across by the page's own width, and grow a little on a wide screen (the owner, the same day: "the settings page is now good but the cards are in the left aligned which does not look good, make the cards size dynamic so they covers the screen according to the screen size.", and chose "Fill the width") | decided |
+| 46 | Ambient lighting through OpenRGB | The owner's RGB devices take the colour glowing most on the screen (2.6; the owner, 2026-11-27: "Whatever is glowing in the screen, the most the RGB of the keyboard or mouse or any other devices which is connected to the computer, should change automatically with the colour which is glowing most on the screen. Clokrix should intelligently figure out which colour is glowing the most or which colour to send to the devices", and chose OpenRGB). Clokrix drives them through OpenRGB, which the owner installs and runs (never bundled), with a client of its own written from OpenRGB's protocol document, no GPL code copied: Direct mode only, never save-mode, each device's mode put back when lighting stops. The screen is captured only while lighting is on, made small on the GPU and kept as one colour in memory; a phone screen session on the same monitor takes it over. Clokrix Pro | decided |
+| 47 | The phone wheel | A phone the owner allowed ("Steers games", off by default, set on the PC) steers games as an Xbox 360 controller (2.6; the owner, 2026-11-27: "can we use the mobile phones gyro behaviour and drive any driving games like Euro truck simulator 2 or Snowrunner, etc using a phone just like it's a Moza wheel? Also there should be no lag.", and chose ViGEmBus installed on first use). Its packets go only over the direct connection, unordered and never resent; the relay is too slow and never carries them. ViGEmBus's signed installer comes in the MSI and runs only when the owner sets the wheel up on the PC, with one administrator prompt there, never from the phone; Clokrix talks to it with a client of its own, and the controller exists only while a phone steers. Clokrix Pro | decided |
+| 48 | The owner's dashboard | The owner sees every key on the website's `/dashboard`, signed in with the key page's passkeys (2.6; the owner, 2026-11-27: "Make an admin panel dashboard where i can see keys which are currently in use and also including the system the key is in use and names of the person who owns that key. I need a full dashboard."). The buyer's name is asked at checkout and goes to Razorpay with the order; the dashboard reads names, emails and phones from Razorpay as it opens and the website never keeps them. A 2.6 app tells the checkout its PC's name, processor, graphics card and Windows and Clokrix versions, which the ledger keeps for that key's PC only. The owner can cancel a key (its PC turns Free at its next weekly check), restore one they cancelled, free one from its PC, name it, and give one to a named person | decided |
 
 Other: the speedometer prototype referenced in spec §3 was not available, so it is rebuilt from
 the §4.3 animation spec in Phase 0.
@@ -5454,6 +5457,87 @@ meant a new passphrase and a deploy, which cut off every device, the PC too.
       the deploy (version 4064438c), its secrets; no key in the log.
 - [x] **The owner listed the devices** (2026-11-27): Devices set up here, on the key page. The
       owner: "it worked, both devices show up".
+
+### 2.6.0 — ambient lighting, the phone wheel, the owner's dashboard
+
+The owner's three requests (2026-11-27), planned before building:
+
+> Here is the next version of clokrix. The features are: 1. Whatever is glowing in the screen,
+> the most the RGB of the keyboard or mouse or any other devices which is connected to the
+> computer, should change automatically with the colour which is glowing most on the screen.
+> Clokrix should intelligently figure out which colour is glowing the most or which colour to
+> send to the devices 2. can we use the mobile phones gyro behaviour and drive any driving games
+> like Euro truck simulator 2 or Snowrunner, etc using a phone just like it's a Moza wheel? Also
+> there should be no lag. 3. Make an admin panel dashboard where i can see keys which are
+> currently in use and also including the system the key is in use and names of the person who
+> owns that key. I need a full dashboard.
+
+Their answers to the plan's questions: names asked at checkout and read live from Razorpay,
+never stored; the app sends the PC's name, hardware and versions; lighting through OpenRGB; the
+virtual controller's driver shipped in the MSI and installed on first use (decisions 46 to 48).
+On `claude/vyro-2.0`.
+
+- [x] **The owner's dashboard** (`licence/src/dashboard.ts`, `/dashboard`; decision 48), signed
+      in with the key page's passkeys, a pass good for 5 minutes at a time and 30 at most:
+  - tiles for keys in use now (on a PC and checked in within 8 days), bought and money taken
+    per currency, given, quiet, not turned on, cancelled and refunded, and test keys; keys sold
+    each month as a chart;
+  - a table, searchable and filtered, as cards on a phone: each key's owner (name, email, phone
+    from Razorpay's lists; or the name it was given to), source and price, PC (name, processor,
+    graphics, Windows, Clokrix; "not updated yet" for 2.5), turned on, last checked in, moves;
+  - Cancel (its PC turns Free at its next weekly check; a 2.5 app hears `revoked`), Restore
+    (owner-cancelled only; a refund after a cancel keeps it off), Free from its PC, Name, Give a
+    key to a named person, and Export CSV (formula-like cells prefixed);
+  - the checkout asks the buyer's name before Pay; `/activate` and `/check` take what the app
+    says of its PC, kept only for the PC holding the key. The privacy page and `docs/pro.md`
+    say what is now kept and sent.
+  - 45 licence tests; every check broken on purpose fails one. In Chromium with virtual
+    passkeys and a stand-in Razorpay: sign-in, tiles, the chart's tooltip, search, filters,
+    each action, CSV, a stale pass signing out; light, dark and phone width.
+- [x] **What the app tells the checkout** (`edition::About`): the PC's name, processor, main
+      graphics card, Windows and Clokrix versions, each cleaned and at most 100 characters,
+      when Pro turns on and at each check; within a day when they change. A key its seller
+      cancelled says so ("This key was cancelled by its seller"). Settings → Clokrix Pro and
+      CONTRIBUTING say what is sent.
+- [x] **Ambient lighting** (Pro, the Lighting view; decision 46):
+  - the colour (`lighting/colour.rs`): each picture, 64×36 in linear light, weighed in OKLab by
+    chroma times lightness into 24 hues; the busiest hue and its neighbours win, made vivid, as
+    bright as the scene; a colourless screen shows white, Clokrix blue or nothing; a hue stays
+    until another clearly beats it; Fast, Smooth or Auto (fast with a game in front); the
+    brightness never swings back and forth more than 3 times a second (WCAG 2.3.1);
+  - the picture (`screen/reduce.rs`): made small on the GPU, 8-bit or HDR, about 36 KB read
+    back; GDI's fallback halftones; a phone screen session on the same monitor takes the
+    capture over, and lighting follows its pictures;
+  - the lights (`lighting/openrgb.rs`): OpenRGB's SDK protocol, versions 0 to 5, Direct mode,
+    never save-mode; each device's mode noted first and put back when lighting stops, a device
+    is unpicked, Pro ends, Clokrix closes, or after a crash; memory-bus devices 5 colours a
+    second at most;
+  - fixed on the way: a PC turning Free now ends a direct screen session too.
+- [x] **The phone wheel** (Pro; decision 47; [`docs/remote.md`](docs/remote.md)):
+  - "Steers games" per phone on the PC; `wheel.start` and `wheel.stop`; the phone's Wheel tab;
+  - steering from gravity against Centre, smoothed by the gyro (its sign learnt), the same on
+    iPhone and Android, upright or leaning back; pedals by thumb height; twelve buttons; the
+    round trip shown; the game's rumble as vibration on Android;
+  - 12-byte packets on an unordered, never-resent channel of the direct link; the PC writes
+    the controller on each; 0.4 s without one lets go (pedals and buttons at once, the steering
+    eased to centre over 0.2 s); a game's dead zone made up for; pedals on the triggers or the
+    right stick;
+  - ViGEmBus 1.22.0 (signed, BSD-3, pinned SHA-256) fetched by CI and the release, carried in
+    the MSI, run only from Settings → Remote → Wheel → "Set up the virtual controller";
+  - a banner with Stop on every view while a phone steers; the relay's page policy allows the
+    motion sensors and the screen wake lock.
+- [x] **Locally:** types; 320 frontend tests; 946 core tests; the relay's 41 and its end to end
+      (174 checks; the wheel's: told at once, the direct connection, the round trip, half right
+      gives half the stick, the throttle full at the top, axe on each screen, no screen past the
+      side at 320 to 430 px, the PC letting go when the link goes, Stop); the licence's 45;
+      clippy for Windows (core and app) and Linux; the notices.
+- [ ] **CI green** on the branch.
+- [ ] **Deploys**, each on the owner's go: the licence (the dashboard and the checkout's name
+      field) and the relay (the Wheel tab and the page policy).
+- [ ] **Field check** ([`docs/field-check-2.6.md`](docs/field-check-2.6.md)): lighting with a
+      game and a film; the wheel in Euro Truck Simulator 2, American Truck Simulator and
+      SnowRunner, its delay on Wi-Fi, letting go when Wi-Fi drops; a 2.6 PC on the dashboard.
+- [ ] **Release 2.6.0**, on the owner's "release 2.6.0".
 
 ## Risks
 

@@ -4,7 +4,7 @@
 // is released (a test checks package.json's version has one).
 
 /** One of the icons the dialogs draw (WhatsNew.svelte). */
-export type NoteIcon = 'phone' | 'end' | 'power' | 'wake' | 'fan' | 'gauge' | 'gpu' | 'screen' | 'mic' | 'sparkles';
+export type NoteIcon = 'phone' | 'end' | 'power' | 'wake' | 'fan' | 'gauge' | 'gpu' | 'screen' | 'mic' | 'sparkles' | 'lighting' | 'wheel';
 
 export interface NoteItem {
   icon: NoteIcon;
@@ -20,6 +20,27 @@ export interface Release {
 }
 
 export const NOTES: Release[] = [
+  {
+    version: '2.6.0',
+    items: [
+      {
+        icon: 'lighting',
+        title: 'Your lights follow the screen',
+        text: 'Clokrix Pro now colours your RGB keyboard, mouse and other lights with the colour glowing most on the screen, through OpenRGB: quick in games, smooth in films. Turn it on in the new Lighting view.',
+      },
+      {
+        icon: 'wheel',
+        title: 'Your phone as a steering wheel',
+        text: 'A phone you allow (Settings → Remote, “Steers games”) turns into a steering wheel with pedals. This PC plays it as an Xbox controller in Euro Truck Simulator 2, SnowRunner and other driving games, straight over your Wi-Fi. Clokrix Pro.',
+        phone: true,
+      },
+      {
+        icon: 'sparkles',
+        title: 'What Pro tells the checkout',
+        text: 'With a Pro key, Clokrix now also tells the checkout this PC’s name, processor, graphics card and Windows and Clokrix versions, so the seller can see which PC a key is on. Nothing else about the PC is sent.',
+      },
+    ],
+  },
   {
     version: '2.5.5',
     items: [

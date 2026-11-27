@@ -12,8 +12,11 @@ third-party monitoring app or library).
 - **Build spec:** [`PROJECT_PLAN.md`](PROJECT_PLAN.md) — what to build and why.
 - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — milestones, phase tracker, decision log.
 
-**Status:** 2.2. New in 2.2: the new name, Clokrix, and its logo; an installed Vyro updates to
-it and keeps its settings and history ([the relay](docs/remote.md#the-relays-new-address-22) has
+**Status:** 2.6. New in 2.6 (Pro): [ambient lighting](#ambient-lighting-26), your RGB keyboard,
+mouse and other lights in the colour glowing most on the screen, through OpenRGB; and [the phone
+wheel](#the-phone-wheel-26), a phone you allow as a steering wheel with pedals that the PC plays
+as an Xbox controller in driving games. New in 2.2: the new name, Clokrix, and its logo; an
+installed Vyro updates to it and keeps its settings and history ([the relay](docs/remote.md#the-relays-new-address-22) has
 a new address, so phones pair again once). Live CPU, GPU, board, fan, voltage, RAM, storage and
 network sensors on Windows (low-level ones through PawnIO, read by the Clokrix Sensor Service),
 history, System Health, alerts, game frame rates (PresentMon), tray and an MSI installer. New in
@@ -96,13 +99,31 @@ Intel CPUs, the NCT679x and DDR4 on Intel have been checked on one PC so far
 
 Clokrix Free is the Dashboard, with its layouts and editing, and Settings. Clokrix Pro is
 everything else: Health and alerts, fan control, GPU tuning, History, the Benchmark, every part
-of this PC, desktop widgets, the game overlay and the phone app. It costs $100 once, for life, on
+of this PC, desktop widgets, the game overlay, the phone app, ambient lighting and the phone
+wheel (2.6). It costs $100 once, for life, on
 one PC (₹10,000 in India, including all taxes, from 2.5.2), and can move to another. Every PC
 gets Pro for 7 days from the first start of 2.5. Buy Pro (Settings → Clokrix Pro) opens the
 checkout in the browser, and Pro turns on by itself once it is paid.
 [`docs/pro.md`](docs/pro.md) explains the trial, one PC, what is sent, and the checkout's
 set-up. The code stays MIT or Apache-2.0, and a build without the checkout's settings
 is Pro.
+
+## Ambient lighting (2.6)
+
+**Lighting** (Pro) colours your RGB keyboard, mouse, fans, RAM and other lights with the colour
+glowing most on the screen: vivid colours count, grey, white and black do not, so a red sign in
+a dark game lights red. It follows quickly in games and smoothly in films (Auto chooses by the
+game in front), as bright as the scene, and never flashes more than 3 times a second.
+
+- **Through OpenRGB** (free, `openrgb.org`), which you install and leave open with its SDK
+  Server on; Clokrix talks to it on this PC and never saves anything to a device. Close the
+  lighting in iCUE, Synapse, G HUB or Armoury Crate, or they fight OpenRGB.
+- **The screen** is read only while lighting is on: each picture is made small on the graphics
+  card and kept only as one colour, and nothing of it leaves the PC. A phone screen session on
+  the same monitor takes the capture over, and the lights follow its pictures meanwhile.
+- Each device goes back to its own effect when lighting goes off, when Clokrix closes, or at the
+  next start after a crash. RGB memory takes colours a little more slowly, to leave its bus to
+  the sensors.
 
 ## Fan and pump control
 
@@ -448,6 +469,26 @@ the PC (1.5).
 - **Limits.** Networks that block `workers.dev` or allow the web only through a proxy cannot
   reach the relay. The relay runs on Cloudflare's free plan, shared by everyone: past its
   daily limit it pauses until midnight UTC.
+
+### The phone wheel (2.6)
+
+**A phone as a steering wheel** (Pro): allow it on the PC (Settings → Remote, "Steers games"),
+then on the phone's Wheel tab tap Start steering and hold it like a wheel. Turning it steers;
+its edges are the brake and throttle, pressed harder the higher your thumb; twelve buttons sit
+under the wheel. The PC plays it as an Xbox 360 controller, which Euro Truck Simulator 2,
+SnowRunner and other driving games bind like any controller.
+
+- **As little delay as a phone allows:** each sensor reading goes straight to the PC, over your
+  network, on a channel that never waits for a lost packet; the phone shows the round trip. It
+  needs a direct path to the PC (the same Wi-Fi is best); the relay is too slow for it.
+- **The virtual controller** is ViGEmBus, a signed driver the installer carries. Settings →
+  Remote → Wheel → "Set up the virtual controller" installs it, with one administrator prompt on
+  the PC.
+- **Letting go:** a phone that stops sending for 0.4 s releases the pedals and buttons and
+  centres the steering. The PC shows a banner with Stop while a phone steers.
+- **Limits:** no force feedback (Android phones vibrate with the game's rumble; iPhones cannot);
+  some online games' anti-cheat refuses virtual controllers.
+  [`docs/remote.md`](docs/remote.md#the-phone-wheel-26) has the details.
 
 ### Notifications (2.0)
 

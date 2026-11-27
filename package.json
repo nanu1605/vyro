@@ -1,7 +1,7 @@
 {
   "name": "clokrix",
   "private": true,
-  "version": "2.5.5",
+  "version": "2.6.0",
   "license": "MIT OR Apache-2.0",
   "type": "module",
   "scripts": {

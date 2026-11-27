@@ -1227,7 +1227,8 @@ async function sweepFree(browser, theme) {
     await page.waitForTimeout(1200);
     const locks = await page.locator('.sidebar [role="tab"] .lock').count();
     checks++;
-    if (locks !== 17) problem(at('Sidebar'), `${locks} views marked Pro, not 17`);
+    // 18 from 2.6: Lighting.
+    if (locks !== 18) problem(at('Sidebar'), `${locks} views marked Pro, not 18`);
     await tab(page, 'Health');
     const panel = page.locator('#panel-health');
     checks++;
