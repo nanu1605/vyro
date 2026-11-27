@@ -107,10 +107,11 @@ reported passed (2026-11-13) without notes per step.
 
 ## Lighting through OpenRGB (2.6)
 
-Ambient lighting sends a colour to OpenRGB, which the owner installs and runs; OpenRGB writes to
-the devices. Clokrix itself writes no device, register or bus: what it may ask of OpenRGB is
-listed here. Paths are under `crates/clokrix-core/src/lighting/` and `src-tauri/src/lighting.rs`.
-The field column is field check 2.6's.
+Ambient lighting sends a colour to OpenRGB, which writes to the devices. The owner installs
+OpenRGB, or from 2.6.1 has Clokrix set it up (Set up OpenRGB, below). Clokrix itself writes no
+device, register or bus: what it may ask of OpenRGB is listed here. Paths are under
+`crates/clokrix-core/src/lighting/` and `src-tauri/src/lighting.rs`. The field column is field
+check 2.6's.
 
 | Rule | Enforced in | Tests | Field result |
 |---|---|---|---|
@@ -121,3 +122,5 @@ The field column is field check 2.6's.
 | **Rate limits.** A colour at most 30 times a second, only when it changed; devices on the memory bus (OpenRGB's "I2C" locations: memory modules, many boards), which Clokrix's own SPD reads share, at most 5 times a second. | `interval`, `run` (`sent`) | `devices_on_the_memory_bus_take_colours_slowly` | **Pending** |
 | **No flashing.** The brightness never swings 10% or more back and forth more than 3 times a second (WCAG 2.3.1), however the screen flashes. | `colour::Picker::limit` | `the_brightness_never_flashes_more_than_3_times_a_second` | **Pending** |
 | **Where a device is is never kept.** It is named by a hash of its name, maker and location (a USB path can hold a serial number). | `device_id` | `names_a_device_lastingly_without_keeping_where_it_is` | — |
+| **Set up OpenRGB only when the owner asks (2.6.1), and only the release Clokrix knows.** OpenRGB 1.1's own installer, downloaded from its Codeberg release only when the owner presses Set up OpenRGB, is installed only if its size and SHA-256 are the pinned ones, after Windows' administrator prompt. It is held open for reading only between its last check and the install, so nothing can change it in between. | `setup::verify`, `setup::Package::write`, `setup::install`, `set_up_openrgb` | `takes_only_the_pinned_installer`, `installs_both_features_without_a_restart`, `downloads_bytes_through_redirects`, `follows_redirects_only_where_they_are_safe` | **Pending** |
+| **OpenRGB's server on this PC only.** Its service, as installed, serves 127.0.0.1:6742; when Clokrix starts an OpenRGB without the service, it passes `--server-host 127.0.0.1`, and never starts a second copy of one already open. | `setup::START_ARGS`, `setup::next` | `waits_for_starts_or_offers_openrgb_as_it_finds_it` | **Pending** |

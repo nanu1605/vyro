@@ -60,7 +60,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 43 | Settings sections in a window | A section named in Settings' list opens in a centred window over the page, growing out of its name and shrinking back into it; Ctrl K and the links that name a section open it the same way (2.5; the owner, 2026-11-13: "That section should pop out of the screen also add animations to it", and chose the centred window) | decided |
 | 44 | Glass | Every theme turns to iOS-like glass: see-through panes over a more colourful wash, lit along their top edge, with layers that float over content (menus, toasts, the top bar, the phone's bars and sheets) frosting what is under them, and windows solid panes lit the same way (decision 45); cards do not blur, since the soft wash under them would look the same. On Windows 11 (build 22523 and later) the window itself turns see-through, with Windows' Acrylic frosting the desktop behind it; AMOLED's black stays black. Settings → Appearance → Glass effects, on by default, turns it off, as do Windows' Transparency effects and a system's request for less transparency; off is 2.4's look exactly. Desktop widgets, the game overlay, the phone app, the LAN page and the checkout page take it too (2.5; the owner, 2026-11-14: "Add IOS like glass effect in whole clokrix including relay, which will make clokrix to look premium.", and chose the see-through window on Windows 11 and all six themes with a switch) | decided |
 | 45 | Settings as tiles | Settings is a search box and six tiles (Appearance; Gaming and overlay; Phone and remote; Startup and units; Updates; Clokrix Pro), each saying its state in a line; a tile opens its group in decision 43's window, grown out of the tile. The search finds any one setting by its name or a word it goes by, and opens its window on it, ringed; Ctrl K too. A setting says what it does in a line, the rest behind "More"; the less used ones are under "Advanced"; Phone and remote is in tabs. Windows (every dialog) are solid panes with glass's sheen and lit edge, frosting nothing: the blur was redone at every frame they grew (2.5; the owner, 2026-11-15: "The settings pop out animation is very laggy." and "The setting page attached in the screenshot has too much on the page which makes the settings page very user-unfriendly. Please share ideas to make it more user-friendly.", and chose tiles that pop out with all four tidy-ups: six groups, shorter text, the advanced parts folded, search). The tiles fill the page's width, 3, 2 or 1 across by the page's own width, and grow a little on a wide screen (the owner, the same day: "the settings page is now good but the cards are in the left aligned which does not look good, make the cards size dynamic so they covers the screen according to the screen size.", and chose "Fill the width") | decided |
-| 46 | Ambient lighting through OpenRGB | The owner's RGB devices take the colour glowing most on the screen (2.6; the owner, 2026-11-27: "Whatever is glowing in the screen, the most the RGB of the keyboard or mouse or any other devices which is connected to the computer, should change automatically with the colour which is glowing most on the screen. Clokrix should intelligently figure out which colour is glowing the most or which colour to send to the devices", and chose OpenRGB). Clokrix drives them through OpenRGB, which the owner installs and runs (never bundled), with a client of its own written from OpenRGB's protocol document, no GPL code copied: Direct mode only, never save-mode, each device's mode put back when lighting stops. The screen is captured only while lighting is on, made small on the GPU and kept as one colour in memory; a phone screen session on the same monitor takes it over. Clokrix Pro | decided |
+| 46 | Ambient lighting through OpenRGB | The owner's RGB devices take the colour glowing most on the screen (2.6; the owner, 2026-11-27: "Whatever is glowing in the screen, the most the RGB of the keyboard or mouse or any other devices which is connected to the computer, should change automatically with the colour which is glowing most on the screen. Clokrix should intelligently figure out which colour is glowing the most or which colour to send to the devices", and chose OpenRGB). Clokrix drives them through OpenRGB, never bundled. From 2.6.1 Clokrix sets OpenRGB up when the owner asks (the owner, 2026-11-27: "install OpenRGB  with the installer", choosing to download it at set-up): OpenRGB's own official installer, downloaded from its release page by the Lighting view's Set up OpenRGB, checked against a pinned SHA-256 and run with one administrator prompt; its service then runs the SDK server on 127.0.0.1 only. Clokrix talks to it with a client of its own written from OpenRGB's protocol document, no GPL code copied: Direct mode only, never save-mode, each device's mode put back when lighting stops. The screen is captured only while lighting is on, made small on the GPU and kept as one colour in memory; a phone screen session on the same monitor takes it over. Clokrix Pro | decided |
 | 47 | The phone wheel | A phone the owner allowed ("Steers games", off by default, set on the PC) steers games as an Xbox 360 controller (2.6; the owner, 2026-11-27: "can we use the mobile phones gyro behaviour and drive any driving games like Euro truck simulator 2 or Snowrunner, etc using a phone just like it's a Moza wheel? Also there should be no lag.", and chose ViGEmBus installed on first use). Its packets go only over the direct connection, unordered and never resent; the relay is too slow and never carries them. ViGEmBus's signed installer comes in the MSI and runs only when the owner sets the wheel up on the PC, with one administrator prompt there, never from the phone; Clokrix talks to it with a client of its own, and the controller exists only while a phone steers. Clokrix Pro | decided |
 | 48 | The owner's dashboard | The owner sees every key on the website's `/dashboard`, signed in with the key page's passkeys (2.6; the owner, 2026-11-27: "Make an admin panel dashboard where i can see keys which are currently in use and also including the system the key is in use and names of the person who owns that key. I need a full dashboard."). The buyer's name is asked at checkout and goes to Razorpay with the order; the dashboard reads names, emails and phones from Razorpay as it opens and the website never keeps them. A 2.6 app tells the checkout its PC's name, processor, graphics card and Windows and Clokrix versions, which the ledger keeps for that key's PC only. The owner can cancel a key (its PC turns Free at its next weekly check), restore one they cancelled, free one from its PC, name it, and give one to a named person | decided |
 
@@ -5557,6 +5557,50 @@ On `claude/vyro-2.0`.
       check, on the owner's go: lighting and the wheel are off until the owner turns them on.
 - [ ] **Field check** results, from [`docs/field-check-2.6.md`](docs/field-check-2.6.md); the
       games' bindings then go in [`docs/remote.md`](docs/remote.md#the-phone-wheel-26).
+
+### 2.6.1 — Clokrix sets up OpenRGB
+
+The owner (2026-11-27), after 2.6.0's release:
+
+> install OpenRGB  with the installer
+
+They chose "Download at set-up" over carrying OpenRGB in Clokrix's MSI: the MSI and every
+update stay about 19 MB, and Clokrix redistributes nothing of OpenRGB's (GPL-2.0), so there is
+no source to republish (decision 46). On `claude/vyro-2.0`.
+
+- [x] **The release pinned** (`lighting/setup.rs`): OpenRGB 1.1 (2026-10-16, SDK protocol 6,
+      the newest stable on openrgb.org's release page), its Windows installer
+      `OpenRGB_1.1_Windows_64_8e16de2.msi` from its Codeberg release, 23,345,664 bytes, SHA-256
+      `a4ce48a5…`. Read with msitools: two features, the application and "Register OpenRGB as a
+      system service" (on by default); the service "OpenRGB" runs as LocalSystem, starts
+      automatically and at install; started as a service, OpenRGB 1.1 runs its SDK server with
+      no autoconnect, its settings in `Program Files\OpenRGB\service_config` (administrators
+      only), on 127.0.0.1:6742 unless those settings say otherwise. A protocol-5 client, as
+      Clokrix's, is answered in protocol 5.
+- [x] **Set up OpenRGB** in the Lighting view, while lighting is on and OpenRGB is not on the
+      PC: the installer downloaded (`edition::https::fetch`: up to 5 redirects, never from
+      HTTPS to HTTP, its size capped), checked, written to the app's folder and held open for
+      reading only while it is checked again and installed, so nothing can change it in
+      between; then `msiexec /i … /passive /norestart` with both features, after one
+      administrator prompt (`elevated::run`, shared with the wheel's ViGEmBus). The view says
+      Downloading, Installing, then Starting while the service finds its devices (up to 2
+      minutes), then lists them.
+- [x] **An OpenRGB installed some other way** without its service is started by the app, once
+      while lighting is on and it does not answer, with its server on 127.0.0.1 only
+      (`--server --server-host 127.0.0.1 --startminimized`); never a second copy of one already
+      open. Otherwise the view keeps 2.6's steps for starting OpenRGB's server by hand.
+- [x] **Locally:** core tests for the download (redirects, a downgrade refused, the size cap,
+      bytes chunked and not), the pin, msiexec's options and exit codes, and what the view says
+      as OpenRGB is found; the front end's types and tests; the accessibility sweep now with
+      the Lighting view, and Set up OpenRGB through its states in the browser preview; clippy
+      for Windows (core and app) and Linux.
+- [ ] **CI's check of the real thing**: the `openrgb_setup` example on the Windows runner
+      downloads, checks and installs the pinned installer as the app does, and Clokrix's client
+      reads OpenRGB's devices on 127.0.0.1:6742, nothing listening elsewhere; the release
+      checks the pin still downloads (`scripts/check-openrgb.ps1`). Waiting on the owner's go
+      for the workflow change.
+- [ ] **Field check**: [`docs/field-check-2.6.md`](docs/field-check-2.6.md) §1 now starts with
+      Set up OpenRGB.
 
 ## Risks
 

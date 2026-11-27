@@ -39,34 +39,49 @@ impl ProcessProvider {
     }
 
     fn query(&mut self) -> Result<&[u8], BoxError> {
-        for _ in 0..6 {
-            let len = u32::try_from(self.buf.len() * 8).unwrap_or(u32::MAX);
-            let mut needed = 0u32;
-            // SAFETY: the buffer holds `len` writable bytes.
-            let status = unsafe {
-                NtQuerySystemInformation(
-                    SystemProcessInformation,
-                    self.buf.as_mut_ptr().cast(),
-                    len,
-                    &mut needed,
-                )
-            };
-            if status == STATUS_INFO_LENGTH_MISMATCH {
-                // Grow with headroom: processes start between calls.
-                let want = (needed as usize).max(len as usize) * 5 / 4;
-                self.buf.resize(want.div_ceil(8), 0);
-                continue;
-            }
-            status.ok()?;
-            let used = (needed as usize).min(self.buf.len() * 8);
-            // SAFETY: reinterpreting initialised u64 storage as bytes.
-            let bytes = unsafe {
-                std::slice::from_raw_parts(self.buf.as_ptr().cast::<u8>(), self.buf.len() * 8)
-            };
-            return Ok(&bytes[..used]);
-        }
-        Err("process list kept growing".into())
+        query(&mut self.buf)
     }
+}
+
+/// The process list into `buf` (grown as needed): the bytes `parse_process_list` reads.
+fn query(buf: &mut Vec<u64>) -> Result<&[u8], BoxError> {
+    for _ in 0..6 {
+        let len = u32::try_from(buf.len() * 8).unwrap_or(u32::MAX);
+        let mut needed = 0u32;
+        // SAFETY: the buffer holds `len` writable bytes.
+        let status = unsafe {
+            NtQuerySystemInformation(
+                SystemProcessInformation,
+                buf.as_mut_ptr().cast(),
+                len,
+                &mut needed,
+            )
+        };
+        if status == STATUS_INFO_LENGTH_MISMATCH {
+            // Grow with headroom: processes start between calls.
+            let want = (needed as usize).max(len as usize) * 5 / 4;
+            buf.resize(want.div_ceil(8), 0);
+            continue;
+        }
+        status.ok()?;
+        let used = (needed as usize).min(buf.len() * 8);
+        // SAFETY: reinterpreting initialised u64 storage as bytes.
+        let bytes = unsafe { std::slice::from_raw_parts(buf.as_ptr().cast::<u8>(), buf.len() * 8) };
+        return Ok(&bytes[..used]);
+    }
+    Err("process list kept growing".into())
+}
+
+/// Whether a process named `image` (as "OpenRGB.exe") runs now, for any user.
+pub fn running(image: &str) -> bool {
+    let mut buf = vec![0u64; 64 * 1024];
+    let Ok(bytes) = query(&mut buf) else {
+        return false;
+    };
+    let base = bytes.as_ptr() as usize;
+    parse_process_list(bytes, base)
+        .iter()
+        .any(|p| p.name.eq_ignore_ascii_case(image))
 }
 
 impl Provider for ProcessProvider {

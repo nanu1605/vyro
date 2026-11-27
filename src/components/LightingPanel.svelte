@@ -8,7 +8,7 @@
   import CardGrid, { type CardItem } from './CardGrid.svelte';
   import LoadState from './LoadState.svelte';
   import More from './More.svelte';
-  import { getLighting, onLightingStatus, setLighting, watchLighting, type LightingView } from '../ipc';
+  import { getLighting, onLightingStatus, setLighting, setUpOpenRgb, watchLighting, type LightingView } from '../ipc';
   import type { LightingSettings, LightingStatus, LightSpeed, NoColour, Rgb8 } from '../types';
 
   interface Props {
@@ -20,6 +20,9 @@
   let status = $state.raw<LightingStatus | null>(null);
   let error = $state<string | null>(null);
   let busy = $state(false);
+  // Set up OpenRGB (2.6.1): pressed, and what came of it.
+  let settingUp = $state(false);
+  let setupNote = $state<string | null>(null);
 
   const CARDS: CardItem[] = [
     { id: 'light-main', title: 'Ambient lighting', w: 2 },
@@ -59,6 +62,20 @@
       error = String(e);
     } finally {
       busy = false;
+    }
+  }
+
+  async function setUp(): Promise<void> {
+    settingUp = true;
+    setupNote = null;
+    try {
+      setupNote = await setUpOpenRgb();
+      error = null;
+    } catch (e) {
+      setupNote = String(e);
+    } finally {
+      settingUp = false;
+      status = await watchLighting().catch(() => status);
     }
   }
 
@@ -119,7 +136,23 @@
             <div class="now">
               <span class="swatch" style:background={status.colour ? hex(status.colour) : 'transparent'} aria-hidden="true"></span>
               <div>
-                {#if status.link === 'notRunning'}
+                {#if status.link === 'missing' && status.offer}
+                  <p><b>OpenRGB isn't on this PC.</b> Clokrix drives your lights through it.</p>
+                  <p class="note">
+                    Set up OpenRGB {status.offer} (free, open source): Clokrix downloads it from OpenRGB's release page, checks
+                    it is the release it knows, and installs it after one Windows prompt for an administrator. It then runs in
+                    the background, starting with Windows. Remove it any time from Windows' Apps.
+                  </p>
+                  <button type="button" class="primary" disabled={settingUp} onclick={() => void setUp()}>Set up OpenRGB</button>
+                {:else if status.link === 'settingUp'}
+                  <p role="status"><b>{status.setup === 'installing' ? 'Installing OpenRGB…' : 'Downloading OpenRGB…'}</b></p>
+                  <p class="note">
+                    {status.setup === 'installing' ? 'Answer the Windows prompt for an administrator.' : 'About 23 MB.'}
+                  </p>
+                {:else if status.link === 'starting'}
+                  <p role="status"><b>Starting OpenRGB…</b></p>
+                  <p class="note">It looks for every device first, which can take a minute.</p>
+                {:else if status.link === 'missing' || status.link === 'notRunning'}
                   <p><b>OpenRGB is not answering.</b></p>
                   <p class="note">
                     Install OpenRGB (free, from <code>openrgb.org</code>) and open it. In its <b>SDK Server</b> tab, choose
@@ -133,6 +166,7 @@
                 {:else}
                   <p class="note">Starting…</p>
                 {/if}
+                {#if setupNote}<p class="note" role="status">{setupNote}</p>{/if}
               </div>
             </div>
           {/if}
@@ -155,7 +189,7 @@
           {#if !settings.on}
             <p class="note">Turn ambient lighting on to see OpenRGB's devices.</p>
           {:else if !status || status.devices.length === 0}
-            <p class="note">{status?.link === 'connected' ? 'OpenRGB has no devices.' : 'Waiting for OpenRGB.'}</p>
+            <p class="note">{status?.link === 'connected' ? 'OpenRGB has no devices.' : status?.link === 'missing' ? 'Once OpenRGB is set up, its devices are listed here.' : 'Waiting for OpenRGB.'}</p>
           {:else}
             <ul class="devices">
               {#each status.devices as d (d.id)}
@@ -306,6 +340,11 @@
     background: var(--bg);
     color: var(--text);
     font: inherit;
+  }
+  button.primary {
+    margin-top: 0.4rem;
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+    background: color-mix(in srgb, var(--accent) 16%, var(--bg));
   }
   .err {
     color: var(--bad, #d14343);

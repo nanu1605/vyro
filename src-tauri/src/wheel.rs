@@ -415,15 +415,7 @@ mod win {
     /// Runs ViGEmBus's own installer, elevated (one administrator prompt on this PC), and waits
     /// for it. Ok(true): installed; Ok(false): a restart is needed first.
     pub fn install() -> Result<bool, String> {
-        use windows::core::{w, HSTRING};
-        use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
-        use windows::Win32::System::Threading::{
-            GetExitCodeProcess, WaitForSingleObject, INFINITE,
-        };
-        use windows::Win32::UI::Shell::{
-            ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW,
-        };
-        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        use clokrix_core::elevated::{self, NotRun};
 
         let setup = std::env::current_exe()
             .ok()
@@ -433,34 +425,13 @@ mod win {
             })
             .filter(|p| p.is_file())
             .ok_or("ViGEmBus's installer is missing: install Clokrix again.")?;
-        let file = HSTRING::from(setup.as_os_str());
-        let mut info = SHELLEXECUTEINFOW {
-            cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
-            fMask: SEE_MASK_NOCLOSEPROCESS,
-            lpVerb: w!("runas"),
-            lpFile: windows::core::PCWSTR(file.as_ptr()),
-            nShow: SW_SHOWNORMAL.0,
-            ..Default::default()
-        };
-        // SAFETY: a filled-in structure whose strings outlive the call; the process handle it
-        // returns is closed below.
-        if let Err(e) = unsafe { ShellExecuteExW(&mut info) } {
-            // 1223: the owner said no at the administrator prompt.
-            return Err(if e.code().0 as u32 & 0xFFFF == 1223 {
+        let code = elevated::run(&setup, "").map_err(|e| match e {
+            NotRun::Declined => {
                 "The virtual controller was not set up: the administrator prompt was declined."
-                    .into()
-            } else {
-                format!("ViGEmBus's installer did not start: {e}")
-            });
-        }
-        let mut code = 0u32;
-        // SAFETY: the process handle ShellExecuteExW gave, waited for and closed once.
-        unsafe {
-            if WaitForSingleObject(info.hProcess, INFINITE) == WAIT_OBJECT_0 {
-                let _ = GetExitCodeProcess(info.hProcess, &mut code);
+                    .to_owned()
             }
-            let _ = CloseHandle(info.hProcess);
-        }
+            NotRun::Failed(e) => format!("ViGEmBus's installer did not start: {e}"),
+        })?;
         match code {
             0 => {}
             3010 | 1641 => return Ok(false),

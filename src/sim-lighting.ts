@@ -1,7 +1,8 @@
 // Browser preview of the Lighting view (2.6): OpenRGB with three devices (constructed), and the
-// colour following a screen that cycles slowly through a few scenes.
+// colour following a screen that cycles slowly through a few scenes. `?openrgb=missing` (2.6.1):
+// OpenRGB is not on the PC until Set up OpenRGB, which downloads, installs and starts it.
 
-import type { LightingSettings, LightingStatus, Rgb8 } from './types';
+import type { LightingSettings, LightingStatus, LightLink, Rgb8, SetupStep } from './types';
 import type { LightingView } from './ipc';
 
 let settings: LightingSettings = {
@@ -27,15 +28,41 @@ const SCENES: Rgb8[] = [
   { r: 255, g: 170, b: 20 },
 ];
 
+type Phase = 'missing' | SetupStep | 'starting' | 'connected';
+let phase: Phase =
+  typeof location !== 'undefined' && new URLSearchParams(location.search).get('openrgb') === 'missing'
+    ? 'missing'
+    : 'connected';
+
 function status(): LightingStatus {
   const scene = SCENES[Math.floor(Date.now() / 3000) % SCENES.length]!;
+  const connected = settings.on && phase === 'connected';
+  let link: LightLink = 'off';
+  if (settings.on) {
+    link = phase === 'downloading' || phase === 'installing' ? 'settingUp' : phase;
+  }
   return {
-    link: settings.on ? 'connected' : 'off',
-    devices: settings.on ? DEVICES.map((d) => ({ ...d, picked: settings.devices.includes(d.id) })) : [],
+    link,
+    devices: connected ? DEVICES.map((d) => ({ ...d, picked: settings.devices.includes(d.id) })) : [],
     colour: settings.on ? scene : null,
     capture: settings.on ? 'Desktop Duplication' : null,
     held: null,
+    setup: phase === 'downloading' || phase === 'installing' ? phase : null,
+    offer: '1.1',
   };
+}
+
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export async function simSetUpOpenRgb(): Promise<string> {
+  if (phase !== 'missing') return 'OpenRGB is on this PC already.';
+  phase = 'downloading';
+  await pause(1200);
+  phase = 'installing';
+  await pause(1200);
+  phase = 'starting';
+  setTimeout(() => (phase = 'connected'), 1500);
+  return 'OpenRGB 1.1 is set up: Clokrix finds your devices in a moment.';
 }
 
 const view = (): LightingView => ({ settings: { ...settings }, status: status(), monitors: 2 });

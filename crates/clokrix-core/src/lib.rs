@@ -16,6 +16,8 @@ pub mod devices;
 pub mod diag;
 pub mod display;
 pub mod edition;
+#[cfg(windows)]
+pub mod elevated;
 pub mod engine;
 pub mod fan;
 pub mod files;

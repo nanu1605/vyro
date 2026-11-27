@@ -21,7 +21,7 @@ use crate::registry::{Group, Registry, SensorDesc, SensorKey, Source, Unit};
 pub use cpu::{logical_processors, CpuProvider};
 pub use gpu::GpuProvider;
 pub use memory::MemoryProvider;
-pub use process::ProcessProvider;
+pub use process::{running, ProcessProvider};
 
 /// Per-process GPU utilization, written by the GPU provider and read by the process provider.
 pub type GpuShare = Arc<Mutex<HashMap<u32, f64>>>;

@@ -236,6 +236,7 @@ fn main() {
             lighting::get_lighting,
             lighting::set_lighting,
             lighting::watch_lighting,
+            lighting::set_up_openrgb,
             wheel::get_wheel_status,
             wheel::stop_wheel,
             wheel::set_wheel_options,

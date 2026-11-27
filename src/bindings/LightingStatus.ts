@@ -2,6 +2,7 @@
 import type { LightDevice } from "./LightDevice";
 import type { LightLink } from "./LightLink";
 import type { Rgb8 } from "./Rgb8";
+import type { SetupStep } from "./SetupStep";
 
 /**
  * What the Lighting view shows.
@@ -19,4 +20,12 @@ capture: string | null,
 /**
  * Why the lights hold their colour now, if they do.
  */
-held: string | null, };
+held: string | null, 
+/**
+ * OpenRGB's set-up step now, with [`LightLink::SettingUp`].
+ */
+setup: SetupStep | null, 
+/**
+ * The OpenRGB version the app sets up, where it can (Windows).
+ */
+offer: string | null, };

@@ -43,7 +43,8 @@ const THEMES = ['midnight', 'amoled', 'cyber', 'glass', 'minimal', 'daylight'];
 const WIDTHS = [1920, 1440, 390];
 const TABS = [
   'Dashboard', 'Cooling', 'GPU tuning', 'History', 'Health', 'Insights', 'Gaming', 'Benchmark', 'Processes',
-  'Hardware', 'My PC', 'Storage', 'Network', 'Displays', 'Devices', 'System', 'Sensors', 'Widgets', 'Settings',
+  'Hardware', 'My PC', 'Storage', 'Network', 'Displays', 'Devices', 'Lighting', 'System', 'Sensors', 'Widgets',
+  'Settings',
 ];
 
 // Desktop widgets (P30), one of each kind and style, as the browser preview keeps them.
@@ -382,6 +383,31 @@ async function sweepCustomAccent(browser, theme, accent, width) {
     await noSidewaysScroll(page, where);
     if (t === 'Settings') await closeGroup(page);
   }
+  await ctx.close();
+}
+
+// --- Lighting (2.6.1): OpenRGB not on the PC, then set up from the view. ------------------------
+
+async function sweepLighting(browser, theme, width) {
+  const { ctx, page } = await open(browser, BASE, { width, theme });
+  await page.goto(`${BASE}/?openrgb=missing`);
+  await page.waitForTimeout(1200);
+  const at = (what) => `${what} · ${theme} ${width}px`;
+  await tab(page, 'Lighting');
+  await page.getByRole('switch', { name: "Light my devices with the screen's colour" }).check();
+  const button = page.getByRole('button', { name: 'Set up OpenRGB' });
+  checks++;
+  await button.waitFor({ timeout: 5000 }).catch(() => problem(at('Lighting'), 'no Set up OpenRGB while OpenRGB is missing'));
+  await axe(page, at('Lighting, OpenRGB missing'));
+  await noSidewaysScroll(page, at('Lighting, OpenRGB missing'));
+  await button.click();
+  checks++;
+  await page.getByText('Downloading OpenRGB…').waitFor({ timeout: 3000 }).catch(() => problem(at('Set up OpenRGB'), 'no download shown'));
+  await axe(page, at('Lighting, setting OpenRGB up'));
+  checks++;
+  await page.getByText('Constructed RGB Keyboard').waitFor({ timeout: 8000 }).catch(() => problem(at('Set up OpenRGB'), 'no devices after it'));
+  await axe(page, at('Lighting, OpenRGB set up'));
+  await noSidewaysScroll(page, at('Lighting, OpenRGB set up'));
   await ctx.close();
 }
 
@@ -1484,6 +1510,7 @@ try {
     }
     for (const theme of ['midnight', 'daylight']) {
       await Promise.all(WIDTHS.map((w) => sweepDialogs(browser, theme, w)));
+      await Promise.all(WIDTHS.map((w) => sweepLighting(browser, theme, w)));
       await Promise.all([...WIDTHS, 800].map((w) => sweepDashboard(browser, theme, w)));
       // The narrowest window that keeps 12 columns (cards 3 wide about 195 px), and a wider one.
       await Promise.all([920, 1100].map((w) => sweepDashboard(browser, theme, w, 'narrow')));

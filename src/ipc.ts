@@ -1244,6 +1244,13 @@ export async function watchLighting(): Promise<LightingStatus> {
   return invoke<LightingStatus>('watch_lighting');
 }
 
+/** "Set up OpenRGB" (2.6.1): its pinned installer downloaded, checked and run after Windows'
+ * administrator prompt. Resolves with what came of it. */
+export async function setUpOpenRgb(): Promise<string> {
+  if (!inTauri) return (await import('./sim-lighting')).simSetUpOpenRgb();
+  return invoke<string>('set_up_openrgb');
+}
+
 export async function onLightingStatus(cb: (s: LightingStatus) => void): Promise<() => void> {
   if (!inTauri) return (await import('./sim-lighting')).simOnLighting(cb);
   return listen<LightingStatus>('lighting-status', (e) => cb(e.payload));

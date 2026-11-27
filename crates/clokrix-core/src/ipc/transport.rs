@@ -95,10 +95,18 @@ pub enum ServiceState {
 }
 
 pub fn service_state() -> ServiceState {
+    state_of(crate::ipc::SERVICE_NAME)
+}
+
+/// State of the Windows service `name` (another program's too: OpenRGB's, 2.6.1).
+pub fn state_of(name: &str) -> ServiceState {
     #[cfg(windows)]
-    return win::service_status().map_or(ServiceState::NotInstalled, |(state, _)| state);
+    return win::status_of(name).map_or(ServiceState::NotInstalled, |(state, _)| state);
     #[cfg(not(windows))]
-    ServiceState::NotInstalled
+    {
+        let _ = name;
+        ServiceState::NotInstalled
+    }
 }
 
 #[cfg(windows)]
@@ -317,14 +325,15 @@ mod win {
 
     /// The service's state and process id; `None` when it is not installed or not visible.
     pub fn service_status() -> Option<(ServiceState, u32)> {
+        status_of(crate::ipc::SERVICE_NAME)
+    }
+
+    /// The service `name`'s state and process id, as [`service_status`].
+    pub fn status_of(name: &str) -> Option<(ServiceState, u32)> {
         // SAFETY: plain SCM calls; handles are closed below and the buffer outlives the call.
         unsafe {
             let scm = OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_CONNECT).ok()?;
-            let svc = OpenServiceW(
-                scm,
-                &HSTRING::from(crate::ipc::SERVICE_NAME),
-                SERVICE_QUERY_STATUS,
-            );
+            let svc = OpenServiceW(scm, &HSTRING::from(name), SERVICE_QUERY_STATUS);
             let result = svc.ok().and_then(|svc| {
                 let mut status = SERVICE_STATUS_PROCESS::default();
                 let buf = std::slice::from_raw_parts_mut(

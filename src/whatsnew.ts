@@ -21,6 +21,16 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '2.6.1',
+    items: [
+      {
+        icon: 'lighting',
+        title: 'Clokrix sets up OpenRGB for you',
+        text: 'Lighting no longer needs OpenRGB installed by hand. With lighting on and no OpenRGB on this PC, press Set up OpenRGB: Clokrix downloads OpenRGB’s own installer, checks it is exactly the release it knows, and installs it after one Windows prompt. OpenRGB then runs in the background, starting with Windows.',
+      },
+    ],
+  },
+  {
     version: '2.6.0',
     items: [
       {

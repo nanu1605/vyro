@@ -12,8 +12,9 @@ third-party monitoring app or library).
 - **Build spec:** [`PROJECT_PLAN.md`](PROJECT_PLAN.md) — what to build and why.
 - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — milestones, phase tracker, decision log.
 
-**Status:** 2.6. New in 2.6 (Pro): [ambient lighting](#ambient-lighting-26), your RGB keyboard,
-mouse and other lights in the colour glowing most on the screen, through OpenRGB; and [the phone
+**Status:** 2.6.1. New in 2.6 (Pro): [ambient lighting](#ambient-lighting-26), your RGB keyboard,
+mouse and other lights in the colour glowing most on the screen, through OpenRGB, which 2.6.1
+sets up for you; and [the phone
 wheel](#the-phone-wheel-26), a phone you allow as a steering wheel with pedals that the PC plays
 as an Xbox controller in driving games. New in 2.2: the new name, Clokrix, and its logo; an
 installed Vyro updates to it and keeps its settings and history ([the relay](docs/remote.md#the-relays-new-address-22) has
@@ -115,9 +116,17 @@ glowing most on the screen: vivid colours count, grey, white and black do not, s
 a dark game lights red. It follows quickly in games and smoothly in films (Auto chooses by the
 game in front), as bright as the scene, and never flashes more than 3 times a second.
 
-- **Through OpenRGB** (free, `openrgb.org`), which you install and leave open with its SDK
-  Server on; Clokrix talks to it on this PC and never saves anything to a device. Close the
-  lighting in iCUE, Synapse, G HUB or Armoury Crate, or they fight OpenRGB.
+- **Through OpenRGB** (free, open source, `openrgb.org`); Clokrix talks to it on this PC and
+  never saves anything to a device. Close the lighting in iCUE, Synapse, G HUB or Armoury Crate,
+  or they fight OpenRGB.
+- **Set up OpenRGB** (2.6.1): without OpenRGB on the PC, the Lighting view offers to set it up.
+  Clokrix then downloads OpenRGB 1.1's own installer from its release page, checks it is exactly
+  the file Clokrix knows (its SHA-256), and installs it after one Windows prompt for an
+  administrator. OpenRGB then runs in the background as its own service, starting with Windows,
+  its server on this PC only. That download is the only time Clokrix contacts OpenRGB's site;
+  nothing of OpenRGB comes with Clokrix's installer. Uninstalling Clokrix leaves OpenRGB, which
+  Windows' Apps removes. An OpenRGB you installed yourself works too: Clokrix starts it if it is
+  not running.
 - **The screen** is read only while lighting is on: each picture is made small on the graphics
   card and kept only as one colour, and nothing of it leaves the PC. A phone screen session on
   the same monitor takes the capture over, and the lights follow its pictures meanwhile.

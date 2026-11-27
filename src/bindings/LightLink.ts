@@ -3,4 +3,4 @@
 /**
  * What OpenRGB is to Clokrix now.
  */
-export type LightLink = "off" | "notRunning" | "connected";
+export type LightLink = "off" | "notRunning" | "connected" | "missing" | "settingUp" | "starting";

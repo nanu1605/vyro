@@ -7,6 +7,11 @@
 //! lighting lets go of it and takes its colour from the session's own pictures instead. Each
 //! device's mode is noted (`lighting.json`) before Clokrix puts it in Direct, and put back when
 //! lighting stops, Pro ends, Clokrix closes, or at the next start after a crash.
+//!
+//! OpenRGB (2.6.1, `lighting::setup`): when it is not on this PC, the view offers Set up OpenRGB,
+//! which downloads its pinned installer and runs it with one administrator prompt; its service
+//! then answers. An OpenRGB installed without the service is started here, once, while lighting
+//! is on and it does not answer.
 
 use std::collections::{HashMap, HashSet};
 use std::net::{Ipv4Addr, SocketAddr};
@@ -17,9 +22,10 @@ use std::time::{Duration, Instant};
 
 use clokrix_core::lighting::colour::{Picker, Rgb8, Target, Thumb};
 use clokrix_core::lighting::openrgb::{Client, Controller, PORT};
+use clokrix_core::lighting::setup::{self, Next};
 use clokrix_core::lighting::{
     self, device_id, info, interval, restore_mode, saved_mode, LightLink, LightingSettings,
-    LightingStatus, SavedMode,
+    LightingStatus, SavedMode, SetupStep,
 };
 use clokrix_core::{files, lock};
 use serde::{Deserialize, Serialize};
@@ -59,6 +65,10 @@ pub struct LightingState {
     tapped: Mutex<Option<Thumb>>,
     /// The view is open until then.
     watched: Mutex<Instant>,
+    /// OpenRGB's set-up runs: this step.
+    setting_up: Mutex<Option<SetupStep>>,
+    /// OpenRGB was just set up: the thread looks for it afresh.
+    fresh: AtomicBool,
 }
 
 impl LightingState {
@@ -79,6 +89,8 @@ impl LightingState {
             holding: AtomicBool::new(false),
             tapped: Mutex::new(None),
             watched: Mutex::new(Instant::now()),
+            setting_up: Mutex::new(None),
+            fresh: AtomicBool::new(false),
         }
     }
 
@@ -95,7 +107,13 @@ impl LightingState {
     }
 
     fn status(&self) -> LightingStatus {
-        lock(&self.status).clone()
+        let mut s = lock(&self.status).clone();
+        s.offer = cfg!(windows).then(|| setup::VERSION.to_owned());
+        s.setup = *lock(&self.setting_up);
+        if s.setup.is_some() && s.link != LightLink::Off {
+            s.link = LightLink::SettingUp;
+        }
+        s
     }
 }
 
@@ -286,6 +304,51 @@ fn restore_all(
     state.save();
 }
 
+/// OpenRGB does not answer: what the view says, and OpenRGB started if it is installed without
+/// its service (once a run of the thread).
+fn silent(
+    state: &LightingState,
+    now: Instant,
+    silent_since: &mut Option<Instant>,
+    started_at: &mut Option<Instant>,
+) -> LightLink {
+    if lock(&state.setting_up).is_some() {
+        return LightLink::SettingUp;
+    }
+    let since = *silent_since.get_or_insert(now);
+    let found = setup::find();
+    match setup::next(
+        &found,
+        now - since,
+        started_at.map(|at| now.saturating_duration_since(at)),
+    ) {
+        Next::Missing => LightLink::Missing,
+        Next::Wait => LightLink::Starting,
+        Next::NotRunning => LightLink::NotRunning,
+        Next::Start(exe) => {
+            *started_at = Some(now);
+            #[cfg(windows)]
+            {
+                match setup::start(&exe) {
+                    Ok(()) => {
+                        log::info!("lighting: started {}", exe.display());
+                        LightLink::Starting
+                    }
+                    Err(e) => {
+                        log::warn!("lighting: {e}");
+                        LightLink::NotRunning
+                    }
+                }
+            }
+            #[cfg(not(windows))]
+            {
+                let _ = exe;
+                LightLink::NotRunning
+            }
+        }
+    }
+}
+
 /// Whether a game is in front (for the Auto speed).
 fn game_in_front(app: &AppHandle) -> bool {
     crate::gaming::game_in_front(app)
@@ -300,6 +363,9 @@ fn run(app: &AppHandle) {
     let mut client: Option<Client> = None;
     let mut devices: Vec<Controller> = Vec::new();
     let mut look_at = Instant::now();
+    // OpenRGB not answering since then; started here then (once a run).
+    let mut silent_since: Option<Instant> = None;
+    let mut started_at: Option<Instant> = None;
     // Devices in Direct now, and what each was last sent.
     let mut direct: HashSet<String> = HashSet::new();
     let mut sent: HashMap<String, (Rgb8, Instant)> = HashMap::new();
@@ -316,6 +382,11 @@ fn run(app: &AppHandle) {
         let settings = state.settings();
 
         // OpenRGB.
+        if state.fresh.swap(false, Ordering::SeqCst) {
+            silent_since = None;
+            started_at = None;
+            look_at = tick;
+        }
         if client.is_none() && tick >= look_at {
             look_at = tick + RETRY;
             match Client::connect(openrgb()).and_then(|mut c| c.controllers().map(|d| (c, d))) {
@@ -329,10 +400,12 @@ fn run(app: &AppHandle) {
                     devices = d;
                     direct.clear();
                     sent.clear();
+                    silent_since = None;
                 }
                 Err(e) => {
                     log::debug!("lighting: OpenRGB: {e}");
-                    lock(&state.status).link = LightLink::NotRunning;
+                    let link = silent(&state, tick, &mut silent_since, &mut started_at);
+                    lock(&state.status).link = link;
                 }
             }
         }
@@ -560,4 +633,79 @@ pub fn set_lighting(
 pub fn watch_lighting(state: tauri::State<'_, LightingState>) -> LightingStatus {
     *lock(&state.watched) = Instant::now() + Duration::from_secs(5);
     state.status()
+}
+
+/// "Set up OpenRGB": its pinned installer downloaded and checked, then run after an
+/// administrator prompt on this PC. Says what came of it.
+#[tauri::command]
+pub async fn set_up_openrgb(app: AppHandle) -> Result<String, String> {
+    let state = app
+        .try_state::<LightingState>()
+        .ok_or("Clokrix is starting.")?;
+    if !crate::edition::full(&app) {
+        return Err("Ambient lighting is part of Clokrix Pro.".into());
+    }
+    if !cfg!(windows) {
+        return Err("Clokrix sets up OpenRGB on Windows only.".into());
+    }
+    if setup::find().exe.is_some() {
+        return Ok("OpenRGB is on this PC already.".into());
+    }
+    {
+        let mut step = lock(&state.setting_up);
+        if step.is_some() {
+            return Err("OpenRGB's set-up is running already.".into());
+        }
+        *step = Some(SetupStep::Downloading);
+    }
+    tell(&app, &state);
+    let dir = app
+        .path()
+        .app_local_data_dir()
+        .ok()
+        .map(|d| d.join("openrgb"));
+    let worker = app.clone();
+    let done = tauri::async_runtime::spawn_blocking(move || set_up(&worker, dir))
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|r| r);
+    *lock(&state.setting_up) = None;
+    state.fresh.store(true, Ordering::SeqCst);
+    tell(&app, &state);
+    match done {
+        Ok(setup::Installed::Done) => {
+            log::info!("lighting: OpenRGB {} set up", setup::VERSION);
+            Ok(format!(
+                "OpenRGB {} is set up: Clokrix finds your devices in a moment.",
+                setup::VERSION
+            ))
+        }
+        Ok(setup::Installed::Restart) => {
+            Ok("Almost: restart this PC to finish setting up OpenRGB.".into())
+        }
+        Err(e) => {
+            log::warn!("lighting: OpenRGB not set up: {e}");
+            Err(e)
+        }
+    }
+}
+
+/// The download, then the install.
+fn set_up(app: &AppHandle, dir: Option<PathBuf>) -> Result<setup::Installed, String> {
+    let bytes = setup::download()?;
+    if let Some(state) = app.try_state::<LightingState>() {
+        *lock(&state.setting_up) = Some(SetupStep::Installing);
+        tell(app, &state);
+    }
+    #[cfg(windows)]
+    {
+        let dir = dir.ok_or("Clokrix has no folder for the download.")?;
+        let package = setup::Package::write(&bytes, &dir)?;
+        setup::install(&package)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (bytes, dir);
+        Err("Clokrix sets up OpenRGB on Windows only.".into())
+    }
 }

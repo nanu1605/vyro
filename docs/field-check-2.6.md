@@ -20,8 +20,9 @@ The tests cover the rest:
   `claude/vyro-2.0`.
 - The website and the relay deployed from it ("deploy the licence", "deploy the relay"): the
   phone's Wheel tab comes from the relay.
-- For §1: OpenRGB (free, from `openrgb.org`), open, with its **SDK Server** started. Close the
-  lighting in iCUE, Synapse, G HUB or Armoury Crate.
+- For §1: nothing to install first; Clokrix sets OpenRGB up (2.6.1). If OpenRGB is already on
+  the PC, remove it in Windows' Apps to try that, or skip §1's step 1. Close the lighting in
+  iCUE, Synapse, G HUB or Armoury Crate.
 - For §2: a phone paired from anywhere, on the same Wi-Fi as the PC; Euro Truck Simulator 2,
   American Truck Simulator or SnowRunner (any you have).
 
@@ -29,26 +30,32 @@ About an hour.
 
 ## 1. Ambient lighting
 
-1. **Lighting** in the sidebar. Turn on "Light my devices with the screen's colour". OpenRGB's
-   devices are listed; those that cannot follow the screen say why. Pick your keyboard, mouse
-   and any other device.
-2. **A still picture.** Open a mostly dark picture with one bright red sign (a search for
+1. **Set up OpenRGB** (2.6.1). **Lighting** in the sidebar; turn on "Light my devices with the
+   screen's colour": "OpenRGB isn't on this PC" with **Set up OpenRGB**. Press it: Downloading
+   (about 23 MB), then one Windows prompt for an administrator and a small progress bar, then
+   "Starting OpenRGB…" for up to two minutes while it finds your devices. Note how long each
+   took. In Services (`services.msc`), "OpenRGB" is Running, Automatic. Restart the PC: with
+   Clokrix open and OpenRGB not opened by hand, the devices come back on their own.
+2. **Devices.** OpenRGB's devices are listed; those that cannot follow the screen say why. Pick
+   your keyboard, mouse and any other device. RGB memory and boards are listed too (OpenRGB's
+   service reaches them through PawnIO).
+3. **A still picture.** Open a mostly dark picture with one bright red sign (a search for
    "neon sign" will do), full screen: the devices go red within a moment. A grey document or the
    desktop with no colour: white (or Clokrix blue or off, as "When the screen has no colour"
    says).
-3. **A film** (Speed: Smooth or Auto): the devices follow the scenes without flicker or
+4. **A film** (Speed: Smooth or Auto): the devices follow the scenes without flicker or
    flashing, even in a film's fast cuts or explosions.
-4. **A game** (Speed: Auto): the devices follow quickly. Write down:
+5. **A game** (Speed: Auto): the devices follow quickly. Write down:
    - Clokrix's CPU use in Task Manager (Details, `clokrix.exe`), lighting on and then off;
    - the game's frame rate and its present mode (Clokrix's overlay, or PresentMon), lighting on
      and then off. They should be the same.
-5. **HDR**, if your monitor has it: Windows' HDR on, the same picture and film: the colours are
+6. **HDR**, if your monitor has it: Windows' HDR on, the same picture and film: the colours are
    the same as without HDR, not washed out.
-6. **A phone screen session** while lighting is on (the phone's Screen tab): the screen shows
+7. **A phone screen session** while lighting is on (the phone's Screen tab): the screen shows
    on the phone as before, and the devices keep following the screen. Stop it: lighting goes on.
-7. **Off.** Turn lighting off: every device goes back to the effect it had before. Turn it on
+8. **Off.** Turn lighting off: every device goes back to the effect it had before. Turn it on
    again and quit Clokrix from the tray: back to their effects again.
-8. **Memory devices** (RGB RAM sticks), if you have them: their colour changes a little more
+9. **Memory devices** (RGB RAM sticks), if you have them: their colour changes a little more
    slowly; the Dashboard's readings stay smooth.
 
 ## 2. The phone wheel
@@ -103,6 +110,7 @@ About an hour.
 
 ## Report
 
-"Everything is working", or what differs. For §1, the CPU use and frame rates written down;
-for §2, the round trips, which "Full lock at" felt right in each game, and anything a game
-refused; for §3, a screenshot of anything that looks wrong (blur the buyers' details first).
+"Everything is working", or what differs. For §1, how long Set up OpenRGB took, the CPU use and
+frame rates written down; for §2, the round trips, which "Full lock at" felt right in each game,
+and anything a game refused; for §3, a screenshot of anything that looks wrong (blur the buyers'
+details first).

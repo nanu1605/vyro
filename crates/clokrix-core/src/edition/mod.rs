@@ -10,7 +10,7 @@
 //! source, and the lock is for the official builds.
 
 pub mod checkout;
-mod https;
+pub(crate) mod https;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;

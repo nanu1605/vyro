@@ -10,6 +10,7 @@
 
 pub mod colour;
 pub mod openrgb;
+pub mod setup;
 
 use std::time::Duration;
 
@@ -82,6 +83,21 @@ pub enum LightLink {
     /// OpenRGB does not answer: not running, or its SDK server is off.
     NotRunning,
     Connected,
+    /// OpenRGB is not on this PC (2.6.1): the app can set it up.
+    Missing,
+    /// The app sets OpenRGB up now ([`LightingStatus::setup`] says which step).
+    SettingUp,
+    /// OpenRGB is starting: its service, or the program the app started.
+    Starting,
+}
+
+/// A step of OpenRGB's set-up (2.6.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum SetupStep {
+    Downloading,
+    Installing,
 }
 
 /// A device as the Lighting view lists it.
@@ -114,6 +130,10 @@ pub struct LightingStatus {
     pub capture: Option<String>,
     /// Why the lights hold their colour now, if they do.
     pub held: Option<String>,
+    /// OpenRGB's set-up step now, with [`LightLink::SettingUp`].
+    pub setup: Option<SetupStep>,
+    /// The OpenRGB version the app sets up, where it can (Windows).
+    pub offer: Option<String>,
 }
 
 /// A device's lasting name: a hash of its name, maker and where it is, so the same device keeps
