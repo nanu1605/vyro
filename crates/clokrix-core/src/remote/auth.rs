@@ -336,6 +336,7 @@ impl Auth {
                 anywhere: false,
                 control: false,
                 screen: false,
+                wheel: false,
                 push: false,
             })
             .collect()

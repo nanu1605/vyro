@@ -17,6 +17,7 @@
   import { toast } from '../ui/toast.svelte';
   import { errText, untilAnswered, type ScreenProps } from './ask';
   import ClipSheet from './ClipSheet.svelte';
+  import { GATHER_MS, gathered, STUN } from './peer';
   import { capture, CLIP_SECS, frame, Framer, level, micError, PIECE_DIRECT, PIECE_RELAY, pieces, type Capture } from './voice';
   import { coalesce, contentBox, Gestures, type Input, type Key, type Pt, toFraction, typed } from './gestures';
   import {
@@ -93,11 +94,8 @@
   type Mode = 'idle' | 'connecting' | 'direct' | 'slow' | 'ended';
   type Mod = 'Control' | 'Alt' | 'Shift' | 'Meta';
 
-  const STUN: RTCIceServer[] = [{ urls: 'stun:stun.cloudflare.com:3478' }, { urls: 'stun:stun.l.google.com:19302' }];
   /** No direct connection by then: the slow view. */
   const DIRECT_MS = 15_000;
-  /** The longest wait for the phone's own addresses before offering. */
-  const GATHER_MS = 3000;
   /** No new picture decoded for this long (a still screen comes again every second): ask the PC
    * for a whole one. */
   const STALL_MS = 3000;
@@ -381,19 +379,6 @@
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
 
   /** Waits until the phone knows its own addresses (or `ms`), so one offer carries them. */
-  function gathered(p: RTCPeerConnection, ms: number): Promise<void> {
-    if (p.iceGatheringState === 'complete') return Promise.resolve();
-    return new Promise((done) => {
-      const t = setTimeout(done, ms);
-      p.addEventListener('icegatheringstatechange', () => {
-        if (p.iceGatheringState === 'complete') {
-          clearTimeout(t);
-          done();
-        }
-      });
-    });
-  }
-
   function closePeer(): void {
     stopMic();
     channel = null;

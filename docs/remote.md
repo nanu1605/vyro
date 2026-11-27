@@ -156,6 +156,53 @@ deleted 90 days after the PC was last seen.
   could serve an app that shows the screen to someone else, for a phone allowed to see it. Keep
   "Sees the screen" for phones you would hand the PC to.
 
+### The phone wheel (2.6)
+
+The owner asked: *"can we use the mobile phones gyro behaviour and drive any driving games like
+Euro truck simulator 2 or Snowrunner, etc using a phone just like it's a Moza wheel? Also there
+should be no lag."*
+
+- **Off for each phone until the owner allows it, on the PC:** Settings → Remote's paired list
+  has "Steers games" next to "Sees the screen". Seeing the screen does not include the wheel.
+  Taking it back, signing the phone out or turning reach from anywhere off ends a phone's session
+  at once. Clokrix Pro.
+- **The virtual controller.** The PC plays the phone as an Xbox 360 controller through ViGEmBus,
+  a signed driver that comes with the installer and is set up only when the owner presses "Set
+  up the virtual controller" (Settings → Remote → Wheel): one administrator prompt on the PC,
+  never on the phone. A phone asking never starts the install. The controller is plugged in
+  only while a phone steers; uninstalling Clokrix leaves the driver, which other apps share.
+- **Steering.** The phone is held like a wheel, its screen towards the driver. Its turn in the
+  screen's plane is measured from gravity (the accelerometer) against where it was at Centre,
+  smoothed by the gyro, which also carries it where gravity says little. That works the same
+  whichever way a phone reports its axes, upright or leaning back. "Full lock at" sets how far
+  the phone turns for full lock (90° by default, from 30° to 270°). The left edge is the brake
+  and the right the throttle, pressed harder the higher the thumb; twelve buttons sit under the
+  wheel.
+- **No lag, as far as a phone allows.** Each sensor reading goes to the PC at once, in a 12-byte
+  packet on its own channel of the direct connection (as the screen's, end to end), set never to
+  wait for or resend a lost packet: a newer one is already on its way. The PC writes the
+  controller as each packet lands. The phone shows the round trip. On the same Wi-Fi the delay
+  is a few milliseconds of network plus the phone's sensor rate (about 60 readings a second),
+  measured at the 2.6 field check.
+- **Direct only.** The relay's rate limit for phones (5 messages a second) is far too slow, so
+  there is no relay fallback: a phone with no direct path to the PC after 15 s is told to use
+  the same Wi-Fi. A TURN server, where the relay's owner turned one on, also works.
+- **Letting go.** A phone that sends nothing for 0.4 s (Wi-Fi drops, the page hidden) lets go:
+  pedals and buttons are released at once and the steering eases to centre over 0.2 s. A
+  session nobody steers in for 10 minutes ends. While a phone steers, the PC shows a banner with
+  Stop on every view, and a notification at the start; Settings → Remote's record keeps each
+  start.
+- **The PC's options** (Settings → Remote → Wheel): making up for a game's dead zone (most games
+  ignore the first part of a stick's movement; 0 to 30 %), and where the pedals go: the triggers
+  (most games), or the right stick's up and down, for games that read the triggers as one axis.
+- **In the game,** choose a controller and bind steering to the left stick's left and right,
+  and the throttle and brake to the right and left triggers (or the right stick). The bindings
+  for Euro Truck Simulator 2, American Truck Simulator and SnowRunner are written here after the
+  2.6 field check.
+- **Limits.** A phone cannot push back like a force-feedback wheel: Android phones vibrate with
+  the game's rumble, and iPhone browsers cannot vibrate. Some online games' anti-cheat refuses
+  virtual controllers ([anti-cheat](anti-cheat.md)). One phone at a time.
+
 ### Notifications (2.0)
 
 - **On the phone:** More → Notifications turns them on for that PC, chooses what they are about

@@ -24,7 +24,7 @@
   import { animator } from './anim';
   import { reveal } from './reveal';
   import { loadUpdates, update } from './updates.svelte';
-  import { cancelPowerAction, getBackendStatus, getScreenStatus, onScreenShare, stopScreenShare, getHardwareChanges, getLowBatteries, getPawnIoStatus, getPowerState, getRemoteBrief, inTauri, onBackendStatus, onHardwareChanged, onLowBattery, onOpenView, onPowerPending, onRemote, onSensors, onWindowOpened, restoreFans, restoreGpu, setUiVisible, getWhatsNew, whatsNewSeen } from './ipc';
+  import { cancelPowerAction, getBackendStatus, getScreenStatus, onScreenShare, stopScreenShare, getWheelStatus, onWheelStatus, stopWheel, getHardwareChanges, getLowBatteries, getPawnIoStatus, getPowerState, getRemoteBrief, inTauri, onBackendStatus, onHardwareChanged, onLowBattery, onOpenView, onPowerPending, onRemote, onSensors, onWindowOpened, restoreFans, restoreGpu, setUiVisible, getWhatsNew, whatsNewSeen } from './ipc';
   import { needsFor } from './dashboard';
   import { lowNotice } from './devices';
   import { loadSeen, newestId, saveSeen } from './changes';
@@ -36,7 +36,7 @@
   import Sidebar, { type Dot } from './components/shell/Sidebar.svelte';
   import TopBar from './components/shell/TopBar.svelte';
   import LiveRail from './components/shell/LiveRail.svelte';
-  import type { AlertFired, BackendStatus, DeviceInfo, PawnIoStatus, PendingPower, RemoteBrief, ScreenShare, SensorSnapshot } from './types';
+  import type { AlertFired, BackendStatus, DeviceInfo, PawnIoStatus, PendingPower, RemoteBrief, ScreenShare, SensorSnapshot, WheelStatus } from './types';
 
   function lastTab(): Tab {
     try {
@@ -220,6 +220,16 @@
     }
   }
 
+  // A phone steering games (2.6): shown on every view while it lasts, with Stop.
+  let wheelSession = $state.raw<WheelStatus['session']>(null);
+  async function stopSteering(): Promise<void> {
+    try {
+      wheelSession = (await stopWheel()).session;
+    } catch {
+      // The event brings the state.
+    }
+  }
+
   // Remote companion (P26): the header says so while it is on, from any tab.
   let remote = $state.raw<RemoteBrief | null>(null);
   function openRemote(): void {
@@ -319,6 +329,7 @@
     let stopLow: (() => void) | undefined;
     let stopPower: (() => void) | undefined;
     let stopScreen: (() => void) | undefined;
+    let stopWheelEvents: (() => void) | undefined;
     let stopView: (() => void) | undefined;
     let disposed = false;
     // Opened again from the tray: back to the Dashboard unless "Last tab" is chosen.
@@ -368,6 +379,13 @@
     void onScreenShare((s) => ((screenShare = s.share), (screenMic = s.mic))).then((fn) => {
       if (disposed) fn();
       else stopScreen = fn;
+    });
+    getWheelStatus()
+      .then((s) => (wheelSession = s.session))
+      .catch(() => {});
+    void onWheelStatus((s) => (wheelSession = s.session)).then((fn) => {
+      if (disposed) fn();
+      else stopWheelEvents = fn;
     });
     void onRemote((b) => (remote = b)).then((fn) => {
       if (disposed) fn();
@@ -419,6 +437,7 @@
       stopLow?.();
       stopPower?.();
       stopScreen?.();
+      stopWheelEvents?.();
       stopView?.();
       document.removeEventListener('visibilitychange', onVisibility);
     };
@@ -465,6 +484,12 @@
             mouse and keyboard.{screenMic ? ' Its microphone is on: this PC hears the phone.' : ''}
           </span>
           <button type="button" onclick={() => void stopScreen()}>Stop sharing</button>
+        </div>
+      {/if}
+      {#if wheelSession}
+        <div class="power-banner screen-banner" role="status">
+          <span><b>{wheelSession.phone} is steering games</b>: this PC has an Xbox controller it drives.</span>
+          <button type="button" onclick={() => void stopSteering()}>Stop</button>
         </div>
       {/if}
       {#if visited.cooling && !locked('cooling')}

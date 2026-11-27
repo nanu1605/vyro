@@ -34,6 +34,7 @@ timer, animation or WebGL runs; the engine keeps polling at the tray rate (5 s).
 | My PC 3-D (P23) | None (WebGL in the page) | None | Context freed; nothing runs | ≤ 30 fps while shown, GPU process +40 MB | P23 build |
 | Remote companion (P26) | `clokrix-companion` (on only) and one per connection | One shared view per reading | 1 Hz while a phone watches | Under 1 MB on, nobody watching | P26 build |
 | Screen on the phone (1.7) | Only during a session: `clokrix-screen-rtc`, `clokrix-screen` (capture and H.264), `clokrix-screen-idle` | None | Same | Nothing without a session; during one, measured at field check 1.7 | Tests; field check 1.7 |
+| Phone wheel (2.6) | Only while a phone steers: `clokrix-screen-rtc` (the direct link, no video), `clokrix-wheel` (writes the controller on each packet), `clokrix-wheel-rumble` | None | Same | Nothing without a session; during one, a 12-byte packet per sensor reading (about 60 a second) and a controller write for each | Tests; field check 2.6 |
 | Ambient lighting (2.6) | `clokrix-lighting`, only while lighting is on | None | Same (the lights follow the screen with the window closed) | Each picture made small on the GPU (about 36 KB read back), at most 30 a second, none while the screen is still; with no device picked and the view closed, it looks only for OpenRGB, every 5 s | Tests; field check 2.6 |
 
 The frontend's repeating timers were audited too:

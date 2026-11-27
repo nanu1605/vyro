@@ -170,6 +170,9 @@ pub struct Access {
     pub control: bool,
     /// The phone may see and use the PC's screen (1.7).
     pub screen: bool,
+    /// The phone may steer games (2.6). A PC before 2.6 says nothing of it: the phone then
+    /// offers no wheel.
+    pub wheel: bool,
     /// The requests it may make.
     pub methods: Vec<&'static str>,
 }

@@ -145,6 +145,8 @@ fn main() -> Result<(), String> {
             }
             SessionEvent::Mic(f) => println!("mic {} bytes", f.len()),
             SessionEvent::MicEnd => println!("mic off"),
+            SessionEvent::Wheel(b) => println!("wheel {} bytes", b.len()),
+            SessionEvent::WheelEnd => println!("wheel off"),
             SessionEvent::Closed(why) => println!("closed {why}"),
         }),
     )?;

@@ -26,6 +26,7 @@ mod tray;
 mod updates;
 mod voice;
 mod whats_new;
+mod wheel;
 mod widgets;
 
 use tauri::Manager;
@@ -95,6 +96,7 @@ fn main() {
             app.manage(remote_api::PhoneState::load(app.handle()));
             app.manage(screen::ScreenState::load(app.handle()));
             app.manage(lighting::LightingState::load(app.handle()));
+            app.manage(wheel::WheelState::load(app.handle()));
             tray::build(app.handle())?;
             let settings = app.state::<tray::SettingsStore>().get();
             if let Err(e) = tray::apply(app.handle(), settings) {
@@ -234,6 +236,11 @@ fn main() {
             lighting::get_lighting,
             lighting::set_lighting,
             lighting::watch_lighting,
+            wheel::get_wheel_status,
+            wheel::stop_wheel,
+            wheel::set_wheel_options,
+            wheel::install_wheel_driver,
+            remote::set_phone_wheel,
         ])
         .build(context)
         .expect("failed to build the Tauri application");
@@ -262,6 +269,8 @@ pub(crate) fn wind_down(handle: &tauri::AppHandle, why: &str) {
     gpu_tune::stop_and_wait(handle, std::time::Duration::from_secs(3));
     // Lets go of keys a phone holds, and puts the default microphone back.
     screen::end_all(handle, why);
+    // A phone steering lets go of the controller, which is unplugged.
+    wheel::end_all(handle, why);
     // A microphone left playing without a session too.
     voice::mic_off(handle, why);
     // The lights back as they were.

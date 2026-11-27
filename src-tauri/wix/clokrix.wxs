@@ -6,6 +6,9 @@
     then shows its "needs PawnIO" banner. PawnIO installs before the service starts.
   - installs PresentMon.exe (Intel, signed, MIT) beside the service, which runs it to measure
     the frame rate of the fullscreen game the app points it at.
+  - carries the signed ViGEmBus installer (Nefarius, BSD-3) for the phone wheel (2.6), without
+    running it: the app runs it, after an administrator prompt, when the owner sets the wheel up.
+    Uninstalling Clokrix leaves ViGEmBus, which other apps may use too.
   - installs clokrix-service.exe as "ClokrixService" (LocalSystem, automatic start, restarted on
     failure) and starts it without waiting: if it cannot start, the install still succeeds and
     the app falls back to reading unprivileged sensors itself, with a banner saying so.
@@ -45,6 +48,14 @@
         <Component Id="PawnIOSetup" Guid="{324AB78E-31EE-4D0B-8649-8EE947016DB4}" Win64="yes">
           <File Id="PawnIOSetupExe" Name="PawnIO_setup.exe" KeyPath="yes"
                 Source="$(sys.SOURCEFILEDIR)..\pawnio\PawnIO_setup.exe" />
+        </Component>
+      </Directory>
+
+      <!-- Fetched by scripts/fetch-vigembus.ps1 (pinned SHA-256); never run by the installer. -->
+      <Directory Id="ViGEmBusDir" Name="vigembus">
+        <Component Id="ViGEmBusSetup" Guid="{DFC41A19-52A9-47A0-9A23-92F3363D39B5}" Win64="yes">
+          <File Id="ViGEmBusSetupExe" Name="ViGEmBus_setup.exe" KeyPath="yes"
+                Source="$(sys.SOURCEFILEDIR)..\vigembus\ViGEmBus_setup.exe" />
         </Component>
       </Directory>
 

@@ -82,7 +82,43 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
 OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 3. LICENSE-0BSD
+## 3. LICENSE
+
+Used by: ViGEmBus 1.22.0 (bundled installer)
+
+~~~~text
+BSD 3-Clause License
+
+Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+   contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+~~~~
+
+## 4. LICENSE-0BSD
 
 Used by: adler2 2.0.1
 
@@ -101,7 +137,7 @@ AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
 OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ~~~~
 
-## 4. LICENSE-APACHE
+## 5. LICENSE-APACHE
 
 Used by: adler2 2.0.1, cargo-platform 0.1.9
 
@@ -309,7 +345,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ~~~~
 
-## 5. LICENSE-MIT
+## 6. LICENSE-MIT
 
 Used by: adler2 2.0.1, anyhow 1.0.104, atomic-waker 1.1.2, camino 1.2.6, cargo-platform 0.1.9, cargo_metadata 0.19.2, ctor 0.8.0, ctor-proc-macro 0.0.7, curve25519-dalek-derive 0.1.1, displaydoc 0.2.7, dtoa 1.0.11, dtor 0.3.0, dtor-proc-macro 0.0.6, dyn-clone 1.0.20, erased-serde 0.4.10, fastrand 2.5.0, group 0.13.0, itoa 1.0.18, lazy_static 1.5.1, minimal-lexical 0.2.1, once_cell 1.21.4, pin-project-lite 0.2.17, proc-macro2 1.0.107, quote 1.0.47, ref-cast 1.0.27, ref-cast-impl 1.0.27, rustc-hash 2.1.3, semver 1.0.28, serde 1.0.229, serde-untagged 0.1.9, serde_core 1.0.229, serde_derive 1.0.229, serde_derive_internals 0.29.1, serde_json 1.0.151, serde_repr 0.1.21, servo_arc 0.4.3, siphasher 1.0.4, syn 2.0.119, syn 3.0.6, thiserror 1.0.69, thiserror 2.0.21, thiserror-impl 1.0.69, thiserror-impl 2.0.21, tinyvec 1.13.3, typeid 1.0.3, unicode-ident 1.0.26, utf-8 0.7.6, winnow 1.0.4, wmi 0.18.4, zmij 1.0.23
 
@@ -339,7 +375,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 6. LICENSE-APACHE
+## 7. LICENSE-APACHE
 
 Used by: aead 0.5.2, aes 0.8.4, aes-gcm 0.10.3, arrayvec 0.7.8, asn1-rs 0.7.2, asn1-rs-derive 0.6.0, atomic-waker 1.1.2, base16ct 0.2.0, base64 0.22.1, base64 0.23.1, base64ct 1.8.3, bit-set 0.8.0, bit-vec 0.8.0, bit-vec 0.9.1, bitflags 1.3.2, bitflags 2.13.2, block-buffer 0.10.4, bs58 0.5.1, camino 1.2.6, ccm 0.5.0, cfg-if 1.0.5, chacha20 0.9.1, chacha20poly1305 0.10.1, cipher 0.4.4, const-oid 0.9.6, cpufeatures 0.2.17, crossbeam-channel 0.5.17, crossbeam-utils 0.8.23, crypto-bigint 0.5.5, crypto-common 0.1.7, ctr 0.9.2, curve25519-dalek-derive 0.1.1, defmt 1.1.1, defmt-macros 1.1.1, der 0.7.10, der-parser 10.0.0, der_derive 0.7.3, digest 0.10.7, dimpl 0.7.6, displaydoc 0.2.7, elliptic-curve 0.13.8, equivalent 1.0.2, fastrand 2.5.0, ff 0.13.1, flagset 0.4.7, flate2 1.1.10, fnv 1.0.7, form_urlencoded 1.2.2, ghash 0.5.1, glob 0.3.4, group 0.13.0, hashbrown 0.12.3, hashbrown 0.17.1, hashlink 0.12.2, heck 0.5.0, hkdf 0.12.4, hmac 0.12.1, html5ever 0.38.0, httparse 1.10.1, hyper-rustls 0.27.10, idna 1.1.0, idna_adapter 1.2.2, indexmap 1.9.3, indexmap 2.14.2, inout 0.1.4, keyboard-types 0.7.0, lazy_static 1.5.1, lock_api 0.4.14, log 0.4.34, markup5ever 0.38.0, mime 0.3.17, minimal-lexical 0.2.1, muda 0.19.3, num-bigint 0.4.8, num-integer 0.1.47, num-traits 0.2.19, oid-registry 0.8.1, once_cell 1.21.4, opaque-debug 0.3.1, p256 0.13.2, p384 0.13.1, parking_lot 0.12.5, parking_lot_core 0.9.12, pem-rfc7468 0.7.0, percent-encoding 2.3.2, pkcs8 0.10.2, png 0.17.16, poly1305 0.8.0, polyval 0.6.2, primeorder 0.13.6, regex 1.13.1, regex-automata 0.4.18, regex-syntax 0.8.11, rusticata-macros 4.1.0, rustls 0.23.45, rustls-platform-verifier 0.7.1, scopeguard 1.2.0, sec1 0.7.3, serde_with 3.23.0, serde_with_macros 3.23.0, serialize-to-javascript 0.1.2, serialize-to-javascript-impl 0.1.2, servo_arc 0.4.3, sha1 0.10.7, sha2 0.10.9, signature 2.2.0, siphasher 1.0.4, smallvec 1.16.2, socket2 0.6.5, spki 0.7.3, stable_deref_trait 1.2.1, static_assertions 1.1.0, string_cache 0.9.0, tempfile 3.27.0, tendril 0.5.1, tinyvec 1.13.3, tray-icon 0.24.2, tungstenite 0.28.0, unicode-segmentation 1.13.3, universal-hash 0.5.1, url 2.5.8, utf8_iter 1.0.4, uuid 1.26.1, web_atoms 0.2.6, window-vibrancy 0.6.0, wmi 0.18.4, wry 0.55.1, x509-cert 0.2.5, x509-parser 0.18.1, yasna 0.6.0, zeroize 1.9.0, zeroize_derive 1.5.0
 
@@ -547,7 +583,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ~~~~
 
-## 7. LICENSE-MIT
+## 8. LICENSE-MIT
 
 Used by: aead 0.5.2
 
@@ -580,7 +616,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 8. LICENSE-MIT
+## 9. LICENSE-MIT
 
 Used by: aes 0.8.4
 
@@ -612,7 +648,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 9. LICENSE-MIT
+## 10. LICENSE-MIT
 
 Used by: aes-gcm 0.10.3, chacha20poly1305 0.10.1
 
@@ -644,7 +680,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 10. COPYING
+## 11. COPYING
 
 Used by: aho-corasick 1.1.5, byteorder 1.5.0, jiff 0.2.37, jiff-core 0.1.1, jiff-tzdb 0.1.8, jiff-tzdb-platform 0.1.3, memchr 2.8.3, same-file 1.0.6, termcolor 1.4.1, walkdir 2.5.0, winapi-util 0.1.11
 
@@ -654,7 +690,7 @@ This project is dual-licensed under the Unlicense and MIT licenses.
 You may use this code under the terms of either license.
 ~~~~
 
-## 11. LICENSE-MIT
+## 12. LICENSE-MIT
 
 Used by: aho-corasick 1.1.5, byteorder 1.5.0, jiff 0.2.37, jiff-core 0.1.1, jiff-tzdb 0.1.8, jiff-tzdb-platform 0.1.3, memchr 2.8.3, termcolor 1.4.1, walkdir 2.5.0
 
@@ -682,7 +718,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 12. UNLICENSE
+## 13. UNLICENSE
 
 Used by: aho-corasick 1.1.5, byteorder 1.5.0, jiff 0.2.37, jiff-core 0.1.1, jiff-tzdb 0.1.8, jiff-tzdb-platform 0.1.3, memchr 2.8.3, same-file 1.0.6, termcolor 1.4.1, walkdir 2.5.0, winapi-util 0.1.11
 
@@ -713,7 +749,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 For more information, please refer to <http://unlicense.org/>
 ~~~~
 
-## 13. LICENSE
+## 14. LICENSE
 
 Used by: alloc-no-stdlib 2.0.4, brotli 8.0.4, brotli-decompressor 5.0.3
 
@@ -732,7 +768,7 @@ Redistribution and use in source and binary forms, with or without modification,
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ~~~~
 
-## 14. BSD-3-Clause (standard text; the package ships none)
+## 15. BSD-3-Clause (standard text; the package ships none)
 
 Used by: alloc-stdlib 0.2.4
 
@@ -750,7 +786,7 @@ Redistribution and use in source and binary forms, with or without modification,
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ~~~~
 
-## 15. LICENSE-APACHE
+## 16. LICENSE-APACHE
 
 Used by: anyhow 1.0.104, dtoa 1.0.11, dyn-clone 1.0.20, erased-serde 0.4.10, fdeflate 0.3.7, itoa 1.0.18, libc 0.2.189, miniz_oxide 0.8.9, miniz_oxide 0.9.1, num-conv 0.2.2, pin-project-lite 0.2.17, proc-macro2 1.0.107, quote 1.0.47, raw-window-handle 0.6.2, ref-cast 1.0.27, ref-cast-impl 1.0.27, rustc-hash 2.1.3, semver 1.0.28, serde 1.0.229, serde-untagged 0.1.9, serde_core 1.0.229, serde_derive 1.0.229, serde_derive_internals 0.29.1, serde_json 1.0.151, serde_repr 0.1.21, syn 2.0.119, syn 3.0.6, sync_wrapper 1.0.2, tauri 2.11.6, tauri-codegen 2.6.3, tauri-macros 2.6.3, tauri-plugin-log 2.9.2, tauri-plugin-notification 2.4.0, tauri-plugin-single-instance 2.4.5, tauri-plugin-updater 2.12.0, tauri-runtime 2.11.3, tauri-runtime-wry 2.11.4, tauri-utils 2.9.3, tauri-winrt-notification 0.7.3, thiserror 1.0.69, thiserror 2.0.21, thiserror-impl 1.0.69, thiserror-impl 2.0.21, time 0.3.55, time-core 0.1.9, time-macros 0.2.32, typeid 1.0.3, unicode-ident 1.0.26, utf-8 0.7.6, @tauri-apps/api 2.11.1 (npm)
 
@@ -933,7 +969,7 @@ TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 END OF TERMS AND CONDITIONS
 ~~~~
 
-## 16. LICENSE-MIT
+## 17. LICENSE-MIT
 
 Used by: arrayvec 0.7.8
 
@@ -965,7 +1001,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 17. LICENSE-MIT
+## 18. LICENSE-MIT
 
 Used by: asn1-rs 0.7.2, asn1-rs-derive 0.6.0, der-parser 10.0.0, oid-registry 0.8.1, rusticata-macros 4.1.0, x509-parser 0.18.1
 
@@ -997,7 +1033,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 18. MIT (standard text; the package ships none)
+## 19. MIT (standard text; the package ships none)
 
 Used by: asn1-rs-impl 0.2.0
 
@@ -1022,7 +1058,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 19. LICENSE-THIRD-PARTY
+## 20. LICENSE-THIRD-PARTY
 
 Used by: atomic-waker 1.1.2
 
@@ -1074,7 +1110,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 20. LICENSE
+## 21. LICENSE
 
 Used by: aws-lc-rs 1.18.2
 
@@ -1283,7 +1319,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ~~~~
 
-## 21. LICENSE
+## 22. LICENSE
 
 Used by: aws-lc-sys 0.46.0
 
@@ -1606,7 +1642,7 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 22. LICENSE-MIT
+## 23. LICENSE-MIT
 
 Used by: base16ct 0.2.0
 
@@ -1639,7 +1675,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 23. LICENSE-MIT
+## 24. LICENSE-MIT
 
 Used by: base64 0.22.1
 
@@ -1667,7 +1703,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 24. LICENSE-MIT
+## 25. LICENSE-MIT
 
 Used by: base64 0.23.1
 
@@ -1695,7 +1731,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 25. LICENSE-MIT
+## 26. LICENSE-MIT
 
 Used by: base64ct 1.8.3
 
@@ -1728,7 +1764,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 26. LICENSE-MIT
+## 27. LICENSE-MIT
 
 Used by: bit-set 0.8.0, bit-vec 0.8.0, bit-vec 0.9.1
 
@@ -1760,7 +1796,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 27. LICENSE-MIT
+## 28. LICENSE-MIT
 
 Used by: bitflags 1.3.2, bitflags 2.13.2, glob 0.3.4, log 0.4.34, num-bigint 0.4.8, num-integer 0.1.47, num-traits 0.2.19, regex 1.13.1, regex-automata 0.4.18, regex-syntax 0.8.11
 
@@ -1792,7 +1828,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 28. LICENSE-MIT
+## 29. LICENSE-MIT
 
 Used by: block-buffer 0.10.4
 
@@ -1824,7 +1860,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 29. LICENSE.MIT
+## 30. LICENSE.MIT
 
 Used by: brotli 8.0.4
 
@@ -1850,7 +1886,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 30. LICENSE-MIT
+## 31. LICENSE-MIT
 
 Used by: bs58 0.5.1
 
@@ -1877,7 +1913,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 31. LICENSE
+## 32. LICENSE
 
 Used by: bytes 1.12.1
 
@@ -1909,7 +1945,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 32. LICENSE-MIT
+## 33. LICENSE-MIT
 
 Used by: ccm 0.5.0
 
@@ -1941,7 +1977,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 33. LICENSE
+## 34. LICENSE
 
 Used by: cfb 0.7.3
 
@@ -1969,7 +2005,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 34. LICENSE-MIT
+## 35. LICENSE-MIT
 
 Used by: cfg-if 1.0.5, socket2 0.6.5
 
@@ -2001,7 +2037,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 35. LICENSE-MIT
+## 36. LICENSE-MIT
 
 Used by: chacha20 0.9.1
 
@@ -2033,7 +2069,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 36. LICENSE.txt
+## 37. LICENSE.txt
 
 Used by: chrono 0.4.45
 
@@ -2279,7 +2315,7 @@ limitations under the License.
 ~~~~
 ~~~~~
 
-## 37. LICENSE-MIT
+## 38. LICENSE-MIT
 
 Used by: cipher 0.4.4
 
@@ -2311,7 +2347,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 38. LICENSE
+## 39. LICENSE
 
 Used by: combine 4.6.8
 
@@ -2339,7 +2375,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 39. LICENSE-MIT
+## 40. LICENSE-MIT
 
 Used by: const-oid 0.9.6, der_derive 0.7.3
 
@@ -2371,7 +2407,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 40. LICENSE-APACHE
+## 41. LICENSE-APACHE
 
 Used by: cookie 0.18.2
 
@@ -2580,7 +2616,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ~~~~
 
-## 41. LICENSE-MIT
+## 42. LICENSE-MIT
 
 Used by: cookie 0.18.2
 
@@ -2613,7 +2649,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 42. LICENSE-MIT
+## 43. LICENSE-MIT
 
 Used by: cpufeatures 0.2.17
 
@@ -2645,7 +2681,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 43. LICENSE-APACHE
+## 44. LICENSE-APACHE
 
 Used by: crc 3.4.0
 
@@ -2853,7 +2889,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ~~~~
 
-## 44. LICENSE-MIT
+## 45. LICENSE-MIT
 
 Used by: crc 3.4.0
 
@@ -2881,7 +2917,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 45. MIT (standard text; the package ships none)
+## 46. MIT (standard text; the package ships none)
 
 Used by: crc-catalog 2.5.0
 
@@ -2906,7 +2942,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 46. LICENSE-APACHE
+## 47. LICENSE-APACHE
 
 Used by: crc32fast 1.5.2, ctor 0.8.0, ctor-proc-macro 0.0.7, dpi 0.1.2, dtor 0.3.0, dtor-proc-macro 0.0.6, fallible-iterator 0.3.0, fallible-streaming-iterator 0.1.9, hex 0.4.3, json-patch 3.0.1, notify-rust 4.18.0, nvml-wrapper 0.13.0, nvml-wrapper-sys 0.10.0, serde_spanned 1.1.1, tao 0.35.3, toml 1.1.6+spec-1.1.0, toml_datetime 1.1.1+spec-1.1.0, toml_parser 1.1.3+spec-1.1.0, toml_writer 1.1.2+spec-1.1.0, wrapcenum-derive 0.4.1, jsqr 1.4.0 (npm)
 
@@ -3114,7 +3150,7 @@ Apache License
    limitations under the License.
 ~~~~
 
-## 47. LICENSE-MIT
+## 48. LICENSE-MIT
 
 Used by: crc32fast 1.5.2
 
@@ -3142,7 +3178,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 48. LICENSE-MIT
+## 49. LICENSE-MIT
 
 Used by: crossbeam-channel 0.5.17, crossbeam-utils 0.8.23
 
@@ -3176,7 +3212,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 49. LICENSE-THIRD-PARTY
+## 50. LICENSE-THIRD-PARTY
 
 Used by: crossbeam-channel 0.5.17
 
@@ -3776,7 +3812,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ~~~~
 
-## 50. LICENSE-MIT
+## 51. LICENSE-MIT
 
 Used by: crypto-bigint 0.5.5, pem-rfc7468 0.7.0, x509-cert 0.2.5
 
@@ -3808,7 +3844,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 51. LICENSE-MIT
+## 52. LICENSE-MIT
 
 Used by: crypto-common 0.1.7
 
@@ -3840,7 +3876,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 52. LICENSE
+## 53. LICENSE
 
 Used by: cssparser 0.36.0, cssparser-macros 0.6.1, dtoa-short 0.3.5
 
@@ -4220,7 +4256,7 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
   defined by the Mozilla Public License, v. 2.0.
 ~~~~
 
-## 53. LICENSE-MIT
+## 54. LICENSE-MIT
 
 Used by: ctr 0.9.2
 
@@ -4253,7 +4289,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 54. LICENSE
+## 55. LICENSE
 
 Used by: curve25519-dalek 4.1.3
 
@@ -4325,7 +4361,7 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ~~~~
 
-## 55. LICENSE
+## 56. LICENSE
 
 Used by: darling 0.20.11, darling 0.24.1, darling_core 0.20.11, darling_core 0.24.1, darling_macro 0.20.11, darling_macro 0.24.1
 
@@ -4353,7 +4389,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 56. LICENSE
+## 57. LICENSE
 
 Used by: data-encoding 2.11.1
 
@@ -4382,7 +4418,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 57. LICENSE-MIT
+## 58. LICENSE-MIT
 
 Used by: defmt 1.1.1, defmt-macros 1.1.1
 
@@ -4414,7 +4450,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 58. MIT (standard text; the package ships none)
+## 59. MIT (standard text; the package ships none)
 
 Used by: defmt-parser 1.0.0
 
@@ -4439,7 +4475,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 59. LICENSE-MIT
+## 60. LICENSE-MIT
 
 Used by: der 0.7.10, pkcs8 0.10.2
 
@@ -4471,7 +4507,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 60. LICENSE-Apache
+## 61. LICENSE-Apache
 
 Used by: deranged 0.5.8
 
@@ -4679,7 +4715,7 @@ Apache License
    limitations under the License.
 ~~~~
 
-## 61. LICENSE-MIT
+## 62. LICENSE-MIT
 
 Used by: deranged 0.5.8
 
@@ -4705,7 +4741,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 62. LICENSE
+## 63. LICENSE
 
 Used by: derive_more 2.1.1, derive_more-impl 2.1.1
 
@@ -4733,7 +4769,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 63. LICENSE-MIT
+## 64. LICENSE-MIT
 
 Used by: digest 0.10.7, hmac 0.12.1
 
@@ -4765,7 +4801,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 64. LICENSE-MIT.txt
+## 65. LICENSE-MIT.txt
 
 Used by: dimpl 0.7.6, str0m 0.24.1
 
@@ -4779,7 +4815,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 65. LICENSE-APACHE
+## 66. LICENSE-APACHE
 
 Used by: dirs 6.0.0, dirs-sys 0.5.0
 
@@ -4960,7 +4996,7 @@ TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
    of your accepting any such warranty or additional liability.
 ~~~~
 
-## 66. LICENSE-MIT
+## 67. LICENSE-MIT
 
 Used by: dirs 6.0.0, dirs-sys 0.5.0
 
@@ -4986,7 +5022,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 67. LICENSE
+## 68. LICENSE
 
 Used by: dom_query 0.27.0
 
@@ -5020,7 +5056,7 @@ derived from the "nipper" project (https://github.com/importcjj/nipper),
 developed by Chen Jiaju, licensed under the MIT License and the Apache License 2.0 (dual licensed).
 ~~~~
 
-## 68. LICENSE-LIBM-MIT
+## 69. LICENSE-LIBM-MIT
 
 Used by: dpi 0.1.2
 
@@ -5078,7 +5114,7 @@ have been licensed under extremely permissive terms.
 ------------------------------------------------------------------------------
 ~~~~
 
-## 69. LICENSE
+## 70. LICENSE
 
 Used by: dunce 1.0.5
 
@@ -5206,7 +5242,7 @@ express Statement of Purpose.
     this CC0 or use of the Work.
 ~~~~
 
-## 70. LICENSE-APACHE
+## 71. LICENSE-APACHE
 
 Used by: ecdsa 0.16.9, rfc6979 0.4.0
 
@@ -5414,7 +5450,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ~~~~
 
-## 71. LICENSE-MIT
+## 72. LICENSE-MIT
 
 Used by: ecdsa 0.16.9, rfc6979 0.4.0
 
@@ -5446,7 +5482,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 72. LICENSE-MIT
+## 73. LICENSE-MIT
 
 Used by: elliptic-curve 0.13.8
 
@@ -5478,7 +5514,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 73. LICENSE-MIT
+## 74. LICENSE-MIT
 
 Used by: equivalent 1.0.2
 
@@ -5510,7 +5546,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 74. LICENSE-MIT
+## 75. LICENSE-MIT
 
 Used by: fallible-iterator 0.3.0
 
@@ -5536,7 +5572,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 75. LICENSE-MIT
+## 76. LICENSE-MIT
 
 Used by: fallible-streaming-iterator 0.1.9
 
@@ -5562,7 +5598,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 76. LICENSE-MIT
+## 77. LICENSE-MIT
 
 Used by: fdeflate 0.3.7, ident_case 1.0.1
 
@@ -5594,7 +5630,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 77. LICENSE
+## 78. LICENSE
 
 Used by: fern 0.7.1
 
@@ -5608,7 +5644,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 78. LICENSE-MIT
+## 79. LICENSE-MIT
 
 Used by: ff 0.13.1
 
@@ -5636,7 +5672,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 79. LICENSE-MIT
+## 80. LICENSE-MIT
 
 Used by: flate2 1.1.10
 
@@ -5668,7 +5704,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 80. LICENSE-MIT
+## 81. LICENSE-MIT
 
 Used by: fnv 1.0.7
 
@@ -5700,7 +5736,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 81. LICENSE
+## 82. LICENSE
 
 Used by: foldhash 0.2.0
 
@@ -5726,7 +5762,7 @@ the following restrictions:
 3. This notice may not be removed or altered from any source distribution.
 ~~~~
 
-## 82. LICENSE-MIT
+## 83. LICENSE-MIT
 
 Used by: form_urlencoded 1.2.2
 
@@ -5758,7 +5794,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 83. LICENSE-APACHE
+## 84. LICENSE-APACHE
 
 Used by: futures 0.3.34, futures-channel 0.3.34, futures-core 0.3.34, futures-executor 0.3.34, futures-io 0.3.34, futures-macro 0.3.34, futures-sink 0.3.34, futures-task 0.3.34, futures-util 0.3.34
 
@@ -5967,7 +6003,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ~~~~
 
-## 84. LICENSE-MIT
+## 85. LICENSE-MIT
 
 Used by: futures 0.3.34, futures-channel 0.3.34, futures-core 0.3.34, futures-executor 0.3.34, futures-io 0.3.34, futures-macro 0.3.34, futures-sink 0.3.34, futures-task 0.3.34, futures-util 0.3.34
 
@@ -6000,7 +6036,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 85. LICENSE
+## 86. LICENSE
 
 Used by: generic-array 0.14.7
 
@@ -6028,7 +6064,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 86. LICENSE-APACHE
+## 87. LICENSE-APACHE
 
 Used by: getrandom 0.2.17, getrandom 0.3.4, getrandom 0.4.3
 
@@ -6236,7 +6272,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ~~~~
 
-## 87. LICENSE-MIT
+## 88. LICENSE-MIT
 
 Used by: getrandom 0.2.17
 
@@ -6269,7 +6305,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 88. LICENSE-MIT
+## 89. LICENSE-MIT
 
 Used by: getrandom 0.3.4
 
@@ -6302,7 +6338,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 89. LICENSE-MIT
+## 90. LICENSE-MIT
 
 Used by: getrandom 0.4.3
 
@@ -6335,7 +6371,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 90. LICENSE-MIT
+## 91. LICENSE-MIT
 
 Used by: ghash 0.5.1
 
@@ -6367,7 +6403,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 91. LICENSE-MIT
+## 92. LICENSE-MIT
 
 Used by: hashbrown 0.12.3, hashbrown 0.17.1
 
@@ -6399,7 +6435,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 92. LICENSE-MIT
+## 93. LICENSE-MIT
 
 Used by: hashlink 0.12.2
 
@@ -6432,7 +6468,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 93. LICENSE-MIT
+## 94. LICENSE-MIT
 
 Used by: heck 0.5.0, unicode-segmentation 1.13.3
 
@@ -6464,7 +6500,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 94. LICENSE-MIT
+## 95. LICENSE-MIT
 
 Used by: hex 0.4.3
 
@@ -6491,7 +6527,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 95. LICENSE-MIT
+## 96. LICENSE-MIT
 
 Used by: hkdf 0.12.4
 
@@ -6524,7 +6560,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 96. LICENSE-MIT
+## 97. LICENSE-MIT
 
 Used by: html5ever 0.38.0, markup5ever 0.38.0, web_atoms 0.2.6
 
@@ -6556,7 +6592,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 97. LICENSE-APACHE
+## 98. LICENSE-APACHE
 
 Used by: http 1.5.0
 
@@ -6764,7 +6800,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ~~~~
 
-## 98. LICENSE-MIT
+## 99. LICENSE-MIT
 
 Used by: http 1.5.0
 
@@ -6796,7 +6832,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 99. LICENSE
+## 100. LICENSE
 
 Used by: http-body 1.1.0, http-body-util 0.1.5
 
@@ -6828,7 +6864,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 100. LICENSE-MIT
+## 101. LICENSE-MIT
 
 Used by: httparse 1.10.1
 
@@ -6854,7 +6890,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 101. LICENSE
+## 102. LICENSE
 
 Used by: hyper 1.11.1
 
@@ -6880,7 +6916,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 102. LICENSE-ISC
+## 103. LICENSE-ISC
 
 Used by: hyper-rustls 0.27.10, rustls 0.23.45
 
@@ -6902,7 +6938,7 @@ ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 ~~~~
 
-## 103. LICENSE-MIT
+## 104. LICENSE-MIT
 
 Used by: hyper-rustls 0.27.10, rustls 0.23.45
 
@@ -6934,7 +6970,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 104. LICENSE
+## 105. LICENSE
 
 Used by: hyper-util 0.1.21
 
@@ -6960,7 +6996,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 105. LICENSE
+## 106. LICENSE
 
 Used by: ico 0.5.0
 
@@ -6988,7 +7024,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 106. LICENSE
+## 107. LICENSE
 
 Used by: icu_collections 2.3.0, icu_locale_core 2.3.0, icu_normalizer 2.3.0, icu_normalizer_data 2.3.0, icu_properties 2.3.0, icu_properties_data 2.3.0, icu_provider 2.3.1, litemap 0.8.3, potential_utf 0.1.6, tinystr 0.8.4, writeable 0.6.4, yoke 0.8.3, yoke-derive 0.8.3, zerofrom 0.1.8, zerofrom-derive 0.1.8, zerotrie 0.2.5, zerovec 0.11.8, zerovec-derive 0.11.6
 
@@ -7041,7 +7077,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 ~~~~
 
-## 107. LICENSE-MIT
+## 108. LICENSE-MIT
 
 Used by: idna 1.1.0, percent-encoding 2.3.2, url 2.5.8
 
@@ -7073,7 +7109,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 108. LICENSE-MIT
+## 109. LICENSE-MIT
 
 Used by: idna_adapter 1.2.2
 
@@ -7105,7 +7141,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 109. LICENSE-MIT
+## 110. LICENSE-MIT
 
 Used by: indexmap 1.9.3, indexmap 2.14.2
 
@@ -7137,7 +7173,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 110. LICENSE
+## 111. LICENSE
 
 Used by: infer 0.19.0
 
@@ -7165,7 +7201,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 111. LICENSE-MIT
+## 112. LICENSE-MIT
 
 Used by: inout 0.1.4
 
@@ -7198,7 +7234,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 112. LICENSE-APACHE
+## 113. LICENSE-APACHE
 
 Used by: ipnet 2.12.2
 
@@ -7406,7 +7442,7 @@ Apache License
    limitations under the License.
 ~~~~
 
-## 113. LICENSE-MIT
+## 114. LICENSE-MIT
 
 Used by: ipnet 2.12.2
 
@@ -7420,7 +7456,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 114. MIT (standard text; the package ships none)
+## 115. MIT (standard text; the package ships none)
 
 Used by: is 0.11.1
 
@@ -7445,7 +7481,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 115. LICENSE-MIT
+## 116. LICENSE-MIT
 
 Used by: json-patch 3.0.1
 
@@ -7473,7 +7509,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 116. LICENSE-APACHE
+## 117. LICENSE-APACHE
 
 Used by: jsonptr 0.6.3
 
@@ -7681,7 +7717,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ~~~~
 
-## 117. LICENSE-MIT
+## 118. LICENSE-MIT
 
 Used by: jsonptr 0.6.3
 
@@ -7709,7 +7745,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 118. LICENSE-MIT
+## 119. LICENSE-MIT
 
 Used by: keyboard-types 0.7.0
 
@@ -7735,7 +7771,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 119. LICENSE-MIT
+## 120. LICENSE-MIT
 
 Used by: libc 0.2.189
 
@@ -7767,7 +7803,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 120. LICENSE
+## 121. LICENSE
 
 Used by: libloading 0.8.9
 
@@ -7786,7 +7822,7 @@ NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE US
 THIS SOFTWARE.
 ~~~~
 
-## 121. LICENSE
+## 122. LICENSE
 
 Used by: libsqlite3-sys 0.38.2, rusqlite 0.40.2
 
@@ -7812,7 +7848,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 122. LICENSE-MIT
+## 123. LICENSE-MIT
 
 Used by: lock_api 0.4.14, parking_lot 0.12.5, parking_lot_core 0.9.12
 
@@ -7844,7 +7880,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 123. LICENSE-MIT
+## 124. LICENSE-MIT
 
 Used by: mime 0.3.17
 
@@ -7870,7 +7906,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 124. LICENSE.md
+## 125. LICENSE.md
 
 Used by: minimal-lexical 0.2.1
 
@@ -7914,7 +7950,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ~~~~
 
-## 125. LICENSE
+## 126. LICENSE
 
 Used by: minisign-verify 0.2.5
 
@@ -7980,7 +8016,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 126. LICENSE
+## 127. LICENSE
 
 Used by: miniz_oxide 0.8.9, miniz_oxide 0.8.9, miniz_oxide 0.9.1, miniz_oxide 0.9.1
 
@@ -8012,7 +8048,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 127. LICENSE-ZLIB.md
+## 128. LICENSE-ZLIB.md
 
 Used by: miniz_oxide 0.8.9, miniz_oxide 0.9.1
 
@@ -8033,7 +8069,7 @@ Permission is granted to anyone to use this software for any purpose, including 
 3. This notice may not be removed or altered from any source distribution.
 ~~~~
 
-## 128. LICENSE
+## 129. LICENSE
 
 Used by: mio 1.2.3
 
@@ -8059,7 +8095,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 129. LICENSE-MIT
+## 130. LICENSE-MIT
 
 Used by: muda 0.19.3, tray-icon 0.24.2
 
@@ -8087,7 +8123,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 130. LICENSE.spdx
+## 131. LICENSE.spdx
 
 Used by: muda 0.19.3
 
@@ -8113,7 +8149,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/muda.git
 Creator: Person: Daniel Thompson-Yvetot
 ~~~~
 
-## 131. LICENSE-MIT
+## 132. LICENSE-MIT
 
 Used by: new_debug_unreachable 1.0.6
 
@@ -8145,7 +8181,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 132. LICENSE
+## 133. LICENSE
 
 Used by: nom 7.1.3, nom 8.0.0
 
@@ -8172,7 +8208,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 133. LICENSE-MIT
+## 134. LICENSE-MIT
 
 Used by: notify-rust 4.18.0
 
@@ -8200,7 +8236,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 134. LICENSE-MIT
+## 135. LICENSE-MIT
 
 Used by: num-conv 0.2.2
 
@@ -8226,7 +8262,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 135. LICENSE-MIT
+## 136. LICENSE-MIT
 
 Used by: nvml-wrapper 0.13.0, nvml-wrapper-sys 0.10.0, wrapcenum-derive 0.4.1
 
@@ -8254,7 +8290,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 136. LICENSE-MIT
+## 137. LICENSE-MIT
 
 Used by: opaque-debug 0.3.1
 
@@ -8286,7 +8322,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 137. LICENSE.txt
+## 138. LICENSE.txt
 
 Used by: option-ext 0.2.0, selectors 0.36.1
 
@@ -8666,7 +8702,7 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
   defined by the Mozilla Public License, v. 2.0.
 ~~~~
 
-## 138. LICENSE-MIT
+## 139. LICENSE-MIT
 
 Used by: p256 0.13.2, primeorder 0.13.6
 
@@ -8698,7 +8734,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 139. LICENSE-MIT
+## 140. LICENSE-MIT
 
 Used by: p384 0.13.1
 
@@ -8730,7 +8766,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 140. LICENSE
+## 141. LICENSE
 
 Used by: phf 0.13.1, phf_generator 0.13.1, phf_macros 0.13.1, phf_shared 0.13.1
 
@@ -8757,7 +8793,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 141. LICENCE
+## 142. LICENCE
 
 Used by: plist 1.10.1
 
@@ -8783,7 +8819,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 142. LICENSE-MIT
+## 143. LICENSE-MIT
 
 Used by: png 0.17.16
 
@@ -8815,7 +8851,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 143. LICENSE-MIT
+## 144. LICENSE-MIT
 
 Used by: poly1305 0.8.0
 
@@ -8847,7 +8883,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 144. LICENSE-MIT
+## 145. LICENSE-MIT
 
 Used by: polyval 0.6.2
 
@@ -8879,7 +8915,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 145. LICENSE-Apache
+## 146. LICENSE-Apache
 
 Used by: powerfmt 0.2.0
 
@@ -9087,7 +9123,7 @@ Apache License
    limitations under the License.
 ~~~~
 
-## 146. LICENSE-MIT
+## 147. LICENSE-MIT
 
 Used by: powerfmt 0.2.0
 
@@ -9113,7 +9149,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 147. LICENSE-APACHE
+## 148. LICENSE-APACHE
 
 Used by: ppv-lite86 0.2.21
 
@@ -9321,7 +9357,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ~~~~
 
-## 148. LICENSE-MIT
+## 149. LICENSE-MIT
 
 Used by: ppv-lite86 0.2.21
 
@@ -9353,7 +9389,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 149. LICENSE
+## 150. LICENSE
 
 Used by: precomputed-hash 0.1.1
 
@@ -9381,7 +9417,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 150. MIT (standard text; the package ships none)
+## 151. MIT (standard text; the package ships none)
 
 Used by: qrcodegen 1.8.0
 
@@ -9406,7 +9442,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 151. LICENSE-MIT.md
+## 152. LICENSE-MIT.md
 
 Used by: quick-xml 0.42.0
 
@@ -9436,7 +9472,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 152. LICENSE-APACHE
+## 153. LICENSE-APACHE
 
 Used by: rand 0.9.5, rand_chacha 0.9.0
 
@@ -9619,7 +9655,7 @@ TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 END OF TERMS AND CONDITIONS
 ~~~~
 
-## 153. LICENSE-MIT
+## 154. LICENSE-MIT
 
 Used by: rand 0.9.5, rand_chacha 0.9.0, rand_core 0.6.4, rand_core 0.9.5
 
@@ -9652,7 +9688,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 154. LICENSE-APACHE
+## 155. LICENSE-APACHE
 
 Used by: rand_core 0.6.4, rand_core 0.9.5
 
@@ -9846,7 +9882,7 @@ APPENDIX: How to apply the Apache License to your work.
    identification within third-party archives.
 ~~~~
 
-## 155. LICENSE-MIT.md
+## 156. LICENSE-MIT.md
 
 Used by: raw-window-handle 0.6.2
 
@@ -9874,7 +9910,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 156. LICENSE-ZLIB.md
+## 157. LICENSE-ZLIB.md
 
 Used by: raw-window-handle 0.6.2
 
@@ -9892,7 +9928,7 @@ Permission is granted to anyone to use this software for any purpose, including 
 3. This notice may not be removed or altered from any source distribution.
 ~~~~
 
-## 157. LICENSE
+## 158. LICENSE
 
 Used by: rcgen 0.14.10
 
@@ -10113,7 +10149,7 @@ Apache License, version 2.0
    END OF TERMS AND CONDITIONS
 ~~~~
 
-## 158. LICENSE-APACHE
+## 159. LICENSE-APACHE
 
 Used by: reqwest 0.13.5
 
@@ -10321,7 +10357,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ~~~~
 
-## 159. LICENSE-MIT
+## 160. LICENSE-MIT
 
 Used by: reqwest 0.13.5
 
@@ -10347,7 +10383,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 160. LICENSE
+## 161. LICENSE
 
 Used by: ring 0.17.14
 
@@ -10363,7 +10399,7 @@ See src/polyfill/once_cell/LICENSE-APACHE and src/polyfill/once_cell/LICENSE-MIT
 for the license to code that was sourced from the once_cell project.
 ~~~~
 
-## 161. LICENSE-BoringSSL
+## 162. LICENSE-BoringSSL
 
 Used by: ring 0.17.14
 
@@ -10641,7 +10677,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ~~~~
 
-## 162. LICENSE-other-bits
+## 163. LICENSE-other-bits
 
 Used by: ring 0.17.14
 
@@ -10661,7 +10697,7 @@ OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ~~~~
 
-## 163. LICENSE-APACHE
+## 164. LICENSE-APACHE
 
 Used by: rustls-pki-types 1.15.1
 
@@ -10869,7 +10905,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ~~~~
 
-## 164. LICENSE-MIT
+## 165. LICENSE-MIT
 
 Used by: rustls-pki-types 1.15.1
 
@@ -10901,7 +10937,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 165. LICENSE-MIT
+## 166. LICENSE-MIT
 
 Used by: rustls-platform-verifier 0.7.1
 
@@ -10929,7 +10965,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 166. LICENSE
+## 167. LICENSE
 
 Used by: rustls-webpki 0.103.15
 
@@ -10955,7 +10991,7 @@ The files under third-party/chromium are licensed as described in
 third-party/chromium/LICENSE.
 ~~~~
 
-## 167. LICENSE-MIT
+## 168. LICENSE-MIT
 
 Used by: same-file 1.0.6, winapi-util 0.1.11
 
@@ -10983,7 +11019,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 168. LICENSE
+## 169. LICENSE
 
 Used by: schemars 0.8.22, schemars 0.9.0, schemars 1.2.2, schemars_derive 0.8.22
 
@@ -11011,7 +11047,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 169. LICENSE-MIT
+## 170. LICENSE-MIT
 
 Used by: scopeguard 1.2.0
 
@@ -11043,7 +11079,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 170. LICENSE-APACHE
+## 171. LICENSE-APACHE
 
 Used by: sctp-proto 0.10.6
 
@@ -11252,7 +11288,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ~~~~
 
-## 171. LICENSE-MIT
+## 172. LICENSE-MIT
 
 Used by: sctp-proto 0.10.6
 
@@ -11281,7 +11317,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 172. LICENSE-MIT
+## 173. LICENSE-MIT
 
 Used by: sec1 0.7.3
 
@@ -11313,7 +11349,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 173. LICENSE-MIT
+## 174. LICENSE-MIT
 
 Used by: serde_spanned 1.1.1, toml 1.1.6+spec-1.1.0, toml_datetime 1.1.1+spec-1.1.0, toml_parser 1.1.3+spec-1.1.0, toml_writer 1.1.2+spec-1.1.0
 
@@ -11339,7 +11375,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 174. LICENSE-MIT
+## 175. LICENSE-MIT
 
 Used by: serde_with 3.23.0, serde_with_macros 3.23.0
 
@@ -11371,7 +11407,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 175. LICENSE-MIT
+## 176. LICENSE-MIT
 
 Used by: serialize-to-javascript 0.1.2, serialize-to-javascript-impl 0.1.2
 
@@ -11399,7 +11435,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 176. LICENSE-MIT
+## 177. LICENSE-MIT
 
 Used by: sha1 0.10.7, sha2 0.10.9
 
@@ -11433,7 +11469,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 177. LICENSE-MIT
+## 178. LICENSE-MIT
 
 Used by: signature 2.2.0
 
@@ -11465,7 +11501,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 178. LICENSE.md
+## 179. LICENSE.md
 
 Used by: simd-adler32 0.3.10
 
@@ -11493,7 +11529,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 179. COPYING
+## 180. COPYING
 
 Used by: siphasher 1.0.4
 
@@ -11507,7 +11543,7 @@ http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
 option.
 ~~~~
 
-## 180. LICENSE
+## 181. LICENSE
 
 Used by: slab 0.4.12
 
@@ -11539,7 +11575,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 181. LICENSE-MIT
+## 182. LICENSE-MIT
 
 Used by: smallvec 1.16.2
 
@@ -11571,7 +11607,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 182. LICENSE-APACHE
+## 183. LICENSE-APACHE
 
 Used by: softbuffer 0.4.8
 
@@ -11779,7 +11815,7 @@ Apache License
    limitations under the License.
 ~~~~
 
-## 183. LICENSE-MIT
+## 184. LICENSE-MIT
 
 Used by: softbuffer 0.4.8
 
@@ -11805,7 +11841,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 184. LICENSE-MIT
+## 185. LICENSE-MIT
 
 Used by: spki 0.7.3
 
@@ -11837,7 +11873,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 185. LICENSE-MIT
+## 186. LICENSE-MIT
 
 Used by: stable_deref_trait 1.2.1
 
@@ -11869,7 +11905,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 186. LICENSE-MIT
+## 187. LICENSE-MIT
 
 Used by: static_assertions 1.1.0
 
@@ -11897,7 +11933,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 187. MIT (standard text; the package ships none)
+## 188. MIT (standard text; the package ships none)
 
 Used by: str0m-proto 0.7.0, str0m-rust-crypto 0.6.0
 
@@ -11922,7 +11958,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 188. LICENSE-MIT
+## 189. LICENSE-MIT
 
 Used by: string_cache 0.9.0
 
@@ -11954,7 +11990,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 189. LICENSE
+## 190. LICENSE
 
 Used by: strsim 0.11.1
 
@@ -11984,7 +12020,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 190. LICENSE
+## 191. LICENSE
 
 Used by: subtle 2.6.1
 
@@ -12020,7 +12056,7 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ~~~~
 
-## 191. LICENSE.md
+## 192. LICENSE.md
 
 Used by: svelte 5.57.1 (npm)
 
@@ -12034,7 +12070,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 192. LICENSE
+## 193. LICENSE
 
 Used by: synstructure 0.13.2, synstructure 0.14.0
 
@@ -12048,7 +12084,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 193. LICENSE.spdx
+## 194. LICENSE.spdx
 
 Used by: tao 0.35.3
 
@@ -12073,7 +12109,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/tao.git
 Creator: Person: Daniel Thompson-Yvetot
 ~~~~
 
-## 194. LICENSE_MIT
+## 195. LICENSE_MIT
 
 Used by: tauri 2.11.6, tauri-codegen 2.6.3, tauri-macros 2.6.3, tauri-plugin-log 2.9.2, tauri-plugin-notification 2.4.0, tauri-plugin-updater 2.12.0, tauri-runtime 2.11.3, tauri-runtime-wry 2.11.4, tauri-utils 2.9.3, tauri-winrt-notification 0.7.3, @tauri-apps/api 2.11.1 (npm)
 
@@ -12101,7 +12137,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 195. LICENSE.spdx
+## 196. LICENSE.spdx
 
 Used by: tauri-plugin-log 2.9.2, tauri-plugin-notification 2.4.0, tauri-plugin-single-instance 2.4.5, tauri-plugin-updater 2.12.0
 
@@ -12128,7 +12164,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/tauri.git
 Creator: Person: Daniel Thompson-Yvetot
 ~~~~
 
-## 196. LICENSE_MIT
+## 197. LICENSE_MIT
 
 Used by: tauri-plugin-single-instance 2.4.5
 
@@ -12156,7 +12192,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 197. LICENSE.spdx
+## 198. LICENSE.spdx
 
 Used by: tauri-winrt-notification 0.7.3
 
@@ -12182,7 +12218,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/winrt-notification.git
 Creator: Person: Daniel Thompson-Yvetot
 ~~~~
 
-## 198. LICENSE-MIT
+## 199. LICENSE-MIT
 
 Used by: tempfile 3.27.0
 
@@ -12214,7 +12250,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 199. LICENSE-MIT
+## 200. LICENSE-MIT
 
 Used by: tendril 0.5.1
 
@@ -12246,7 +12282,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 200. LICENSE
+## 201. LICENSE
 
 Used by: three 0.186.1 (npm)
 
@@ -12274,7 +12310,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 201. LICENSE-MIT
+## 202. LICENSE-MIT
 
 Used by: time 0.3.55, time-core 0.1.9, time-macros 0.2.32
 
@@ -12300,7 +12336,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 202. LICENSE-ZLIB.md
+## 203. LICENSE-ZLIB.md
 
 Used by: tinyvec 1.13.3
 
@@ -12318,7 +12354,7 @@ Permission is granted to anyone to use this software for any purpose, including 
 3. This notice may not be removed or altered from any source distribution.
 ~~~~
 
-## 203. LICENSE
+## 204. LICENSE
 
 Used by: tokio 1.53.1, tokio-util 0.7.19
 
@@ -12346,7 +12382,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 204. LICENSE-APACHE
+## 205. LICENSE-APACHE
 
 Used by: tokio-rustls 0.26.5
 
@@ -12554,7 +12590,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ~~~~
 
-## 205. LICENSE-MIT
+## 206. LICENSE-MIT
 
 Used by: tokio-rustls 0.26.5
 
@@ -12586,7 +12622,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 206. LICENSE
+## 207. LICENSE
 
 Used by: tower 0.5.3, tower-layer 0.3.3, tower-service 0.3.3
 
@@ -12618,7 +12654,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 207. LICENSE
+## 208. LICENSE
 
 Used by: tower-http 0.6.11
 
@@ -12650,7 +12686,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 208. LICENSE
+## 209. LICENSE
 
 Used by: tracing 0.1.44, tracing-attributes 0.1.31, tracing-core 0.1.36
 
@@ -12682,7 +12718,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 209. LICENSE.spdx
+## 210. LICENSE.spdx
 
 Used by: tray-icon 0.24.2
 
@@ -12708,7 +12744,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/tray-icon.git
 Creator: Person: Daniel Thompson-Yvetot
 ~~~~
 
-## 210. LICENSE
+## 211. LICENSE
 
 Used by: try-lock 0.2.5
 
@@ -12735,7 +12771,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 211. MIT (standard text; the package ships none)
+## 212. MIT (standard text; the package ships none)
 
 Used by: ts-rs 12.0.1, ts-rs-macros 12.0.1
 
@@ -12760,7 +12796,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 212. LICENSE-MIT
+## 213. LICENSE-MIT
 
 Used by: tungstenite 0.28.0
 
@@ -12787,7 +12823,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 213. LICENSE
+## 214. LICENSE
 
 Used by: typenum 1.20.1
 
@@ -12795,7 +12831,7 @@ Used by: typenum 1.20.1
 MIT OR Apache-2.0
 ~~~~
 
-## 214. LICENSE-APACHE
+## 215. LICENSE-APACHE
 
 Used by: typenum 1.20.1
 
@@ -13003,7 +13039,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ~~~~
 
-## 215. LICENSE-MIT
+## 216. LICENSE-MIT
 
 Used by: typenum 1.20.1
 
@@ -13031,7 +13067,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 216. MIT (standard text; the package ships none)
+## 217. MIT (standard text; the package ships none)
 
 Used by: unic-char-property 0.9.0, unic-char-range 0.9.0, unic-common 0.9.0, unic-ucd-ident 0.9.0, unic-ucd-version 0.9.0
 
@@ -13056,7 +13092,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 217. LICENSE-UNICODE
+## 218. LICENSE-UNICODE
 
 Used by: unicode-ident 1.0.26
 
@@ -13102,7 +13138,7 @@ dealings in these Data Files or Software without prior written
 authorization of the copyright holder.
 ~~~~
 
-## 218. LICENSE-MIT
+## 219. LICENSE-MIT
 
 Used by: universal-hash 0.5.1
 
@@ -13134,7 +13170,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 219. LICENSE.txt
+## 220. LICENSE.txt
 
 Used by: untrusted 0.7.1, untrusted 0.9.0
 
@@ -13154,7 +13190,7 @@ Used by: untrusted 0.7.1, untrusted 0.9.0
 // OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ~~~~
 
-## 220. LICENSE
+## 221. LICENSE
 
 Used by: urlpattern 0.3.0
 
@@ -13182,7 +13218,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 221. LICENSE-MIT
+## 222. LICENSE-MIT
 
 Used by: utf8_iter 1.0.4
 
@@ -13214,7 +13250,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 222. LICENSE-MIT
+## 223. LICENSE-MIT
 
 Used by: uuid 1.26.1
 
@@ -13247,7 +13283,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 223. LICENSE
+## 224. LICENSE
 
 Used by: want 0.3.1
 
@@ -13273,7 +13309,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ~~~~
 
-## 224. MIT (standard text; the package ships none)
+## 225. MIT (standard text; the package ships none)
 
 Used by: webview2-com 0.38.2
 
@@ -13298,7 +13334,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 225. MIT (standard text; the package ships none)
+## 226. MIT (standard text; the package ships none)
 
 Used by: webview2-com-macros 0.8.1
 
@@ -13323,7 +13359,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 226. MIT (standard text; the package ships none)
+## 227. MIT (standard text; the package ships none)
 
 Used by: webview2-com-sys 0.38.2
 
@@ -13348,7 +13384,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 227. LICENSE-MIT
+## 228. LICENSE-MIT
 
 Used by: window-vibrancy 0.6.0
 
@@ -13376,7 +13412,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 228. LICENSE.spdx
+## 229. LICENSE.spdx
 
 Used by: window-vibrancy 0.6.0
 
@@ -13402,7 +13438,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/window-vibrancy.git
 Creator: Person: Daniel Thompson-Yvetot
 ~~~~
 
-## 229. license-apache-2.0
+## 230. license-apache-2.0
 
 Used by: windows 0.61.3, windows 0.62.2, windows-collections 0.2.0, windows-collections 0.3.2, windows-core 0.61.2, windows-core 0.62.2, windows-future 0.2.1, windows-future 0.3.2, windows-implement 0.60.2, windows-interface 0.59.3, windows-link 0.1.3, windows-link 0.2.1, windows-numerics 0.2.0, windows-numerics 0.3.1, windows-registry 0.6.1, windows-result 0.3.4, windows-result 0.4.1, windows-strings 0.4.2, windows-strings 0.5.1, windows-sys 0.59.0, windows-sys 0.60.2, windows-sys 0.61.2, windows-targets 0.52.6, windows-targets 0.53.5, windows-threading 0.1.0, windows-threading 0.2.1, windows-version 0.1.7, windows_x86_64_msvc 0.52.6, windows_x86_64_msvc 0.53.1
 
@@ -13610,7 +13646,7 @@ Apache License
    limitations under the License.
 ~~~~
 
-## 230. license-mit
+## 231. license-mit
 
 Used by: windows 0.61.3, windows 0.62.2, windows-collections 0.2.0, windows-collections 0.3.2, windows-core 0.61.2, windows-core 0.62.2, windows-future 0.2.1, windows-future 0.3.2, windows-implement 0.60.2, windows-interface 0.59.3, windows-link 0.1.3, windows-link 0.2.1, windows-numerics 0.2.0, windows-numerics 0.3.1, windows-registry 0.6.1, windows-result 0.3.4, windows-result 0.4.1, windows-strings 0.4.2, windows-strings 0.5.1, windows-sys 0.59.0, windows-sys 0.60.2, windows-sys 0.61.2, windows-targets 0.52.6, windows-targets 0.53.5, windows-threading 0.1.0, windows-threading 0.2.1, windows-version 0.1.7, windows_x86_64_msvc 0.52.6, windows_x86_64_msvc 0.53.1
 
@@ -13638,7 +13674,7 @@ MIT License
     SOFTWARE
 ~~~~
 
-## 231. LICENSE-MIT
+## 232. LICENSE-MIT
 
 Used by: wry 0.55.1
 
@@ -13666,7 +13702,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ~~~~
 
-## 232. LICENSE.spdx
+## 233. LICENSE.spdx
 
 Used by: wry 0.55.1
 
@@ -13693,7 +13729,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/wry.git
 Creator: Person: Daniel Thompson-Yvetot
 ~~~~
 
-## 233. LICENSE
+## 234. LICENSE
 
 Used by: x25519-dalek 2.0.1
 
@@ -13729,7 +13765,7 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ~~~~
 
-## 234. LICENSE-MIT
+## 235. LICENSE-MIT
 
 Used by: yasna 0.6.0
 
@@ -13743,7 +13779,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 235. LICENSE-APACHE
+## 236. LICENSE-APACHE
 
 Used by: zerocopy 0.8.59
 
@@ -13951,7 +13987,7 @@ Apache License
    limitations under the License.
 ~~~~
 
-## 236. LICENSE-BSD
+## 237. LICENSE-BSD
 
 Used by: zerocopy 0.8.59
 
@@ -13982,7 +14018,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ~~~~
 
-## 237. LICENSE-MIT
+## 238. LICENSE-MIT
 
 Used by: zerocopy 0.8.59
 
@@ -14014,7 +14050,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 238. LICENSE-MIT
+## 239. LICENSE-MIT
 
 Used by: zeroize 1.9.0
 
@@ -14046,7 +14082,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 239. LICENSE-MIT
+## 240. LICENSE-MIT
 
 Used by: zeroize_derive 1.5.0
 
@@ -14078,7 +14114,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ~~~~
 
-## 240. LICENSE
+## 241. LICENSE
 
 Used by: zip 4.6.1
 
@@ -14109,7 +14145,7 @@ Some files in the "tests/data" subdirectory of this repository are under other
 licences; see files named LICENSE.*.txt for details.
 ~~~~
 
-## 241. LICENSE
+## 242. LICENSE
 
 Used by: zlib-rs 0.6.8
 

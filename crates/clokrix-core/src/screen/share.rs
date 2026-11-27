@@ -79,6 +79,8 @@ pub enum Note {
         default: bool,
         why: Option<String>,
     },
+    /// The phone wheel's virtual controller (2.6): plugged in, or not and why.
+    Pad { ok: bool, why: Option<String> },
     /// What went out lately ([`Report`]): sizes as `[w, h]`, rates a second, bits a second.
     Report {
         capture: &'static str,

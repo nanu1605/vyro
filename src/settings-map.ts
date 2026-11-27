@@ -46,7 +46,7 @@ export const group = (id: GroupId): Group => GROUPS.find((g) => g.id === id)!;
 const groupOfPart = (part: string): Group | undefined => GROUPS.find((g) => g.parts.includes(part));
 
 /** Remote's tabs (its window). */
-export type RemoteTab = 'phones' | 'network' | 'screen' | 'wake' | 'activity' | 'options';
+export type RemoteTab = 'phones' | 'network' | 'screen' | 'wheel' | 'wake' | 'activity' | 'options';
 
 export interface Setting {
   /** The id of its row in the window. */
@@ -87,6 +87,7 @@ export const SETTINGS: readonly Setting[] = [
   { id: 'set-remote-screen', label: 'Screen sharing', part: 'remote', tab: 'screen', keys: 'remote desktop see the screen mouse keyboard' },
   { id: 'set-remote-lock', label: 'Lock this PC when a phone’s session ends', part: 'remote', tab: 'screen', keys: 'lock screen' },
   { id: 'set-remote-mic', label: 'The phone as this PC’s microphone', part: 'remote', tab: 'screen', keys: 'mic microphone vb-cable audio voice default' },
+  { id: 'set-remote-wheel', label: 'Phone wheel', part: 'remote', tab: 'wheel', keys: 'steer steering games driving controller gamepad xbox vigem gyro euro truck' },
   { id: 'set-remote-wake', label: 'Wake from phone', part: 'remote', tab: 'wake', keys: 'wake on lan power on magic packet' },
   { id: 'set-remote-activity', label: 'Recent from your phones', part: 'remote', tab: 'activity', keys: 'history log actions' },
   { id: 'set-remote-port', label: 'Port on this network', part: 'remote', tab: 'options', keys: 'port' },

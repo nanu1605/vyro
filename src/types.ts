@@ -91,6 +91,16 @@ export type { PowerRequest } from './bindings/PowerRequest';
 export type { PowerState } from './bindings/PowerState';
 export type { ScreenShare } from './bindings/ScreenShare';
 export type { ScreenStatus } from './bindings/ScreenStatus';
+import type { WheelOptions } from './bindings/WheelOptions';
+export type { WheelOptions } from './bindings/WheelOptions';
+export type { Pedals } from './bindings/Pedals';
+
+/** The phone wheel on the PC (2.6): the virtual controller's driver and the phone steering. */
+export interface WheelStatus {
+  driver: 'installed' | 'missing' | 'installing' | 'unsupported';
+  session: { phone: string; id: string; since: number } | null;
+  options: WheelOptions;
+}
 export type { PendingPower } from './bindings/PendingPower';
 export type { WakeReadiness } from './bindings/WakeReadiness';
 export type { WakeTarget } from './bindings/WakeTarget';

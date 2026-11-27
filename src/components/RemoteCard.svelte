@@ -2,7 +2,8 @@
   // Settings → Phone and remote (P26, 1.4): reach this PC from anywhere through the Clokrix relay,
   // or from this network through the local companion; pairs phones and devices with a QR code (or
   // a typed code on this network), and lists them with a way to sign each out at once. In tabs
-  // since 2.5's tiles (Phones, This network, Screen, Wake, Activity, Options), one at a time.
+  // since 2.5's tiles (Phones, This network, Screen, Wheel, Wake, Activity, Options), one at a
+  // time; Wheel from 2.6.
   import { untrack } from 'svelte';
   import Card from './Card.svelte';
   import More from './More.svelte';
@@ -17,6 +18,12 @@
     getRemoteStatus,
     getScreenStatus,
     getWakeReadiness,
+    getWheelStatus,
+    installWheelDriver,
+    onWheelStatus,
+    setPhoneWheel,
+    setWheelOptions,
+    stopWheel,
     onPhoneActions,
     onScreenShare,
     resetRelay,
@@ -35,7 +42,7 @@
     startRelayPairing,
     startRemotePairing,
   } from '../ipc';
-  import type { PhoneAction, RemoteStatus, ScreenStatus, WakeReadiness } from '../types';
+  import type { Pedals, PhoneAction, RemoteStatus, ScreenStatus, WakeReadiness, WheelStatus } from '../types';
 
   interface Props {
     active: boolean;
@@ -70,6 +77,10 @@
   let screen = $state.raw<ScreenStatus | null>(null);
   /** The microphone a virtual cable offers: `undefined` while it is looked for. */
   let cable = $state<string | null | undefined>(undefined);
+  /** The phone wheel (2.6). */
+  let wheel = $state.raw<WheelStatus | null>(null);
+  /** What setting up the virtual controller came to. */
+  let wheelNote = $state<string | null>(null);
 
   function loadActions(): void {
     getPhoneActions()
@@ -113,6 +124,45 @@
       stop?.();
     };
   });
+  // The phone wheel (2.6): its driver, the phone steering now, the options.
+  $effect(() => {
+    if (!active) return;
+    untrack(() => {
+      getWheelStatus()
+        .then((s) => (wheel = s))
+        .catch(() => {});
+    });
+    let stop: (() => void) | undefined;
+    let disposed = false;
+    void onWheelStatus((s) => (wheel = s)).then((fn) => {
+      if (disposed) fn();
+      else stop = fn;
+    });
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  });
+  async function wheelCall(f: () => Promise<WheelStatus>): Promise<void> {
+    try {
+      wheel = await f();
+      error = null;
+    } catch (e) {
+      error = String(e).replace(/^Error: /, '');
+    }
+  }
+  async function setUpWheel(): Promise<void> {
+    wheelNote = null;
+    try {
+      wheelNote = await installWheelDriver();
+      error = null;
+    } catch (e) {
+      error = String(e).replace(/^Error: /, '');
+    }
+    getWheelStatus()
+      .then((s) => (wheel = s))
+      .catch(() => {});
+  }
   async function screenCall(f: () => Promise<ScreenStatus>): Promise<void> {
     try {
       screen = await f();
@@ -241,6 +291,7 @@
     ...(relayOn
       ? [
           { id: 'screen' as const, label: 'Screen' },
+          { id: 'wheel' as const, label: 'Wheel' },
           { id: 'wake' as const, label: 'Wake' },
         ]
       : []),
@@ -420,6 +471,15 @@
                       >
                         {d.screen ? 'Sees the screen' : 'No screen'}
                       </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-pressed={d.wheel}
+                        aria-label="{d.name} may steer games"
+                        onclick={() => void run(() => setPhoneWheel(d.id, !d.wheel))}
+                      >
+                        {d.wheel ? 'Steers games' : 'No wheel'}
+                      </button>
                     {/if}
                     <button type="button" disabled={busy} aria-label="Sign out {d.name}" onclick={() => void run(() => signOutRemote(d.id))}>
                       Sign out
@@ -595,6 +655,82 @@
           </p>
         </div>
         {/if}
+      {:else if shown === 'wheel'}
+        {#if !wheel}
+          <p class="note">Loading…</p>
+        {:else}
+          <div class="group" id="set-remote-wheel">
+            <h3 id="remote-wheel">Phone wheel</h3>
+            {#if wheel.session}
+              <p class="shared" role="status">
+                <b>{wheel.session.phone}</b> is steering games now.
+                <button type="button" onclick={() => void wheelCall(stopWheel)}>Stop</button>
+              </p>
+            {/if}
+            <div class="row plain">
+              <p class="note">
+                A phone marked “Steers games” turns into a steering wheel with pedals: this PC plays it as an Xbox controller,
+                which driving games (Euro Truck Simulator 2, SnowRunner and others) can bind.
+              </p>
+              <More about="the phone wheel">
+                The phone sends its turn and pedals straight to this PC over your network, so it needs to reach this PC
+                directly (the same Wi-Fi is best). It cannot push back like a force-feedback wheel; Android phones vibrate with
+                the game's rumble. A phone that stops sending for 0.4 s lets go of everything. Some online games' anti-cheat
+                refuses virtual controllers.
+              </More>
+            </div>
+            <div class="row plain">
+              {#if wheel.driver === 'installed'}
+                <p class="note">The virtual controller (ViGEmBus) is set up.</p>
+              {:else if wheel.driver === 'installing'}
+                <p class="note" role="status">Setting up the virtual controller: allow it in Windows' prompt.</p>
+              {:else if wheel.driver === 'unsupported'}
+                <p class="note">The phone wheel needs Clokrix on Windows.</p>
+              {:else}
+                <p class="note">
+                  The phone wheel needs a virtual controller driver, ViGEmBus, which comes with Clokrix. Setting it up asks once
+                  for an administrator's permission on this PC.
+                </p>
+                <button type="button" onclick={() => void setUpWheel()}>Set up the virtual controller</button>
+              {/if}
+            </div>
+            {#if wheelNote}<p class="note" role="status">{wheelNote}</p>{/if}
+            <label class="range">
+              <span
+                >Make up for a game's dead zone: {wheel.options.antiDeadzone}%<small
+                  >Most games ignore the first part of a stick's movement; set it to the game's dead zone so the slightest turn
+                  steers.</small
+                ></span
+              >
+              <input
+                type="range"
+                min="0"
+                max="30"
+                step="1"
+                value={wheel.options.antiDeadzone}
+                onchange={(e) => {
+                  const antiDeadzone = Number(e.currentTarget.value);
+                  const o = wheel!.options;
+                  void wheelCall(() => setWheelOptions({ ...o, antiDeadzone }));
+                }}
+              />
+            </label>
+            <label class="pick">
+              <span>The pedals</span>
+              <select
+                value={wheel.options.pedals}
+                onchange={(e) => {
+                  const pedals = e.currentTarget.value as Pedals;
+                  const o = wheel!.options;
+                  void wheelCall(() => setWheelOptions({ ...o, pedals }));
+                }}
+              >
+                <option value="triggers">On the triggers (most games)</option>
+                <option value="rightStick">On the right stick, up and down (for games that join the triggers)</option>
+              </select>
+            </label>
+          </div>
+        {/if}
       {:else if shown === 'wake'}
         <div class="group" id="set-remote-wake">
           <h3 id="remote-wake">Wake from phone</h3>
@@ -746,6 +882,22 @@
     display: block;
     color: var(--muted);
     font-size: 0.75rem;
+  }
+  /* The phone wheel's options (2.6). */
+  .range,
+  .pick {
+    display: grid;
+    gap: 0.3rem;
+    margin: 0.4rem 0 0.7rem;
+    font-size: 0.85rem;
+  }
+  .range small {
+    display: block;
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+  .pick select {
+    max-width: 100%;
   }
   /* A setting and its "More". */
   .row {

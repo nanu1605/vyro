@@ -3,6 +3,10 @@
 //! to the phone and input comes back directly, over WebRTC (str0m, no OpenSSL). The fingerprints
 //! that secure it travel in the sealed offer and answer, so the relay cannot step in.
 //!
+//! The phone wheel (2.6) uses the same connection without video: its controller comes on a
+//! channel of its own ("wheel"), unordered and never resent, and the PC answers on it with the
+//! newest echo and rumble only ([`Session::wheel_send`]).
+//!
 //! The phone reports how the video arrives (transport-wide congestion control); from that
 //! str0m estimates what the connection carries, paces what goes out, and the producer encodes
 //! to fit ([`Session::estimate`]).
@@ -42,7 +46,10 @@ const START_ESTIMATE: u64 = 3_000_000;
 /// The most the estimate looks for: the producer's top rate with room for the rest.
 const WANTED: u64 = 6_000_000;
 /// The kinds of note for the phone ([`slot`]).
-const NOTE_KINDS: usize = 4;
+const NOTE_KINDS: usize = 5;
+/// What goes to the phone wheel: the newest echo, and the newest rumble.
+pub const WHEEL_ECHO: usize = 0;
+pub const WHEEL_RUMBLE: usize = 1;
 
 /// Where the session finds its addresses.
 #[derive(Debug, Clone)]
@@ -88,6 +95,10 @@ pub enum SessionEvent {
     Mic(Vec<u8>),
     /// The phone turned its microphone off (its channel closed).
     MicEnd,
+    /// A packet on the phone wheel's channel (2.6; `crate::wheel::packet`).
+    Wheel(Vec<u8>),
+    /// The wheel's channel closed.
+    WheelEnd,
     /// The session ended, and why.
     Closed(String),
 }
@@ -132,6 +143,8 @@ enum Channel {
     Clip(super::voice::ClipStream),
     /// The live microphone ("mic").
     Mic,
+    /// The phone wheel's controller ("wheel", 2.6).
+    Wheel,
 }
 
 pub type EventSink = Box<dyn Fn(SessionEvent) + Send>;
@@ -143,7 +156,8 @@ fn slot(note: &Note) -> usize {
         Note::Sending { .. } | Note::Secure => 0,
         Note::Mic { .. } => 1,
         Note::Report { .. } => 2,
-        Note::End { .. } => 3,
+        Note::Pad { .. } => 3,
+        Note::End { .. } => 4,
     }
 }
 
@@ -155,6 +169,8 @@ struct State {
     notes: [Option<(String, bool)>; NOTE_KINDS],
     /// Answers to clips, for their channels.
     replies: Vec<(ChannelId, String)>,
+    /// For the phone wheel's channel: the newest of each kind only.
+    wheel_out: [Option<Vec<u8>>; 2],
 }
 
 /// A running session. Dropping it ends it.
@@ -229,6 +245,14 @@ impl Session {
 
     pub fn closed(&self) -> bool {
         crate::lock(&self.state).closed
+    }
+
+    /// Sends the phone wheel `bytes` of kind `slot` ([`WHEEL_ECHO`], [`WHEEL_RUMBLE`]): one not
+    /// yet sent is replaced by the next of its kind, as only the newest matters.
+    pub fn wheel_send(&self, slot: usize, bytes: Vec<u8>) {
+        if let Some(s) = crate::lock(&self.state).wheel_out.get_mut(slot) {
+            *s = Some(bytes);
+        }
     }
 
     /// Ends the session from any thread; it closes soon after.
@@ -401,6 +425,15 @@ fn take_due(state: &mut State) -> Vec<String> {
         .collect()
 }
 
+/// What is due on the phone wheel's channel, in its kinds' order; it is due no more.
+fn take_wheel_out(state: &mut State) -> Vec<Vec<u8>> {
+    state
+        .wheel_out
+        .iter_mut()
+        .filter_map(Option::take)
+        .collect()
+}
+
 /// Writes the notes still due to the phone's channel; whether there were any.
 fn send_notes(rtc: &mut Rtc, id: ChannelId, state: &Mutex<State>) -> bool {
     let notes = take_due(&mut crate::lock(state));
@@ -453,6 +486,7 @@ fn run(
     let local = socket.local_addr().ok();
     let mut video: Option<(Mid, str0m::format::PayloadParams)> = None;
     let mut channel: Option<ChannelId> = None;
+    let mut wheel: Option<ChannelId> = None;
     let mut channels: std::collections::HashMap<ChannelId, Channel> = Default::default();
     // Until a keyframe goes, the phone can decode nothing (pictures build on the one before):
     // none is sent before it, after connecting and after a frame was lost.
@@ -500,6 +534,10 @@ fn run(
                     Event::ChannelOpen(id, label) if label == "mic" => {
                         channels.insert(id, Channel::Mic);
                     }
+                    Event::ChannelOpen(id, label) if label == "wheel" => {
+                        wheel = Some(id);
+                        channels.insert(id, Channel::Wheel);
+                    }
                     Event::ChannelOpen(id, _) => {
                         channel = Some(id);
                         channels.insert(id, Channel::Input);
@@ -508,8 +546,13 @@ fn run(
                         }
                     }
                     Event::ChannelClose(id) => {
-                        if let Some(Channel::Mic) = channels.remove(&id) {
-                            events(SessionEvent::MicEnd);
+                        match channels.remove(&id) {
+                            Some(Channel::Mic) => events(SessionEvent::MicEnd),
+                            Some(Channel::Wheel) => {
+                                wheel = None;
+                                events(SessionEvent::WheelEnd);
+                            }
+                            _ => {}
                         }
                         if channel == Some(id) {
                             channel = None;
@@ -517,6 +560,11 @@ fn run(
                     }
                     Event::ChannelData(d) if matches!(channels.get(&d.id), Some(Channel::Mic)) => {
                         events(SessionEvent::Mic(d.data));
+                    }
+                    Event::ChannelData(d)
+                        if matches!(channels.get(&d.id), Some(Channel::Wheel)) =>
+                    {
+                        events(SessionEvent::Wheel(d.data));
                     }
                     Event::ChannelData(d)
                         if matches!(channels.get(&d.id), Some(Channel::Clip(_))) =>
@@ -589,6 +637,17 @@ fn run(
             if let Some(mut ch) = rtc.channel(id) {
                 if let Err(e) = ch.write(false, text.as_bytes()) {
                     log::debug!("screen: a clip's answer not sent: {e}");
+                }
+            }
+        }
+        // The wheel's echo and rumble, newest only.
+        if let Some(id) = wheel {
+            let out = take_wheel_out(&mut crate::lock(state));
+            if let Some(mut ch) = (!out.is_empty()).then(|| rtc.channel(id)).flatten() {
+                for b in &out {
+                    if let Err(e) = ch.write(true, b) {
+                        log::debug!("wheel: not sent: {e}");
+                    }
                 }
             }
         }
@@ -688,5 +747,26 @@ mod tests {
             ]
         );
         assert!(take_due(&mut crate::lock(&state)).is_empty(), "sent once");
+    }
+
+    /// Only the newest echo and rumble go to the phone wheel, each once.
+    #[test]
+    fn the_wheel_hears_only_the_newest_of_each_kind() {
+        let state = Arc::new(Mutex::new(State::default()));
+        let set = |slot: usize, b: &[u8]| crate::lock(&state).wheel_out[slot] = Some(b.to_vec());
+        set(WHEEL_ECHO, &[1]);
+        set(WHEEL_RUMBLE, &[2]);
+        set(WHEEL_ECHO, &[3]);
+        assert_eq!(take_wheel_out(&mut crate::lock(&state)), [vec![3], vec![2]]);
+        assert!(
+            take_wheel_out(&mut crate::lock(&state)).is_empty(),
+            "sent once"
+        );
+        let pad = Note::Pad {
+            ok: false,
+            why: Some("ViGEmBus is not installed".into()),
+        };
+        assert_eq!(slot(&pad), 3);
+        assert!(pad.json().contains("\"t\":\"pad\""));
     }
 }

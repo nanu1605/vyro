@@ -16,7 +16,7 @@ mod hid_win;
 #[cfg(any(windows, test))]
 mod watch;
 #[cfg(windows)]
-mod win;
+pub(crate) mod win;
 
 #[cfg(windows)]
 pub use control::{audio as audio_connection, disconnect, reach, settle};

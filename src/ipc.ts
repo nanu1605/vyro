@@ -8,7 +8,7 @@ import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
 import { savedLook, type AccentChoice, type OpenOn, type ThemeId } from './themes';
 import { EMPTY as NO_WIDGETS, type Widgets } from './widgets';
-import type { AlertFired, AlertRule, BackendStatus, Edition, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Control, Dashboard, DeviceInfo, Devices, LinkState, PhoneAction, PowerState, ScreenStatus, WakeReadiness, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo, GpuTestDone, GpuTestKind, GpuTestProgress, TuneConfig, TuneEvent, TuneSettings, TuneStatus, LightingSettings, LightingStatus } from './types';
+import type { AlertFired, AlertRule, BackendStatus, Edition, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Control, Dashboard, DeviceInfo, Devices, LinkState, PhoneAction, PowerState, ScreenStatus, WakeReadiness, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo, GpuTestDone, GpuTestKind, GpuTestProgress, TuneConfig, TuneEvent, TuneSettings, TuneStatus, LightingSettings, LightingStatus, WheelOptions, WheelStatus } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -888,6 +888,41 @@ export async function setPhoneControl(id: string, control: boolean): Promise<Rem
 export async function setPhoneScreen(id: string, on: boolean): Promise<RemoteStatus> {
   if (!inTauri) return (await import('./sim-remote')).simPhoneScreen(id, on);
   return invoke<RemoteStatus>('set_phone_screen', { id, on });
+}
+
+/** Lets a phone paired from anywhere steer games as a controller, or not (2.6). */
+export async function setPhoneWheel(id: string, on: boolean): Promise<RemoteStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simPhoneWheel(id, on);
+  return invoke<RemoteStatus>('set_phone_wheel', { id, on });
+}
+
+/** The phone wheel (2.6): the virtual controller's driver, the phone steering now, the options. */
+export async function getWheelStatus(): Promise<WheelStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simWheelStatus();
+  return invoke<WheelStatus>('get_wheel_status');
+}
+
+/** Stop the phone steering, at the PC. */
+export async function stopWheel(): Promise<WheelStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simStopWheel();
+  return (await invoke<WheelStatus | null>('stop_wheel')) ?? getWheelStatus();
+}
+
+export async function setWheelOptions(options: WheelOptions): Promise<WheelStatus> {
+  if (!inTauri) return (await import('./sim-remote')).simWheelOptions(options);
+  return invoke<WheelStatus>('set_wheel_options', { options });
+}
+
+/** "Set up the virtual controller": its installer, after an administrator prompt on this PC.
+ * Gives what to tell the owner. */
+export async function installWheelDriver(): Promise<string> {
+  if (!inTauri) return (await import('./sim-remote')).simInstallWheel();
+  return invoke<string>('install_wheel_driver');
+}
+
+export async function onWheelStatus(cb: (s: WheelStatus) => void): Promise<() => void> {
+  if (!inTauri) return (await import('./sim-remote')).onSimWheel(cb);
+  return listen<WheelStatus>('wheel-status', (e) => cb(e.payload));
 }
 
 /** The screen shared with a phone now, and its settings (1.7). */

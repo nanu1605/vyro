@@ -35,6 +35,8 @@ Thumbs.db
 
 # Bundled PawnIO installer (fetched by scripts/fetch-pawnio.ps1)
 src-tauri/pawnio/PawnIO_setup.exe
+# Bundled ViGEmBus installer, for the phone wheel (fetched by scripts/fetch-vigembus.ps1)
+src-tauri/vigembus/ViGEmBus_setup.exe
 
 # Bundled PresentMon (fetched by scripts/fetch-presentmon.ps1)
 src-tauri/presentmon/PresentMon.exe

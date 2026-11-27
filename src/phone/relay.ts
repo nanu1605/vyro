@@ -40,6 +40,8 @@ export type PhoneInfo = RemoteInfo & {
   control?: boolean;
   /** This phone may see and use the PC's screen (1.7; absent: the PC cannot share it). */
   screen?: boolean;
+  /** This phone may steer games (2.6; absent: the PC's Clokrix is older). */
+  wheel?: boolean;
   /** The requests it may make. */
   methods?: string[];
 };

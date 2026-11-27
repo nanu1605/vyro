@@ -662,14 +662,23 @@ fn every_request_has_one_access_and_changes_need_control() {
     assert_eq!(api::access("process.end"), Some(api::Access::Control));
     assert_eq!(api::access("processes"), Some(api::Access::View));
     assert_eq!(api::access("nope"), None);
-    assert!(api::allowed(false, false)
+    assert!(api::allowed(false, false, false)
         .iter()
         .all(|m| api::access(m) == Some(api::Access::View)));
-    assert_eq!(api::allowed(true, true).len(), api::METHODS.len());
+    assert_eq!(api::allowed(true, true, true).len(), api::METHODS.len());
     // The screen is its own permission: control does not bring it, nor it control.
-    assert!(!api::allowed(true, false).contains(&"screen.start"));
-    let screen_only = api::allowed(false, true);
+    assert!(!api::allowed(true, false, false).contains(&"screen.start"));
+    let screen_only = api::allowed(false, true, false);
     assert!(screen_only.contains(&"screen.start") && !screen_only.contains(&"power"));
+    // So is the wheel (2.6): neither control nor the screen brings it, nor it them.
+    assert!(!screen_only.contains(&"wheel.start"));
+    assert!(!api::allowed(true, true, false).contains(&"wheel.start"));
+    let wheel_only = api::allowed(false, false, true);
+    assert!(wheel_only.contains(&"wheel.start") && wheel_only.contains(&"wheel.stop"));
+    assert!(!wheel_only.contains(&"screen.start") && !wheel_only.contains(&"power"));
+    for m in ["wheel.start", "wheel.stop"] {
+        assert_eq!(api::access(m), Some(api::Access::Wheel), "{m}");
+    }
     for m in [
         "screen.monitors",
         "screen.start",
@@ -1275,4 +1284,67 @@ fn a_pc_that_said_it_was_leaving_with_no_connection_does_not_say_so_once_awake()
     // woke does not tell the relay, which would then take a crash for leaving.
     assert!(!leaving_now(NOW, NOW + 3600));
     assert!(!leaving_now(0, NOW));
+}
+
+#[test]
+fn the_wheel_is_off_until_the_owner_allows_it_and_is_kept() {
+    let mut p = paired();
+    assert!(p.set_control("0a1b2c3d", true));
+    assert!(p.set_screen("0a1b2c3d", true));
+    assert!(
+        !p.may_wheel(&ID),
+        "neither control nor the screen brings the wheel"
+    );
+    assert!(p.set_wheel("0a1b2c3d", true));
+    assert!(!p.set_wheel("ffffffff", true));
+    assert!(p.may_wheel(&ID));
+    assert!(p.devices(&[])[0].wheel);
+    let stored = p.stored(true, None);
+    assert!(stored.phones[0].wheel);
+    assert!(Phones::load(&stored, NOW).unwrap().may_wheel(&ID));
+    // A 2.5 file has no `wheel`: off, the rest as it was.
+    let mut json: serde_json::Value = serde_json::to_value(&stored).unwrap();
+    json["phones"][0].as_object_mut().unwrap().remove("wheel");
+    let old: StoredRelay = serde_json::from_value(json).unwrap();
+    let old = Phones::load(&old, NOW).unwrap();
+    assert!(!old.may_wheel(&ID) && old.may_screen(&ID) && old.may_control(&ID));
+    // Turned off, the wheel goes and the screen stays.
+    assert!(p.set_wheel("0a1b2c3d", false));
+    assert!(!p.may_wheel(&ID) && p.may_screen(&ID));
+}
+
+#[test]
+fn wheel_requests_need_the_wheel_permission() {
+    let mut p = paired();
+    assert!(p.set_control("0a1b2c3d", true));
+    assert!(p.set_screen("0a1b2c3d", true));
+    let mut s = Session::new();
+    let info_fn = info;
+    let phone = TestPhone::new(ID, &OWN_SECRET);
+    let (session, info) = hello2(&mut s, &mut p, &phone);
+    assert_eq!(info["wheel"].as_bool(), Some(false));
+    let (outs, _, reqs) = s.on_frame(
+        &mut p,
+        &phone.frame(&req(&session, 1, 1, "wheel.start")),
+        &now(&info_fn, None),
+    );
+    assert!(reqs.is_empty());
+    assert_eq!(phone.read(&outs[0]).unwrap()["err"], api::NO_WHEEL);
+
+    // Allowed on the PC: the phone hears at once, and may.
+    assert!(p.set_wheel("0a1b2c3d", true));
+    let outs = s.refresh(&mut p, &now(&info_fn, None));
+    let info = phone.read(&outs[0]).unwrap();
+    assert_eq!(info["wheel"].as_bool(), Some(true));
+    assert!(info["methods"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|m| m == "wheel.start"));
+    let (_, _, reqs) = s.on_frame(
+        &mut p,
+        &phone.frame(&req(&session, 2, 2, "wheel.start")),
+        &now(&info_fn, None),
+    );
+    assert_eq!(reqs[0].method, "wheel.start");
 }

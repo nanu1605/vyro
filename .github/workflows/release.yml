@@ -147,6 +147,9 @@ jobs:
       - name: Fetch the bundled PresentMon (pinned SHA-256)
         shell: pwsh
         run: ./scripts/fetch-presentmon.ps1
+      - name: Fetch the bundled ViGEmBus installer, for the phone wheel (pinned SHA-256)
+        shell: pwsh
+        run: ./scripts/fetch-vigembus.ps1
 
       # Only release builds carry the updater; other builds never check (updates.rs).
       - name: Updater configuration

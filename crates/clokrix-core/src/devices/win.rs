@@ -619,7 +619,7 @@ impl Drop for Closer {
 }
 
 /// Present interfaces of a class.
-pub(super) fn interfaces(class: &GUID) -> Vec<String> {
+pub(crate) fn interfaces(class: &GUID) -> Vec<String> {
     for _ in 0..3 {
         let mut len = 0u32;
         // SAFETY: size query for the whole system's present interfaces of `class`.

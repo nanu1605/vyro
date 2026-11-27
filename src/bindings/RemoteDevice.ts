@@ -29,6 +29,10 @@ control: boolean,
  */
 screen: boolean, 
 /**
+ * May steer games as a controller (2.6); only phones paired through the relay can.
+ */
+wheel: boolean, 
+/**
  * Gets notifications with its app closed (2.0); the phone turns them on and off.
  */
 push: boolean, };

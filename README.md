@@ -64,7 +64,9 @@ and installs the **Clokrix Sensor Service**. The service runs the sensor engine 
 PawnIO and SMART need, keeps history while the app is closed, and serves the app over a local
 named pipe; the app itself runs without administrator rights. Intel's
 [PresentMon](https://github.com/GameTechDev/PresentMon) console app is installed beside the
-service, which runs it to measure the game in front (nothing is injected into games). Without the service the app still
+service, which runs it to measure the game in front (nothing is injected into games). The MSI
+also carries the signed [ViGEmBus](https://github.com/nefarius/ViGEmBus) installer for the phone
+wheel (2.6); it runs only when the owner sets the wheel up, with one administrator prompt. Without the service the app still
 starts, reads what it can, and says what is missing. "Start with Windows" (Settings) opens it
 in the tray at sign-in. Builds are not code-signed yet, so SmartScreen will warn; from 2.0 a
 release signs itself once SignPath Foundation has taken the project on

@@ -262,6 +262,7 @@ impl Session {
                     None => Some(api::UNKNOWN),
                     Some(Access::Control) if !phones.may_control(&id) => Some(api::VIEW_ONLY),
                     Some(Access::Screen) if !phones.may_screen(&id) => Some(api::NO_SCREEN),
+                    Some(Access::Wheel) if !phones.may_wheel(&id) => Some(api::NO_WHEEL),
                     Some(_) => None,
                 };
                 match refused {
@@ -316,11 +317,13 @@ impl Session {
         let access = self.conns.get(id).map(|c| {
             let control = phones.may_control(id);
             let screen = phones.may_screen(id);
+            let wheel = phones.may_wheel(id);
             proto::Access {
                 session: b64url(&c.session),
                 control,
                 screen,
-                methods: api::allowed(control, screen),
+                wheel,
+                methods: api::allowed(control, screen, wheel),
             }
         });
         seal_to(

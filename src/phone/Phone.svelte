@@ -7,6 +7,7 @@
   // that move in from the side they are on.
   import { onMount } from 'svelte';
   import Activity from '@lucide/svelte/icons/activity';
+  import Car from '@lucide/svelte/icons/car';
   import HeartPulse from '@lucide/svelte/icons/heart-pulse';
   import LayoutGrid from '@lucide/svelte/icons/layout-grid';
   import List from '@lucide/svelte/icons/list';
@@ -28,13 +29,14 @@
   import Toasts from './ui/Toasts.svelte';
 
   type Screen = 'home' | 'pc' | 'scan' | 'install';
-  /** A PC's tabs (1.5); only Live for a PC whose Clokrix is older, Screen from 1.7. Devices sit
-   * at the top of More (1.7). */
-  type Tab = 'live' | 'processes' | 'screen' | 'health' | 'more';
+  /** A PC's tabs (1.5); only Live for a PC whose Clokrix is older, Screen from 1.7, Wheel from
+   * 2.6. Devices sit at the top of More (1.7). */
+  type Tab = 'live' | 'processes' | 'screen' | 'wheel' | 'health' | 'more';
   const TABS: Array<{ id: Tab; label: string; icon: typeof Activity }> = [
     { id: 'live', label: 'Live', icon: Activity },
     { id: 'processes', label: 'Processes', icon: List },
     { id: 'screen', label: 'Screen', icon: Monitor },
+    { id: 'wheel', label: 'Wheel', icon: Car },
     { id: 'health', label: 'Health', icon: HeartPulse },
     { id: 'more', label: 'More', icon: LayoutGrid },
   ];
@@ -99,7 +101,7 @@
     link ? link.request<T>(m, p) : Promise.reject<T>(new RequestError('Not connected to the PC.', 'unsent'));
   const others = $derived(sleepers(pcs, current));
   const tabs = $derived(
-    TABS.filter((t) => t.id !== 'screen' || info?.screen !== undefined).map((t) => ({
+    TABS.filter((t) => (t.id !== 'screen' || info?.screen !== undefined) && (t.id !== 'wheel' || info?.wheel !== undefined)).map((t) => ({
       ...t,
       dot: t.id === 'more' ? lowBattery : null,
     })),
@@ -119,8 +121,8 @@
   const navOn = $derived(screen === 'pc' && linkState === 'online' && asks && !immersive);
   /** The Screen tab stays while its session is on, though the connection to the relay drops
    * (a relay restart, the phone changing networks): leaving it would end the session, and a
-   * direct one does not need the relay. */
-  const keepScreen = $derived(screen === 'pc' && tab === 'screen' && sharing);
+   * direct one does not need the relay. So does the Wheel tab (2.6) while it steers. */
+  const keepScreen = $derived(screen === 'pc' && (tab === 'screen' || tab === 'wheel') && sharing);
 
   $effect(() => {
     document.title = screen === 'pc' ? pageTitle(pc?.name ?? '', view) : 'Clokrix';
@@ -180,7 +182,10 @@
    * Leaving the PC, the Screen tab's own Stop, sent as the tab closes, would go through the next
    * PC's link, or none, and the PC would end the session only when it noticed the phone gone. */
   const stopScreen = (l: PcLink) =>
-    Promise.race([l.request('screen.stop').catch(() => {}), new Promise((r) => setTimeout(r, STOP_WAIT_MS))]);
+    Promise.race([
+      Promise.all([l.request(tab === 'wheel' ? 'wheel.stop' : 'screen.stop').catch(() => {})]),
+      new Promise((r) => setTimeout(r, STOP_WAIT_MS)),
+    ]);
 
   /** Lets go of the open PC's link, its screen session stopped first. */
   function letGo(): void {
@@ -549,6 +554,17 @@
               {#await import('./screens/Processes.svelte') then m}<m.default {ask} {can} pc={pc.name} />{/await}
             {:else if tab === 'health'}
               {#await import('./screens/Health.svelte') then m}<m.default {ask} {can} pc={pc.name} />{/await}
+            {:else if tab === 'wheel'}
+              {#await import('./screens/Wheel.svelte') then m}
+                <m.default
+                  {ask}
+                  {can}
+                  pc={pc.name}
+                  onimmersive={(on: boolean) => (immersive = on)}
+                  onsharing={(on: boolean) => (sharing = on)}
+                  ice={() => link?.iceServers() ?? Promise.resolve([])}
+                />
+              {/await}
             {:else if tab === 'screen'}
               {#await import('./screens/Screen.svelte') then m}
                 <m.default

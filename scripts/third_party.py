@@ -48,6 +48,15 @@ hand.
 - **PresentMon console application** (`PresentMon.exe`, version 2.6.0, unmodified, signed by
   Intel) from <https://github.com/GameTechDev/PresentMon>, licensed under MIT (text in
   `THIRD_PARTY_LICENSES.md`). The sensor service runs it to measure game frame rates.
+
+## ViGEmBus
+
+- **ViGEmBus installer** (`vigembus\\ViGEmBus_setup.exe`, version 1.22.0, unmodified, signed by
+  Nefarius Software Solutions e.U.) from <https://github.com/nefarius/ViGEmBus>, licensed under
+  BSD-3-Clause (text in `THIRD_PARTY_LICENSES.md`). Not installed with Clokrix: the app runs it,
+  after an administrator prompt, when the owner sets up the phone wheel (2.6), which then plays
+  as a virtual Xbox controller. Clokrix talks to the bus through its own code, written from
+  ViGEmClient's public interface.
 """
 
 
@@ -169,6 +178,7 @@ def render_licenses():
             spdx, text = fallback(name, license, authors)
             add(f"{name} {version}", f"{spdx} (standard text; the package ships none)", text)
     add("PresentMon 2.6.0 (bundled executable)", "LICENSE.txt", (FALLBACK_DIR / "PresentMon.txt").read_text())
+    add("ViGEmBus 1.22.0 (bundled installer)", "LICENSE", (FALLBACK_DIR / "ViGEmBus.txt").read_text())
     for name in UI_PACKAGES:
         d = ROOT / "node_modules" / name
         version = json.loads((d / "package.json").read_text())["version"]

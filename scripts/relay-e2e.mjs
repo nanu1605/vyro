@@ -13,8 +13,9 @@
 // sideways at 320, 360, 390 or 430 px, every tab and sheet again on the light theme, and the
 // phone's What's new shows once to a phone that used an older app. From 2.0: notifications with
 // the app closed, through a push service played here, which checks the relay's signature and
-// opens each notification as a browser would (Node's own crypto, apart from the PC's). Exits 1 on
-// any failure. With SHOTS=<folder>, it also saves a screenshot of each screen there.
+// opens each notification as a browser would (Node's own crypto, apart from the PC's). From 2.6:
+// the phone wheel, straight to the PC, steering, the throttle, and the PC letting go when the link
+// goes. Exits 1 on any failure. With SHOTS=<folder>, it also saves a screenshot of each screen there.
 
 import { spawn } from 'node:child_process';
 import { createDecipheriv, createECDH, hkdfSync, randomBytes, webcrypto } from 'node:crypto';
@@ -586,6 +587,79 @@ async function main() {
       await stop.click();
       await seeText(a.page, 'The session ended: you stopped it', '…and Stop ends it');
     } else problem('slow view', `no Stop: the session is no longer shown; ${await scene(a, pc, relay)}`);
+
+    // 1d. The phone wheel (2.6), its own permission. No video, so Playwright's Chromium connects
+    // straight to the PC; the phone's turn and pedals reach the controller, and the PC lets go
+    // of everything when the link goes.
+    await tab('Wheel');
+    await seeText(a.page, 'may not steer', 'the Wheel tab says steering is not allowed yet');
+    await axeBoth(a.page, 'phone app, wheel (not allowed)');
+    // Chrome on Android allows the motion sensors by default; this browser asks.
+    await a.ctx.grantPermissions(['accelerometer', 'gyroscope'], { origin: RELAY });
+    pc.say('wheel');
+    const steerStart = a.page.getByRole('button', { name: 'Start steering' });
+    await steerStart.waitFor({ timeout: 10_000 }).then(
+      () => ok('a phone allowed to steer is told at once'),
+      (e) => problem('wheel', e.message),
+    );
+    await axeBoth(a.page, 'phone app, wheel');
+    // The phone held upright, then turned `deg` clockwise (gravity in the phone's axes).
+    const motion = (deg) =>
+      a.page.evaluate((deg) => {
+        const r = (deg * Math.PI) / 180;
+        window.dispatchEvent(
+          new DeviceMotionEvent('devicemotion', {
+            accelerationIncludingGravity: { x: -Math.sin(r) * 9.81, y: Math.cos(r) * 9.81, z: 0 },
+            rotationRate: { alpha: 0, beta: 0, gamma: 0 },
+            interval: 16,
+          }),
+        );
+      }, deg);
+    const steering = pc.out.next(/^wheel: connected$/, 30_000);
+    await steerStart.click();
+    await steering.then(
+      () => ok('the wheel connects to the PC directly'),
+      async (e) => problem('wheel', `${e.message}; ${await scene(a, pc, relay)}`),
+    );
+    await seeText(a.page, /Round trip \d+ ms/, '…and the phone shows the round trip');
+    await motion(0);
+    // Half the range (90°) to the right: half the stick, to the right.
+    const turnedRight = pc.out.next(/^wheel: lx (\d+) /, 10_000);
+    await motion(45);
+    await turnedRight.then(
+      ([, lx]) => (Math.abs(Number(lx) - 16384) < 400 ? ok(`turning the phone right steers right (${lx})`) : problem('wheel', `turned half right, the stick at ${lx}`)),
+      (e) => problem('wheel', e.message),
+    );
+    const throttle = await a.page.getByRole('slider', { name: 'Throttle' }).boundingBox();
+    const pressed = pc.out.next(/^wheel: lx \d+ ry -?\d+ rt (\d+) /, 10_000);
+    if (throttle) {
+      await a.page.mouse.move(throttle.x + throttle.width / 2, throttle.y + 4);
+      await a.page.mouse.down();
+    }
+    await pressed.then(
+      ([, rt]) => (Number(rt) > 240 ? ok(`the throttle pressed at the top is full (${rt})`) : problem('wheel', `the throttle pressed at the top is at ${rt}`)),
+      (e) => problem('wheel', e.message),
+    );
+    await axeBoth(a.page, 'phone app, wheel (steering)');
+    // The link gone with the throttle held and the wheel turned: the PC lets go of both.
+    const letGo = pc.out.next(/^wheel: lx 0 ry 0 rt 0 lt 0 buttons 0x0000$/, 5_000);
+    await a.page.evaluate(() => window.__peers.at(-1)?.close());
+    await letGo.then(
+      () => ok('the PC lets go of the controller when the link goes'),
+      (e) => problem('wheel dead man', e.message),
+    );
+    await a.page.mouse.up();
+    const wheelStopped = pc.out.next(/^asked: wheel\.stop$/, 10_000);
+    await a.page.getByRole('button', { name: 'Stop', exact: true }).click();
+    await wheelStopped.then(
+      () => ok('…and Stop tells the PC'),
+      (e) => problem('wheel stop', e.message),
+    );
+    await steerStart.waitFor({ timeout: 5000 }).then(
+      () => ok('…and the phone is back to its start'),
+      (e) => problem('wheel stop', e.message),
+    );
+
     await tab('Live');
     const cut = (await a.page.evaluate(() => window.__closes)).filter((c) => c.code === 1008);
     if (cut.length) problem('pace', `the relay cut phone A off: ${cut.map((c) => c.reason).join(', ')}`);

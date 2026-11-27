@@ -18,12 +18,13 @@ most.
 | **GPU tuning through the maker's driver interface** (1.6; AMD and Intel from 2.0): the service sets the card's clock offsets and power limit with the driver's own calls, as the maker's tools do: NVML for NVIDIA, ADLX for AMD (as AMD Software), the Intel Graphics Control Library for Intel Arc. Nothing touches the game. | The owner's presets. | Only after the owner turns GPU tuning on and applies a preset other than Stock |
 | **Screen capture and input** (1.7): the app copies the screen with Windows' Desktop Duplication, as screen-sharing tools do, and turns a phone's taps and typing into Windows input (`SendInput`, marked by Windows as injected). | A phone the owner allowed sees and uses the screen. | Only during a screen session, which the PC shows with a banner; never otherwise |
 | **Screen capture for ambient lighting** (2.6): the app copies the screen with Desktop Duplication, as ambient-lighting tools do, makes each picture small on the GPU and keeps only one colour from it. The colour goes to OpenRGB on this PC, which drives the lights. | The owner's RGB devices in the screen's colour. | Only while the owner has ambient lighting on (the Lighting view) and a device picked, or the view is open |
+| **A virtual Xbox 360 controller** (2.6): ViGEmBus (Nefarius Software Solutions, signed, BSD-3), the driver controller tools such as DS4Windows use. It comes with the installer and is installed only when the owner sets it up (one administrator prompt). While a phone steers, Windows and games see an ordinary Xbox 360 controller. | The phone wheel: a phone the owner allowed steers driving games. | The driver, once set up, stays installed (other apps share it). The controller is plugged in only while a phone steers, and unplugged when it stops |
 
 ## What Clokrix never does
 
 - It never injects code or a DLL into a game, and never hooks its graphics API. The overlay is a separate window.
 - It never reads or writes another process's memory.
-- It never reads keyboard or mouse input. It sends input only during a screen session a phone the owner allowed asked for (1.7), and only what that phone sends; a game may ignore or refuse injected input, as it may with any remote desktop.
+- It never reads keyboard or mouse input. It sends input only during a screen session a phone the owner allowed asked for (1.7), and only what that phone sends; a game may ignore or refuse injected input, as it may with any remote desktop. Its virtual controller (2.6) exists only while a phone the owner allowed steers, and moves only as that phone does.
 - It never writes CPU settings or any voltage. GPU settings (a card's clock offsets and power limit) are written only once the owner turns GPU tuning on and applies a preset (1.6, decision 37), and only through the card maker's own driver interface: NVML for NVIDIA, ADLX for AMD, the Intel Graphics Control Library for Intel (2.0). The other hardware writes are fan and pump speeds, on the allow-listed board, once the owner turns fan control on.
 
 ## What has been reported
@@ -36,9 +37,11 @@ most.
 ## If a game complains
 
 From least to most:
-1. **Turn off the overlay** (Settings → Overlay), then frame capture (Settings → Gaming). PresentMon and the overlay then never start. With GPU tuning on, **Return GPU to stock** (the tray) or turn it off. Stop any screen session (the banner's Stop sharing).
+1. **Turn off the overlay** (Settings → Overlay), then frame capture (Settings → Gaming). PresentMon and the overlay then never start. With GPU tuning on, **Return GPU to stock** (the tray) or turn it off. Stop any screen session (the banner's Stop sharing) and the phone wheel (the banner's Stop).
 2. **Stop the service while playing:** `sc stop ClokrixService` from an administrator prompt, or Services → Clokrix Sensor Service → Stop. PawnIO's modules are no longer used. The app keeps showing what it can read without the driver (usage, GPU, drives, network), and fan control hands the fans back to the BIOS before the service stops.
 3. **Uninstall PawnIO** (Apps → PawnIO) if the anti-cheat refuses to run while the driver is merely installed. Clokrix then shows its "needs PawnIO" banner, and works without the low-level sensors and fan control.
+
+**The virtual controller.** Some online games' anti-cheat refuses virtual controllers, or ignores them. ViGEmBus is no longer developed by its author (it is retired, though still signed and working). If a game refuses it, steer that game with a real controller or wheel. To remove the driver, uninstall "Nefarius Virtual Gamepad Emulation Bus Driver" from Apps; other controller tools that use it stop working too.
 
 ## Field check (P27)
 

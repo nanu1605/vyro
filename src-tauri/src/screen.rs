@@ -619,6 +619,8 @@ mod win {
                     crate::voice::mic_off(&app, "turned off on the phone");
                 }
                 SessionEvent::MicEnd => {}
+                // The phone wheel's: never in a screen session.
+                SessionEvent::Wheel(_) | SessionEvent::WheelEnd => {}
                 SessionEvent::Closed(why) => end(&app, serial, &why, By::Phone),
             })
         };

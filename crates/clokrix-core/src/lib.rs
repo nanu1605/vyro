@@ -51,6 +51,7 @@ pub mod storage;
 pub mod sysinfo;
 pub mod units;
 pub mod usage;
+pub mod wheel;
 #[cfg(windows)]
 mod winutil;
 

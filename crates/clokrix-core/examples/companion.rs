@@ -16,7 +16,9 @@
 //! (1.7) is a test picture in the slow view; a direct session sends real H.264 the way the app
 //! does (the app's own producer): on Windows the monitor through Windows' encoder, elsewhere a
 //! moving test pattern through OpenH264 (`still` stops it moving, `moving` starts it again).
-//! Input is printed (`screen input: {…}`), never done. Notifications (2.0): `alert`, `battery` and
+//! Input is printed (`screen input: {…}`), never done. `wheel` lets every phone steer (2.6): its
+//! wheel session's reports are printed (`wheel: lx … rt … lt … buttons …`), as a recording
+//! controller takes them, with the echo and the dead man as the app keeps them. Notifications (2.0): `alert`, `battery` and
 //! `game` send one of each to the phones that want them, `sleep` tells the relay the PC is
 //! leaving, and `crash` ends at once without a word, as a PC that lost power would.
 //!
@@ -102,6 +104,8 @@ impl Drop for Live {
 
 /// The direct screen session, while there is one.
 static SCREEN: Mutex<Option<Live>> = Mutex::new(None);
+/// The phone wheel's session, while there is one (2.6).
+static WHEEL: Mutex<Option<Live>> = Mutex::new(None);
 /// A clip coming through the relay.
 static PIECES: Mutex<Option<Pieces>> = Mutex::new(None);
 /// The phone's microphone sends.
@@ -203,6 +207,7 @@ fn screen_start(r: &Request) -> Result<serde_json::Value, String> {
                 MIC_ON.store(false, Ordering::SeqCst);
                 println!("screen: mic off");
             }
+            SessionEvent::Wheel(_) | SessionEvent::WheelEnd => {}
             SessionEvent::Closed(why) => println!("screen: closed ({why})"),
         }),
     )?;
@@ -228,6 +233,81 @@ fn screen_start(r: &Request) -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({ "answer": answer }))
 }
 
+/// A phone wheel session (2.6): the reports a controller would take, printed when they change;
+/// the newest packet echoed every 100 ms; the dead man as the app has it.
+fn wheel_start(r: &Request) -> Result<serde_json::Value, String> {
+    use clokrix_core::screen::rtc::WHEEL_ECHO;
+    use clokrix_core::wheel::{packet, Wheel, WheelOptions};
+    let offer = r
+        .params
+        .get("offer")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("no offer")?;
+    let opts = rtc::Options {
+        hosts: vec![local_ipv4()],
+        stun: Vec::new(),
+        ..rtc::Options::default()
+    };
+    let wheel = Arc::new(Mutex::new(Wheel::new(WheelOptions::default())));
+    let (session, answer) = rtc::start(
+        offer,
+        &opts,
+        Box::new({
+            let wheel = Arc::clone(&wheel);
+            move |e| match e {
+                SessionEvent::Connected => println!("wheel: connected"),
+                SessionEvent::Wheel(b) => match packet::parse(&b) {
+                    Ok(p) => {
+                        clokrix_core::lock(&wheel).take(&p, std::time::Instant::now());
+                    }
+                    Err(e) => println!("wheel: refused: {e}"),
+                },
+                SessionEvent::WheelEnd => {
+                    clokrix_core::lock(&wheel).let_go(std::time::Instant::now());
+                }
+                SessionEvent::Input(i) => println!("wheel input (not used): {i:?}"),
+                SessionEvent::Closed(why) => println!("wheel: closed ({why})"),
+                _ => {}
+            }
+        }),
+    )?;
+    let session = Arc::new(session);
+    session.tell(&Note::Pad {
+        ok: true,
+        why: None,
+    });
+    let stop = Arc::new(AtomicBool::new(false));
+    std::thread::spawn({
+        let (session, stop) = (Arc::clone(&session), Arc::clone(&stop));
+        move || {
+            let mut last = None;
+            let mut echoed = std::time::Instant::now();
+            while !stop.load(Ordering::SeqCst) && !session.closed() {
+                std::thread::sleep(std::time::Duration::from_millis(8));
+                let (r, newest) = {
+                    let mut w = clokrix_core::lock(&wheel);
+                    (w.report(std::time::Instant::now()), w.newest())
+                };
+                if last != Some(r) {
+                    println!(
+                        "wheel: lx {} ry {} rt {} lt {} buttons {:#06x}",
+                        r.thumb_lx, r.thumb_ry, r.right_trigger, r.left_trigger, r.buttons
+                    );
+                    last = Some(r);
+                }
+                if echoed.elapsed() >= std::time::Duration::from_millis(100) {
+                    echoed = std::time::Instant::now();
+                    if let Some((seq, t)) = newest {
+                        session.wheel_send(WHEEL_ECHO, packet::echo(seq, t).to_vec());
+                    }
+                }
+            }
+        }
+    });
+    *clokrix_core::lock(&WHEEL) = Some(Live { session, stop });
+    Ok(serde_json::json!({ "answer": answer }))
+}
+
 /// A phone's request, answered with the simulated engine's data. Actions are printed only.
 fn answer(engine: &OnceLock<Arc<LocalEngine>>, r: &Request) -> Result<serde_json::Value, String> {
     let latest = || engine.get().and_then(|e| e.latest());
@@ -237,6 +317,12 @@ fn answer(engine: &OnceLock<Arc<LocalEngine>>, r: &Request) -> Result<serde_json
             { "index": 1, "name": "Test 2", "width": 1920, "height": 1080, "primary": false }
         ])),
         "screen.start" => screen_start(r),
+        "wheel.start" => wheel_start(r),
+        "wheel.stop" => {
+            clokrix_core::lock(&WHEEL).take();
+            println!("asked: wheel.stop");
+            Ok(serde_json::json!({ "done": true }))
+        }
         "screen.slow" => Ok(serde_json::json!({
             "jpeg": clokrix_core::remote::relay::proto::b64url(SCREEN_JPEG),
             "w": 320,
@@ -376,6 +462,13 @@ fn relay(url: &str, theme: String) -> Result<(), String> {
                     p.set_screen(&d.id, true);
                 }
                 println!("phones may see the screen");
+            }
+            Ok("wheel") => {
+                let mut p = clokrix_core::lock(&phones);
+                for d in p.devices(&[]) {
+                    p.set_wheel(&d.id, true);
+                }
+                println!("phones may steer");
             }
             Ok(which @ ("still" | "moving")) => {
                 moving().store(which == "moving", Ordering::SeqCst);

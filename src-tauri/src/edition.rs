@@ -165,6 +165,7 @@ fn apply(app: &AppHandle, on: bool) {
     // A direct screen session runs over its own connection, not the relay's: it ends too.
     if !on {
         crate::screen::end_all(app, "this PC turned Free");
+        crate::wheel::end_all(app, "this PC turned Free");
     }
     crate::lighting::set_pro(app, on);
     if !on {

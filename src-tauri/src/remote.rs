@@ -251,6 +251,7 @@ fn end_unpaired(app: &AppHandle) {
     };
     let paired: Vec<String> = lock(&phones).allowed().into_iter().map(|a| a.id).collect();
     crate::screen::end_unpaired(app, &paired, "the phone is no longer paired");
+    crate::wheel::end_unpaired(app, &paired, "the phone is no longer paired");
 }
 
 /// A fresh place on the relay: a random room and key.
@@ -572,6 +573,7 @@ impl Remote {
         lock(&self.relay).url = url;
         if self.relay_url() != before {
             crate::screen::end_all(app, "the relay was changed");
+            crate::wheel::end_all(app, "the relay was changed");
             let on = lock(&self.relay).enabled;
             self.stop_relay();
             if let Some(p) = lock(&self.phones).as_ref() {
@@ -613,6 +615,20 @@ impl Remote {
             } else {
                 "only look"
             }
+        );
+        self.save();
+        Ok(())
+    }
+
+    /// Lets a phone steer games, or not (2.6). The phone hears at once.
+    fn set_phone_wheel(&self, id: &str, on: bool) -> Result<(), String> {
+        let phones = lock(&self.phones).clone().ok_or("No phone is paired.")?;
+        if !lock(&phones).set_wheel(id, on) {
+            return Err("That phone is no longer paired.".into());
+        }
+        log::info!(
+            "remote: a phone may {}steer games",
+            if on { "" } else { "no longer " }
         );
         self.save();
         Ok(())
@@ -881,8 +897,14 @@ pub async fn cancel_remote_pairing(app: AppHandle) -> Result<RemoteStatus, Strin
 pub async fn sign_out_remote(app: AppHandle, id: Option<String>) -> Result<RemoteStatus, String> {
     change(app, move |app, r| {
         match id.as_deref() {
-            Some(id) => crate::screen::end_phone(app, id, "the phone was signed out"),
-            None => crate::screen::end_all(app, "every phone was signed out"),
+            Some(id) => {
+                crate::screen::end_phone(app, id, "the phone was signed out");
+                crate::wheel::end_phone(app, id, "the phone was signed out");
+            }
+            None => {
+                crate::screen::end_all(app, "every phone was signed out");
+                crate::wheel::end_all(app, "every phone was signed out");
+            }
         }
         r.sign_out(id.as_deref());
         Ok(())
@@ -900,6 +922,7 @@ pub async fn set_relay_enabled(app: AppHandle, enabled: bool) -> Result<RemoteSt
     change(app, move |app, r| {
         if !enabled {
             crate::screen::end_all(app, "reach from anywhere was turned off");
+            crate::wheel::end_all(app, "reach from anywhere was turned off");
         }
         r.set_relay_enabled(app, enabled);
         Ok(())
@@ -942,6 +965,19 @@ pub async fn set_phone_screen(
             crate::screen::end_phone(app, &id, "the screen is no longer allowed");
         }
         r.set_phone_screen(&id, on)
+    })
+    .await
+}
+
+/// Lets a phone paired through the relay steer games, or not (2.6); taking it back ends the
+/// phone's wheel session at once.
+#[tauri::command]
+pub async fn set_phone_wheel(app: AppHandle, id: String, on: bool) -> Result<RemoteStatus, String> {
+    change(app, move |app, r| {
+        if !on {
+            crate::wheel::end_phone(app, &id, "steering is no longer allowed");
+        }
+        r.set_phone_wheel(&id, on)
     })
     .await
 }
@@ -990,6 +1026,7 @@ pub async fn cancel_relay_pairing(app: AppHandle) -> Result<RemoteStatus, String
 pub async fn reset_relay(app: AppHandle) -> Result<RemoteStatus, String> {
     change(app, |app, r| {
         crate::screen::end_all(app, "the relay was reset");
+        crate::wheel::end_all(app, "the relay was reset");
         r.reset_relay(app)
     })
     .await

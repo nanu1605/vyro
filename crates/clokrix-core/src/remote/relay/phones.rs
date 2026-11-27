@@ -40,6 +40,9 @@ pub struct StoredPhone {
     /// May see and use the PC's screen (1.7); off until the owner turns it on.
     #[serde(default)]
     pub screen: bool,
+    /// May steer games as a controller (2.6); off until the owner turns it on.
+    #[serde(default)]
+    pub wheel: bool,
     /// Its push subscription and what it wants to hear about (2.0), sealed ([`vault`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push: Option<String>,
@@ -74,6 +77,7 @@ struct Phone {
     pending: bool,
     control: bool,
     screen: bool,
+    wheel: bool,
     push: Option<Push>,
 }
 
@@ -152,6 +156,7 @@ impl Phones {
                     pending: false,
                     control: p.control,
                     screen: p.screen,
+                    wheel: p.wheel,
                     push: p
                         .push
                         .as_deref()
@@ -195,6 +200,7 @@ impl Phones {
                         last_seen: p.last_seen,
                         control: p.control,
                         screen: p.screen,
+                        wheel: p.wheel,
                         push: p
                             .push
                             .as_ref()
@@ -262,6 +268,7 @@ impl Phones {
             pending: true,
             control: false,
             screen: false,
+            wheel: false,
             push: None,
         });
         self.generation += 1;
@@ -312,6 +319,29 @@ impl Phones {
         self.phones
             .iter()
             .any(|p| &p.id == id && !p.pending && p.screen)
+    }
+
+    /// Lets a phone steer games as a controller (2.6), or not; `false` when there is no such
+    /// phone. Only the owner, on the PC, calls this.
+    pub fn set_wheel(&mut self, id: &str, on: bool) -> bool {
+        let Some(p) = self.phones.iter_mut().find(|p| hex(&p.id) == id) else {
+            return false;
+        };
+        if p.wheel != on {
+            p.wheel = on;
+            self.dirty = true;
+            if !p.pending && !self.info_due.contains(&p.id) {
+                self.info_due.push(p.id);
+            }
+        }
+        true
+    }
+
+    /// May the phone steer games.
+    pub fn may_wheel(&self, id: &PhoneId) -> bool {
+        self.phones
+            .iter()
+            .any(|p| &p.id == id && !p.pending && p.wheel)
     }
 
     /// Gives a phone's push subscription, or takes it away (`None`); `false` when there is no
@@ -485,6 +515,7 @@ impl Phones {
                     anywhere: true,
                     control: p.control,
                     screen: p.screen,
+                    wheel: p.wheel,
                     push: p.push.is_some(),
                 }
             })

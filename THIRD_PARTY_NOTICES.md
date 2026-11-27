@@ -22,6 +22,15 @@ hand.
   Intel) from <https://github.com/GameTechDev/PresentMon>, licensed under MIT (text in
   `THIRD_PARTY_LICENSES.md`). The sensor service runs it to measure game frame rates.
 
+## ViGEmBus
+
+- **ViGEmBus installer** (`vigembus\ViGEmBus_setup.exe`, version 1.22.0, unmodified, signed by
+  Nefarius Software Solutions e.U.) from <https://github.com/nefarius/ViGEmBus>, licensed under
+  BSD-3-Clause (text in `THIRD_PARTY_LICENSES.md`). Not installed with Clokrix: the app runs it,
+  after an administrator prompt, when the owner sets up the phone wheel (2.6), which then plays
+  as a virtual Xbox controller. Clokrix talks to the bus through its own code, written from
+  ViGEmClient's public interface.
+
 ## Rust crates (399)
 
 Compiled into `clokrix.exe` for Windows. Full license texts are in each crate's source package (crates.io) and repository.

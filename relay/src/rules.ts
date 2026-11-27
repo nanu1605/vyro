@@ -302,8 +302,9 @@ export function assetHeaders(url: URL): Record<string, string> {
     ].join('; '),
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer',
-    // The camera scans a pairing code; the microphone records voice for the PC (1.7).
-    'Permissions-Policy': 'camera=(self), microphone=(self), geolocation=()',
+    // The camera scans a pairing code; the microphone records voice for the PC (1.7); the motion
+    // sensors steer, the screen kept awake meanwhile (the phone wheel, 2.6).
+    'Permissions-Policy': 'camera=(self), microphone=(self), geolocation=(), accelerometer=(self), gyroscope=(self), magnetometer=(), screen-wake-lock=(self)',
     'Cross-Origin-Opener-Policy': 'same-origin',
     'X-Frame-Options': 'DENY',
     'X-Robots-Tag': 'noindex, nofollow',

@@ -166,6 +166,10 @@ fn call(app: &AppHandle, r: &Request) -> Result<Value, String> {
     if api::access(&r.method) == Some(Access::Screen) {
         return crate::screen::handle(app, r);
     }
+    // So does the phone wheel (2.6).
+    if api::access(&r.method) == Some(Access::Wheel) {
+        return crate::wheel::handle(app, r);
+    }
     let engine = app.state::<Engine>();
     let e: &dyn EngineApi = engine.api.as_ref();
     let p = &r.params;
