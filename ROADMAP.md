@@ -5340,8 +5340,7 @@ owner: "A backup device for the key page".
       to 7cf5a63, then Licence run 45834371360 from `main`: the passphrase set and long enough,
       the 38 tests (the key page's 7 among them), the deploy, its secrets. The owner's PC stays
       set up; this session cannot reach the website to open it.
-- [ ] **The owner adds a backup device** from their PC: `/give`, Add another device, then Set
-      up the other device.
+- [x] **The owner adds a backup device:** done with a code, below (2026-11-27).
 
 ### After 2.5.4: adding a device, in two clicks
 
@@ -5401,8 +5400,9 @@ closed, and its words named only the first.
 - [x] **Deployed** (2026-11-27, on the owner's go: "deploy the licence"). `main` fast-forwarded
       to b4ce730, then Licence run 45980744656 from `main`: the passphrase set, the 39 tests,
       the deploy, its secrets; no key in the log.
-- [ ] **The owner adds the phone with a code:** on the PC, `/give` and Add another device; on
-      the phone, `/give`, Set up this device with a code.
+- [x] **The owner added the phone with a code** (2026-11-27): on the PC, `/give` and Add
+      another device; on the phone, `/give`, Set up this device with a code. The owner: "it
+      worked, phone is set up". Two devices now give keys: the PC and the phone.
 
 ## Risks
 
