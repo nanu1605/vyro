@@ -5398,7 +5398,11 @@ closed, and its words named only the first.
       set itself up (2 devices) and then signed in alone; a third device got nothing from the
       same code.
 - [x] **CI green on af9d6b0** (run 45977610382; every job, the checkout's tests among them).
-- [ ] **Deploy** on the owner's go; then the owner adds the phone with a code.
+- [x] **Deployed** (2026-11-27, on the owner's go: "deploy the licence"). `main` fast-forwarded
+      to b4ce730, then Licence run 45980744656 from `main`: the passphrase set, the 39 tests,
+      the deploy, its secrets; no key in the log.
+- [ ] **The owner adds the phone with a code:** on the PC, `/give` and Add another device; on
+      the phone, `/give`, Set up this device with a code.
 
 ## Risks
 
