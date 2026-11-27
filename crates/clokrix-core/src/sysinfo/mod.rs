@@ -57,6 +57,22 @@ pub fn windows_build() -> u32 {
     0
 }
 
+/// Windows' name and version as Settings shows them, e.g. "Windows 11 Pro 25H2" (2.6: told the
+/// checkout with a key). Quick: the registry only. `None` off Windows or where it cannot be read.
+pub fn windows_version() -> Option<String> {
+    #[cfg(windows)]
+    {
+        let o = win::os_info();
+        let name = o.name?;
+        Some(match o.display_version {
+            Some(v) => format!("{name} {v}"),
+            None => name,
+        })
+    }
+    #[cfg(not(windows))]
+    None
+}
+
 /// Windows' "Transparency effects" (Settings → Personalisation → Colours); on where it cannot be
 /// read, as Windows has it by default.
 pub fn transparency_effects() -> bool {

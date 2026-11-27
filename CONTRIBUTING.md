@@ -71,7 +71,8 @@ signed, unmodified modules (`crates/clokrix-core/pawnio/`, hashes checked by a t
 Serial numbers (board, drives, monitors, memory modules), MAC addresses, Wi-Fi SSID/BSSID and
 global IPv6 addresses may be shown locally but are never logged, persisted, or sent anywhere.
 Diagnostic dumps (`clokrix-live.json`, `clokrix-inventory.json`) leave them out or redact them by
-default. Do not attach raw SPD EEPROM dumps to issues: they contain module serial numbers.
+default. With a Pro key (2.6), the app tells the checkout only the PC's name, processor, graphics
+card, and Windows and Clokrix versions (`edition::About`), with the key and the PC's hash. Do not attach raw SPD EEPROM dumps to issues: they contain module serial numbers.
 
 ## Reporting hardware results
 

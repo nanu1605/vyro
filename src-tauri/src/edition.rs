@@ -266,25 +266,47 @@ fn collect(app: &AppHandle, state: &EditionState, c: &Claim) {
     }
 }
 
-/// At most weekly, when online: is the key still Pro on this PC? Moved, freed or refunded: Free,
-/// with a note. Unreachable: nothing changes.
+/// What the checkout is told of this PC (2.6, docs/pro.md "What is sent"): its name as Windows
+/// shows it, its processor and graphics card, and its Windows and Clokrix versions.
+fn about(app: &AppHandle) -> edition::About {
+    let hw = app
+        .try_state::<crate::engine::Engine>()
+        .map(|e| e.inventory.hardware().clone());
+    edition::About::new(
+        Some(&clokrix_core::remote::net::pc_name()),
+        hw.as_ref().and_then(|h| h.cpu.brand.as_deref()),
+        hw.as_ref().and_then(|h| edition::main_gpu(&h.gpus)),
+        clokrix_core::sysinfo::windows_version().as_deref(),
+        Some(env!("CARGO_PKG_VERSION")),
+    )
+}
+
+/// At most weekly, when online: is the key still Pro on this PC? Moved, freed, refunded or
+/// cancelled: Free, with a note. Unreachable: nothing changes. What the checkout knows of this PC
+/// changed (an update, a new graphics card, a PC updated from 2.5): told within a day.
 fn recheck(app: &AppHandle, state: &EditionState, now: i64) {
-    let (key, due) = {
+    let (key, checked, sent) = {
         let s = lock(&state.stored);
         (
             s.key.clone().filter(|_| s.activation.is_some()),
-            s.checked
-                .is_none_or(|t| now - t >= CHECK_EVERY || t > now + DAY),
+            s.checked,
+            s.about_sent.clone(),
         )
     };
-    let (Some(key), true, Some(checkout)) = (key, due, checkout()) else {
+    let since = |every: i64| checked.is_none_or(|t| now - t >= every || t > now + DAY);
+    let (Some(key), true, Some(checkout)) = (key, since(DAY), checkout()) else {
         return;
     };
-    let note = match checkout.check(&key, &state.pc) {
+    let about = about(app);
+    if !since(CHECK_EVERY) && sent.as_ref() == Some(&about) {
+        return;
+    }
+    let note = match checkout.check(&key, &state.pc, Some(&about)) {
         Ok(Standing::Here) => None,
         Ok(Standing::Moved) => Some("Pro moved to another PC with this key."),
         Ok(Standing::Released) => Some("Pro was freed on this PC."),
         Ok(Standing::Revoked) => Some("This key's payment was refunded."),
+        Ok(Standing::Cancelled) => Some("This key was cancelled by its seller."),
         Ok(Standing::NoKey) => Some("The checkout no longer knows this key."),
         Err(e) => {
             log::debug!("edition: check: {e}");
@@ -293,6 +315,7 @@ fn recheck(app: &AppHandle, state: &EditionState, now: i64) {
     };
     state.change(|s| {
         s.checked = Some(now);
+        s.about_sent = Some(about);
         if let Some(n) = note {
             s.activation = None;
             s.note = Some(n.into());
@@ -307,8 +330,9 @@ fn recheck(app: &AppHandle, state: &EditionState, now: i64) {
 fn activate(app: &AppHandle, key: &str, move_here: bool) -> Result<(), String> {
     let state = app.state::<EditionState>();
     let checkout = checkout().ok_or("This build of Clokrix cannot be bought from.")?;
+    let about = about(app);
     let token = checkout
-        .activate(key, &state.pc, move_here)
+        .activate(key, &state.pc, move_here, Some(&about))
         .map_err(|e| match e {
             Refusal::MovedRecently { until: Some(t) } => format!(
                 "Pro moved to another PC less than 30 days ago; it can move again in {} days.",
@@ -328,6 +352,7 @@ fn activate(app: &AppHandle, key: &str, move_here: bool) -> Result<(), String> {
         s.key = Some(key.to_owned());
         s.activation = Some(token);
         s.checked = Some(unix_now());
+        s.about_sent = Some(about);
         s.note = None;
         s.claim = None;
     });

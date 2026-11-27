@@ -106,6 +106,10 @@
       </div>
     {/if}
     {#if error}<p class="err" role="alert">{error}</p>{/if}
+    <p class="note">
+      With a key, Clokrix tells its checkout this PC's name, processor, graphics card, and Windows and Clokrix
+      versions, with the key and a one-way code for the PC. Nothing else about it is sent.
+    </p>
   {/if}
 </Card>
 

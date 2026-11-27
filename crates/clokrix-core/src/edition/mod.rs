@@ -121,6 +121,70 @@ pub struct Stored {
     pub ended_seen: bool,
     /// This PC's id where Windows' own could not be read: made once, then kept.
     pub own_pc: Option<String>,
+    /// What was last told the checkout of this PC (2.6): told again soon after it changes.
+    pub about_sent: Option<About>,
+}
+
+/// What the app tells the checkout of the PC its key is on (2.6), for the owner's dashboard
+/// (`licence/src/dashboard.ts`; docs/pro.md, "What is sent"): its name as Windows shows it, its
+/// processor and graphics card, and its Windows and Clokrix versions. Nothing else.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct About {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cpu: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub windows: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app: Option<String>,
+}
+
+/// The checkout keeps at most this many characters of each.
+const ABOUT_CHARS: usize = 100;
+
+fn about_field(s: Option<&str>) -> Option<String> {
+    let s = s?;
+    let words: Vec<&str> = s
+        .split(|c: char| c.is_control() || c.is_whitespace())
+        .filter(|w| !w.is_empty())
+        .collect();
+    let t = words.join(" ");
+    (!t.is_empty()).then(|| t.chars().take(ABOUT_CHARS).collect())
+}
+
+impl About {
+    /// Each part cleaned as the checkout keeps it: control characters and runs of spaces made
+    /// one space, at most 100 characters; an empty one left out.
+    pub fn new(
+        name: Option<&str>,
+        cpu: Option<&str>,
+        gpu: Option<&str>,
+        windows: Option<&str>,
+        app: Option<&str>,
+    ) -> Self {
+        Self {
+            name: about_field(name),
+            cpu: about_field(cpu),
+            gpu: about_field(gpu),
+            windows: about_field(windows),
+            app: about_field(app),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// The graphics card to name: the first with its own memory, else the first.
+pub fn main_gpu(gpus: &[crate::info::GpuId]) -> Option<&str> {
+    gpus.iter()
+        .find(|g| g.vram_mb.is_some_and(|m| m >= 1024.0))
+        .or_else(|| gpus.first())
+        .map(|g| g.name.as_str())
 }
 
 impl Stored {
@@ -399,5 +463,49 @@ mod tests {
         let after = s.purchase_code(2800);
         assert_eq!(after.len(), 32);
         assert_ne!(after, first);
+    }
+
+    #[test]
+    fn tells_the_checkout_only_what_it_keeps_of_the_pc() {
+        let long = "x".repeat(300);
+        let a = About::new(
+            Some(" DESK\u{7}TOP\n 1 "),
+            Some(&long),
+            Some("  "),
+            None,
+            Some("2.6.0"),
+        );
+        assert_eq!(a.name.as_deref(), Some("DESK TOP 1"));
+        assert_eq!(a.cpu.as_deref().map(str::len), Some(100));
+        assert_eq!((a.gpu.as_deref(), a.windows.as_deref()), (None, None));
+        assert_eq!(
+            serde_json::to_value(&a).unwrap(),
+            serde_json::json!({ "name": "DESK TOP 1", "cpu": "x".repeat(100), "app": "2.6.0" })
+        );
+        assert!(About::new(None, Some(" "), None, None, None).is_empty());
+        // Kept with the rest; a file from before has none.
+        let s: Stored = serde_json::from_str(r#"{"key":"CLKX-ABCDE-FGHJK-MNPQR-STVWX"}"#).unwrap();
+        assert_eq!(s.about_sent, None);
+    }
+
+    #[test]
+    fn names_the_graphics_card_with_its_own_memory() {
+        let gpu = |name: &str, vram: Option<f64>| crate::info::GpuId {
+            name: name.into(),
+            vram_mb: vram,
+            ..Default::default()
+        };
+        assert_eq!(main_gpu(&[]), None);
+        assert_eq!(
+            main_gpu(&[
+                gpu("AMD Radeon(TM) Graphics", Some(512.0)),
+                gpu("NVIDIA GeForce RTX 5060 Ti", Some(16_384.0))
+            ]),
+            Some("NVIDIA GeForce RTX 5060 Ti")
+        );
+        assert_eq!(
+            main_gpu(&[gpu("Intel(R) UHD Graphics", None)]),
+            Some("Intel(R) UHD Graphics")
+        );
     }
 }

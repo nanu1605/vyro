@@ -4,7 +4,7 @@
 use serde::Deserialize;
 use serde_json::json;
 
-use super::https;
+use super::{https, About};
 
 /// Why a call did not give what was asked.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,6 +15,8 @@ pub enum Refusal {
     NoKey,
     /// The key's payment was refunded.
     Revoked,
+    /// The key was cancelled by its seller (2.6, the owner's dashboard).
+    Cancelled,
     /// The key is Pro on another PC.
     InUse,
     /// The key moved less than 30 days ago; it may move again from `until` (Unix seconds).
@@ -35,6 +37,9 @@ impl std::fmt::Display for Refusal {
             Self::Unreachable(e) => write!(f, "Can't reach Clokrix's checkout: {e}"),
             Self::NoKey => f.write_str("That is not a Clokrix Pro key. Check it against the one you were given."),
             Self::Revoked => f.write_str("This key's payment was refunded, so it no longer turns Pro on."),
+            Self::Cancelled => f.write_str(
+                "This key was cancelled by its seller, so it no longer turns Pro on. Write to them if you think it should not be.",
+            ),
             Self::InUse => f.write_str(
                 "This key is Pro on another PC. Free it there (Settings → Clokrix Pro → Free this PC), or move Pro here.",
             ),
@@ -56,6 +61,8 @@ pub enum Standing {
     Moved,
     Released,
     Revoked,
+    /// Cancelled by the seller (2.6).
+    Cancelled,
     NoKey,
 }
 
@@ -69,17 +76,21 @@ pub struct Checkout {
 struct Wrong {
     error: Option<String>,
     until: Option<i64>,
+    /// Who turned a key off: "owner" for its seller (2.6); a refund says nothing.
+    by: Option<String>,
 }
 
 fn refusal(status: u16, body: &str) -> Refusal {
     let w: Wrong = serde_json::from_str(body).unwrap_or(Wrong {
         error: None,
         until: None,
+        by: None,
     });
     match w.error.as_deref() {
         // A key typed wrong is refused before it is looked up.
         Some("no-key" | "key") => Refusal::NoKey,
         Some("too-many") => Refusal::Busy,
+        Some("revoked") if w.by.as_deref() == Some("owner") => Refusal::Cancelled,
         Some("revoked") => Refusal::Revoked,
         Some("in-use") => Refusal::InUse,
         Some("moved-recently") => Refusal::MovedRecently { until: w.until },
@@ -132,12 +143,19 @@ impl Checkout {
     }
 
     /// `key` Pro on `pc`; with `move_here`, also from another PC. Answers the signed activation.
-    pub fn activate(&self, key: &str, pc: &str, move_here: bool) -> Result<String, Refusal> {
-        let a = self.call(
-            "POST",
-            "/activate",
-            Some(&json!({ "key": key, "pc": pc, "move": move_here })),
-        )?;
+    /// `about` is what the checkout is told of this PC (2.6).
+    pub fn activate(
+        &self,
+        key: &str,
+        pc: &str,
+        move_here: bool,
+        about: Option<&About>,
+    ) -> Result<String, Refusal> {
+        let mut body = json!({ "key": key, "pc": pc, "move": move_here });
+        if let Some(a) = about.filter(|a| !a.is_empty()) {
+            body["about"] = json!(a);
+        }
+        let a = self.call("POST", "/activate", Some(&body))?;
         if a.status != 200 {
             return Err(refusal(a.status, &a.body));
         }
@@ -160,9 +178,13 @@ impl Checkout {
         }
     }
 
-    /// Whether `key` is still Pro on `pc`.
-    pub fn check(&self, key: &str, pc: &str) -> Result<Standing, Refusal> {
-        let a = self.call("POST", "/check", Some(&json!({ "key": key, "pc": pc })))?;
+    /// Whether `key` is still Pro on `pc`, telling the checkout `about` this PC (2.6).
+    pub fn check(&self, key: &str, pc: &str, about: Option<&About>) -> Result<Standing, Refusal> {
+        let mut body = json!({ "key": key, "pc": pc });
+        if let Some(a) = about.filter(|a| !a.is_empty()) {
+            body["about"] = json!(a);
+        }
+        let a = self.call("POST", "/check", Some(&body))?;
         if a.status != 200 {
             return Err(refusal(a.status, &a.body));
         }
@@ -170,6 +192,7 @@ impl Checkout {
         struct Got {
             ok: bool,
             reason: Option<String>,
+            by: Option<String>,
         }
         let g: Got = serde_json::from_str(&a.body)
             .map_err(|e| Refusal::Unreachable(format!("unexpected answer: {e}")))?;
@@ -177,6 +200,7 @@ impl Checkout {
             (true, _) => Standing::Here,
             (false, Some("moved")) => Standing::Moved,
             (false, Some("released")) => Standing::Released,
+            (false, Some("revoked")) if g.by.as_deref() == Some("owner") => Standing::Cancelled,
             (false, Some("revoked")) => Standing::Revoked,
             (false, _) => Standing::NoKey,
         })
@@ -261,28 +285,60 @@ mod tests {
             (403, r#"{"error":"revoked"}"#),
             (400, r#"{"error":"key"}"#),
             (429, r#"{"error":"too-many"}"#),
+            (403, r#"{"error":"revoked","by":"owner"}"#),
+            (200, r#"{"ok":false,"reason":"revoked","by":"owner"}"#),
+            (200, r#"{"ok":false,"reason":"revoked"}"#),
         ]);
         let pc = "ab".repeat(32);
         let key = "CLKX-ABCDE-FGHJK-MNPQR-STVWX";
-        assert_eq!(c.activate(key, &pc, false), Ok("payload.sig".into()));
-        assert_eq!(c.activate(key, &pc, false), Err(Refusal::InUse));
+        let about = About::new(
+            Some("DESK\u{1}TOP  1"),
+            Some("AMD Ryzen 7 7800X3D"),
+            None,
+            Some("Windows 11 Pro 25H2"),
+            Some("2.6.0"),
+        );
         assert_eq!(
-            c.activate(key, &pc, true),
+            c.activate(key, &pc, false, Some(&about)),
+            Ok("payload.sig".into())
+        );
+        assert_eq!(c.activate(key, &pc, false, None), Err(Refusal::InUse));
+        assert_eq!(
+            c.activate(key, &pc, true, None),
             Err(Refusal::MovedRecently {
                 until: Some(1_800_000_000)
             })
         );
-        assert_eq!(c.check(key, &pc), Ok(Standing::Here));
-        assert_eq!(c.check(key, &pc), Ok(Standing::Moved));
+        assert_eq!(c.check(key, &pc, Some(&about)), Ok(Standing::Here));
+        assert_eq!(c.check(key, &pc, None), Ok(Standing::Moved));
         assert_eq!(c.release(key, &pc), Ok(()));
         assert_eq!(c.release(key, &pc), Err(Refusal::NotHere));
-        assert_eq!(c.activate(key, &pc, false), Err(Refusal::Revoked));
-        assert_eq!(c.activate("CLKX-typo", &pc, false), Err(Refusal::NoKey));
-        assert_eq!(c.check(key, &pc), Err(Refusal::Busy));
+        assert_eq!(c.activate(key, &pc, false, None), Err(Refusal::Revoked));
+        assert_eq!(
+            c.activate("CLKX-typo", &pc, false, None),
+            Err(Refusal::NoKey)
+        );
+        assert_eq!(c.check(key, &pc, None), Err(Refusal::Busy));
+        // Cancelled by the seller (2.6): said so, not as a refund.
+        assert_eq!(c.activate(key, &pc, false, None), Err(Refusal::Cancelled));
+        assert_eq!(c.check(key, &pc, None), Ok(Standing::Cancelled));
+        assert_eq!(c.check(key, &pc, None), Ok(Standing::Revoked));
         let asked = t.join().unwrap();
+        let body = |i: usize| -> serde_json::Value {
+            serde_json::from_str(asked[i].split("\r\n\r\n").nth(1).unwrap()).unwrap()
+        };
         assert!(asked[0].starts_with("POST /activate HTTP/1.1"));
-        assert!(asked[0].ends_with(&format!(r#"{{"key":"{key}","move":false,"pc":"{pc}"}}"#)));
+        assert_eq!(
+            body(0),
+            json!({ "key": key, "move": false, "pc": pc, "about": {
+                "name": "DESK TOP 1", "cpu": "AMD Ryzen 7 7800X3D",
+                "windows": "Windows 11 Pro 25H2", "app": "2.6.0" } })
+        );
+        // Nothing of the PC when there is nothing to tell.
+        assert_eq!(body(1), json!({ "key": key, "move": false, "pc": pc }));
         assert!(asked[2].contains(r#""move":true"#));
+        assert_eq!(body(3)["about"]["name"], "DESK TOP 1");
+        assert_eq!(body(4), json!({ "key": key, "pc": pc }));
         assert!(asked[5].starts_with("POST /release "));
     }
 
@@ -296,7 +352,7 @@ mod tests {
             .port();
         let c = Checkout::new(&format!("http://127.0.0.1:{port}"));
         assert!(matches!(
-            c.check("CLKX-ABCDE-FGHJK-MNPQR-STVWX", &"ab".repeat(32)),
+            c.check("CLKX-ABCDE-FGHJK-MNPQR-STVWX", &"ab".repeat(32), None),
             Err(Refusal::Unreachable(_))
         ));
     }
