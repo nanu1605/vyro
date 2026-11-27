@@ -21,6 +21,16 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '2.5.5',
+    items: [
+      {
+        icon: 'gauge',
+        title: 'Intel processors read on the side too',
+        text: 'Clokrix now reads Intel processors on the side, as it has AMD processors since 2.5.4, so a slow processor read no longer holds up the other readings.',
+      },
+    ],
+  },
+  {
     version: '2.5.4',
     items: [
       {

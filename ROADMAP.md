@@ -5226,7 +5226,7 @@ drive scan did. The owner, 2026-11-24, told so: "fix the AMD CPU and network one
       requests run CI with read-only contents and no secrets, and the deploy and release
       workflows start only by hand or on a tag.
 
-### After 2.5.4: the Intel CPU's reads on a thread of their own
+### 2.5.5: the Intel CPU's reads on a thread of their own
 
 The owner, 2026-11-26: "continue". The two items still open (the ASUS and Gigabyte boards) need
 the boards; this one needs none. 2.5.4 left the Intel CPU as it was because no log had it slow
@@ -5244,8 +5244,11 @@ logical processor in the poller's tick.
 - [x] **CI green on 7aa0a2e** (run 45777494653; Linux, Windows with the smoke test, the clean
       install and the upgrade from Vyro 2.1.0, the relay and phone app with the end-to-end test,
       the checkout, accessibility). Its uploads were taken again, the old files deleted: the
-      test build, the phone app screens and the H.264, kept to 2026-11-29. It goes out in the
-      next version, on the owner's go; `main` stays at 2.5.4 until then.
+      test build, the phone app screens and the H.264, kept to 2026-11-29. It goes out in 2.5.5.
+- [x] **Version 2.5.5** (the owner, 2026-11-27: "release 2.5.5"): `scripts/set-version.py
+      2.5.5`; What's new in 2.5.5: Intel processors read on the side too. It is this PC's, so it
+      is not marked for the phone app. The key page's changes since 2.5.4 are the checkout's,
+      deployed already; the app does not change for them.
 
 ### After 2.5.4: the key page
 
