@@ -5537,7 +5537,10 @@ On `claude/vyro-2.0`.
       fast-forwarded to 09c95d6, then Licence run 46042026159 from `main`: the 45 tests, the
       deploy (version 2866e806), its secrets; no key in the log. The dashboard and the
       checkout's name field are live.
-- [ ] **The relay deployed**, on the owner's go (the Wheel tab and the page policy).
+- [x] **The relay deployed** (2026-11-27, on the owner's go: "deploy the relay"): Relay run
+      46044582773 from `main` (be60543) built the phone app, passed the relay's checks and 41
+      tests, and deployed (version acbfd8b3) on both its addresses. Phones get the Wheel tab
+      once their PC runs 2.6; with a 2.5 PC nothing changes for them.
 - [ ] **Field check** ([`docs/field-check-2.6.md`](docs/field-check-2.6.md)): lighting with a
       game and a film; the wheel in Euro Truck Simulator 2, American Truck Simulator and
       SnowRunner, its delay on Wi-Fi, letting go when Wi-Fi drops; a 2.6 PC on the dashboard.
