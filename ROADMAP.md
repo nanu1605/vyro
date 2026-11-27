@@ -5249,6 +5249,17 @@ logical processor in the poller's tick.
       2.5.5`; What's new in 2.5.5: Intel processors read on the side too. It is this PC's, so it
       is not marked for the phone app. The key page's changes since 2.5.4 are the checkout's,
       deployed already; the app does not change for them.
+- [x] **CI green on 7206942** (run 45985873026; Linux, Windows with the smoke test, the clean
+      install and the upgrade from Vyro 2.1.0, the relay and phone app with the end-to-end test,
+      the checkout, accessibility). `main` fast-forwarded to it.
+- [x] **2.5.5 released** (2026-11-27, on the owner's go: "release 2.5.5"). Release run
+      45987955390 tagged `v2.5.5` on 7206942, found the relay's address and Pro's checkout in
+      `clokrix.exe`, and put the 15.01 MB `Clokrix_2.5.5_x64_en-US.msi`, its checksums and then
+      `latest.json` in the bucket. It then read the website's `/updates/latest.json` (2.5.5) and
+      downloaded `/download`, whose SHA-256 matched the MSI's, and published the same files here
+      and to the private copy in `nanu1605/vyro-releases`. GitHub's digests here: MSI
+      `8f9e5e81…`, `latest.json` `112a9eec…`, `SHA256SUMS.txt` `ec122db5…`. Unsigned, as before.
+      Installed copies of 2.5.2 and later update to it from the website at their next check.
 
 ### After 2.5.4: the key page
 
