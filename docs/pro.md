@@ -87,13 +87,19 @@ infotech"):
 2. **Each key:** open `/give` on that PC and choose **Sign in**. Windows checks you again, and
    the page shows a new key, once.
 3. **A backup device** (the owner: "A backup device for the key page"): on a device set up,
-   choose **Add another device**. That device checks you first. Then, within 5 minutes, choose
-   **Set up the other device**, and in the browser's window pick another to keep a passkey on:
-   your phone (by its QR code, with Bluetooth on in both the phone and the PC), a password
-   manager that syncs (Google Password Manager, 1Password, Bitwarden) or a security key; not
-   the PC's own Windows Hello, which is set up already. Either can then sign in, so a PC reset
-   or a lost PC keeps nobody out. Up to 5 devices; an added one can add more. A step that does
-   not finish says which it was, with the browser's reason, and the second can be tried again.
+   choose **Add another device**. That device checks you first, then shows a code. Within 5
+   minutes, either:
+   - **on the other device itself** (your phone, or another PC): open `/give` there, choose
+     **Set up this device with a code**, type the code, and let that device check you. It keeps
+     its own passkey: no Bluetooth, nothing between the two;
+   - **or from the PC:** choose **Set up the other device**, and in the browser's window pick a
+     password manager that syncs (Google Password Manager, 1Password, Bitwarden), a security
+     key, or your phone by its QR code (with Bluetooth on in both); not the PC's own Windows
+     Hello, which is set up already.
+
+   Either device can then sign in, so a PC reset or a lost PC keeps nobody out. Up to 5
+   devices; an added one can add more. A code is good once; a step that does not finish says
+   which it was, with the browser's reason, and can be tried again.
 
 Anyone else who opens the page sees only Sign in, which gives them nothing: their device has no
 passkey for it. The passphrase in GitHub sets up a device only while none is set up; more are

@@ -688,7 +688,7 @@ describe('the key page (2.5.5)', () => {
       const first = await page();
       expect(first.status).toBe(200);
       expect(first.page).toContain('<meta name="robots" content="noindex">');
-      expect(first.page).toContain('Set up this device');
+      expect(first.page).toContain('<input id="passphrase"');
       // Nothing on the page says what it gives.
       expect(first.page.slice(first.page.indexOf('<main'), first.page.indexOf('<div id="got"'))).not.toMatch(/\bkeys?\b/i);
       expect(await post('/give/start', {})).toEqual({ status: 409, body: { error: 'not-set-up' } });
@@ -713,7 +713,7 @@ describe('the key page (2.5.5)', () => {
 
       const after = await page();
       expect(after.page).toContain('>Sign in</button>');
-      expect(after.page).not.toContain('Set up this device');
+      expect(after.page).not.toContain('<input id="passphrase"');
       // Adding a device is two clicks: the second, for the other device, waits hidden.
       expect(after.page).toContain('<div id="next" class="after" hidden>');
       expect(after.page).toContain('>Set up the other device</button>');
@@ -823,11 +823,61 @@ describe('the key page (2.5.5)', () => {
     }
   });
 
+  it('adds the other device itself, with the code a device set up shows, once', async () => {
+    const pass = 'a passphrase for the code tests';
+    await restart(KEY_ID, {}, { KEY_PAGE_PASSPHRASE: pass });
+    try {
+      const pc = await Device.make();
+      expect((await setUp(pc, pass)).body).toEqual({ ok: true });
+      // A sign-in's start gives a code: a short name for its challenge.
+      const start = await post('/give/add/start', await signInBody(pc));
+      const code = start.body.code as string;
+      expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/);
+      // Not a code, or one not shown: refused.
+      expect(await post('/give/add/code', {})).toEqual({ status: 400, body: { error: 'code' } });
+      expect(await post('/give/add/code', { code: 'not a code' })).toEqual({ status: 400, body: { error: 'code' } });
+      const unshown = (code[0] === '0' ? '1' : '0') + code.slice(1);
+      expect(await post('/give/add/code', { code: unshown })).toEqual({ status: 403, body: { error: 'code' } });
+
+      // On the phone, typed as people type it: the same ceremony as the PC's.
+      const phone = await Device.make(-8, false);
+      const got = await post('/give/add/code', { code: ` ${code.replace('-', '').toLowerCase()} ` });
+      expect(got.status).toBe(200);
+      expect(got.body.challenge).toBe(start.body.challenge);
+      expect(got.body.rp).toEqual(start.body.rp);
+      expect(got.body.exclude).toEqual([pc.id]);
+      // Once: seen again, the code gives nothing.
+      expect(await post('/give/add/code', { code })).toEqual({ status: 403, body: { error: 'code' } });
+      const body = await addBody(phone, got.body.challenge as string);
+      expect(await post('/give/add/finish', body)).toEqual({ status: 200, body: { ok: true, devices: 2 } });
+      expect((await post('/give/add/finish', body)).status).toBe(400);
+      expect((await signIn(phone)).status).toBe(200);
+
+      // The PC's own button and the code share a challenge: one device each sign-in.
+      const shared = await post('/give/add/start', await signInBody(pc));
+      expect((await post('/give/add/finish', await addBody(await Device.make(), shared.body.challenge as string))).body).toEqual({ ok: true, devices: 3 });
+      const late = await post('/give/add/code', { code: shared.body.code });
+      expect(late.status).toBe(200);
+      expect((await post('/give/add/finish', await addBody(await Device.make(), late.body.challenge as string))).status).toBe(400);
+
+      // Up to 5 in all, by code too; a code shown before then gives nothing once 5 are set up.
+      const codes: string[] = [];
+      for (let i = 0; i < 3; i++) codes.push((await post('/give/add/start', await signInBody(phone))).body.code as string);
+      for (const [i, c] of codes.slice(0, 2).entries()) {
+        const o = await post('/give/add/code', { code: c });
+        expect((await post('/give/add/finish', await addBody(await Device.make(), o.body.challenge as string))).body).toEqual({ ok: true, devices: 4 + i });
+      }
+      expect(await post('/give/add/code', { code: codes[2] })).toEqual({ status: 409, body: { error: 'devices' } });
+    } finally {
+      await restart();
+    }
+  });
+
   it('starts setup again under a new passphrase: the old device then gives nothing', async () => {
     const next = { KEY_PAGE_PASSPHRASE: 'another passphrase for the tests' };
     await restart(KEY_ID, {}, next);
     try {
-      expect((await page()).page).toContain('Set up this device');
+      expect((await page()).page).toContain('<input id="passphrase"');
       expect(await post('/give/start', {})).toEqual({ status: 409, body: { error: 'not-set-up' } });
       const stale = await post('/give/key', { id: device.id, authenticatorData: 'AA', clientDataJSON: 'AA', signature: 'AA' });
       expect(stale.status).toBe(403);

@@ -5369,7 +5369,35 @@ closed, and its words named only the first.
 - [x] **Deployed** (2026-11-26, on the owner's go: "deploy the licence"). `main` fast-forwarded
       to 819b792, then Licence run 45876550365 from `main`: the passphrase set, the 38 tests,
       the deploy, its secrets; no key in the log.
-- [ ] **The owner adds the backup:** `/give`, Add another device, then Set up the other device.
+- [x] **Tried by the owner:** the sign-in now worked, and the other device's step did not. The
+      owner, 2026-11-27: "It throws an error: The other device was not set up: cancelled, timed
+      out, or it could not be reached. [...] (The browser said: The operation either timed out
+      or was not allowed.)" The browser's window on the PC reaches a phone only over Bluetooth,
+      which many desktop PCs lack.
+
+### After 2.5.4: adding a device with a code
+
+- [x] **A code for the other device itself** (`/give/add/code`; `newCode`, `normalCode`; the
+      ledger's `codes`): after a sign-in, Add another device also shows a code, 10 characters
+      in two fives (50 bits). On the other device (a phone, or another PC), the page's **Set up
+      this device with a code** takes it and runs the ceremony there, so that device keeps its
+      own passkey: no Bluetooth and no window between the two. The code is a short name for
+      that sign-in's `add` challenge, kept only as long as the challenge is good (5 minutes) and
+      taken once; the passkey made with it is checked as any other's, under the same limit of
+      5 devices. Typed as people type it (any case, spaces, O for 0). The PC's own button stays,
+      for a password manager or a security key.
+- [x] **Tests** (39 licence tests): the code given only after a sign-in; not a code, or one not
+      shown, refused; on the phone, the same ceremony; once only; the PC's button and the code
+      share one challenge, so one device a sign-in; up to 5, and a code shown before then gives
+      nothing once 5 are set up. Checks broken on purpose one at a time (the code taken once,
+      the limit at the code, the code's form, the code looked up) each failed a test. The
+      code's own age is not tested (the tests cannot move the checkout's clock); the challenge
+      it names is checked for its age there and again at finish, as the tests for an old
+      challenge show. In Chromium, a "PC" and a "phone" with a device each: the PC showed the
+      code; the phone refused a wrong one, took the right one typed in lower case with a space,
+      set itself up (2 devices) and then signed in alone; a third device got nothing from the
+      same code.
+- [ ] **CI**, then **Deploy** on the owner's go; then the owner adds the phone with a code.
 
 ## Risks
 

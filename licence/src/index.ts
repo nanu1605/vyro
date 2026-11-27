@@ -34,7 +34,8 @@
 //                            new key.
 //   POST /give/add/start, /give/add/finish
 //                            another device's passkey (up to MAX_DEVICES), after a sign-in with one
-//                            set up.
+//                            set up. The start also gives a code for the other device itself:
+//   POST /give/add/code      {code}: the same ceremony, begun on the other device, once.
 // Clokrix itself (2.5.2, downloads.ts), from the R2 bucket the Release workflow fills:
 //   GET  /download, /download/<tag>/<file>, /updates/latest.json
 
@@ -53,6 +54,8 @@ import {
   isPc,
   MAX_DEVICES,
   MIN_PASSPHRASE,
+  newCode,
+  normalCode,
   normalKey,
   same,
   samePassphrase,
@@ -286,8 +289,8 @@ export default {
       const all = await ledger.passkeys(setup);
       const passkeys = all.filter((p) => p.rp === rpId);
       // The same name for everyone, and a random user id: nothing about the owner.
-      const making = async (kind: 'create' | 'add') => ({
-        challenge: await newChallenge(set, kind, now),
+      const making = async (kind: 'create' | 'add', challenge?: string) => ({
+        challenge: challenge ?? (await newChallenge(set, kind, now)),
         rp: { id: rpId, name: 'Clokrix' },
         user: { id: b64url(crypto.getRandomValues(new Uint8Array(16))), name: 'Clokrix Pro keys' },
         algs: ALGS,
@@ -364,7 +367,24 @@ export default {
       if (path === '/give/add/start') {
         if (!(await signedIn())) return json(403, { error: 'passkey' });
         if (all.length >= MAX_DEVICES) return json(409, { error: 'devices' });
-        return json(200, await making('add'));
+        const o = await making('add');
+        // The same challenge by a short name, to type on the other device itself.
+        const code = newCode();
+        await ledger.addCode(code, o.challenge);
+        return json(200, { ...o, code });
+      }
+
+      // The other device itself, with the code a device set up showed (the owner, 2026-11-27,
+      // when the browser's window on the PC could not reach another: "It throws an error"). No
+      // Bluetooth or browser window between the two. The code names that sign-in's challenge,
+      // once, while the challenge is good; its passkey is then checked as any other's.
+      if (path === '/give/add/code') {
+        const code = normalCode(b.code);
+        if (!code) return json(400, { error: 'code' });
+        if (all.length >= MAX_DEVICES) return json(409, { error: 'devices' });
+        const challenge = await ledger.takeCode(code);
+        if (!challenge || !(await freshChallenge(set, 'add', challenge, now))) return json(403, { error: 'code' });
+        return json(200, await making('add', challenge));
       }
 
       if (path === '/give/add/finish') {

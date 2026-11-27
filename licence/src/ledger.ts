@@ -63,6 +63,7 @@ export class Ledger extends DurableObject<object> {
         created INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS used (value TEXT PRIMARY KEY, at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS codes (code TEXT PRIMARY KEY, challenge TEXT NOT NULL, at INTEGER NOT NULL);
     `);
     // Added after the first deploy, when every key yet had been bought under Test keys: so they
     // all count as test.
@@ -155,6 +156,25 @@ export class Ledger extends DurableObject<object> {
       if (this.sql.exec('SELECT 1 FROM used WHERE value = ?', value).toArray().length > 0) return false;
       this.sql.exec('INSERT INTO used (value, at) VALUES (?, ?)', value, now);
       return true;
+    });
+  }
+
+  /** A code naming an `add` challenge, to type on the other device itself. Kept only as long as
+   * a challenge is good. */
+  addCode(code: string, challenge: string): void {
+    const now = this.now();
+    this.sql.exec('DELETE FROM codes WHERE at < ?', now - CHALLENGE_SECONDS);
+    this.sql.exec('INSERT INTO codes (code, challenge, at) VALUES (?, ?, ?)', code, challenge, now);
+  }
+
+  /** The challenge `code` names, once: null if it names none, or one too old, or was taken. */
+  takeCode(code: string): string | null {
+    return this.ctx.storage.transactionSync(() => {
+      this.sql.exec('DELETE FROM codes WHERE at < ?', this.now() - CHALLENGE_SECONDS);
+      const r = this.sql.exec<{ challenge: string }>('SELECT challenge FROM codes WHERE code = ?', code).toArray()[0];
+      if (!r) return null;
+      this.sql.exec('DELETE FROM codes WHERE code = ?', code);
+      return r.challenge;
     });
   }
 

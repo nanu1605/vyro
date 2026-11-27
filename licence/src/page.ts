@@ -41,7 +41,7 @@ const STYLE = `
   .button { display: inline-block; padding: 11px 18px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent); color: var(--on-accent);
     font-weight: 600; text-decoration: none; }
   .button.quiet { border-color: var(--line); background: transparent; color: var(--text); }
-  .key { display: block; margin: 8px 0 12px; padding: 12px; border: 1px dashed var(--line); border-radius: 10px;
+  .key, .code { display: block; margin: 8px 0 12px; padding: 12px; border: 1px dashed var(--line); border-radius: 10px;
     font: 600 1.05rem/1.4 ui-monospace, 'Cascadia Mono', Consolas, monospace; text-align: center; user-select: all; overflow-wrap: anywhere; }
   .after { margin-top: 12px; }
   .err { color: #d14343; }
@@ -237,11 +237,21 @@ once it has checked you (fingerprint, face or PIN), signs in here.</p>
 <p id="about" class="muted after">Another device (your phone, a password manager or a security
 key) can sign in here too, as a backup. Adding one asks this device first.</p>
 <div id="next" class="after" hidden>
-  <p>This device has checked you. Now the other one, within 5 minutes: in the window that opens,
-  pick your phone (scan its QR code, with Bluetooth on in both it and this PC), a password
-  manager or a security key. Not this PC's own Windows Hello: it is set up already.</p>
-  <button id="other" type="button">Set up the other device</button>
-</div>`;
+  <p>This device has checked you. Now the other one, within 5 minutes. On it (your phone, or
+  another PC), open this page, choose <b>Set up this device with a code</b> and type:</p>
+  <code id="code" class="code"></code>
+  <p class="muted">Or from here: choose <b>Set up the other device</b>, and in the window that
+  opens pick a password manager, a security key, or your phone by its QR code (with Bluetooth on
+  in both it and this PC). Not this PC's own Windows Hello: it is set up already.</p>
+  <button id="other" class="quiet" type="button">Set up the other device</button>
+</div>
+<button id="join-open" class="quiet" type="button">Set up this device with a code</button>
+<form id="join" class="after" hidden>
+  <label for="code-in">The code a device set up here shows</label>
+  <input id="code-in" name="code" autocomplete="one-time-code" autocapitalize="characters"
+    spellcheck="false" inputmode="text" maxlength="20" required>
+  <button type="submit">Set up this device</button>
+</form>`;
   return page({
     title: 'Clokrix',
     seller: o.seller,
@@ -270,6 +280,7 @@ key) can sign in here too, as a backup. Adding one asks this device first.</p>
     passkey: 'That sign-in was refused. Try again.',
     devices: 'This page has as many devices as it takes (5).',
     ceremony: 'That took over 5 minutes, or was done already: choose Add another device again.',
+    code: 'That code is not one shown here, or is over 5 minutes old, or was used: on a device set up, choose Add another device for a new one.',
     authenticator: 'That device did not check you (fingerprint, face or PIN): pick one that does.',
     algorithm: 'That device makes a kind of passkey this page does not take: pick another.',
   };
@@ -335,7 +346,9 @@ key) can sign in here too, as a backup. Adding one asks this device first.</p>
   let adding = null;
   async function addDevice() {
     adding = await api('/give/add/start', await signature());
+    document.getElementById('code').textContent = adding.code;
     document.getElementById('add').hidden = true;
+    document.getElementById('join-open').hidden = true;
     document.getElementById('about').hidden = true;
     document.getElementById('next').hidden = false;
   }
@@ -345,8 +358,19 @@ key) can sign in here too, as a backup. Adding one asks this device first.</p>
     document.getElementById('next').hidden = true;
     document.getElementById('add').hidden = false;
     document.getElementById('about').hidden = false;
+    document.getElementById('join-open').hidden = false;
     document.getElementById('done').textContent =
       'The other device is set up: ' + added.devices + ' devices can sign in here now.';
+  }
+  // This device, set up with the code a device set up showed: its own passkey, made here.
+  let joining = null;
+  async function join() {
+    if (!joining) joining = await api('/give/add/code', { code: document.getElementById('code-in').value });
+    const added = await make(joining, '/give/add/finish', {});
+    joining = null;
+    document.getElementById('join').hidden = true;
+    document.getElementById('done').textContent =
+      'This device is set up: ' + added.devices + ' devices can sign in here now. Choose Sign in to use it.';
   }
   async function signIn() {
     const got = await api('/give/key', await signature());
@@ -397,6 +421,22 @@ key) can sign in here too, as a backup. Adding one asks this device first.</p>
   if (add) add.addEventListener('click', () => run(add, addDevice, signInCancelled));
   const other = document.getElementById('other');
   if (other) other.addEventListener('click', () => run(other, addOther, otherCancelled));
+  const joinOpen = document.getElementById('join-open');
+  if (joinOpen)
+    joinOpen.addEventListener('click', () => {
+      joinOpen.hidden = true;
+      document.getElementById('join').hidden = false;
+      document.getElementById('code-in').focus();
+    });
+  const joinForm = document.getElementById('join');
+  if (joinForm) {
+    // A code typed again is a new one to take.
+    document.getElementById('code-in').addEventListener('input', () => (joining = null));
+    joinForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      run(joinForm.querySelector('button'), join, 'This device was not set up: cancelled or timed out. Choose Set up this device again.');
+    });
+  }
 </script>`,
   });
 }

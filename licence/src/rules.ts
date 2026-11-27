@@ -59,6 +59,21 @@ export function newKey(random: (n: number) => Uint8Array = (n) => crypto.getRand
   return `CLKX-${chars.slice(0, 5)}-${chars.slice(5, 10)}-${chars.slice(10, 15)}-${chars.slice(15, 20)}`;
 }
 
+/** A code for adding a device to the key page (2.5.5): 10 random characters in two fives (50
+ * bits), shown on a device set up and typed on the other. Good once, for CHALLENGE_SECONDS. */
+export function newCode(random: (n: number) => Uint8Array = (n) => crypto.getRandomValues(new Uint8Array(n))): string {
+  const chars = [...random(10)].map((b) => ALPHABET[b & 31]).join('');
+  return `${chars.slice(0, 5)}-${chars.slice(5)}`;
+}
+
+/** A code as typed (any case, spaces or none, O for 0 and so on), or null if it is not one. */
+export function normalCode(typed: unknown): string | null {
+  if (typeof typed !== 'string' || typed.length > 40) return null;
+  const c = typed.toUpperCase().replace(/[\s-]/g, '').replace(/O/g, '0').replace(/[IL]/g, '1');
+  if (!/^[0-9A-HJKMNP-TV-Z]{10}$/.test(c)) return null;
+  return `${c.slice(0, 5)}-${c.slice(5)}`;
+}
+
 /** A key as typed (any case, spaces or none, O for 0 and so on), or null if it is not one. */
 export function normalKey(typed: string): string | null {
   const s = typed.toUpperCase().replace(/[\s-]/g, '');
