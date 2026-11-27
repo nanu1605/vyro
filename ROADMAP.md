@@ -5544,7 +5544,19 @@ On `claude/vyro-2.0`.
 - [ ] **Field check** ([`docs/field-check-2.6.md`](docs/field-check-2.6.md)): lighting with a
       game and a film; the wheel in Euro Truck Simulator 2, American Truck Simulator and
       SnowRunner, its delay on Wi-Fi, letting go when Wi-Fi drops; a 2.6 PC on the dashboard.
-- [ ] **Release 2.6.0**, on the owner's "release 2.6.0".
+- [x] **2.6.0 released** (2026-11-27, on the owner's go: "release 2.6.0"). Release run
+      46049665485 tagged `v2.6.0` on 798376b (bf311a6's code; ROADMAP only after it), fetched
+      PawnIO, PresentMon and ViGEmBus against their pinned hashes, found the relay's address and
+      Pro's checkout in `clokrix.exe`, and put the 19.13 MB (19,128,320 bytes)
+      `Clokrix_2.6.0_x64_en-US.msi`, its checksums and then `latest.json` in the bucket. It then
+      read the website's `/updates/latest.json` (2.6.0) and downloaded `/download`, whose SHA-256
+      matched the MSI's, and published the same files here and to the private copy in
+      `nanu1605/vyro-releases`. GitHub's digests here: MSI `98d8fed5…`, `latest.json`
+      `fb5cc818…`, `SHA256SUMS.txt` `79f87e1a…`. Unsigned, as before. Installed copies of 2.5.2
+      and later update to it from the website at their next check. Released before the field
+      check, on the owner's go: lighting and the wheel are off until the owner turns them on.
+- [ ] **Field check** results, from [`docs/field-check-2.6.md`](docs/field-check-2.6.md); the
+      games' bindings then go in [`docs/remote.md`](docs/remote.md#the-phone-wheel-26).
 
 ## Risks
 
