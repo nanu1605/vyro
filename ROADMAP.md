@@ -5451,6 +5451,8 @@ meant a new passphrase and a deploy, which cut off every device, the PC too.
 - [x] **Deployed** (2026-11-27, on the owner's go: "deploy the licence"). `main` fast-forwarded
       to 819a508, then Licence run 45997664386 from `main`: the passphrase set, the 41 tests,
       the deploy (version 4064438c), its secrets; no key in the log.
+- [x] **The owner listed the devices** (2026-11-27): Devices set up here, on the key page. The
+      owner: "it worked, both devices show up".
 
 ## Risks
 
