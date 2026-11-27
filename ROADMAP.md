@@ -5594,11 +5594,15 @@ no source to republish (decision 46). On `claude/vyro-2.0`.
       as OpenRGB is found; the front end's types and tests; the accessibility sweep now with
       the Lighting view, and Set up OpenRGB through its states in the browser preview; clippy
       for Windows (core and app) and Linux.
-- [ ] **CI's check of the real thing**: the `openrgb_setup` example on the Windows runner
-      downloads, checks and installs the pinned installer as the app does, and Clokrix's client
-      reads OpenRGB's devices on 127.0.0.1:6742, nothing listening elsewhere; the release
-      checks the pin still downloads (`scripts/check-openrgb.ps1`). The workflow change on the
-      owner's go (2026-11-27: "Edit the workflows").
+- [x] **CI's check of the real thing** (run 46062971222 on 5ab82bf, every job green; the
+      workflow change on the owner's go, 2026-11-27: "Edit the workflows"). On the Windows
+      runner the `openrgb_setup` example downloaded the pinned installer (23,345,664 bytes,
+      SHA-256 as pinned, 3.1 s), installed it with the app's msiexec options while holding it
+      open read-only (exit 0), and found `Program Files\OpenRGB\OpenRGB.exe` and the "OpenRGB"
+      service running, automatic, LocalSystem; Clokrix's client was answered at once on
+      127.0.0.1:6742 in protocol 5 (no devices on a virtual machine), and nothing listened on
+      port 6742 anywhere else. The release now checks the pin still downloads
+      (`scripts/check-openrgb.ps1`).
 - [ ] **Field check**: [`docs/field-check-2.6.md`](docs/field-check-2.6.md) §1 now starts with
       Set up OpenRGB.
 
