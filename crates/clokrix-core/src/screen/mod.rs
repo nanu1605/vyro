@@ -16,6 +16,8 @@ pub mod input;
 #[cfg(windows)]
 pub mod jpeg;
 pub mod producer;
+#[cfg(windows)]
+pub mod reduce;
 pub mod rtc;
 pub mod share;
 pub mod stun;

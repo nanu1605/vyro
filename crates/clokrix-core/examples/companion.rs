@@ -129,7 +129,7 @@ fn video(session: &rtc::Session, stop: &AtomicBool) -> Result<(), String> {
         Status::Secure => {}
     };
     #[cfg(windows)]
-    return producer::run(session, &producer::Settings::default(), stop, &status);
+    return producer::run(session, &producer::Settings::default(), stop, &status, None);
     #[cfg(not(windows))]
     {
         // Larger than SD, so a phone that asks for SD gets smaller pictures (1.7).

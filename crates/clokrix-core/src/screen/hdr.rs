@@ -186,7 +186,7 @@ impl Hdr {
     }
 }
 
-fn compile(src: &str, entry: PCSTR, target: PCSTR) -> Result<ID3DBlob, CaptureError> {
+pub(super) fn compile(src: &str, entry: PCSTR, target: PCSTR) -> Result<ID3DBlob, CaptureError> {
     let mut code = None;
     let mut errors = None;
     // SAFETY: the source pointer and length describe `src`; out pointers are valid.
@@ -215,7 +215,7 @@ fn compile(src: &str, entry: PCSTR, target: PCSTR) -> Result<ID3DBlob, CaptureEr
     code.ok_or_else(|| none("shader"))
 }
 
-fn bytes(b: &ID3DBlob) -> &[u8] {
+pub(super) fn bytes(b: &ID3DBlob) -> &[u8] {
     // SAFETY: the blob owns this memory for its lifetime, which bounds the slice's.
     unsafe { std::slice::from_raw_parts(b.GetBufferPointer().cast(), b.GetBufferSize()) }
 }

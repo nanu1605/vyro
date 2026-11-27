@@ -17,6 +17,7 @@ most.
 | **Reads of other processes' names, CPU and memory use** (the Processes tab and the footprint). | Task-Manager-style listing. | While the app is open |
 | **GPU tuning through the maker's driver interface** (1.6; AMD and Intel from 2.0): the service sets the card's clock offsets and power limit with the driver's own calls, as the maker's tools do: NVML for NVIDIA, ADLX for AMD (as AMD Software), the Intel Graphics Control Library for Intel Arc. Nothing touches the game. | The owner's presets. | Only after the owner turns GPU tuning on and applies a preset other than Stock |
 | **Screen capture and input** (1.7): the app copies the screen with Windows' Desktop Duplication, as screen-sharing tools do, and turns a phone's taps and typing into Windows input (`SendInput`, marked by Windows as injected). | A phone the owner allowed sees and uses the screen. | Only during a screen session, which the PC shows with a banner; never otherwise |
+| **Screen capture for ambient lighting** (2.6): the app copies the screen with Desktop Duplication, as ambient-lighting tools do, makes each picture small on the GPU and keeps only one colour from it. The colour goes to OpenRGB on this PC, which drives the lights. | The owner's RGB devices in the screen's colour. | Only while the owner has ambient lighting on (the Lighting view) and a device picked, or the view is open |
 
 ## What Clokrix never does
 

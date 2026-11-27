@@ -8,7 +8,7 @@ import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
 import { savedLook, type AccentChoice, type OpenOn, type ThemeId } from './themes';
 import { EMPTY as NO_WIDGETS, type Widgets } from './widgets';
-import type { AlertFired, AlertRule, BackendStatus, Edition, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Control, Dashboard, DeviceInfo, Devices, LinkState, PhoneAction, PowerState, ScreenStatus, WakeReadiness, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo, GpuTestDone, GpuTestKind, GpuTestProgress, TuneConfig, TuneEvent, TuneSettings, TuneStatus } from './types';
+import type { AlertFired, AlertRule, BackendStatus, Edition, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Control, Dashboard, DeviceInfo, Devices, LinkState, PhoneAction, PowerState, ScreenStatus, WakeReadiness, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo, GpuTestDone, GpuTestKind, GpuTestProgress, TuneConfig, TuneEvent, TuneSettings, TuneStatus, LightingSettings, LightingStatus } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -1184,4 +1184,32 @@ export async function getWindowLook(): Promise<WindowLook> {
 export async function onWindowLook(cb: (l: WindowLook) => void): Promise<() => void> {
   if (!inTauri) return () => {};
   return listen<WindowLook>('window-look', (e) => cb(e.payload));
+}
+
+/** Ambient lighting (2.6): its settings, how it is now, and how many monitors it can follow. */
+export interface LightingView {
+  settings: LightingSettings;
+  status: LightingStatus;
+  monitors: number;
+}
+
+export async function getLighting(): Promise<LightingView> {
+  if (!inTauri) return (await import('./sim-lighting')).simLighting();
+  return invoke<LightingView>('get_lighting');
+}
+
+export async function setLighting(settings: LightingSettings): Promise<LightingView> {
+  if (!inTauri) return (await import('./sim-lighting')).simSetLighting(settings);
+  return invoke<LightingView>('set_lighting', { settings });
+}
+
+/** The view is open: it hears the colour for the next few seconds (asked again while open). */
+export async function watchLighting(): Promise<LightingStatus> {
+  if (!inTauri) return (await import('./sim-lighting')).simWatchLighting();
+  return invoke<LightingStatus>('watch_lighting');
+}
+
+export async function onLightingStatus(cb: (s: LightingStatus) => void): Promise<() => void> {
+  if (!inTauri) return (await import('./sim-lighting')).simOnLighting(cb);
+  return listen<LightingStatus>('lighting-status', (e) => cb(e.payload));
 }

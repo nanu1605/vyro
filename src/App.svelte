@@ -610,6 +610,13 @@
           {/await}
         </div>
       {/if}
+      {#if visited.lighting && !locked('lighting')}
+        <div id="panel-lighting" role="tabpanel" aria-labelledby="tab-lighting" hidden={tab !== 'lighting'}>
+          {#await import('./components/LightingPanel.svelte') then { default: LightingPanel }}
+            <LightingPanel active={tab === 'lighting'} />
+          {/await}
+        </div>
+      {/if}
       {#if visited.system && !locked('system')}
         <div id="panel-system" role="tabpanel" aria-labelledby="tab-system" hidden={tab !== 'system'}>
           <SystemPanel />

@@ -29,6 +29,7 @@ pub mod intel;
 pub mod intel_cpu;
 pub mod inventory;
 pub mod ipc;
+pub mod lighting;
 #[cfg(windows)]
 pub mod live;
 pub mod network;

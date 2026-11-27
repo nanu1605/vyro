@@ -11,6 +11,7 @@ mod edition;
 mod engine;
 mod gaming;
 mod gpu_tune;
+mod lighting;
 mod look;
 mod migrate;
 mod overlay;
@@ -93,6 +94,7 @@ fn main() {
             app.manage(device_watch::DeviceWatch::default());
             app.manage(remote_api::PhoneState::load(app.handle()));
             app.manage(screen::ScreenState::load(app.handle()));
+            app.manage(lighting::LightingState::load(app.handle()));
             tray::build(app.handle())?;
             let settings = app.state::<tray::SettingsStore>().get();
             if let Err(e) = tray::apply(app.handle(), settings) {
@@ -109,6 +111,7 @@ fn main() {
             smoke::start();
             whats_new::announce(app.handle(), minimized);
             edition::start(app.handle());
+            lighting::start(app.handle());
             if minimized {
                 tray::park_after_start(app.handle());
             } else {
@@ -228,6 +231,9 @@ fn main() {
             edition::enter_key,
             edition::release_pro,
             edition::edition_seen,
+            lighting::get_lighting,
+            lighting::set_lighting,
+            lighting::watch_lighting,
         ])
         .build(context)
         .expect("failed to build the Tauri application");
@@ -258,4 +264,6 @@ pub(crate) fn wind_down(handle: &tauri::AppHandle, why: &str) {
     screen::end_all(handle, why);
     // A microphone left playing without a session too.
     voice::mic_off(handle, why);
+    // The lights back as they were.
+    lighting::wind_down(handle);
 }

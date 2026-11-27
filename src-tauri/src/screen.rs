@@ -4,7 +4,8 @@
 //! Windows input (`clokrix_core::screen`). Where no direct path exists the phone asks for one
 //! picture at a time through the relay instead (the slow view, 20 minutes a day). One phone at a
 //! time; while it lasts the PC shows a banner and a tray item, both with Stop. Nothing captures
-//! unless a session is on.
+//! for the phone unless a session is on. Ambient lighting (2.6, `crate::lighting`) lets go of a
+//! monitor a session takes, and takes its colour from the session's pictures meanwhile.
 
 // Elsewhere only the commands and the ends are built (and never reached).
 #![cfg_attr(not(windows), allow(dead_code, unused_imports))]
@@ -390,6 +391,7 @@ fn end(app: &AppHandle, serial: u64, why: &str, by: By) {
     );
     state.save();
     announce(app);
+    crate::lighting::resume_output(app);
     // Dropping a session waits for its thread, which may be the one calling here.
     let _ = std::thread::Builder::new()
         .name("clokrix-screen-end".into())
@@ -666,7 +668,10 @@ mod win {
                         }
                     }
                 };
-                if let Err(e) = producer::run(&session, &settings, &stop, &status) {
+                // Ambient lighting lets go of the monitor, taking its colour from these pictures.
+                let tap = crate::lighting::yield_output(&owner, monitor);
+                let tap = tap.as_deref().map(|f| f as &dyn Fn(&producer::Picture));
+                if let Err(e) = producer::run(&session, &settings, &stop, &status, tap) {
                     let why = format!("the screen could not be sent: {e}");
                     end(&owner, serial, &why, By::Phone);
                 }
@@ -692,6 +697,8 @@ mod win {
             .is_some_and(|l| l.share.id == r.phone && matches!(l.kind, Kind::Slow(_)));
         if !ours {
             claim(app, r)?;
+            // Ambient lighting lets go of the monitor (and holds its colour meanwhile).
+            let _ = crate::lighting::yield_output(app, monitor_param(r));
             let capture = Capture::open(monitor_param(r)).map_err(|e| e.to_string())?;
             begin(
                 app,
@@ -761,7 +768,7 @@ mod win {
                 view.fresh = true;
             }
             Ok(None) => {}
-            Err(CaptureError::Lost) => {
+            Err(CaptureError::Lost | CaptureError::Busy) => {
                 let _ = view.capture.reopen();
             }
             Err(CaptureError::Secure) => {

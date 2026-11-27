@@ -9,11 +9,15 @@
 //! blank is then taken again through GDI, as Chrome falls back to it; when GDI sees the screen,
 //! the rest of the session is taken through GDI. So is a session whose pictures Desktop
 //! Duplication gives in a form that cannot be read or converted.
+//!
+//! Ambient lighting (2.6) takes the monitor made small instead ([`Capture::next_thumb`], made on
+//! the GPU by [`super::reduce`]); a capture serves one or the other. Windows lets a process
+//! duplicate a monitor once, so a second capture of it is [`CaptureError::Busy`].
 
 use std::time::{Duration, Instant};
 
 use windows::core::Interface;
-use windows::Win32::Foundation::HMODULE;
+use windows::Win32::Foundation::{E_ACCESSDENIED, E_INVALIDARG, HMODULE};
 use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_UNKNOWN;
 use windows::Win32::Graphics::Direct3D11::{
     D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D, D3D11_CPU_ACCESS_READ,
@@ -31,17 +35,20 @@ use windows::Win32::Graphics::Dxgi::{
 };
 use windows::Win32::Graphics::Gdi::{
     BitBlt, CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GdiFlush, GetDC,
-    ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, CAPTUREBLT, DIB_RGB_COLORS,
-    HBITMAP, HDC, HGDIOBJ, SRCCOPY,
+    ReleaseDC, SelectObject, SetBrushOrgEx, SetStretchBltMode, StretchBlt, BITMAPINFO,
+    BITMAPINFOHEADER, BI_RGB, CAPTUREBLT, DIB_RGB_COLORS, HALFTONE, HBITMAP, HDC, HGDIOBJ, SRCCOPY,
 };
 
 use super::frames;
 use super::hdr::{self, Hdr};
 use super::input::Rect;
 pub use super::producer::{CaptureError, Picture};
+use super::reduce::Reduce;
+use crate::lighting::colour::{Thumb, THUMB_H, THUMB_W};
 
 fn other(what: &str, e: &windows::core::Error) -> CaptureError {
-    if e.code() == DXGI_ERROR_ACCESS_DENIED {
+    // The secure desktop: DXGI's word, or (opening a duplication) Windows' plain "access denied".
+    if e.code() == DXGI_ERROR_ACCESS_DENIED || e.code() == E_ACCESSDENIED {
         CaptureError::Secure
     } else if e.code() == DXGI_ERROR_ACCESS_LOST || e.code() == DXGI_ERROR_SESSION_DISCONNECTED {
         CaptureError::Lost
@@ -119,6 +126,16 @@ fn readable(f: DXGI_FORMAT) -> bool {
     f == DXGI_FORMAT_B8G8R8A8_UNORM || f == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB
 }
 
+/// Why a duplication did not open: "invalid argument" when this process duplicates the monitor
+/// already (ambient lighting, letting go of it for a screen session).
+fn duplicating(e: &windows::core::Error) -> CaptureError {
+    if e.code() == E_INVALIDARG {
+        CaptureError::Busy
+    } else {
+        other("duplication", e)
+    }
+}
+
 /// Logs what Windows duplicates: a field report then says what the PC's capture was given.
 fn describe(monitor: &Monitor, dup: &IDXGIOutputDuplication) {
     // SAFETY: a live duplication.
@@ -156,6 +173,10 @@ pub struct Capture {
     staging: Option<ID3D11Texture2D>,
     /// Converts an HDR desktop's pictures, once one came.
     hdr: Option<Hdr>,
+    /// Makes the pictures small for ambient lighting, once one came.
+    reduce: Option<Reduce>,
+    /// The display's SDR white level, and when it was read (it can change while lighting runs).
+    white: Option<(u32, Instant)>,
     /// Why Desktop Duplication's pictures cannot be used, when one could not be.
     unusable: Option<String>,
     /// A picture was taken since the duplication opened (until then every frame is one).
@@ -182,26 +203,38 @@ const RETRY: Duration = Duration::from_secs(5);
 /// Where the monitor is on the desktop is looked up this often, and after it is opened again.
 const FOLLOW: Duration = Duration::from_secs(1);
 
-/// The monitor through GDI: a copy of its part of the screen into a bitmap of our own.
+/// The monitor through GDI: a copy of its part of the screen into a bitmap of our own, whole or
+/// made small (for ambient lighting).
 struct Gdi {
     mem: HDC,
     bitmap: HBITMAP,
     old: HGDIOBJ,
     bits: *mut std::ffi::c_void,
     rect: Rect,
+    /// The bitmap's size: the monitor's, or [`THUMB_W`] x [`THUMB_H`].
+    size: (i32, i32),
     /// The last picture, and when it was taken: GDI does not say when the screen changes.
     last: Option<(Vec<u8>, Instant)>,
 }
 
 impl Gdi {
     fn open(rect: Rect) -> Result<Self, CaptureError> {
+        Self::open_sized(rect, (rect.width, rect.height))
+    }
+
+    /// The monitor made small, for ambient lighting.
+    fn open_small(rect: Rect) -> Result<Self, CaptureError> {
+        Self::open_sized(rect, (THUMB_W as i32, THUMB_H as i32))
+    }
+
+    fn open_sized(rect: Rect, size: (i32, i32)) -> Result<Self, CaptureError> {
         let fail = |what: &str| CaptureError::Other(format!("GDI: {what}"));
         let info = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
                 biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                biWidth: rect.width,
+                biWidth: size.0,
                 // Negative: rows top to bottom, as the conversion reads them.
-                biHeight: -rect.height,
+                biHeight: -size.1,
                 biPlanes: 1,
                 biBitCount: 32,
                 biCompression: BI_RGB.0,
@@ -233,6 +266,7 @@ impl Gdi {
                 old,
                 bits,
                 rect,
+                size,
                 last: None,
             })
         }
@@ -241,30 +275,61 @@ impl Gdi {
     /// The monitor now. A copy that fails is the secure desktop (or no desktop at all).
     fn grab(&mut self) -> Result<Picture, CaptureError> {
         let r = self.rect;
-        let len = r.width as usize * r.height as usize * 4;
+        let (w, h) = self.size;
+        let len = w as usize * h as usize * 4;
         // SAFETY: the bitmap is `len` bytes and selected into `mem`; it is read after GdiFlush.
         unsafe {
             let screen = GetDC(None);
-            let copied = BitBlt(
-                self.mem,
-                0,
-                0,
-                r.width,
-                r.height,
-                Some(screen),
-                r.left,
-                r.top,
-                SRCCOPY | CAPTUREBLT,
-            );
+            let copied = if (w, h) == (r.width, r.height) {
+                BitBlt(
+                    self.mem,
+                    0,
+                    0,
+                    w,
+                    h,
+                    Some(screen),
+                    r.left,
+                    r.top,
+                    SRCCOPY | CAPTUREBLT,
+                )
+                .is_ok()
+            } else {
+                // Made small with each pixel the average of those it stands for.
+                SetStretchBltMode(self.mem, HALFTONE);
+                let _ = SetBrushOrgEx(self.mem, 0, 0, None);
+                StretchBlt(
+                    self.mem,
+                    0,
+                    0,
+                    w,
+                    h,
+                    Some(screen),
+                    r.left,
+                    r.top,
+                    r.width,
+                    r.height,
+                    SRCCOPY | CAPTUREBLT,
+                )
+                .as_bool()
+            };
             ReleaseDC(None, screen);
-            copied.map_err(|_| CaptureError::Secure)?;
+            if !copied {
+                return Err(CaptureError::Secure);
+            }
             let _ = GdiFlush();
             Ok(Picture {
                 bgra: std::slice::from_raw_parts(self.bits.cast::<u8>(), len).to_vec(),
-                width: r.width as u32,
-                height: r.height as u32,
+                width: w as u32,
+                height: h as u32,
             })
         }
+    }
+
+    /// The monitor made small, at most once every `timeout_ms`; `None` when it did not change.
+    fn thumb(&mut self, timeout_ms: u32) -> Result<Option<Thumb>, CaptureError> {
+        Ok(self
+            .next(timeout_ms)?
+            .map(|p| Thumb::from_bgra(&p.bgra, p.width, p.height, 1)))
     }
 
     /// The next picture, at most one every `timeout_ms`; `None` when the screen did not change.
@@ -321,8 +386,7 @@ impl Capture {
         };
         let output: IDXGIOutput1 = output.cast().map_err(|e| other("output", &e))?;
         // SAFETY: a live output and device.
-        let dup =
-            unsafe { output.DuplicateOutput(&device) }.map_err(|e| other("duplication", &e))?;
+        let dup = unsafe { output.DuplicateOutput(&device) }.map_err(|e| duplicating(&e))?;
         describe(&monitor, &dup);
         Ok(Self {
             ctx,
@@ -331,6 +395,8 @@ impl Capture {
             dup: Some(dup),
             staging: None,
             hdr: None,
+            reduce: None,
+            white: None,
             unusable: None,
             seen: false,
             gdi: None,
@@ -346,8 +412,8 @@ impl Capture {
     pub fn reopen(&mut self) -> Result<(), CaptureError> {
         self.dup = None;
         // SAFETY: as in `open`.
-        let dup = unsafe { self.output.DuplicateOutput(&self.device) }
-            .map_err(|e| other("duplication", &e))?;
+        let dup =
+            unsafe { self.output.DuplicateOutput(&self.device) }.map_err(|e| duplicating(&e))?;
         describe(&self.monitor, &dup);
         self.dup = Some(dup);
         self.staging = None;
@@ -379,8 +445,13 @@ impl Capture {
             r.top
         );
         self.monitor.rect = r;
-        if self.gdi.is_some() {
-            match Gdi::open(r) {
+        if let Some(size) = self.gdi.as_ref().map(|g| g.size) {
+            let small = size == (THUMB_W as i32, THUMB_H as i32);
+            match if small {
+                Gdi::open_small(r)
+            } else {
+                Gdi::open(r)
+            } {
                 Ok(g) => self.gdi = Some(g),
                 Err(e) => log::warn!("screen: {e}"),
             }
@@ -589,6 +660,141 @@ impl Capture {
         // SAFETY: the frame acquired above.
         let _ = unsafe { dup.ReleaseFrame() };
         result
+    }
+}
+
+impl Capture {
+    /// The monitor made small for ambient lighting (2.6), waiting at most `timeout_ms`; `None`
+    /// when it did not change. Through GDI, as [`next`](Self::next), when Desktop Duplication's
+    /// pictures stay blank or cannot be read.
+    pub fn next_thumb(&mut self, timeout_ms: u32) -> Result<Option<Thumb>, CaptureError> {
+        if self.followed.elapsed() >= FOLLOW {
+            self.follow();
+        }
+        if let Some(g) = &mut self.gdi {
+            return g.thumb(timeout_ms);
+        }
+        let thumb = self.reduced(timeout_ms)?;
+        if let Some(why) = self.unusable.take() {
+            let mut g = Gdi::open_small(self.monitor.rect)
+                .map_err(|e| CaptureError::Other(format!("{why}, and {e}")))?;
+            let t = g.thumb(0)?;
+            log::warn!(
+                "lighting: {why}, so {} is taken through GDI",
+                self.monitor.name
+            );
+            self.gdi = Some(g);
+            return Ok(t);
+        }
+        let black = |t: &Thumb| t.px.iter().all(|p| *p == [0.0; 3]);
+        match &thumb {
+            Some(t) if black(t) => {
+                self.blank_since.get_or_insert_with(Instant::now);
+            }
+            Some(_) => self.blank_since = None,
+            None => {}
+        }
+        let blank = self.blank_since.is_some_and(|t| t.elapsed() >= BLANK_FOR);
+        if blank && self.tried.is_none_or(|t| t.elapsed() >= RETRY) {
+            self.tried = Some(Instant::now());
+            if let Ok(mut g) = Gdi::open_small(self.monitor.rect) {
+                if let Ok(Some(t)) = g.thumb(0) {
+                    if !black(&t) {
+                        log::warn!(
+                            "lighting: Desktop Duplication gives {} a blank picture; GDI sees it, \
+                             so lighting goes on through GDI",
+                            self.monitor.name
+                        );
+                        self.gdi = Some(g);
+                        return Ok(Some(t));
+                    }
+                }
+            }
+        }
+        Ok(thumb)
+    }
+
+    /// The display's SDR white level, read again every few seconds.
+    fn white(&mut self) -> u32 {
+        if let Some((w, at)) = self.white {
+            if at.elapsed() < Duration::from_secs(5) {
+                return w;
+            }
+        }
+        let w = crate::display::sdr_white_level(&self.monitor.name).unwrap_or(hdr::WHITE);
+        self.white = Some((w, Instant::now()));
+        w
+    }
+
+    /// The next picture through Desktop Duplication, made small on the GPU. The frame is let go
+    /// as soon as its copy is queued.
+    fn reduced(&mut self, timeout_ms: u32) -> Result<Option<Thumb>, CaptureError> {
+        let Some(dup) = self.dup.clone() else {
+            return Err(CaptureError::Lost);
+        };
+        let mut info = DXGI_OUTDUPL_FRAME_INFO::default();
+        let mut res = None;
+        // SAFETY: out pointers valid; every acquired frame is released below.
+        match unsafe { dup.AcquireNextFrame(timeout_ms, &mut info, &mut res) } {
+            Ok(()) => {}
+            Err(e) if e.code() == DXGI_ERROR_WAIT_TIMEOUT => return Ok(None),
+            Err(e) => return Err(other("capture", &e)),
+        }
+        let queued = (|| -> Result<bool, CaptureError> {
+            let Some(res) = res else {
+                return Ok(false);
+            };
+            if info.LastPresentTime == 0 && self.seen {
+                // Only the pointer moved.
+                return Ok(false);
+            }
+            let tex: ID3D11Texture2D = res.cast().map_err(|e| other("capture", &e))?;
+            let mut desc = D3D11_TEXTURE2D_DESC::default();
+            // SAFETY: a live texture.
+            unsafe { tex.GetDesc(&mut desc) };
+            if !readable(desc.Format) && desc.Format != hdr::FORMAT {
+                self.unusable = Some(format!(
+                    "the screen's pixel format ({}) cannot be read",
+                    desc.Format.0
+                ));
+                return Ok(false);
+            }
+            let white = if desc.Format == hdr::FORMAT {
+                self.white()
+            } else {
+                hdr::WHITE
+            };
+            let same = |r: &Reduce| {
+                (r.width, r.height, r.format, r.white)
+                    == (desc.Width, desc.Height, desc.Format, white)
+            };
+            if !self.reduce.as_ref().is_some_and(same) {
+                self.reduce = None;
+                match Reduce::new(&self.device, desc.Width, desc.Height, desc.Format, white) {
+                    Ok(r) => self.reduce = Some(r),
+                    Err(e) => {
+                        self.unusable = Some(format!("the screen cannot be made small ({e})"));
+                        return Ok(false);
+                    }
+                }
+            }
+            if let Some(r) = &self.reduce {
+                r.queue(&self.ctx, &tex);
+            }
+            Ok(true)
+        })();
+        // SAFETY: the frame acquired above; what is read is the copy queued from it.
+        let _ = unsafe { dup.ReleaseFrame() };
+        if !queued? {
+            return Ok(None);
+        }
+        let reduce = self
+            .reduce
+            .as_ref()
+            .ok_or_else(|| CaptureError::Other("lighting: no reducer".into()))?;
+        let t = reduce.read(&self.ctx)?;
+        self.seen = true;
+        Ok(Some(t))
     }
 }
 

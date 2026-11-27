@@ -150,6 +150,9 @@ pub enum CaptureError {
     /// The duplication ended (a mode change, a full-screen game, the secure desktop came and
     /// went): open it again.
     Lost,
+    /// The monitor is taken already by another part of Clokrix (2.6: ambient lighting, letting
+    /// go of it for a screen session): try again in a moment.
+    Busy,
     Other(String),
 }
 
@@ -158,6 +161,7 @@ impl std::fmt::Display for CaptureError {
         match self {
             Self::Secure => f.write_str("the PC is showing a secure screen"),
             Self::Lost => f.write_str("the screen changed"),
+            Self::Busy => f.write_str("the screen is being taken by another part of Clokrix"),
             Self::Other(m) => f.write_str(m),
         }
     }
@@ -315,19 +319,19 @@ const REPEAT: Duration = Duration::from_secs(1);
 const SETTLE: Duration = Duration::from_secs(1);
 
 /// Sends the monitor to `session` until `stop` or the session ends (Windows: Desktop
-/// Duplication and Windows' own H.264 encoder).
+/// Duplication and Windows' own H.264 encoder). `tap` sees each new picture (2.6: ambient
+/// lighting takes its colour from the session's pictures while the session has the monitor).
 #[cfg(windows)]
 pub fn run(
     session: &Session,
     s: &Settings,
     stop: &AtomicBool,
     status: &dyn Fn(Status),
+    tap: Option<&dyn Fn(&Picture)>,
 ) -> Result<(), String> {
     use super::encode::Encoder;
     let cap = open(s.monitor, stop, status)?;
-    drive(session, s, stop, status, cap, |w, h, fps, bitrate| {
-        Encoder::new(w, h, fps, bitrate)
-    })
+    drive_with(session, s, stop, status, cap, Encoder::new, tap)
 }
 
 #[cfg(windows)]
@@ -371,8 +375,21 @@ pub fn drive<S: Source, E: Encode>(
     s: &Settings,
     stop: &AtomicBool,
     status: &dyn Fn(Status),
+    cap: S,
+    make: impl FnMut(u32, u32, u32, u32) -> Result<E, String>,
+) -> Result<(), String> {
+    drive_with(session, s, stop, status, cap, make, None)
+}
+
+/// [`drive`], with `tap` seeing each new picture.
+pub fn drive_with<S: Source, E: Encode>(
+    session: &Session,
+    s: &Settings,
+    stop: &AtomicBool,
+    status: &dyn Fn(Status),
     mut cap: S,
     mut make: impl FnMut(u32, u32, u32, u32) -> Result<E, String>,
+    tap: Option<&dyn Fn(&Picture)>,
 ) -> Result<(), String> {
     // The encoder, with the size and pictures a second it was made for.
     let mut enc: Option<(E, u32, u32, u32)> = None;
@@ -429,7 +446,7 @@ pub fn drive<S: Source, E: Encode>(
                 }
                 p
             }
-            Err(CaptureError::Lost) => {
+            Err(CaptureError::Lost | CaptureError::Busy) => {
                 std::thread::sleep(Duration::from_millis(100));
                 if let Err(e) = cap.reopen() {
                     if e == CaptureError::Secure && !secure {
@@ -455,6 +472,9 @@ pub fn drive<S: Source, E: Encode>(
         let mut made = false;
         let nv12 = match picture {
             Some(p) => {
+                if let Some(tap) = tap {
+                    tap(&p);
+                }
                 let step = adapt.step;
                 let (w, h) = frames::fit(p.width, p.height, step.max_width, step.max_height);
                 if enc
@@ -562,9 +582,16 @@ fn open(
 ) -> Result<super::capture::Capture, String> {
     use super::capture::Capture;
     let mut told = false;
+    let since = Instant::now();
     loop {
         match Capture::open(monitor) {
             Ok(c) => return Ok(c),
+            // Ambient lighting is letting go of it: a moment.
+            Err(CaptureError::Busy)
+                if since.elapsed() < Duration::from_secs(2) && !stop.load(Ordering::SeqCst) =>
+            {
+                std::thread::sleep(Duration::from_millis(100));
+            }
             Err(CaptureError::Secure | CaptureError::Lost) if !stop.load(Ordering::SeqCst) => {
                 if !told {
                     told = true;

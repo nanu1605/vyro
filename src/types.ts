@@ -224,3 +224,10 @@ export interface GpuTestDone {
   settings: import('./bindings/TuneSettings').TuneSettings | null;
   message: string;
 }
+export type { LightDevice } from './bindings/LightDevice';
+export type { LightingSettings } from './bindings/LightingSettings';
+export type { LightingStatus } from './bindings/LightingStatus';
+export type { LightLink } from './bindings/LightLink';
+export type { LightSpeed } from './bindings/LightSpeed';
+export type { NoColour } from './bindings/NoColour';
+export type { Rgb8 } from './bindings/Rgb8';

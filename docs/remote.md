@@ -121,7 +121,9 @@ deleted 90 days after the PC was last seen.
   screen with …" in the tray, and a notification at the start; Settings → Remote's record keeps
   each session's start and end. One phone at a time. A session ends after 10 minutes with no
   input and the phone not showing it, and (if chosen) the PC locks when a phone's session ends.
-  Nothing is captured unless a session is on.
+  Nothing is captured for the phone unless a session is on. (Ambient lighting, 2.6, captures
+  the screen while the owner has it on, keeping only one colour; a session on the same monitor
+  takes it over, and lighting takes its colour from the session's pictures meanwhile.)
 - **Direct, end to end.** The phone's WebRTC offer and the PC's answer travel sealed through the
   relay. They carry the certificate fingerprints DTLS checks, so the relay cannot put itself in
   the middle: it never sees the picture or the input. The picture then goes straight from the PC

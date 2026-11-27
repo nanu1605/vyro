@@ -2824,7 +2824,8 @@ from the phone", directly with a slow fallback (decision 38). Built on `claude/v
       the start, the start and end in Settings → Remote's record. It ends after 10 minutes with
       no input and the phone not showing it (the phone says it is there every 30 s while it
       does); "Lock this PC when a phone's session ends" is an option. Nothing captures without a
-      session. Media Foundation is looked up in System32 when a session starts, so Clokrix still
+      session (for the phone; ambient lighting, 2.6, captures while the owner has it on). Media
+      Foundation is looked up in System32 when a session starts, so Clokrix still
       starts on a Windows "N" edition without the Media Feature Pack (only the direct view is
       missing there, and the phone uses the slow view).
 - [x] **The slow view**: if the phone has no direct path in 15 s, or plays no H.264, it asks for

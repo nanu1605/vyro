@@ -104,3 +104,20 @@ reported passed (2026-11-13) without notes per step.
 | **The stability test fails on any mistake**: a wrong result, a different frame, a changed memory word, a driver reset. | `gpu_tune::stress::run`, `bench::win::gpu` | `stability_test_failures`; `every_workload_runs_on_warp` (`bench/win/gpu.rs`, Windows) | **Reported passed** (field check 1.6) |
 | **From a phone** only Stock and tested presets. | `src-tauri/src/remote_api.rs` (`gpu_preset`), `relay::api` | `what_a_phone_changed_is_kept_in_words` (`remote/relay/tests.rs`) | **Reported passed** (field check 1.6) |
 | **Always visible**: the top bar's chip with Stock, "Return GPU to stock" in the tray, the tray's tooltip, and the log. | `gpu_tune::TuneBrief` in every snapshot; the app's header and tray | `the_tooltip_names_fan_control_and_alerts` (`src-tauri/src/tray.rs`) | **Reported passed** (field check 1.6) |
+
+## Lighting through OpenRGB (2.6)
+
+Ambient lighting sends a colour to OpenRGB, which the owner installs and runs; OpenRGB writes to
+the devices. Clokrix itself writes no device, register or bus: what it may ask of OpenRGB is
+listed here. Paths are under `crates/clokrix-core/src/lighting/` and `src-tauri/src/lighting.rs`.
+The field column is field check 2.6's.
+
+| Rule | Enforced in | Tests | Field result |
+|---|---|---|---|
+| **Off by default, and only devices the owner picks.** None is picked until the owner ticks it in the Lighting view. | `LightingSettings::default` (`on: false`, `devices: []`); `run` drives only picked devices | `settings_stay_within_bounds` | **Pending** |
+| **Direct mode only.** A device without OpenRGB's per-LED "Direct" mode is never driven: it cannot be picked. | `Controller::direct_mode`, `info` | `reads_a_device_under_every_protocol_it_speaks` | **Pending** |
+| **Nothing is saved to a device.** OpenRGB's save-mode packet (1102), which writes a device's memory, is never sent. | `openrgb::Client::send` (debug assertion), only `UPDATE_MODE` and `UPDATE_LEDS` are sent | `talks_to_openrgb_in_the_protocol_both_speak` | **Pending** |
+| **Each device's mode is noted first and put back** when lighting stops, a device is unpicked, Pro ends, Clokrix closes, or at the next start after a crash (`lighting.json`). Never "back" into Direct. | `saved_mode`, `restore_mode`, `lighting::restore_all`, `lighting::start` | `puts_a_device_back_in_the_mode_it_was_in` | **Pending** |
+| **Rate limits.** A colour at most 30 times a second, only when it changed; devices on the memory bus (OpenRGB's "I2C" locations: memory modules, many boards), which Clokrix's own SPD reads share, at most 5 times a second. | `interval`, `run` (`sent`) | `devices_on_the_memory_bus_take_colours_slowly` | **Pending** |
+| **No flashing.** The brightness never swings 10% or more back and forth more than 3 times a second (WCAG 2.3.1), however the screen flashes. | `colour::Picker::limit` | `the_brightness_never_flashes_more_than_3_times_a_second` | **Pending** |
+| **Where a device is is never kept.** It is named by a hash of its name, maker and location (a USB path can hold a serial number). | `device_id` | `names_a_device_lastingly_without_keeping_where_it_is` | — |

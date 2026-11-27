@@ -149,7 +149,8 @@ fn changed(app: &AppHandle) {
 
 /// What Pro opens, on or off. Off: fans to the BIOS, the GPU to stock (with tuning, and applying
 /// it at start, off, so the service does not tune the card at the next start either); widgets,
-/// the overlay, game watching and the phone link go. On: what was on comes back.
+/// the overlay, game watching, the phone link (a screen session too) and ambient lighting go. On:
+/// what was on comes back.
 fn apply(app: &AppHandle, on: bool) {
     crate::tray::set_pro(app, on);
     crate::widgets::sync(app);
@@ -161,6 +162,11 @@ fn apply(app: &AppHandle, on: bool) {
             r.stop_relay();
         }
     }
+    // A direct screen session runs over its own connection, not the relay's: it ends too.
+    if !on {
+        crate::screen::end_all(app, "this PC turned Free");
+    }
+    crate::lighting::set_pro(app, on);
     if !on {
         let app = app.clone();
         std::thread::spawn(move || stand_down(&app));

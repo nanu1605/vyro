@@ -13,6 +13,7 @@ import HardDrive from '@lucide/svelte/icons/hard-drive';
 import HeartPulse from '@lucide/svelte/icons/heart-pulse';
 import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
 import LayoutGrid from '@lucide/svelte/icons/layout-grid';
+import Palette from '@lucide/svelte/icons/palette';
 import Lightbulb from '@lucide/svelte/icons/lightbulb';
 import Monitor from '@lucide/svelte/icons/monitor';
 import Mouse from '@lucide/svelte/icons/mouse';
@@ -55,6 +56,7 @@ export const VIEWS = [
   { id: 'network', label: 'Network', group: 'pc', icon: Wifi, blurb: 'Adapters, traffic and ping' },
   { id: 'displays', label: 'Displays', group: 'pc', icon: Monitor, blurb: 'Monitors and what they support' },
   { id: 'devices', label: 'Devices', group: 'pc', icon: Mouse, blurb: 'Peripherals and batteries' },
+  { id: 'lighting', label: 'Lighting', group: 'pc', icon: Palette, blurb: 'Your RGB lights in the screen\u2019s colour' },
   { id: 'system', label: 'System', group: 'pc', icon: AppWindow, blurb: 'Windows, security and start-up apps' },
   { id: 'processes', label: 'Processes', group: 'pc', icon: Activity, blurb: 'What uses the CPU, memory and GPU' },
   { id: 'sensors', label: 'Sensors', group: 'pc', icon: Thermometer, blurb: 'Every sensor, with min, max and average' },

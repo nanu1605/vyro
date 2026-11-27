@@ -37,6 +37,12 @@ pub struct GameState {
     context: Mutex<Option<GameContext>>,
 }
 
+/// A followed game is the app in front (2.6: ambient lighting's Auto speed).
+pub fn game_in_front(app: &AppHandle) -> bool {
+    app.try_state::<GameState>()
+        .is_some_and(|s| s.in_front.load(Ordering::SeqCst))
+}
+
 /// From every snapshot: per-process GPU use, for the load trigger.
 pub fn note_snapshot(app: &AppHandle, snap: &SensorSnapshot) {
     if let Some(state) = app.try_state::<GameState>() {
