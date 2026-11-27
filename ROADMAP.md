@@ -5603,6 +5603,19 @@ no source to republish (decision 46). On `claude/vyro-2.0`.
       127.0.0.1:6742 in protocol 5 (no devices on a virtual machine), and nothing listened on
       port 6742 anywhere else. The release now checks the pin still downloads
       (`scripts/check-openrgb.ps1`).
+- [x] **2.6.1 released** (2026-11-27, on the owner's go: "release 2.6.1"). `main`
+      fast-forwarded to 828a5f0 (5ab82bf's code, green on CI; ROADMAP and a doc after it), then
+      Release run 46066239880 from `main` tagged `v2.6.1` on 828a5f0. It fetched PawnIO,
+      PresentMon and ViGEmBus against their pinned hashes, checked that OpenRGB's pinned
+      installer still downloads as pinned, found the relay's address and Pro's checkout in
+      `clokrix.exe`, and put the 19.11 MB (19,107,840 bytes) `Clokrix_2.6.1_x64_en-US.msi`, its
+      checksums and then `latest.json` in the bucket. It then read the website's
+      `/updates/latest.json` (2.6.1) and downloaded `/download`, whose SHA-256 matched the
+      MSI's, and published the same files here and to the private copy in
+      `nanu1605/vyro-releases`. GitHub's digests here: MSI `9f570a5e…`, `latest.json`
+      `26ee667d…`, `SHA256SUMS.txt` `0400c494…`. Unsigned, as before; no secret in the log.
+      Installed copies of 2.5.2 and later update to it from the website at their next check.
+      No deploy was needed: the website and the relay are unchanged.
 - [ ] **Field check**: [`docs/field-check-2.6.md`](docs/field-check-2.6.md) §1 now starts with
       Set up OpenRGB.
 
