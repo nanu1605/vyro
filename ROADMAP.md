@@ -5397,7 +5397,8 @@ closed, and its words named only the first.
       code; the phone refused a wrong one, took the right one typed in lower case with a space,
       set itself up (2 devices) and then signed in alone; a third device got nothing from the
       same code.
-- [ ] **CI**, then **Deploy** on the owner's go; then the owner adds the phone with a code.
+- [x] **CI green on af9d6b0** (run 45977610382; every job, the checkout's tests among them).
+- [ ] **Deploy** on the owner's go; then the owner adds the phone with a code.
 
 ## Risks
 
