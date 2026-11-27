@@ -5597,8 +5597,8 @@ no source to republish (decision 46). On `claude/vyro-2.0`.
 - [ ] **CI's check of the real thing**: the `openrgb_setup` example on the Windows runner
       downloads, checks and installs the pinned installer as the app does, and Clokrix's client
       reads OpenRGB's devices on 127.0.0.1:6742, nothing listening elsewhere; the release
-      checks the pin still downloads (`scripts/check-openrgb.ps1`). Waiting on the owner's go
-      for the workflow change.
+      checks the pin still downloads (`scripts/check-openrgb.ps1`). The workflow change on the
+      owner's go (2026-11-27: "Edit the workflows").
 - [ ] **Field check**: [`docs/field-check-2.6.md`](docs/field-check-2.6.md) §1 now starts with
       Set up OpenRGB.
 

@@ -483,6 +483,34 @@ jobs:
             '| Uninstalled after it | Run entries and notification registrations of both names removed; data kept |'
           ) -join "`n" | Add-Content $env:GITHUB_STEP_SUMMARY
 
+      # 2.6.1: OpenRGB as the Lighting view's "Set up OpenRGB" installs it, after the install
+      # checks above so that they run on a runner without it: the pinned installer downloaded
+      # and checked, installed with the app's msiexec options, and its service's SDK server
+      # answering Clokrix's own client, on this PC only.
+      - name: OpenRGB as Clokrix sets it up (2.6.1)
+        shell: pwsh
+        run: |
+          cargo build -p clokrix-core --example openrgb_setup
+          $log = Join-Path $env:RUNNER_TEMP 'openrgb.log'
+          .\target\debug\examples\openrgb_setup.exe --log $log --wait 180 | Tee-Object -FilePath openrgb.md
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content $log -Tail 60 -ErrorAction SilentlyContinue
+            throw 'OpenRGB was not set up as the app sets it up'
+          }
+          $svc = Get-CimInstance Win32_Service -Filter "Name='OpenRGB'"
+          if (-not $svc -or $svc.State -ne 'Running' -or $svc.StartMode -ne 'Auto' -or $svc.StartName -ne 'LocalSystem') {
+            throw "OpenRGB's service: $($svc | Select-Object State, StartMode, StartName | Out-String)"
+          }
+          $listening = @(Get-NetTCPConnection -LocalPort 6742 -State Listen -ErrorAction SilentlyContinue)
+          if (-not $listening) { throw 'nothing listens on port 6742' }
+          $elsewhere = @($listening | Where-Object { $_.LocalAddress -ne '127.0.0.1' })
+          if ($elsewhere) { throw "OpenRGB listens on $($elsewhere.LocalAddress -join ', '), not only 127.0.0.1" }
+          @(
+            (Get-Content openrgb.md -Raw).TrimEnd(),
+            '| Service | OpenRGB: automatic, LocalSystem, running |',
+            "| Listening | port 6742 on $(($listening.LocalAddress | Sort-Object -Unique) -join ', ') only |"
+          ) -join "`n" | Add-Content $env:GITHUB_STEP_SUMMARY
+
       # Ready-to-run downloads for checking on a real PC without a toolchain.
       - name: Collect Windows binaries
         shell: pwsh
