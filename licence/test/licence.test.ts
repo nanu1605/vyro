@@ -23,6 +23,11 @@ interface Pay {
   amount: number;
   currency: string;
   status: string;
+  /** What the buyer typed into Razorpay's window, and the checkout's notes (2.6). */
+  email?: string;
+  contact?: string;
+  notes?: Record<string, string> | unknown[];
+  created_at?: number;
 }
 
 let server: TestHarness;
@@ -31,6 +36,10 @@ let rzp: Server;
 const orders: Array<{ id: string; body: { amount: number; currency: string; notes: Record<string, string> } }> = [];
 const payments = new Map<string, Pay>();
 let captured = 0;
+/** Razorpay's lists, failing while this is set (the dashboard still answers). */
+let listsDown = false;
+/** The lists asked for: path and query. */
+const listed: string[] = [];
 let publicKey: webcrypto.CryptoKey;
 let api = '';
 let pkcs8 = '';
@@ -74,6 +83,17 @@ beforeAll(async () => {
         orders.push({ id, body: JSON.parse(Buffer.concat(chunks).toString()) });
         return send(200, { id });
       }
+      // Lists, as Razorpay gives them: the newest first, `count` (at most 100) from `skip`.
+      const list = /^\/v1\/(payments|orders)\?(.*)$/.exec(url);
+      if (req.method === 'GET' && list) {
+        listed.push(url);
+        if (listsDown) return send(500, { error: 'down' });
+        const q = new URLSearchParams(list[2]);
+        const count = Math.min(100, Number(q.get('count') ?? 10));
+        const skip = Number(q.get('skip') ?? 0);
+        const all: unknown[] = list[1] === 'payments' ? [...payments.values()].reverse() : orders.map((o) => ({ id: o.id, notes: o.body.notes })).reverse();
+        return send(200, { entity: 'collection', count, items: all.slice(skip, skip + count) });
+      }
       const pay = /^\/v1\/payments\/([^/]+)(\/capture)?$/.exec(url);
       const p = pay ? payments.get(decodeURIComponent(pay[1]!)) : undefined;
       if (!p) return send(404, { error: 'no-payment' });
@@ -109,8 +129,11 @@ const claimCode = () => Buffer.from(webcrypto.getRandomValues(new Uint8Array(16)
 const pcId = () => Buffer.from(webcrypto.getRandomValues(new Uint8Array(32))).toString('hex');
 const sign = (secret: string, text: string) => createHmac('sha256', secret).update(text).digest('hex');
 
-async function order(claim: string | null, ip = from()): Promise<string> {
-  const res = await fetch(`${base}/order`, { method: 'POST', headers: { ...ip, 'Content-Type': 'application/json' }, body: JSON.stringify({ c: claim }) });
+/** The buyer's name, as the checkout page sends it (constructed). */
+const BUYER = 'A Buyer';
+
+async function order(claim: string | null, ip = from(), name: string = BUYER): Promise<string> {
+  const res = await fetch(`${base}/order`, { method: 'POST', headers: { ...ip, 'Content-Type': 'application/json' }, body: JSON.stringify({ c: claim, name }) });
   expect(res.status).toBe(200);
   return ((await res.json()) as { order_id: string }).order_id;
 }
@@ -171,6 +194,17 @@ describe('the checkout page', () => {
     for (const s of inline) expect(() => new Function(s)).not.toThrow();
   });
 
+  it('asks the buyer\'s name, and makes no order without one (2.6)', async () => {
+    const page = await (await fetch(`${base}/buy`, { headers: from() })).text();
+    expect(page).toContain('<input id="name" name="name" autocomplete="name" maxlength="80" required>');
+    const before = orders.length;
+    for (const name of [undefined, '', '   ', 42]) expect(await post('/order', { c: null, name })).toEqual({ status: 400, body: { error: 'name' } });
+    expect(orders.length).toBe(before);
+    // Cleaned as kept: control characters out, at most 80 characters.
+    const id = await order(null, from(), ' Asha\u0007 Rao ' + 'x'.repeat(200));
+    expect(orders.find((o) => o.id === id)!.body.notes.name).toBe('Asha Rao ' + 'x'.repeat(71));
+  });
+
   it('refuses a code that is not one of the app\'s', async () => {
     expect((await fetch(`${base}/buy?c=not-a-code`, { headers: from() })).status).toBe(400);
     expect((await post('/order', { c: 'nope' })).status).toBe(400);
@@ -182,7 +216,7 @@ describe('the checkout page', () => {
     const o = orders.find((x) => x.id === id)!;
     expect(o.body.amount).toBe(10000);
     expect(o.body.currency).toBe('USD');
-    expect(o.body.notes).toEqual({ product: 'clokrix-pro', claim: c });
+    expect(o.body.notes).toEqual({ product: 'clokrix-pro', claim: c, name: BUYER });
   });
 });
 
@@ -356,7 +390,7 @@ describe('the price: ₹10,000 in India, $100 elsewhere', () => {
 
   it('makes the order in the currency the page shows, or by the country when none is sent', async () => {
     const make = async (body: unknown, country: string) => {
-      const res = await fetch(`${base}/order`, { method: 'POST', headers: { ...at(country), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const res = await fetch(`${base}/order`, { method: 'POST', headers: { ...at(country), 'Content-Type': 'application/json' }, body: JSON.stringify({ name: BUYER, ...(body as object) }) });
       expect(res.status).toBe(200);
       const id = ((await res.json()) as { order_id: string }).order_id;
       return orders.find((o) => o.id === id)!.body;
@@ -992,6 +1026,209 @@ describe('the key page (2.5.5)', () => {
     }
   });
 
+  // The owner's dashboard (2.6), signed in with these passkeys.
+  const DASH = 'a passphrase for the dashboard tests';
+  let owner: Device;
+  /** The dashboard's data after a sign-in by `d`. */
+  const signedInData = async (d: Device) => post('/dashboard/data', await signInBody(d));
+  type Row = { lic: string; key: string; source: string; pc: string | null; about: Record<string, string> | null; buyer: Record<string, string | null> | null } & Record<string, unknown>;
+  const rowOf = (body: Record<string, unknown>, key: string) => (body.keys as Row[]).find((k) => k.key === key)!;
+  const passOf = (body: Record<string, unknown>) => ({ pass: body.pass, by: body.by, at: body.at });
+
+  it('shows nothing before a sign-in, then every key with its buyer and its PC (2.6)', async () => {
+    await restart(KEY_ID, {}, { KEY_PAGE_PASSPHRASE: DASH });
+    try {
+      const look = async () => (await fetch(`${base}/dashboard`, { headers: from() })).text();
+      const none = await look();
+      expect(none).toContain('No device is set up here yet');
+      owner = await Device.make();
+      const start = await post('/give/setup/start', { passphrase: DASH });
+      expect((await post('/give/setup/finish', { passphrase: DASH, ...(await addBody(owner, start.body.challenge as string)) })).body).toEqual({ ok: true });
+      const page = await look();
+      expect(page).toContain('<form id="go"><button type="submit">Sign in</button></form>');
+      expect(page).toContain('<meta name="robots" content="noindex">');
+      // Nothing before the sign-in says what it shows.
+      expect(page.slice(page.indexOf('<main'), page.indexOf('<div id="dash"'))).not.toMatch(/\bkeys?\b/i);
+      const inline = [...page.matchAll(/<script nonce="[^"]+">([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
+      expect(inline.length).toBe(1);
+      for (const x of inline) expect(() => new Function(x)).not.toThrow();
+
+      // Not without a sign-in, a pass, or with the passphrase.
+      expect(await post('/dashboard/data', {})).toEqual({ status: 403, body: { error: 'passkey' } });
+      expect(await post('/dashboard/data', { passphrase: DASH })).toEqual({ status: 403, body: { error: 'passkey' } });
+      expect(await post('/dashboard/data', { pass: 'x', by: owner.id, at: 1 })).toEqual({ status: 403, body: { error: 'pass' } });
+
+      // A key bought from the app, its name on the payment, and one bought on the website, its
+      // name only on the order. (On Razorpay's Test keys, as these tests run: marked test.)
+      const c = claimCode();
+      const p1 = payment(await order(c, from(), 'Asha Rao'), { email: 'asha@example.test', contact: '+910000000001', notes: { name: 'Asha Rao' } });
+      expect((await paid(p1)).status).toBe(200);
+      const k1 = (await claim(c)).key!;
+      const p2 = payment(await order(null, from(), 'Ravi K'), { amount: 1000000, currency: 'INR', email: 'ravi@example.test', notes: [] });
+      const k2 = keyIn(await (await paid(p2)).text())!;
+      // k1 on a PC, which says what it is; a control character and a long name cleaned, a field
+      // it does not take dropped.
+      const pc = pcId();
+      const about = { name: 'DESK\u0001TOP-1', cpu: 'AMD Ryzen 7 7800X3D ' + 'x'.repeat(200), gpu: 'NVIDIA GeForce RTX 5060 Ti', windows: 'Windows 11 25H2', app: '2.6.0', serial: 'no' };
+      expect((await post('/activate', { key: k1, pc, about })).status).toBe(200);
+
+      const seen = await signedInData(owner);
+      expect(seen.status).toBe(200);
+      expect(seen.body).toMatchObject({ by: owner.id, razorpay: 'ok', live: false });
+      const r1 = rowOf(seen.body, k1);
+      expect(r1).toMatchObject({ source: 'test', amount: 10000, currency: 'USD', pc: pc.slice(0, 8).toUpperCase(), revokedBy: null });
+      expect(r1.buyer).toEqual({ name: 'Asha Rao', email: 'asha@example.test', phone: '+910000000001' });
+      expect(r1.about).toEqual({ name: 'DESK TOP-1', cpu: ('AMD Ryzen 7 7800X3D ' + 'x'.repeat(200)).slice(0, 100), gpu: 'NVIDIA GeForce RTX 5060 Ti', windows: 'Windows 11 25H2', app: '2.6.0' });
+      expect(r1.checked).toEqual(expect.any(Number));
+      const r2 = rowOf(seen.body, k2);
+      expect(r2).toMatchObject({ source: 'test', amount: 1000000, currency: 'INR', pc: null, activated: null });
+      expect(r2.buyer).toEqual({ name: 'Ravi K', email: 'ravi@example.test', phone: null });
+      // The PC by a short code only: never its hash.
+      expect(JSON.stringify(seen.body)).not.toContain(pc);
+      expect(listed.some((u) => u.startsWith('/v1/payments?'))).toBe(true);
+
+      // Another PC's word is not kept: only the PC the key is on says what it is.
+      expect((await post('/check', { key: k1, pc: pcId(), about: { name: 'NOT-THIS-ONE' } })).body).toEqual({ ok: false, reason: 'moved' });
+      expect((await post('/check', { key: k1, pc })).body).toEqual({ ok: true });
+      const again = await post('/dashboard/data', passOf(seen.body));
+      expect(again.status).toBe(200);
+      expect(rowOf(again.body, k1).about!.name).toBe('DESK TOP-1');
+      // A PC the key moves to starts with what it says, or nothing.
+      const next = pcId();
+      expect((await post('/activate', { key: k1, pc: next, move: true })).status).toBe(200);
+      expect(rowOf((await post('/dashboard/data', passOf(again.body))).body, k1).about).toBeNull();
+      expect((await post('/activate', { key: k1, pc: next, about: { name: 'LAPTOP' } })).status).toBe(200);
+      expect(rowOf((await post('/dashboard/data', passOf(again.body))).body, k1).about).toEqual({ name: 'LAPTOP' });
+
+      // A key given from the dashboard: after a sign-in, not with a pass alone.
+      expect((await post('/dashboard/give', { ...passOf(seen.body), label: 'A tester' })).status).toBe(403);
+      const given = await post('/dashboard/give', { ...(await signInBody(owner)), label: ' A\ttester ' });
+      expect(given.status).toBe(200);
+      expect(given.body.row).toMatchObject({ key: given.body.key, source: 'given', label: 'A tester', payment: null, buyer: null });
+      expect(rowOf((await signedInData(owner)).body, given.body.key as string).label).toBe('A tester');
+    } finally {
+      await restart();
+    }
+  });
+
+  it('cancels, restores, frees and names a key, with a pass that runs out (2.6)', async () => {
+    await restart(KEY_ID, {}, { KEY_PAGE_PASSPHRASE: DASH });
+    try {
+      const key = await bought();
+      const pc = pcId();
+      expect((await post('/activate', { key, pc })).status).toBe(200);
+      const seen = await signedInData(owner);
+      let pass = passOf(seen.body);
+      const lic = rowOf(seen.body, key).lic;
+      const act = async (what: string, x: Record<string, unknown> = {}) => {
+        const r = await post(`/dashboard/${what}`, { ...pass, lic, ...x });
+        if (r.body.pass) pass = passOf(r.body);
+        return r;
+      };
+
+      // Cancelled: the PC hears it from the owner, and it turns on nowhere.
+      const cancelled = await act('cancel');
+      expect(cancelled.status).toBe(200);
+      expect(cancelled.body.row).toMatchObject({ lic, revokedBy: 'owner', revoked: expect.any(Number) });
+      expect((await post('/check', { key, pc })).body).toEqual({ ok: false, reason: 'revoked', by: 'owner' });
+      expect(await post('/activate', { key, pc: pcId() })).toEqual({ status: 403, body: { error: 'revoked', by: 'owner' } });
+      expect((await act('cancel')).body).toMatchObject({ error: 'state', row: { revokedBy: 'owner' } });
+      // Restored: Pro again.
+      expect((await act('restore')).body.row).toMatchObject({ revoked: null, revokedBy: null });
+      expect((await post('/check', { key, pc })).body).toEqual({ ok: true });
+      expect((await act('restore')).status).toBe(409);
+
+      // A refund after a cancel keeps it off for good.
+      expect((await act('cancel')).status).toBe(200);
+      const p = [...payments.values()].find((x) => x.order_id && rowOf(seen.body, key).payment === x.id)!;
+      expect((await webhook({ event: 'refund.processed', payload: { refund: { entity: { payment_id: p.id } } } })).status).toBe(200);
+      const data = await post('/dashboard/data', pass);
+      pass = passOf(data.body);
+      expect(rowOf(data.body, key).revokedBy).toBe('refund');
+      expect((await act('restore')).status).toBe(409);
+      expect((await post('/check', { key, pc })).body).toEqual({ ok: false, reason: 'revoked' });
+
+      // Freed from its PC: that PC hears it was released, and any PC takes it.
+      const other = await bought();
+      const otherPc = pcId();
+      expect((await post('/activate', { key: other, pc: otherPc, about: { name: 'OLD-PC' } })).status).toBe(200);
+      const otherLic = rowOf((await post('/dashboard/data', pass)).body, other).lic;
+      const freed = await act('free', { lic: otherLic });
+      expect(freed.body.row).toMatchObject({ pc: null, about: null });
+      expect((await post('/check', { key: other, pc: otherPc })).body).toEqual({ ok: false, reason: 'released' });
+      expect((await act('free', { lic: otherLic })).status).toBe(409);
+      expect((await post('/activate', { key: other, pc: pcId() })).status).toBe(200);
+
+      // Named, cleaned, and cleared.
+      expect((await act('label', { lic: otherLic, label: '  For\u0000 Meera ' })).body.row).toMatchObject({ label: 'For Meera' });
+      expect((await act('label', { lic: otherLic, label: '' })).body.row).toMatchObject({ label: null });
+      expect((await act('label', { lic: 'ffffffffffffffff' })).status).toBe(404);
+      expect((await act('label', { lic: 'not a licence' })).status).toBe(400);
+
+      // The pass: as the checkout makes one, it works; too old, under another kind or passphrase,
+      // or past 30 minutes after the sign-in, it does not.
+      const now = Math.floor(Date.now() / 1000);
+      const withPass = (pass: string, by: string, at: number) => post('/dashboard/data', { pass, by, at });
+      expect((await withPass(challengeFor(`dash:${owner.id}:${now - 60}`, now, DASH), owner.id, now - 60)).status).toBe(200);
+      expect((await withPass(challengeFor(`dash:${owner.id}:${now - 60}`, now - 301, DASH), owner.id, now - 60)).status).toBe(403);
+      expect((await withPass(challengeFor(`dash:${owner.id}:${now - 1801}`, now, DASH), owner.id, now - 1801)).status).toBe(403);
+      expect((await withPass(challengeFor(`dash:${owner.id}:${now - 60}`, now, DASH), owner.id, now - 61)).status).toBe(403);
+      expect((await withPass(challengeFor(`remove:${owner.id}`, now, DASH), owner.id, now - 60)).status).toBe(403);
+      expect((await withPass(challengeFor(`dash:${owner.id}:${now - 60}`, now, PASSPHRASE), owner.id, now - 60)).status).toBe(403);
+      expect((await post('/dashboard/cancel', { lic })).status).toBe(403);
+
+      // A device removed on the key page: its pass is good no more.
+      const phone = await Device.make();
+      expect((await add(owner, phone)).body).toEqual({ ok: true, devices: 2 });
+      const phones = passOf((await signedInData(phone)).body);
+      expect((await post('/dashboard/data', phones)).status).toBe(200);
+      const list = await post('/give/devices', await signInBody(owner));
+      expect((await post('/give/remove', { pass: list.body.pass, by: owner.id, id: phone.id })).status).toBe(200);
+      expect(await post('/dashboard/data', phones)).toEqual({ status: 403, body: { error: 'pass' } });
+      expect((await post('/dashboard/data', pass)).status).toBe(200);
+    } finally {
+      await restart();
+    }
+  });
+
+  it('still shows the keys without Razorpay, and reads its lists past 100 (2.6)', async () => {
+    await restart(KEY_ID, {}, { KEY_PAGE_PASSPHRASE: DASH });
+    try {
+      const key = await bought();
+      // 150 newer payments for something else: the key's is past the first page.
+      for (let i = 0; i < 150; i++) payment(`order_other${i}`, { id: `pay_other${i}`, email: `other${i}@example.test` });
+      listed.length = 0;
+      const seen = await signedInData(owner);
+      expect(seen.body.razorpay).toBe('ok');
+      expect(rowOf(seen.body, key).buyer).toMatchObject({ name: BUYER });
+      expect(listed.some((u) => u.includes('skip=100'))).toBe(true);
+
+      listsDown = true;
+      const down = await post('/dashboard/data', passOf(seen.body));
+      expect(down.status).toBe(200);
+      expect(down.body.razorpay).toBe('failed');
+      expect(rowOf(down.body, key)).toMatchObject({ key, buyer: null, source: 'test' });
+      listsDown = false;
+
+      // On Live keys: a key bought now is bought, the one from before a test key.
+      await restart(LIVE_KEY_ID, {}, { KEY_PAGE_PASSPHRASE: DASH });
+      const real = await bought();
+      const now = await signedInData(owner);
+      expect(now.body.live).toBe(true);
+      expect(rowOf(now.body, real)).toMatchObject({ source: 'bought', amount: 10000, currency: 'USD', buyer: { name: BUYER, email: null, phone: null } });
+      expect(rowOf(now.body, key).source).toBe('test');
+      // A price not kept yet (a key bought before prices were kept) is kept from Razorpay's list.
+      const ledger = await server.getWorker().getDurableObjectStorage('LEDGER', { name: 'ledger' });
+      await ledger.exec('UPDATE licences SET amount = NULL, currency = NULL WHERE key = ?', key);
+      expect(rowOf((await post('/dashboard/data', passOf(now.body))).body, key)).toMatchObject({ amount: 10000, currency: 'USD' });
+      expect(await ledger.exec('SELECT amount FROM licences WHERE key = ?', key)).toEqual([{ amount: 10000 }]);
+    } finally {
+      listsDown = false;
+      for (let i = 0; i < 150; i++) payments.delete(`pay_other${i}`);
+      await restart();
+    }
+  });
+
   it('starts setup again under a new passphrase: the old device then gives nothing', async () => {
     const next = { KEY_PAGE_PASSPHRASE: 'another passphrase for the tests' };
     await restart(KEY_ID, {}, next);
@@ -1054,6 +1291,8 @@ describe('keys bought under Razorpay\'s Test keys', () => {
     const ledger = await worker.getDurableObjectStorage('LEDGER', { name: 'ledger' });
     // The ledger as the first deploy made it, with a key in it.
     await ledger.exec('ALTER TABLE licences DROP COLUMN test');
+    // Nor what the dashboard (2.6) keeps.
+    for (const c of ['checked', 'about', 'revoked_by', 'amount', 'currency', 'label']) await ledger.exec(`ALTER TABLE licences DROP COLUMN ${c}`);
     const key = 'CLKX-0AAAA-AAAAA-AAAAA-AAAAA';
     await ledger.exec('INSERT INTO licences (lic, key, payment, issued) VALUES (?, ?, ?, ?)', 'firstdeploy00001', key, 'pay_first', 1);
     await worker.evictDurableObject('LEDGER', { name: 'ledger' });

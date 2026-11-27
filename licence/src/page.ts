@@ -24,6 +24,7 @@ const STYLE = `
     -webkit-backdrop-filter: blur(24px) saturate(170%); backdrop-filter: blur(24px) saturate(170%);
     box-shadow: inset 0 1px 0 var(--rim), 0 24px 56px -28px rgb(0 0 0 / 45%); }
   main.wide { width: min(46rem, 100%); }
+  main.full { width: min(84rem, 100%); }
   h1 { margin: 0 0 4px; font-size: 1.4rem; }
   h2 { margin: 22px 0 6px; font-size: 1.05rem; }
   .price { margin: 0 0 16px; font-size: 2rem; font-weight: 700; }
@@ -87,6 +88,10 @@ export interface Page {
   wide?: boolean;
   /** For search engines: the website's pages, not the checkout's own. */
   index?: boolean;
+  /** As wide as the screen allows (the dashboard, 2.6). */
+  full?: boolean;
+  /** More style, for this page only. */
+  style?: string;
 }
 
 export function page(p: Page): string {
@@ -96,10 +101,10 @@ export function page(p: Page): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 ${p.index ? '' : '<meta name="robots" content="noindex">\n'}<title>${esc(p.title)}</title>
-<style nonce="${p.nonce}">${STYLE}</style>
+<style nonce="${p.nonce}">${STYLE}${p.style ?? ''}</style>
 </head>
 <body>
-<main${p.wide ? ' class="wide"' : ''}>
+<main${p.full ? ' class="full"' : p.wide ? ' class="wide"' : ''}>
 ${p.body}
 </main>
 ${footer(p.seller)}
@@ -163,6 +168,8 @@ export function checkoutPage(o: { nonce: string; seller: string; keyId: string; 
   <input type="hidden" name="razorpay_order_id">
   <input type="hidden" name="razorpay_signature">
 </form>
+<label for="name">Your name</label>
+<input id="name" name="name" autocomplete="name" maxlength="80" required>
 <button id="pay" type="button">Pay ${price}</button>
 <p class="muted after">${o.claim ? 'Clokrix turns Pro on by itself once you have paid. ' : ''}Sold by ${esc(o.seller)}; Razorpay
 takes the payment. <a href="/refunds">Refundable within ${REFUND_DAYS} days.</a></p>
@@ -183,15 +190,24 @@ takes the payment. <a href="/refunds">Refundable within ${REFUND_DAYS} days.</a>
   options.modal = { confirm_close: true, ondismiss: () => (pay.disabled = false) };
   pay.addEventListener('click', async () => {
     err.textContent = '';
+    // Whose key it is, for the seller: Razorpay keeps it with the order (2.6).
+    const name = document.getElementById('name').value.trim();
+    if (!name) {
+      err.textContent = 'Type your name first.';
+      document.getElementById('name').focus();
+      return;
+    }
     if (typeof Razorpay === 'undefined') {
       err.textContent = 'The payment window could not load. Check your connection and try again.';
       return;
     }
     pay.disabled = true;
     try {
-      const res = await fetch('/order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ c: claim, cur }) });
+      const res = await fetch('/order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ c: claim, cur, name }) });
       if (!res.ok) throw new Error(String(res.status));
       options.order_id = (await res.json()).order_id;
+      options.prefill = { name };
+      options.notes = { name };
     } catch {
       err.textContent = 'The payment could not start. Try again in a moment.';
       pay.disabled = false;
@@ -220,6 +236,46 @@ export function paidPage(o: { nonce: string; seller: string; key: string; fromAp
 another PC. In Clokrix: Settings → Clokrix Pro → Enter key. Razorpay emails you a receipt.</p>`,
   });
 }
+
+/** What the key page and the dashboard (2.6) share in their scripts: base64url both ways, `api`
+ * (a POST, its error said in the page's own `said` words), and `signature()`, a sign-in with a
+ * device set up, as the checkout takes it. Inside a page's template: no backticks here, and every
+ * backslash doubled. */
+export const PASSKEY_SCRIPT = `
+  const enc = (b) => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
+  const dec = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+  async function api(path, body) {
+    const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(said[j.error] || 'That did not work. Try again.'), { code: j.error, body: j });
+    return j;
+  }
+  async function signature() {
+    const o = await api('/give/start', {});
+    const c = await navigator.credentials.get({
+      publicKey: {
+        challenge: dec(o.challenge),
+        rpId: o.rpId,
+        allowCredentials: o.ids.map((id) => ({ type: 'public-key', id: dec(id) })),
+        userVerification: 'required',
+        timeout: 120000,
+      },
+    });
+    const r = c.response;
+    return {
+      id: enc(c.rawId),
+      authenticatorData: enc(r.authenticatorData),
+      clientDataJSON: enc(r.clientDataJSON),
+      signature: enc(r.signature),
+      attachment: c.authenticatorAttachment,
+    };
+  }
+  // The browser's own reason, without the link Chrome adds to it.
+  const why = (x) => {
+    const m = String((x && x.message) || '').split(' See:')[0].trim();
+    return m ? ' (The browser said: ' + m + ')' : '';
+  };
+`;
 
 /** The key page (2.5.5): `setup` to set this device's passkey up with the setup passphrase, then
  * `sign-in`, where the passkey (fingerprint, face or PIN) gets a key. Worded so a visitor learns
@@ -282,8 +338,6 @@ key) can sign in here too, as a backup. Adding one asks this device first.</p>
 <script nonce="${o.nonce}">
   const setup = ${JSON.stringify(setup)};
   const err = document.getElementById('err');
-  const enc = (b) => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
-  const dec = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
   const said = {
     passphrase: 'That is not the setup passphrase.',
     wait: 'Too many wrong passphrases: try again in an hour.',
@@ -298,12 +352,7 @@ key) can sign in here too, as a backup. Adding one asks this device first.</p>
     pass: 'That was over 5 minutes after signing in: choose Devices set up here again.',
     last: 'That is the last device that signs in here: add another first.',
   };
-  async function api(path, body) {
-    const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw Object.assign(new Error(said[j.error] || 'That did not work. Try again.'), { code: j.error });
-    return j;
-  }
+${PASSKEY_SCRIPT}
   // A new passkey for the options the checkout gave, sent as it takes one, with extra.
   async function make(o, finish, extra) {
     const c = await navigator.credentials.create({
@@ -336,27 +385,6 @@ key) can sign in here too, as a backup. Adding one asks this device first.</p>
   async function setUp(passphrase) {
     await make(await api('/give/setup/start', { passphrase }), '/give/setup/finish', { passphrase });
     location.reload();
-  }
-  // A sign-in with a device set up, as the checkout takes it.
-  async function signature() {
-    const o = await api('/give/start', {});
-    const c = await navigator.credentials.get({
-      publicKey: {
-        challenge: dec(o.challenge),
-        rpId: o.rpId,
-        allowCredentials: o.ids.map((id) => ({ type: 'public-key', id: dec(id) })),
-        userVerification: 'required',
-        timeout: 120000,
-      },
-    });
-    const r = c.response;
-    return {
-      id: enc(c.rawId),
-      authenticatorData: enc(r.authenticatorData),
-      clientDataJSON: enc(r.clientDataJSON),
-      signature: enc(r.signature),
-      attachment: c.authenticatorAttachment,
-    };
   }
   // Adding a device takes two clicks: this device signs in, then the other makes its passkey. A
   // click each, so the browser's window for the second opens on a click of its own, with this
@@ -461,11 +489,6 @@ key) can sign in here too, as a backup. Adding one asks this device first.</p>
       document.getElementById('done').textContent = 'Removed ' + name + ': ' + left + ' in here now.';
     }
   }
-  // The browser's own reason, without the link Chrome adds to it.
-  const why = (x) => {
-    const m = String((x && x.message) || '').split(' See:')[0].trim();
-    return m ? ' (The browser said: ' + m + ')' : '';
-  };
   // The third argument says what a refused or closed browser window means at this step.
   async function run(button, work, cancelled) {
     err.textContent = '';

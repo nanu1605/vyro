@@ -19,7 +19,7 @@ export interface Seller {
 /** The newest installer, from this website (downloads.ts). */
 const DOWNLOAD = '/download';
 /** When these pages last changed in what they promise. */
-const UPDATED = '16 November 2026';
+const UPDATED = '27 November 2026';
 
 /** The website's paths, each with its page. */
 export const SITE_PAGES = ['/', '/terms', '/privacy', '/refunds', '/delivery', '/contact'] as const;
@@ -107,18 +107,21 @@ function privacy(s: Seller): string {
     `<p>${esc(s.name)} sells Clokrix Pro. This page says what we keep, and what others keep, when you buy and use it.</p>
 <h2>What we keep</h2>
 <ul>
-  <li>For each purchase: Razorpay's order and payment ids, the key, and when it was paid.</li>
-  <li>For each key: the PC it is on, as a one-way hash of Windows' installation id (never the id itself), and when it
-  was turned on or moved.</li>
+  <li>For each purchase: Razorpay's order and payment ids, the key, what was paid and when.</li>
+  <li>For each key: the PC it is on, as a one-way hash of Windows' installation id (never the id itself), when it
+  was turned on or moved and when it last checked in, and what the app says of that PC (below).</li>
 </ul>
-<p>We keep nothing else about you here: no name, email, address or card details.</p>
+<p>We keep nothing else about you here: no email, phone, address or card details. The name you give when you buy
+goes to Razorpay with your order, not here.</p>
 <h2>What Razorpay keeps</h2>
-<p>What you type into Razorpay's payment window (such as your name, email, phone and payment details) goes to
+<p>Your name, and what you type into Razorpay's payment window (such as your email, phone and payment details), go to
 Razorpay, which takes the payment under its own privacy policy. We see your payment in our Razorpay account, to
-send receipts, answer questions and make refunds.</p>
+send receipts, answer questions, make refunds and know whose key is whose.</p>
 <h2>The app</h2>
-<p>Clokrix's readings stay on your PC. For Pro, the app sends this website only the key and the PC's hash: to turn
-Pro on, to move it, and at most once a week to check the key is still good.</p>
+<p>Clokrix's readings stay on your PC. For Pro, the app sends this website the key and the PC's hash: to turn Pro
+on, to move it, and at most once a week to check the key is still good. Since version 2.6 it also sends the PC's
+name as Windows shows it, its processor and graphics card, and its Windows and Clokrix versions, so we can help with
+your key and see which PC it is on. Nothing else about the PC is sent.</p>
 <h2>This website</h2>
 <p>No cookies, no analytics and no advertising. To stop abuse, each address's requests are counted for a minute,
 then forgotten.</p>

@@ -126,6 +126,36 @@ hour, setup takes none, the right one too, until the oldest is an hour old.
 What the page cannot stop: someone who controls the company's GitHub or Cloudflare account can
 change what is deployed. Keep both to yourself, with two-factor sign-in.
 
+## The owner's dashboard (2.6)
+
+The owner, 2026-11-27: "Make an admin panel dashboard where i can see keys which are currently in
+use and also including the system the key is in use and names of the person who owns that key. I
+need a full dashboard."
+
+At `/dashboard` on the website, signed in with a device set up on the key page (above). Before
+the sign-in it shows only Sign in. After it:
+
+- **In use now**: keys on a PC that checked in within 8 days (the app checks weekly); then keys
+  bought, the money taken in each currency (refunds left out), given, quiet (on a PC not seen in
+  8 days), not turned on yet, cancelled and refunded.
+- **Keys sold each month**, the last 12 months.
+- **Every key**, searchable and filtered by status and source: its owner (the buyer's name from
+  checkout, email and phone, read from Razorpay as the dashboard opens and never kept by the
+  website; or who a given key was given to), the key (hidden until Show, or copied), the price
+  and date, the PC (its name, processor, graphics card, Windows and Clokrix versions, which the
+  app sends since 2.6; a short code of the PC's hash before that), when it was turned on or
+  moved, and when its PC last checked in.
+- **Cancel** turns a key off: its PC turns Free at its next weekly check-in, and the app says
+  the key was cancelled. Cancelling refunds nothing; refunds are made in Razorpay, which then
+  turns the key off by itself, for good. **Restore** turns on again a key the owner cancelled,
+  never one refunded. **Free from its PC** takes a key off its PC, so it can be entered on any
+  other without waiting for a move. **Name** sets who a key was given to.
+- **Give a key**, with who it is for; **Export CSV** of the keys shown.
+
+A sign-in keeps the dashboard open for 30 minutes at most, each action within 5 minutes of the
+one before (it refreshes itself every 4 minutes while it is looked at). A device removed on the
+key page signs the dashboard out at its next action.
+
 ## What is sent, and to whom
 
 **To the checkout** (Clokrix's own Cloudflare Worker, `licence/`):
@@ -133,12 +163,17 @@ change what is deployed. Keep both to yourself, with two-factor sign-in.
 - the purchase's one-time code;
 - the key;
 - the PC's id: a SHA-256 hash of Windows' installation id (`MachineGuid`) with a Clokrix salt,
-  never the id itself.
+  never the id itself;
+- since 2.6, what the owner's dashboard shows of that PC: its name as Windows shows it, its
+  processor and graphics card, and its Windows and Clokrix versions.
 
-The checkout keeps orders, keys and the PC each key is on, and nothing about the buyer.
+The checkout keeps orders, keys, the price paid, the PC each key is on and what the app said of
+it, and when that PC last checked in. It keeps nothing else about the buyer.
 
-**To Razorpay:** what the buyer types into its checkout. Razorpay keeps it under Jainav
-Infotech Private Limited's account.
+**To Razorpay:** the buyer's name, typed on the checkout page before Pay (2.6), kept with the
+order; and what the buyer types into Razorpay's own window. Razorpay keeps both under Jainav
+Infotech Private Limited's account. The dashboard reads them from Razorpay when it opens; the
+checkout keeps none of them.
 
 Nothing else is sent.
 

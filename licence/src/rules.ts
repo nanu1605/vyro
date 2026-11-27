@@ -48,6 +48,46 @@ export const WRONG_PER_HOUR = 20;
 export const MAX_DEVICES = 5;
 /** A passkey ceremony's challenge is good once, for this long. */
 export const CHALLENGE_SECONDS = 300;
+/** The dashboard (2.6) stays signed in this long after its sign-in, each action within
+ * CHALLENGE_SECONDS of the one before. */
+export const DASH_SECONDS = 1800;
+/** A key counts as in use while its PC checked in within this long: the app checks weekly. */
+export const IN_USE_DAYS = 8;
+
+/** `s` without control characters, trimmed, at most `max` characters; null if nothing is left or
+ * it is not a string. */
+function clean(s: unknown, max: number): string | null {
+  if (typeof s !== 'string') return null;
+  const t = s.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, ' ').replace(/\s+/g, ' ').trim();
+  return t ? [...t].slice(0, max).join('') : null;
+}
+
+/** A buyer's name at checkout (2.6), or the name a given key was given to: 1 to 80 characters. */
+export function cleanName(s: unknown): string | null {
+  return clean(s, 80);
+}
+
+/** What the app (2.6) says of the PC a key is on, as the dashboard shows it. */
+export interface AboutPc {
+  name?: string;
+  cpu?: string;
+  gpu?: string;
+  windows?: string;
+  app?: string;
+}
+
+/** `v` as what the app says of its PC: these fields only, each cleaned and at most 100
+ * characters; null if none is given. */
+export function aboutPc(v: unknown): AboutPc | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  const about: AboutPc = {};
+  for (const k of ['name', 'cpu', 'gpu', 'windows', 'app'] as const) {
+    const s = clean(o[k], 100);
+    if (s) about[k] = s;
+  }
+  return Object.keys(about).length > 0 ? about : null;
+}
 
 /** Crockford's base32: no I, L, O or U, so a key read aloud or typed is not misread. */
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';

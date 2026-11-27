@@ -10,9 +10,14 @@
 // random id, and it is never test, so it turns Pro on whichever keys the checkout runs on. The
 // page gives one only to the owner's passkey (webauthn.ts), kept here with the setup it was let
 // in under: a hash of the setup passphrase, so a new passphrase starts the setup again.
+//
+// For the owner's dashboard (2.6), each key also keeps when its PC last checked in, what the app
+// (2.6 and later) says of that PC (its name, processor, graphics, Windows and Clokrix versions),
+// the price paid, the name a given key was given to, and who turned it off: the owner, or a
+// refund. The buyer's name, email and phone stay with Razorpay, read when the dashboard opens.
 
 import { DurableObject } from 'cloudflare:workers';
-import { CHALLENGE_SECONDS, MAX_DEVICES, MOVE_DAYS, newKey, RATE_PER_MIN, WRONG_PER_HOUR } from './rules';
+import { CHALLENGE_SECONDS, MAX_DEVICES, MOVE_DAYS, newKey, RATE_PER_MIN, WRONG_PER_HOUR, type AboutPc } from './rules';
 
 export const LEDGER_NAME = 'ledger';
 
@@ -23,11 +28,39 @@ export interface Licence {
   revoked: boolean;
 }
 
+/** Who turned a key off: the owner, on the dashboard (2.6), or a refund. */
+export type OffBy = 'owner' | 'refund';
+
 export type Activated =
   | { ok: true; lic: string }
-  | { ok: false; status: number; error: 'no-key' | 'revoked' | 'in-use' | 'moved-recently'; until?: number };
+  | { ok: false; status: number; error: 'no-key' | 'revoked' | 'in-use' | 'moved-recently'; until?: number; by?: 'owner' };
 
-export type Checked = { ok: true } | { ok: false; reason: 'no-key' | 'revoked' | 'moved' | 'released' };
+export type Checked = { ok: true } | { ok: false; reason: 'no-key' | 'revoked' | 'moved' | 'released'; by?: 'owner' };
+
+/** A key as the dashboard shows it (2.6). Times are Unix seconds. */
+export interface KeyRow {
+  lic: string;
+  key: string;
+  /** Razorpay's payment id, or `given:` and a random id. */
+  payment: string;
+  /** The Razorpay order it was bought with, if any. */
+  order: string | null;
+  issued: number;
+  /** The PC's hash, or null while on none. */
+  pc: string | null;
+  activated: number | null;
+  moved: number | null;
+  /** When its PC last checked in (or turned it on), since 2.6's checkout. */
+  checked: number | null;
+  about: AboutPc | null;
+  revoked: number | null;
+  revokedBy: OffBy | null;
+  test: boolean;
+  amount: number | null;
+  currency: string | null;
+  /** Who a given key was given to. */
+  label: string | null;
+}
 
 /** The owner's passkey: its credential id, the website it is for, its public key (SPKI, base64url)
  * and algorithm, its signature counter, the setup it was let in under, and its device's name
@@ -84,6 +117,17 @@ export class Ledger extends DurableObject<object> {
     const keyCols = this.sql.exec<{ name: string }>('PRAGMA table_info(passkeys)').toArray();
     if (!keyCols.some((c) => c.name === 'name')) this.sql.exec('ALTER TABLE passkeys ADD COLUMN name TEXT');
     if (!keyCols.some((c) => c.name === 'used')) this.sql.exec('ALTER TABLE passkeys ADD COLUMN used INTEGER');
+    // Added with the dashboard (2.6). A key turned off before has no `revoked_by`: a refund.
+    for (const [name, type] of [
+      ['checked', 'INTEGER'],
+      ['about', 'TEXT'],
+      ['revoked_by', 'TEXT'],
+      ['amount', 'INTEGER'],
+      ['currency', 'TEXT'],
+      ['label', 'TEXT'],
+    ]) {
+      if (!cols.some((c) => c.name === name)) this.sql.exec(`ALTER TABLE licences ADD COLUMN ${name} ${type}`);
+    }
   }
 
   private now(): number {
@@ -114,8 +158,9 @@ export class Ledger extends DurableObject<object> {
   }
 
   /** The order's licence, made now if the order has none: a page and the webhook for the same
-   * payment get the same key. `test`: paid under Razorpay's Test keys. */
-  issue(orderId: string, paymentId: string, test: boolean): Licence | null {
+   * payment get the same key. `test`: paid under Razorpay's Test keys; `amount` in `currency`'s
+   * smallest unit, what was paid. */
+  issue(orderId: string, paymentId: string, test: boolean, amount: number | null = null, currency: string | null = null): Licence | null {
     if (!this.hasOrder(orderId)) return null;
     return this.ctx.storage.transactionSync(() => {
       const had = this.sql.exec<{ lic: string | null }>('SELECT lic FROM orders WHERE id = ?', orderId).one().lic;
@@ -124,18 +169,27 @@ export class Ledger extends DurableObject<object> {
       const paid = this.sql.exec<{ lic: string }>('SELECT lic FROM licences WHERE payment = ?', paymentId).toArray()[0];
       const lic = paid?.lic ?? crypto.randomUUID().replace(/-/g, '').slice(0, 16);
       if (!paid) {
-        this.sql.exec('INSERT INTO licences (lic, key, payment, issued, test) VALUES (?, ?, ?, ?, ?)', lic, newKey(), paymentId, this.now(), test ? 1 : 0);
+        this.sql.exec(
+          'INSERT INTO licences (lic, key, payment, issued, test, amount, currency) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          lic,
+          newKey(),
+          paymentId,
+          this.now(),
+          test ? 1 : 0,
+          amount,
+          currency,
+        );
       }
       this.sql.exec('UPDATE orders SET lic = ? WHERE id = ?', lic, orderId);
       return this.licence(lic);
     });
   }
 
-  /** A key given, not sold (the key page). */
-  give(): Licence {
+  /** A key given, not sold (the key page), to `label` if the owner named who (the dashboard). */
+  give(label: string | null = null): Licence {
     const lic = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
     const payment = `given:${crypto.randomUUID()}`;
-    this.sql.exec('INSERT INTO licences (lic, key, payment, issued, test) VALUES (?, ?, ?, ?, 0)', lic, newKey(), payment, this.now());
+    this.sql.exec('INSERT INTO licences (lic, key, payment, issued, test, label) VALUES (?, ?, ?, ?, 0, ?)', lic, newKey(), payment, this.now(), label);
     return this.licence(lic)!;
   }
 
@@ -256,11 +310,16 @@ export class Ledger extends DurableObject<object> {
 
   private byKey(key: string) {
     return this.sql
-      .exec<{ lic: string; pc: string | null; moved: number | null; revoked: number | null; test: number }>(
-        'SELECT lic, pc, moved, revoked, test FROM licences WHERE key = ?',
+      .exec<{ lic: string; pc: string | null; moved: number | null; revoked: number | null; revoked_by: string | null; test: number }>(
+        'SELECT lic, pc, moved, revoked, revoked_by, test FROM licences WHERE key = ?',
         key,
       )
       .toArray()[0];
+  }
+
+  /** Turned off by the owner (2.6): said so, beside `revoked`, which 2.5's app already knows. */
+  private by(l: { revoked: number | null; revoked_by: string | null }): { by?: 'owner' } {
+    return l.revoked && l.revoked_by === 'owner' ? { by: 'owner' } : {};
   }
 
   /** Refunded, or bought under Test keys while the checkout is `live`: it turns nothing on. The app
@@ -270,44 +329,139 @@ export class Ledger extends DurableObject<object> {
   }
 
   /** Pro on `pc`: the PC the key is on already, or a key on none. With `move`, also a key on another
-   * PC, at most once in MOVE_DAYS: that PC is then no longer Pro. */
-  activate(key: string, pc: string, move: boolean, live: boolean): Activated {
+   * PC, at most once in MOVE_DAYS: that PC is then no longer Pro. `about` is what the app (2.6)
+   * says of the PC: a PC the key moves to starts with its own, or none. */
+  activate(key: string, pc: string, move: boolean, live: boolean, about: AboutPc | null = null): Activated {
     return this.ctx.storage.transactionSync((): Activated => {
       const l = this.byKey(key);
       if (!l) return { ok: false, status: 404, error: 'no-key' };
-      if (this.off(l, live)) return { ok: false, status: 403, error: 'revoked' };
+      if (this.off(l, live)) return { ok: false, status: 403, error: 'revoked', ...this.by(l) };
       const now = this.now();
+      const said = about ? JSON.stringify(about) : null;
       if (l.pc && l.pc !== pc) {
         if (!move) return { ok: false, status: 409, error: 'in-use' };
         if (l.moved && now - l.moved < MOVE_DAYS * DAY) return { ok: false, status: 409, error: 'moved-recently', until: l.moved + MOVE_DAYS * DAY };
-        this.sql.exec('UPDATE licences SET pc = ?, activated = ?, moved = ? WHERE lic = ?', pc, now, now, l.lic);
+        this.sql.exec('UPDATE licences SET pc = ?, activated = ?, moved = ?, checked = ?, about = ? WHERE lic = ?', pc, now, now, now, said, l.lic);
       } else if (l.pc !== pc) {
-        this.sql.exec('UPDATE licences SET pc = ?, activated = ? WHERE lic = ?', pc, now, l.lic);
+        this.sql.exec('UPDATE licences SET pc = ?, activated = ?, checked = ?, about = ? WHERE lic = ?', pc, now, now, said, l.lic);
+      } else {
+        this.sql.exec('UPDATE licences SET checked = ?, about = COALESCE(?, about) WHERE lic = ?', now, said, l.lic);
       }
       return { ok: true, lic: l.lic };
     });
   }
 
-  /** The key off `pc`, so another PC can take it. */
+  /** The key off `pc`, so another PC can take it. What was said of that PC goes with it. */
   release(key: string, pc: string): boolean {
     const l = this.byKey(key);
     if (!l || l.pc !== pc) return false;
-    this.sql.exec('UPDATE licences SET pc = NULL WHERE lic = ?', l.lic);
+    this.sql.exec('UPDATE licences SET pc = NULL, about = NULL WHERE lic = ?', l.lic);
     return true;
   }
 
-  /** Still Pro on `pc`? */
-  check(key: string, pc: string, live: boolean): Checked {
+  /** Still Pro on `pc`? The PC the key is on is seen checking in, and what it says of itself
+   * (2.6) kept; any other PC's word is not. */
+  check(key: string, pc: string, live: boolean, about: AboutPc | null = null): Checked {
     const l = this.byKey(key);
     if (!l) return { ok: false, reason: 'no-key' };
-    if (this.off(l, live)) return { ok: false, reason: 'revoked' };
+    if (l.pc === pc) {
+      this.sql.exec('UPDATE licences SET checked = ?, about = COALESCE(?, about) WHERE lic = ?', this.now(), about ? JSON.stringify(about) : null, l.lic);
+    }
+    if (this.off(l, live)) return { ok: false, reason: 'revoked', ...this.by(l) };
     if (l.pc === pc) return { ok: true };
     return { ok: false, reason: l.pc ? 'moved' : 'released' };
   }
 
-  /** A refunded payment's key stops working. */
+  /** A refunded payment's key stops working. Turned off by the owner before, it now stays off:
+   * only a key the owner turned off can be turned on again. */
   revoke(paymentId: string): boolean {
-    const r = this.sql.exec('UPDATE licences SET revoked = ? WHERE payment = ? AND revoked IS NULL', this.now(), paymentId);
+    const r = this.sql.exec(
+      "UPDATE licences SET revoked = COALESCE(revoked, ?), revoked_by = 'refund' WHERE payment = ? AND (revoked IS NULL OR revoked_by = 'owner')",
+      this.now(),
+      paymentId,
+    );
     return r.rowsWritten > 0;
+  }
+
+  /** Every key, the newest first, for the dashboard (2.6). */
+  all(): KeyRow[] {
+    type Row = {
+      lic: string;
+      key: string;
+      payment: string;
+      ord: string | null;
+      issued: number;
+      pc: string | null;
+      activated: number | null;
+      moved: number | null;
+      checked: number | null;
+      about: string | null;
+      revoked: number | null;
+      revoked_by: string | null;
+      test: number;
+      amount: number | null;
+      currency: string | null;
+      label: string | null;
+    };
+    return this.sql
+      .exec<Row>(
+        `SELECT l.lic, l.key, l.payment, (SELECT o.id FROM orders o WHERE o.lic = l.lic LIMIT 1) AS ord, l.issued, l.pc, l.activated,
+          l.moved, l.checked, l.about, l.revoked, l.revoked_by, l.test, l.amount, l.currency, l.label
+         FROM licences l ORDER BY l.issued DESC, l.rowid DESC`,
+      )
+      .toArray()
+      .map((r) => {
+        let about: AboutPc | null = null;
+        try {
+          about = r.about ? (JSON.parse(r.about) as AboutPc) : null;
+        } catch {
+          about = null;
+        }
+        return {
+          lic: r.lic,
+          key: r.key,
+          payment: r.payment,
+          order: r.ord,
+          issued: r.issued,
+          pc: r.pc,
+          activated: r.activated,
+          moved: r.moved,
+          checked: r.checked,
+          about,
+          revoked: r.revoked,
+          revokedBy: r.revoked ? (r.revoked_by === 'owner' ? 'owner' : 'refund') : null,
+          test: !!r.test,
+          amount: r.amount,
+          currency: r.currency,
+          label: r.label,
+        };
+      });
+  }
+
+  /** The key turned off by the owner (the dashboard): its PC turns Free at its next check-in.
+   * False if there is no such key, or it is off already. */
+  cancel(lic: string): boolean {
+    return this.sql.exec("UPDATE licences SET revoked = ?, revoked_by = 'owner' WHERE lic = ? AND revoked IS NULL", this.now(), lic).rowsWritten > 0;
+  }
+
+  /** A key the owner turned off, on again. Never one a refund turned off. */
+  restore(lic: string): boolean {
+    return this.sql.exec("UPDATE licences SET revoked = NULL, revoked_by = NULL WHERE lic = ? AND revoked_by = 'owner'", lic).rowsWritten > 0;
+  }
+
+  /** The key off whatever PC it is on (the dashboard), so another can take it without a move.
+   * False if it is on none. */
+  free(lic: string): boolean {
+    return this.sql.exec('UPDATE licences SET pc = NULL, about = NULL WHERE lic = ? AND pc IS NOT NULL', lic).rowsWritten > 0;
+  }
+
+  /** Who the key was given to, or null for no one named. False if there is no such key. */
+  setLabel(lic: string, label: string | null): boolean {
+    return this.sql.exec('UPDATE licences SET label = ? WHERE lic = ?', label, lic).rowsWritten > 0;
+  }
+
+  /** The price paid for a key bought before prices were kept, from Razorpay's list. */
+  setPrice(lic: string, amount: number, currency: string): void {
+    this.sql.exec('UPDATE licences SET amount = ?, currency = ? WHERE lic = ? AND amount IS NULL', amount, currency, lic);
   }
 }
