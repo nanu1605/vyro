@@ -5418,6 +5418,37 @@ closed, and its words named only the first.
       another device; on the phone, `/give`, Set up this device with a code. The owner: "it
       worked, phone is set up". Two devices now give keys: the PC and the phone.
 
+### After 2.5.5: removing a device from the key page
+
+The owner, 2026-11-27: "build the remove device option". Before it, cutting off a lost phone
+meant a new passphrase and a deploy, which cut off every device, the PC too.
+
+- [x] **Devices set up here** (`/give/devices`, `/give/remove`): a sign-in lists the devices,
+      each with when it was set up and last signed in, and a **Remove** button. The sign-in
+      gives a pass for removing: a challenge of its own kind, named for the passkey that signed
+      in, good for 5 minutes and only while that passkey is set up. Any device removes another,
+      or itself; never the last one that signs in here, which would leave setup open to the
+      passphrase. Removed, a passkey is no longer offered at sign-in, and the browser is told
+      (`signalUnknownCredential`, where it has it) so it stops offering it.
+- [x] **Device names** (`deviceName`): the system and browser a passkey was set up from, in
+      fixed words only ("Windows, Edge"); one made from the browser's window on another device
+      is "A phone, by its QR code" or "A security key". The two set up before have no name until
+      each signs in on itself. The ledger's passkeys gain `name` and `used`.
+- [x] **Tests** (41 licence tests): names from ten browsers, and nothing but the fixed words;
+      the list only after a sign-in; names kept once given, not taken from a sign-in through
+      the browser's window; no removing without the pass (none, another device's, a sign-in's
+      challenge, one too old, one made under another passphrase); a removed device's sign-in
+      refused; one pass removes more than one; never the last; a device removing itself, its
+      pass then good for nothing. Checks broken on purpose one at a time (the pass's device, the
+      last-device guard, names kept, the pass's kind made and checked, the list's sign-in, the
+      window's device named): each fails a test.
+- [x] **In a browser** (Chromium, a virtual passkey per device, as Windows Edge and an Android
+      phone): one device listed without Remove; the phone added with a code; each lists both,
+      named; a stale pass said, the list closed for a new sign-in; the PC removes the phone,
+      which then cannot sign in; set up again, the phone removes itself; the PC still signs in;
+      no page errors.
+- [ ] **Deployed**: on the owner's go.
+
 ## Risks
 
 - Spec §8 RAM target (< 120 MB) is tight — WebView2 alone is typically 60–100 MB. Measure on

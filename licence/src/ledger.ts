@@ -30,7 +30,8 @@ export type Activated =
 export type Checked = { ok: true } | { ok: false; reason: 'no-key' | 'revoked' | 'moved' | 'released' };
 
 /** The owner's passkey: its credential id, the website it is for, its public key (SPKI, base64url)
- * and algorithm, its signature counter, and the setup it was let in under. */
+ * and algorithm, its signature counter, the setup it was let in under, and its device's name
+ * (rules.ts, deviceName). */
 export interface Passkey {
   id: string;
   rp: string;
@@ -38,6 +39,16 @@ export interface Passkey {
   alg: number;
   count: number;
   setup: string;
+  name: string | null;
+}
+
+/** A device set up, as the owner sees it to remove one: when it was set up and last signed in. */
+export interface Device {
+  id: string;
+  rp: string;
+  name: string | null;
+  created: number;
+  used: number | null;
 }
 
 const DAY = 86_400;
@@ -69,6 +80,10 @@ export class Ledger extends DurableObject<object> {
     // all count as test.
     const cols = this.sql.exec<{ name: string }>('PRAGMA table_info(licences)').toArray();
     if (!cols.some((c) => c.name === 'test')) this.sql.exec('ALTER TABLE licences ADD COLUMN test INTEGER NOT NULL DEFAULT 1');
+    // Added with removing a device: a passkey set up before has no name until it signs in.
+    const keyCols = this.sql.exec<{ name: string }>('PRAGMA table_info(passkeys)').toArray();
+    if (!keyCols.some((c) => c.name === 'name')) this.sql.exec('ALTER TABLE passkeys ADD COLUMN name TEXT');
+    if (!keyCols.some((c) => c.name === 'used')) this.sql.exec('ALTER TABLE passkeys ADD COLUMN used INTEGER');
   }
 
   private now(): number {
@@ -126,7 +141,14 @@ export class Ledger extends DurableObject<object> {
 
   /** The passkeys let in under `setup`. */
   passkeys(setup: string): Passkey[] {
-    return this.sql.exec<Passkey & Record<string, string | number>>('SELECT id, rp, spki, alg, count, setup FROM passkeys WHERE setup = ?', setup).toArray();
+    return this.sql.exec<Passkey & Record<string, string | number | null>>('SELECT id, rp, spki, alg, count, setup, name FROM passkeys WHERE setup = ?', setup).toArray();
+  }
+
+  /** The devices set up under `setup`, the oldest first. */
+  devices(setup: string): Device[] {
+    return this.sql
+      .exec<Device & Record<string, string | number | null>>('SELECT id, rp, name, created, used FROM passkeys WHERE setup = ? ORDER BY created, rowid', setup)
+      .toArray();
   }
 
   /** A passkey let in under `setup`: the `first` (set up with the passphrase) only while none
@@ -137,14 +159,29 @@ export class Ledger extends DurableObject<object> {
       const n = this.passkeys(p.setup).length;
       if (first ? n > 0 : n === 0 || n >= MAX_DEVICES) return false;
       if (this.sql.exec('SELECT 1 FROM passkeys WHERE id = ?', p.id).toArray().length > 0) return false;
-      this.sql.exec('INSERT INTO passkeys (id, rp, spki, alg, count, setup, created) VALUES (?, ?, ?, ?, ?, ?, ?)', p.id, p.rp, p.spki, p.alg, p.count, p.setup, this.now());
+      this.sql.exec('INSERT INTO passkeys (id, rp, spki, alg, count, setup, created, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', p.id, p.rp, p.spki, p.alg, p.count, p.setup, this.now(), p.name);
       return true;
     });
   }
 
-  /** A sign-in's signature counter, kept so that a copied passkey's sign-in is refused. */
-  setCount(id: string, count: number): void {
-    this.sql.exec('UPDATE passkeys SET count = ? WHERE id = ?', count, id);
+  /** A sign-in: its signature counter, kept so that a copied passkey's sign-in is refused, and
+   * its time; and the device's `name`, if the passkey has none yet (set up before names were
+   * kept). */
+  signedIn(id: string, count: number, name: string | null): void {
+    this.sql.exec('UPDATE passkeys SET count = ?, used = ?, name = COALESCE(name, ?) WHERE id = ?', count, this.now(), name, id);
+  }
+
+  /** Passkey `id` removed from `setup`, by a sign-in on `rp` with passkey `by`: refused if `by`
+   * is not set up there (removed meanwhile), or if no other device would be left to sign in there
+   * (then the passphrase alone would set one up again). One already gone is removed. */
+  removePasskey(setup: string, rp: string, by: string, id: string): 'removed' | 'signed-out' | 'last' {
+    return this.ctx.storage.transactionSync(() => {
+      const here = this.passkeys(setup).filter((p) => p.rp === rp);
+      if (!here.some((p) => p.id === by)) return 'signed-out';
+      if (!here.some((p) => p.id !== id)) return 'last';
+      this.sql.exec('DELETE FROM passkeys WHERE id = ? AND setup = ?', id, setup);
+      return 'removed';
+    });
   }
 
   /** A complete ceremony's challenge, marked used: false if it was already (a ceremony sent

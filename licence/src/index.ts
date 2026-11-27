@@ -36,6 +36,9 @@
 //                            another device's passkey (up to MAX_DEVICES), after a sign-in with one
 //                            set up. The start also gives a code for the other device itself:
 //   POST /give/add/code      {code}: the same ceremony, begun on the other device, once.
+//   POST /give/devices       the devices set up, after a sign-in, with a pass for removing them;
+//   POST /give/remove        {pass, by, id}: that device removed, within CHALLENGE_SECONDS of the
+//                            sign-in. Not the last that signs in here.
 // Clokrix itself (2.5.2, downloads.ts), from the R2 bucket the Release workflow fills:
 //   GET  /download, /download/<tag>/<file>, /updates/latest.json
 
@@ -49,6 +52,7 @@ import {
   b64url,
   chosenCurrency,
   currencyFor,
+  deviceName,
   hmacHex,
   isClaim,
   isPc,
@@ -312,7 +316,8 @@ export default {
         if (!a || !(await vouched(a, rpId))) return 'authenticator';
         if (!(await publicKey(spki, alg))) return 'algorithm';
         if (!(await ledger.useChallenge(c.challenge))) return 'ceremony';
-        return { id, rp: rpId, spki: b64url(spki), alg, count: a.count, setup };
+        const name = deviceName(req.headers.get('User-Agent'), b.attachment, b.transports);
+        return { id, rp: rpId, spki: b64url(spki), alg, count: a.count, setup, name };
       };
 
       /** A sign-in with a passkey set up here: the passkey, once all is checked and the
@@ -333,7 +338,8 @@ export default {
         if ((a.count !== 0 || pk.count !== 0) && a.count <= pk.count) return null;
         // Last, once all else holds: a sign-in sent again finds its challenge used.
         if (!(await ledger.useChallenge(c.challenge))) return null;
-        await ledger.setCount(pk.id, a.count);
+        // A sign-in from another device in the browser's window names no device.
+        await ledger.signedIn(pk.id, a.count, deviceName(req.headers.get('User-Agent'), b.attachment));
         return pk;
       };
 
@@ -392,6 +398,28 @@ export default {
         if (typeof p === 'string') return json(400, { error: p });
         if (!(await ledger.addPasskey(p, false))) return json(409, { error: 'devices' });
         return json(200, { ok: true, devices: all.length + 1 });
+      }
+
+      // Removing a device (the owner, 2026-11-27: "build the remove device option"), one that is
+      // lost or in the wrong hands, without starting again under a new passphrase. The devices
+      // come after a sign-in, with a pass for removing them: a challenge of its own kind, named
+      // for the passkey that signed in, good while that passkey is set up, for CHALLENGE_SECONDS.
+      const listed = async () =>
+        (await ledger.devices(setup)).map((d) => ({ id: d.id, name: d.name, created: d.created, used: d.used, here: d.rp === rpId }));
+      if (path === '/give/devices') {
+        const pk = await signedIn();
+        if (!pk) return json(403, { error: 'passkey' });
+        return json(200, { pass: await newChallenge(set, `remove:${pk.id}`, now), by: pk.id, devices: await listed() });
+      }
+
+      if (path === '/give/remove') {
+        const by = typeof b.by === 'string' && b.by.length <= 1364 ? b.by : null;
+        if (!by || typeof b.pass !== 'string' || !(await freshChallenge(set, `remove:${by}`, b.pass, now))) return json(403, { error: 'pass' });
+        if (typeof b.id !== 'string') return json(400, { error: 'body' });
+        const r = await ledger.removePasskey(setup, rpId, by, b.id);
+        if (r === 'signed-out') return json(403, { error: 'pass' });
+        if (r === 'last') return json(409, { error: 'last' });
+        return json(200, { ok: true, devices: await listed() });
       }
 
       return json(404, { error: 'not-found' });

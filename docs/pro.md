@@ -100,18 +100,28 @@ infotech"):
    Either device can then sign in, so a PC reset or a lost PC keeps nobody out. Up to 5
    devices; an added one can add more. A code is good once; a step that does not finish says
    which it was, with the browser's reason, and can be tried again.
+4. **Removing a device** (the owner, 2026-11-27: "build the remove device option"): on a device
+   set up, choose **Devices set up here**. That device checks you, then lists each device with
+   when it was set up and last signed in, named by the system and browser it was set up from
+   ("Windows, Edge", "Android, Chrome"; one made from the browser's window: "A phone, by its QR
+   code" or "A security key"). **Remove** takes one off: it can no longer sign in here, and the
+   browser, where it can, stops offering its passkey. Within 5 minutes of that sign-in. Any
+   device can remove another, or itself, but not the last one that signs in here. A device set
+   up before names were kept is named at its next sign-in on itself.
 
 Anyone else who opens the page sees only Sign in, which gives them nothing: their device has no
 passkey for it. The passphrase in GitHub sets up a device only while none is set up; more are
-added only from one set up. To start again (every device lost, one in the wrong hands, or a
-passphrase someone may have seen), change `KEY_PAGE_PASSPHRASE` and deploy: the page then asks
-to be set up again, and every old device gives nothing more.
+added only from one set up. A device lost or in the wrong hands: remove it from another (step
+4). To start again (every device lost, one in the wrong hands that removed the others first, or
+a passphrase someone may have seen), change `KEY_PAGE_PASSPHRASE` and deploy: the page then
+asks to be set up again, and every old device gives nothing more.
 
 Nothing about the owner is kept or sent: the passkey's name is "Clokrix Pro keys" and its user
-id is random; the checkout keeps only its public key. A given key works as a bought one: one PC
-at a time, Move Pro here, and on Live keys too. It has no order, payment or receipt: the checkout
-records it as given. After 20 wrong setup passphrases in an hour, setup takes none, the right one
-too, until the oldest is an hour old.
+id is random. The checkout keeps its public key, when it was set up and last signed in, and its
+device's name in the fixed words above (nothing else of the browser's User-Agent). A given key
+works as a bought one: one PC at a time, Move Pro here, and on Live keys too. It has no order,
+payment or receipt: the checkout records it as given. After 20 wrong setup passphrases in an
+hour, setup takes none, the right one too, until the oldest is an hour old.
 
 What the page cannot stop: someone who controls the company's GitHub or Cloudflare account can
 change what is deployed. Keep both to yourself, with two-factor sign-in.

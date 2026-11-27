@@ -41,6 +41,11 @@ const STYLE = `
   .button { display: inline-block; padding: 11px 18px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent); color: var(--on-accent);
     font-weight: 600; text-decoration: none; }
   .button.quiet { border-color: var(--line); background: transparent; color: var(--text); }
+  .devices { margin: 0; padding: 0; list-style: none; color: var(--text); }
+  .devices li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0; padding: 10px 0; border-top: 1px solid var(--line); }
+  .devices li > span { flex: 1 1 10rem; }
+  .devices li .muted { display: block; }
+  .devices button.quiet { width: auto; margin: 0; padding: 8px 14px; }
   .key, .code { display: block; margin: 8px 0 12px; padding: 12px; border: 1px dashed var(--line); border-radius: 10px;
     font: 600 1.05rem/1.4 ui-monospace, 'Cascadia Mono', Consolas, monospace; text-align: center; user-select: all; overflow-wrap: anywhere; }
   .after { margin-top: 12px; }
@@ -251,7 +256,14 @@ key) can sign in here too, as a backup. Adding one asks this device first.</p>
   <input id="code-in" name="code" autocomplete="one-time-code" autocapitalize="characters"
     spellcheck="false" inputmode="text" maxlength="20" required>
   <button type="submit">Set up this device</button>
-</form>`;
+</form>
+<button id="list-open" class="quiet" type="button">Devices set up here</button>
+<div id="devices" class="after" hidden>
+  <h2>Devices set up here</h2>
+  <p class="muted">Remove one that is lost, sold or in the wrong hands: it can no longer sign in
+  here. Within 5 minutes of signing in. The last one cannot be removed: add another first.</p>
+  <ul id="list" class="devices"></ul>
+</div>`;
   return page({
     title: 'Clokrix',
     seller: o.seller,
@@ -278,16 +290,18 @@ key) can sign in here too, as a backup. Adding one asks this device first.</p>
     'set-up': 'A device is already set up here.',
     'not-set-up': 'No device is set up here yet.',
     passkey: 'That sign-in was refused. Try again.',
-    devices: 'This page has as many devices as it takes (5).',
+    devices: 'This page has as many devices as it takes (5): remove one first, under Devices set up here.',
     ceremony: 'That took over 5 minutes, or was done already: choose Add another device again.',
     code: 'That code is not one shown here, or is over 5 minutes old, or was used: on a device set up, choose Add another device for a new one.',
     authenticator: 'That device did not check you (fingerprint, face or PIN): pick one that does.',
     algorithm: 'That device makes a kind of passkey this page does not take: pick another.',
+    pass: 'That was over 5 minutes after signing in: choose Devices set up here again.',
+    last: 'That is the last device that signs in here: add another first.',
   };
   async function api(path, body) {
     const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(said[j.error] || 'That did not work. Try again.');
+    if (!r.ok) throw Object.assign(new Error(said[j.error] || 'That did not work. Try again.'), { code: j.error });
     return j;
   }
   // A new passkey for the options the checkout gave, sent as it takes one, with extra.
@@ -314,6 +328,9 @@ key) can sign in here too, as a backup. Adding one asks this device first.</p>
       alg: r.getPublicKeyAlgorithm(),
       authenticatorData: enc(r.getAuthenticatorData()),
       clientDataJSON: enc(r.clientDataJSON),
+      // Made on another device, from the browser's window? Then its name is that device's.
+      attachment: c.authenticatorAttachment,
+      transports: r.getTransports ? r.getTransports() : [],
     });
   }
   async function setUp(passphrase) {
@@ -338,6 +355,7 @@ key) can sign in here too, as a backup. Adding one asks this device first.</p>
       authenticatorData: enc(r.authenticatorData),
       clientDataJSON: enc(r.clientDataJSON),
       signature: enc(r.signature),
+      attachment: c.authenticatorAttachment,
     };
   }
   // Adding a device takes two clicks: this device signs in, then the other makes its passkey. A
@@ -377,6 +395,71 @@ key) can sign in here too, as a backup. Adding one asks this device first.</p>
     document.getElementById('key').textContent = got.key;
     document.getElementById('ask').hidden = true;
     document.getElementById('got').hidden = false;
+  }
+  // The devices set up, after a sign-in, each with Remove but the last that signs in here. The
+  // pass that removes them is good for 5 minutes, and only while the device signed in with is.
+  let pass = null;
+  const day = (t) => new Date(t * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  const nameOf = (d) => (d.name || 'A device set up before names were kept') + (d.id === pass.by ? ' (signed in just now)' : '');
+  async function listDevices() {
+    pass = await api('/give/devices', await signature());
+    showDevices(pass.devices);
+    document.getElementById('devices').hidden = false;
+    document.getElementById('list-open').hidden = true;
+  }
+  // The list closed, its pass gone: the button opens it again, after a sign-in.
+  function closeDevices(again) {
+    pass = null;
+    document.getElementById('devices').hidden = true;
+    document.getElementById('list-open').hidden = !again;
+  }
+  function showDevices(devices) {
+    const here = devices.filter((d) => d.here).length;
+    document.getElementById('list').replaceChildren(
+      ...devices.map((d) => {
+        const li = document.createElement('li');
+        const text = document.createElement('span');
+        const name = document.createElement('b');
+        name.textContent = nameOf(d);
+        const about = document.createElement('span');
+        about.className = 'muted';
+        about.textContent =
+          'Set up ' + day(d.created) + (d.used ? '; last signed in ' + day(d.used) : '; not signed in since') +
+          (d.here ? '' : '; for another address of this page');
+        text.append(name, about);
+        li.append(text);
+        if (!d.here || here > 1) {
+          const remove = document.createElement('button');
+          remove.type = 'button';
+          remove.className = 'quiet';
+          remove.textContent = 'Remove';
+          remove.addEventListener('click', () => run(remove, () => removeDevice(d), 'That device was not removed.'));
+          li.append(remove);
+        }
+        return li;
+      }),
+    );
+  }
+  async function removeDevice(d) {
+    const name = d.id === pass.by ? 'this device' : '“' + nameOf(d) + '”';
+    if (!confirm('Remove ' + name + '? It can no longer sign in here.')) return;
+    const got = await api('/give/remove', { pass: pass.pass, by: pass.by, id: d.id }).catch((x) => {
+      if (x.code === 'pass') closeDevices(true);
+      throw x;
+    });
+    // This browser's passkeys too, where it can say so: it then stops offering that one.
+    try {
+      if (PublicKeyCredential.signalUnknownCredential)
+        await PublicKeyCredential.signalUnknownCredential({ rpId: location.hostname, credentialId: d.id });
+    } catch {}
+    const left = got.devices.length + (got.devices.length === 1 ? ' device signs' : ' devices sign');
+    if (d.id === pass.by) {
+      closeDevices(false);
+      document.getElementById('done').textContent = 'This device is removed: ' + left + ' in here now.';
+    } else {
+      showDevices(got.devices);
+      document.getElementById('done').textContent = 'Removed ' + name + ': ' + left + ' in here now.';
+    }
   }
   // The browser's own reason, without the link Chrome adds to it.
   const why = (x) => {
@@ -421,6 +504,8 @@ key) can sign in here too, as a backup. Adding one asks this device first.</p>
   if (add) add.addEventListener('click', () => run(add, addDevice, signInCancelled));
   const other = document.getElementById('other');
   if (other) other.addEventListener('click', () => run(other, addOther, otherCancelled));
+  const listOpen = document.getElementById('list-open');
+  if (listOpen) listOpen.addEventListener('click', () => run(listOpen, listDevices, signInCancelled));
   const joinOpen = document.getElementById('join-open');
   if (joinOpen)
     joinOpen.addEventListener('click', () => {

@@ -74,6 +74,39 @@ export function normalCode(typed: unknown): string | null {
   return `${c.slice(0, 5)}-${c.slice(5)}`;
 }
 
+const SYSTEMS: Array<[RegExp, string]> = [
+  [/iPhone/, 'iPhone'],
+  [/iPad/, 'iPad'],
+  [/Android/, 'Android'],
+  [/CrOS/, 'ChromeOS'],
+  [/Windows/, 'Windows'],
+  [/Macintosh|Mac OS X/, 'Mac'],
+  [/Linux/, 'Linux'],
+];
+const BROWSERS: Array<[RegExp, string]> = [
+  [/Edg(e|A|iOS)?\//, 'Edge'],
+  [/OPR\/|OPiOS\//, 'Opera'],
+  [/SamsungBrowser\//, 'Samsung Internet'],
+  [/Firefox\/|FxiOS\//, 'Firefox'],
+  [/Chrome\/|CriOS\//, 'Chrome'],
+  [/Safari\//, 'Safari'],
+];
+
+/** A name for a device on the key page (2.5.5), so the owner tells them apart when removing one:
+ * the kind of system and browser its User-Agent names ("Windows, Edge"), from these fixed words
+ * only; nothing else of it is kept. A passkey made on another device from the browser's window
+ * (`attachment` "cross-platform") is that device: a phone by its QR code, or a security key.
+ * Null if none is known. */
+export function deviceName(ua: unknown, attachment?: unknown, transports?: unknown): string | null {
+  if (attachment === 'cross-platform') {
+    const t = Array.isArray(transports) ? transports : [];
+    return t.includes('hybrid') ? 'A phone, by its QR code' : t.length > 0 ? 'A security key' : null;
+  }
+  if (typeof ua !== 'string') return null;
+  const named = [SYSTEMS, BROWSERS].map((words) => words.find(([w]) => w.test(ua))?.[1]).filter((w) => w);
+  return named.length > 0 ? named.join(', ') : null;
+}
+
 /** A key as typed (any case, spaces or none, O for 0 and so on), or null if it is not one. */
 export function normalKey(typed: string): string | null {
   const s = typed.toUpperCase().replace(/[\s-]/g, '');

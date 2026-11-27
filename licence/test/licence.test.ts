@@ -7,6 +7,7 @@ import { createHash, createHmac, webcrypto } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createTestHarness, type TestHarness, type TestHarnessOptions } from 'wrangler';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { deviceName } from '../src/rules';
 
 const KEY_ID = 'rzp_test_clokrix';
 /** Razorpay's Live keys, as the checkout runs once Razorpay has checked the website. */
@@ -868,6 +869,124 @@ describe('the key page (2.5.5)', () => {
         expect((await post('/give/add/finish', await addBody(await Device.make(), o.body.challenge as string))).body).toEqual({ ok: true, devices: 4 + i });
       }
       expect(await post('/give/add/code', { code: codes[2] })).toEqual({ status: 409, body: { error: 'devices' } });
+    } finally {
+      await restart();
+    }
+  });
+
+  it('names a device by its system and browser, in fixed words only', () => {
+    // User-Agents as browsers send them (constructed).
+    const named: Array<[string, string]> = [
+      ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0', 'Windows, Edge'],
+      ['Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0', 'Windows, Firefox'],
+      ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 OPR/125.0.0.0', 'Windows, Opera'],
+      ['Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36', 'Android, Chrome'],
+      ['Mozilla/5.0 (Linux; Android 14; SM-S921B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/28.0 Chrome/130.0.0.0 Mobile Safari/537.36', 'Android, Samsung Internet'],
+      ['Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1', 'iPhone, Safari'],
+      ['Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/142.0.0.0 Mobile/15E148 Safari/604.1', 'iPhone, Chrome'],
+      ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15', 'Mac, Safari'],
+      ['Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36', 'ChromeOS, Chrome'],
+      ['Mozilla/5.0 (X11; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0', 'Linux, Firefox'],
+    ];
+    for (const [ua, name] of named) expect(deviceName(ua)).toBe(name);
+    // Nothing but the fixed words is kept.
+    expect(deviceName('Windows <img src=x onerror=alert(1)>')).toBe('Windows');
+    expect(deviceName('node')).toBeNull();
+    expect(deviceName(undefined)).toBeNull();
+    // Made on another device from the browser's window: that device, whatever the browser is.
+    expect(deviceName(named[0]![0], 'cross-platform', ['hybrid', 'internal'])).toBe('A phone, by its QR code');
+    expect(deviceName(named[0]![0], 'cross-platform', ['nfc', 'usb'])).toBe('A security key');
+    expect(deviceName(named[0]![0], 'cross-platform')).toBeNull();
+    expect(deviceName(named[0]![0], 'platform', ['hybrid'])).toBe('Windows, Edge');
+  });
+
+  it('lists the devices after a sign-in, by name, and removes one, never the last', async () => {
+    const pass = 'a passphrase for the removing tests';
+    await restart(KEY_ID, {}, { KEY_PAGE_PASSPHRASE: pass });
+    const as = (ua: string) => ({ ...from(), 'User-Agent': ua });
+    const EDGE = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0';
+    const PHONE = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36';
+    /** A sign-in by `d`, which is no longer offered, refused. */
+    const refused = async (d: Device) => {
+      const start = await post('/give/start', {});
+      expect(start.body.ids).not.toContain(d.id);
+      const cd = client('webauthn.get', start.body.challenge as string);
+      const ad = authenticator(0x05, d.counts ? ++d.count : 0);
+      const sig = await d.sign(Buffer.concat([ad, sha(cd)]));
+      expect((await post('/give/key', { id: d.id, authenticatorData: b64u(ad), clientDataJSON: b64u(cd), signature: b64u(sig) })).status).toBe(403);
+    };
+    try {
+      // The PC with the passphrase, the phone with a code, and a security key from the PC.
+      const pc = await Device.make();
+      const start = await post('/give/setup/start', { passphrase: pass });
+      expect((await post('/give/setup/finish', { passphrase: pass, ...(await addBody(pc, start.body.challenge as string)) }, as(EDGE))).body).toEqual({ ok: true });
+      expect((await page()).page).toContain('<button id="list-open" class="quiet" type="button">Devices set up here</button>');
+      const code = (await post('/give/add/start', await signInBody(pc))).body.code;
+      const phone = await Device.make(-8, false);
+      const o = await post('/give/add/code', { code });
+      expect((await post('/give/add/finish', await addBody(phone, o.body.challenge as string), as(PHONE))).body).toEqual({ ok: true, devices: 2 });
+      const usb = await Device.make();
+      const fromPc = await post('/give/add/start', await signInBody(pc));
+      const made = { ...(await addBody(usb, fromPc.body.challenge as string)), attachment: 'cross-platform', transports: ['nfc', 'usb'] };
+      expect((await post('/give/add/finish', made, as(EDGE))).body).toEqual({ ok: true, devices: 3 });
+
+      // Not without a sign-in; after one, each device by name, with when it was set up and used.
+      expect((await post('/give/devices', {})).status).toBe(403);
+      expect((await post('/give/devices', { passphrase: pass })).status).toBe(403);
+      const seen = await post('/give/devices', await signInBody(phone));
+      expect(seen.status).toBe(200);
+      expect(seen.body.by).toBe(phone.id);
+      const at = expect.any(Number);
+      expect(seen.body.devices).toEqual([
+        { id: pc.id, name: 'Windows, Edge', created: at, used: at, here: true },
+        { id: phone.id, name: 'Android, Chrome', created: at, used: at, here: true },
+        { id: usb.id, name: 'A security key', created: at, used: null, here: true },
+      ]);
+
+      // A device set up before names were kept is named at its next sign-in on it, not from
+      // another device in the browser's window.
+      const ledger = await server.getWorker().getDurableObjectStorage('LEDGER', { name: 'ledger' });
+      await ledger.exec('UPDATE passkeys SET name = NULL WHERE id = ?', pc.id);
+      const names = async () => ((await post('/give/devices', await signInBody(pc))).body.devices as Array<{ name: string | null }>).map((d) => d.name);
+      expect((await post('/give/key', { ...(await signInBody(pc)), attachment: 'cross-platform' }, as(PHONE))).status).toBe(200);
+      expect(await names()).toEqual([null, 'Android, Chrome', 'A security key']);
+      expect((await post('/give/key', { ...(await signInBody(pc)), attachment: 'platform' }, as(EDGE))).status).toBe(200);
+      expect(await names()).toEqual(['Windows, Edge', 'Android, Chrome', 'A security key']);
+      // Kept once given: a sign-in from elsewhere does not rename it.
+      expect((await post('/give/key', await signInBody(pc), as(PHONE))).status).toBe(200);
+      expect((await names())[0]).toBe('Windows, Edge');
+
+      // Not without its pass: none, another device's name on it, a sign-in's challenge, one too
+      // old, or one made under another passphrase.
+      const removing = (id: string, x: Record<string, unknown> = {}) => post('/give/remove', { pass: seen.body.pass, by: phone.id, id, ...x });
+      const now = Math.floor(Date.now() / 1000);
+      expect((await post('/give/remove', { by: phone.id, id: usb.id })).status).toBe(403);
+      expect((await removing(usb.id, { by: pc.id })).status).toBe(403);
+      expect((await removing(usb.id, { pass: challengeFor('get', now, pass) })).status).toBe(403);
+      expect((await removing(usb.id, { pass: challengeFor(`remove:${phone.id}`, now - 301, pass) })).status).toBe(403);
+      expect((await removing(usb.id, { pass: challengeFor(`remove:${phone.id}`, now, PASSPHRASE) })).status).toBe(403);
+      expect((await removing(usb.id, { pass: challengeFor(`remove:${phone.id}`, now, pass) })).status).toBe(200);
+      expect((await post('/give/devices', await signInBody(pc))).body.devices).toHaveLength(2);
+      await refused(usb);
+
+      // The pass removes more than one; the device it names cannot remove the last.
+      expect((await removing(usb.id)).body).toEqual({ ok: true, devices: [{ id: pc.id, name: 'Windows, Edge', created: at, used: at, here: true }, { id: phone.id, name: 'Android, Chrome', created: at, used: at, here: true }] });
+      expect((await removing(pc.id)).status).toBe(200);
+      await refused(pc);
+      expect(await removing(phone.id)).toEqual({ status: 409, body: { error: 'last' } });
+      expect((await signIn(phone)).status).toBe(200);
+      // One left, the passphrase still sets up nothing.
+      expect((await post('/give/setup/start', { passphrase: pass })).body).toEqual({ error: 'set-up' });
+
+      // A device removes itself; its pass then removes nothing more.
+      const laptop = await Device.make();
+      expect((await add(phone, laptop)).body).toEqual({ ok: true, devices: 2 });
+      const own = await post('/give/devices', await signInBody(laptop));
+      const self = (id: string) => post('/give/remove', { pass: own.body.pass, by: laptop.id, id });
+      expect((await self(laptop.id)).body).toEqual({ ok: true, devices: [{ id: phone.id, name: 'Android, Chrome', created: at, used: at, here: true }] });
+      await refused(laptop);
+      expect(await self(phone.id)).toEqual({ status: 403, body: { error: 'pass' } });
+      expect((await signIn(phone)).status).toBe(200);
     } finally {
       await restart();
     }
