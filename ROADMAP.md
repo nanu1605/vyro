@@ -5531,7 +5531,8 @@ On `claude/vyro-2.0`.
       gives half the stick, the throttle full at the top, axe on each screen, no screen past the
       side at 320 to 430 px, the PC letting go when the link goes, Stop); the licence's 45;
       clippy for Windows (core and app) and Linux; the notices.
-- [ ] **CI green** on the branch.
+- [x] **CI green on bf311a6** (run 46039164080; every job: the MSI built with ViGEmBus's
+      installer, the end to end with the wheel, the accessibility sweep with Lighting's lock).
 - [ ] **Deploys**, each on the owner's go: the licence (the dashboard and the checkout's name
       field) and the relay (the Wheel tab and the page policy).
 - [ ] **Field check** ([`docs/field-check-2.6.md`](docs/field-check-2.6.md)): lighting with a
