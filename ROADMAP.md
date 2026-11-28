@@ -5659,9 +5659,12 @@ I close it" over a button that stops the other program's service (decision 46). 
       alone; a board's empty header under every protocol 0 to 5); clippy for Windows (core and
       app) and Linux; the front end's types and tests; the accessibility sweep with
       `?others=msi` in the browser preview.
-- [ ] **CI**: the `openrgb_setup` example now also prints what the Lighting view would name from
-      the runner's real lists of services and processes (none expected), and fails if either
-      cannot be read.
+- [x] **CI** (run 46109961626 on f0049fb, every job green): the `openrgb_setup` example now also
+      prints what the Lighting view would name from the runner's real lists, and fails if either
+      cannot be read. On the Windows runner: "none (of 109 services and 142 processes running)",
+      after OpenRGB 1.1 installed as before (exit 0, its service running, answered at once on
+      127.0.0.1:6742 in protocol 5, port 6742 on 127.0.0.1 only).
+- [ ] **2.6.2 released**: on the owner's "release 2.6.2".
 - [ ] **Field check**: [`docs/field-check-2.6.md`](docs/field-check-2.6.md) §1, step 2.
 
 ## Risks
