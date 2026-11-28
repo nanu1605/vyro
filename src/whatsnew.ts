@@ -21,6 +21,16 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '2.6.2',
+    items: [
+      {
+        icon: 'lighting',
+        title: 'Clokrix names the program that takes your lights back',
+        text: 'If your lights stay the same while lighting is on, another lighting program may be writing over them. The Lighting view now names MSI Center’s Mystic Light while its services run, and says how to stop them. It also says when a fan or strip header has no LEDs set in OpenRGB.',
+      },
+    ],
+  },
+  {
     version: '2.6.1',
     items: [
       {

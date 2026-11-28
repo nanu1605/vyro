@@ -11,4 +11,8 @@ direct: boolean,
 /**
  * On the memory bus: colours at most 5 times a second.
  */
-slow: boolean, picked: boolean, };
+slow: boolean, picked: boolean, 
+/**
+ * Its zones with no LEDs until their size is set in OpenRGB (2.6.2): names only.
+ */
+empty: Array<string>, };

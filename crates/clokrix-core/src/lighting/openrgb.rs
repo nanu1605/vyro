@@ -81,6 +81,17 @@ pub struct Mode {
     pub raw: Vec<u8>,
 }
 
+/// A zone of a device's LEDs: a keyboard's keys, a board's header.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Zone {
+    pub name: String,
+    /// The LEDs it may have, and has: a header for fans or a strip (min < max) has as many as
+    /// it is given in OpenRGB's Resize, none until then (2.6.2).
+    pub min: u32,
+    pub max: u32,
+    pub count: u32,
+}
+
 /// A device ("controller") as OpenRGB describes it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Controller {
@@ -95,6 +106,7 @@ pub struct Controller {
     pub location: String,
     pub modes: Vec<Mode>,
     pub active_mode: i32,
+    pub zones: Vec<Zone>,
     pub leds: usize,
 }
 
@@ -105,6 +117,16 @@ impl Controller {
             m.name.eq_ignore_ascii_case("direct")
                 && (m.flags & MODE_PER_LED != 0 || m.color_mode == COLORS_PER_LED)
         })
+    }
+
+    /// Its zones whose size is the owner's to set in OpenRGB and is not set: no LED of theirs
+    /// takes a colour until it is.
+    pub fn empty_zones(&self) -> Vec<String> {
+        self.zones
+            .iter()
+            .filter(|z| z.min < z.max && z.count == 0)
+            .map(|z| z.name.clone())
+            .collect()
     }
 }
 
@@ -198,11 +220,18 @@ pub fn parse_controller(data: &[u8], index: u32, version: u32) -> Result<Control
     let modes = (0..n_modes)
         .map(|_| mode(&mut r, version))
         .collect::<Result<Vec<_>, _>>()?;
-    let zones = r.count()?;
-    for _ in 0..zones {
-        r.string()?; // name
+    let n_zones = r.count()?;
+    let mut zones = Vec::with_capacity(n_zones);
+    for _ in 0..n_zones {
+        let name = r.string()?;
         r.i32()?; // type
-        r.take(12)?; // LEDs min, max and count
+        let (min, max, count) = (r.u32()?, r.u32()?, r.u32()?);
+        zones.push(Zone {
+            name,
+            min,
+            max,
+            count,
+        });
         let matrix = usize::from(r.u16()?);
         r.take(matrix)?;
         if version >= 4 {
@@ -234,6 +263,7 @@ pub fn parse_controller(data: &[u8], index: u32, version: u32) -> Result<Control
         location,
         modes,
         active_mode,
+        zones,
         leds,
     })
 }
@@ -450,16 +480,26 @@ pub(crate) mod tests {
         m
     }
 
-    /// A keyboard's description as OpenRGB gives it under `version` (constructed): two modes,
-    /// Static first and Direct, one zone with a matrix and a segment, `leds` LEDs.
-    pub(crate) fn keyboard(version: u32, leds: u16, location: &str) -> Vec<u8> {
+    /// A zone as a test describes it: its name, its LEDs' minimum, maximum and count, and
+    /// whether it has a matrix.
+    type ZoneSpec<'a> = (&'a str, [u32; 3], bool);
+
+    /// A device's description as OpenRGB gives it under `version` (constructed): two modes,
+    /// Static first and Direct, then `zones` (each with a segment), one LED for each counted.
+    fn described(
+        version: u32,
+        kind: i32,
+        name: &str,
+        location: &str,
+        zones: &[ZoneSpec],
+    ) -> Vec<u8> {
         let mut d = vec![0; 4];
-        d.extend_from_slice(&5i32.to_le_bytes());
-        s(&mut d, "Constructed Keyboard");
+        d.extend_from_slice(&kind.to_le_bytes());
+        s(&mut d, name);
         if version >= 1 {
             s(&mut d, "Constructed Co");
         }
-        s(&mut d, "A keyboard");
+        s(&mut d, "A device");
         s(&mut d, "1.0");
         s(&mut d, "SERIAL-0001");
         s(&mut d, location);
@@ -467,30 +507,36 @@ pub(crate) mod tests {
         d.extend_from_slice(&0i32.to_le_bytes());
         d.extend(mode_data(version, "Static", 1 << 6, 2));
         d.extend(mode_data(version, "Direct", MODE_PER_LED, COLORS_PER_LED));
-        d.extend_from_slice(&1u16.to_le_bytes());
-        s(&mut d, "Keys");
-        d.extend_from_slice(&1i32.to_le_bytes());
-        for v in [u32::from(leds); 3] {
-            d.extend_from_slice(&v.to_le_bytes());
+        d.extend_from_slice(&(zones.len() as u16).to_le_bytes());
+        for (zone, sizes, has_matrix) in zones {
+            s(&mut d, zone);
+            d.extend_from_slice(&1i32.to_le_bytes());
+            for v in sizes {
+                d.extend_from_slice(&v.to_le_bytes());
+            }
+            let mut matrix = Vec::new();
+            if *has_matrix {
+                matrix.extend_from_slice(&1u32.to_le_bytes());
+                matrix.extend_from_slice(&2u32.to_le_bytes());
+                matrix.extend_from_slice(&[0; 8]);
+            }
+            d.extend_from_slice(&(matrix.len() as u16).to_le_bytes());
+            d.extend(matrix);
+            if version >= 4 {
+                d.extend_from_slice(&1u16.to_le_bytes());
+                s(&mut d, "All");
+                d.extend_from_slice(&0i32.to_le_bytes());
+                d.extend_from_slice(&[0; 8]);
+            }
+            if version >= 5 {
+                d.extend_from_slice(&0u32.to_le_bytes());
+            }
         }
-        let mut matrix = Vec::new();
-        matrix.extend_from_slice(&1u32.to_le_bytes());
-        matrix.extend_from_slice(&2u32.to_le_bytes());
-        matrix.extend_from_slice(&[0; 8]);
-        d.extend_from_slice(&(matrix.len() as u16).to_le_bytes());
-        d.extend(matrix);
-        if version >= 4 {
-            d.extend_from_slice(&1u16.to_le_bytes());
-            s(&mut d, "All");
-            d.extend_from_slice(&0i32.to_le_bytes());
-            d.extend_from_slice(&[0; 8]);
-        }
-        if version >= 5 {
-            d.extend_from_slice(&0u32.to_le_bytes());
-        }
+        let leds: u32 = zones.iter().map(|(_, [_, _, count], _)| count).sum();
+        let leds = leds as u16;
         d.extend_from_slice(&leds.to_le_bytes());
         for i in 0..leds {
-            s(&mut d, &format!("Key {i}"));
+            s(&mut d, &format!("LED {i}"));
             if version < 6 {
                 d.extend_from_slice(&u32::from(i).to_le_bytes());
             }
@@ -500,6 +546,34 @@ pub(crate) mod tests {
         let n = d.len() as u32;
         d[..4].copy_from_slice(&n.to_le_bytes());
         d
+    }
+
+    /// A keyboard's description as OpenRGB gives it under `version` (constructed): one zone of
+    /// `leds` keys, with a matrix.
+    pub(crate) fn keyboard(version: u32, leds: u16, location: &str) -> Vec<u8> {
+        let n = u32::from(leds);
+        described(
+            version,
+            5,
+            "Constructed Keyboard",
+            location,
+            &[("Keys", [n, n, n], true)],
+        )
+    }
+
+    /// A board's description under `version` (constructed): six LEDs of its own, and a header
+    /// for fans or a strip whose size was never set in OpenRGB.
+    pub(crate) fn board(version: u32) -> Vec<u8> {
+        described(
+            version,
+            0,
+            "Constructed Board",
+            "HID: board",
+            &[
+                ("Onboard", [6, 6, 6], false),
+                ("JRAINBOW1", [0, 240, 0], false),
+            ],
+        )
     }
 
     #[test]
@@ -517,6 +591,28 @@ pub(crate) mod tests {
                 c.modes[1].raw,
                 mode_data(version, "Direct", MODE_PER_LED, 1)
             );
+        }
+    }
+
+    #[test]
+    fn finds_a_header_whose_size_was_never_set() {
+        for version in 0..=VERSION {
+            let b = parse_controller(&board(version), 0, version).unwrap();
+            assert_eq!(b.zones.len(), 2, "v{version}");
+            assert_eq!(
+                b.zones[1],
+                Zone {
+                    name: "JRAINBOW1".into(),
+                    min: 0,
+                    max: 240,
+                    count: 0
+                }
+            );
+            assert_eq!((b.kind, b.leds), (0, 6));
+            assert_eq!(b.empty_zones(), ["JRAINBOW1"], "v{version}");
+            // A keyboard's keys are as many as they are: nothing to set.
+            let k = parse_controller(&keyboard(version, 3, "USB"), 0, version).unwrap();
+            assert!(k.empty_zones().is_empty());
         }
     }
 

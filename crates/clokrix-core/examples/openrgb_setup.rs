@@ -1,6 +1,7 @@
 //! OpenRGB set up as the app sets it up (2.6.1), for CI's Windows runner: downloads the pinned
 //! installer, checks it, installs it with the app's msiexec options, waits for OpenRGB's SDK
-//! server on 127.0.0.1 and asks it for its devices with Clokrix's own client.
+//! server on 127.0.0.1 and asks it for its devices with Clokrix's own client. Also lists the
+//! other lighting programs running as the Lighting view does (2.6.2).
 //!
 //! ```text
 //! openrgb_setup [--log PATH] [--wait SECS]
@@ -64,6 +65,28 @@ fn run() -> Result<(), String> {
     );
     if found.exe.is_none() {
         return Err("OpenRGB.exe is not in Program Files\\OpenRGB".into());
+    }
+
+    // What the Lighting view names (2.6.2), from this PC's own lists: none on CI's runner.
+    let services = clokrix_core::ipc::transport::running_services();
+    let images = clokrix_core::live::names();
+    let others = clokrix_core::lighting::others::found(&services, &images);
+    println!(
+        "| Other lighting | {} (of {} services and {} processes running) |",
+        if others.is_empty() {
+            "none".to_owned()
+        } else {
+            others
+                .iter()
+                .map(|o| format!("{}: {}", o.name, o.services.join(", ")))
+                .collect::<Vec<_>>()
+                .join("; ")
+        },
+        services.len(),
+        images.len()
+    );
+    if services.is_empty() || images.is_empty() {
+        return Err("the running services or processes could not be listed".into());
     }
 
     let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, PORT));

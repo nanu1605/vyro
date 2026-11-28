@@ -98,6 +98,16 @@ pub fn service_state() -> ServiceState {
     state_of(crate::ipc::SERVICE_NAME)
 }
 
+/// The Windows services running now, each as (its name, the name Windows' Services shows):
+/// read only, for the Lighting view to name another lighting program's (2.6.2). Empty elsewhere,
+/// or if the list cannot be read.
+pub fn running_services() -> Vec<(String, String)> {
+    #[cfg(windows)]
+    return win::running_services();
+    #[cfg(not(windows))]
+    Vec::new()
+}
+
 /// State of the Windows service `name` (another program's too: OpenRGB's, 2.6.1).
 pub fn state_of(name: &str) -> ServiceState {
     #[cfg(windows)]
@@ -119,8 +129,8 @@ mod win {
 
     use windows::core::{HSTRING, PCWSTR};
     use windows::Win32::Foundation::{
-        CloseHandle, LocalFree, ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED, HANDLE, HLOCAL,
-        INVALID_HANDLE_VALUE,
+        CloseHandle, LocalFree, ERROR_MORE_DATA, ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED, HANDLE,
+        HLOCAL, INVALID_HANDLE_VALUE,
     };
     use windows::Win32::Security::Authorization::{
         ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
@@ -136,9 +146,11 @@ mod win {
         PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
     };
     use windows::Win32::System::Services::{
-        CloseServiceHandle, OpenSCManagerW, OpenServiceW, QueryServiceStatusEx, SC_MANAGER_CONNECT,
-        SC_STATUS_PROCESS_INFO, SERVICE_QUERY_STATUS, SERVICE_RUNNING, SERVICE_START_PENDING,
-        SERVICE_STATUS_PROCESS, SERVICE_STOPPED,
+        CloseServiceHandle, EnumServicesStatusExW, OpenSCManagerW, OpenServiceW,
+        QueryServiceStatusEx, ENUM_SERVICE_STATUS_PROCESSW, SC_ENUM_PROCESS_INFO,
+        SC_MANAGER_CONNECT, SC_MANAGER_ENUMERATE_SERVICE, SC_STATUS_PROCESS_INFO, SERVICE_ACTIVE,
+        SERVICE_QUERY_STATUS, SERVICE_RUNNING, SERVICE_START_PENDING, SERVICE_STATUS_PROCESS,
+        SERVICE_STOPPED, SERVICE_WIN32,
     };
 
     use super::{Conn, ServiceState};
@@ -326,6 +338,61 @@ mod win {
     /// The service's state and process id; `None` when it is not installed or not visible.
     pub fn service_status() -> Option<(ServiceState, u32)> {
         status_of(crate::ipc::SERVICE_NAME)
+    }
+
+    /// The services running now: (name, display name). Only lists them: nothing is opened.
+    pub fn running_services() -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        // SAFETY: plain SCM calls; the handle is closed below. The records and the strings they
+        // point to are in `buf`, which outlives every read of them and is u64-aligned.
+        unsafe {
+            let Ok(scm) =
+                OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_ENUMERATE_SERVICE)
+            else {
+                return out;
+            };
+            let mut buf = vec![0u64; 8 * 1024];
+            let mut resume = 0u32;
+            for _ in 0..16 {
+                let bytes =
+                    std::slice::from_raw_parts_mut(buf.as_mut_ptr().cast::<u8>(), buf.len() * 8);
+                let (mut needed, mut returned) = (0u32, 0u32);
+                let listed = EnumServicesStatusExW(
+                    scm,
+                    SC_ENUM_PROCESS_INFO,
+                    SERVICE_WIN32,
+                    SERVICE_ACTIVE,
+                    Some(bytes),
+                    &mut needed,
+                    &mut returned,
+                    Some(&mut resume),
+                    PCWSTR::null(),
+                );
+                let records = std::slice::from_raw_parts(
+                    buf.as_ptr().cast::<ENUM_SERVICE_STATUS_PROCESSW>(),
+                    returned as usize,
+                );
+                for r in records {
+                    out.push((
+                        r.lpServiceName.to_string().unwrap_or_default(),
+                        r.lpDisplayName.to_string().unwrap_or_default(),
+                    ));
+                }
+                match listed {
+                    Ok(()) => break,
+                    Err(e) if e.code() == ERROR_MORE_DATA.to_hresult() => {
+                        // More to come from `resume`; room for at least the next record.
+                        if returned == 0 {
+                            let want = (needed as usize).div_ceil(8) + 1;
+                            buf.resize(want.max(buf.len() * 2), 0);
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+            let _ = CloseServiceHandle(scm);
+        }
+        out
     }
 
     /// The service `name`'s state and process id, as [`service_status`].

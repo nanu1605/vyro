@@ -12,6 +12,10 @@
 //! which downloads its pinned installer and runs it with one administrator prompt; its service
 //! then answers. An OpenRGB installed without the service is started here, once, while lighting
 //! is on and it does not answer.
+//!
+//! Another lighting program (2.6.2, `lighting::others`): while lighting is on, the names of the
+//! services and processes running are read every 10 s, and the view names each lighting program
+//! Clokrix recognises among them, with how to stop it. Clokrix never stops or touches it.
 
 use std::collections::{HashMap, HashSet};
 use std::net::{Ipv4Addr, SocketAddr};
@@ -22,6 +26,7 @@ use std::time::{Duration, Instant};
 
 use clokrix_core::lighting::colour::{Picker, Rgb8, Target, Thumb};
 use clokrix_core::lighting::openrgb::{Client, Controller, PORT};
+use clokrix_core::lighting::others::OtherLighting;
 use clokrix_core::lighting::setup::{self, Next};
 use clokrix_core::lighting::{
     self, device_id, info, interval, restore_mode, saved_mode, LightLink, LightingSettings,
@@ -40,6 +45,8 @@ const RETRY: Duration = Duration::from_secs(5);
 const FRAME: Duration = Duration::from_millis(33);
 /// The view hears of the colour this often at most.
 const TELL: Duration = Duration::from_millis(250);
+/// Other lighting programs are looked for this often.
+const OTHERS: Duration = Duration::from_secs(10);
 
 /// What is kept: the settings, and the modes to put back.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -349,6 +356,33 @@ fn silent(
     }
 }
 
+/// The lighting programs of `others::KNOWN` running now, from the names of the services and
+/// processes running (read only).
+fn other_lighting() -> Vec<OtherLighting> {
+    #[cfg(windows)]
+    return clokrix_core::lighting::others::found(
+        &clokrix_core::ipc::transport::running_services(),
+        &clokrix_core::live::names(),
+    );
+    #[cfg(not(windows))]
+    Vec::new()
+}
+
+/// Each program as the log names it: with its services running, or its processes.
+fn others_named(found: &[OtherLighting]) -> Vec<String> {
+    found
+        .iter()
+        .map(|o| {
+            let what = if o.services.is_empty() {
+                &o.processes
+            } else {
+                &o.services
+            };
+            format!("{} ({})", o.name, what.join(", "))
+        })
+        .collect()
+}
+
 /// Whether a game is in front (for the Auto speed).
 fn game_in_front(app: &AppHandle) -> bool {
     crate::gaming::game_in_front(app)
@@ -366,6 +400,11 @@ fn run(app: &AppHandle) {
     // OpenRGB not answering since then; started here then (once a run).
     let mut silent_since: Option<Instant> = None;
     let mut started_at: Option<Instant> = None;
+    // What OpenRGB last failed with, logged once until it changes.
+    let mut failed: Option<String> = None;
+    // Other lighting programs: looked for then; those last logged.
+    let mut others_at = Instant::now();
+    let mut others_logged: Vec<String> = Vec::new();
     // Devices in Direct now, and what each was last sent.
     let mut direct: HashSet<String> = HashSet::new();
     let mut sent: HashMap<String, (Rgb8, Instant)> = HashMap::new();
@@ -380,6 +419,25 @@ fn run(app: &AppHandle) {
     while !state.stop.load(Ordering::SeqCst) {
         let tick = Instant::now();
         let settings = state.settings();
+
+        // Other lighting programs, which take the lights back: named, never touched.
+        if tick >= others_at {
+            others_at = tick + OTHERS;
+            let found = other_lighting();
+            let named = others_named(&found);
+            if named != others_logged {
+                if named.is_empty() {
+                    log::info!("lighting: no other lighting program runs now");
+                } else {
+                    log::info!(
+                        "lighting: {} runs: it takes the lights back",
+                        named.join("; ")
+                    );
+                }
+                others_logged = named;
+            }
+            lock(&state.status).others = found;
+        }
 
         // OpenRGB.
         if state.fresh.swap(false, Ordering::SeqCst) {
@@ -401,9 +459,14 @@ fn run(app: &AppHandle) {
                     direct.clear();
                     sent.clear();
                     silent_since = None;
+                    failed = None;
                 }
                 Err(e) => {
-                    log::debug!("lighting: OpenRGB: {e}");
+                    let said = e.to_string();
+                    if failed.as_deref() != Some(said.as_str()) {
+                        log::info!("lighting: OpenRGB does not answer: {said}");
+                        failed = Some(said);
+                    }
                     let link = silent(&state, tick, &mut silent_since, &mut started_at);
                     lock(&state.status).link = link;
                 }
@@ -458,6 +521,17 @@ fn run(app: &AppHandle) {
                 state.save();
                 match c.set_mode(d.index, m as i32, &d.modes[m].raw) {
                     Ok(()) => {
+                        let empty = d.empty_zones();
+                        if empty.is_empty() {
+                            log::info!("lighting: {} in Direct, {} LEDs", d.name, d.leds);
+                        } else {
+                            log::info!(
+                                "lighting: {} in Direct, {} LEDs; no LEDs set in OpenRGB for {}",
+                                d.name,
+                                d.leds,
+                                empty.join(", ")
+                            );
+                        }
                         direct.insert(id);
                     }
                     Err(e) => {

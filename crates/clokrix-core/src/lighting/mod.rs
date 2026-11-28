@@ -10,6 +10,7 @@
 
 pub mod colour;
 pub mod openrgb;
+pub mod others;
 pub mod setup;
 
 use std::time::Duration;
@@ -114,6 +115,8 @@ pub struct LightDevice {
     /// On the memory bus: colours at most 5 times a second.
     pub slow: bool,
     pub picked: bool,
+    /// Its zones with no LEDs until their size is set in OpenRGB (2.6.2): names only.
+    pub empty: Vec<String>,
 }
 
 /// What the Lighting view shows.
@@ -134,6 +137,8 @@ pub struct LightingStatus {
     pub setup: Option<SetupStep>,
     /// The OpenRGB version the app sets up, where it can (Windows).
     pub offer: Option<String>,
+    /// Other lighting programs running, which take the lights back (2.6.2).
+    pub others: Vec<others::OtherLighting>,
 }
 
 /// A device's lasting name: a hash of its name, maker and where it is, so the same device keeps
@@ -196,6 +201,7 @@ pub fn info(c: &Controller, picked: &[String]) -> LightDevice {
         leds: c.leds as u32,
         direct: c.direct_mode().is_some(),
         slow: on_memory_bus(c),
+        empty: c.empty_zones(),
     }
 }
 
@@ -242,7 +248,7 @@ pub fn pick_settings(s: &LightingSettings, game: bool, accent: Rgb8) -> colour::
 
 #[cfg(test)]
 mod tests {
-    use super::openrgb::{parse_controller, tests::keyboard, VERSION};
+    use super::openrgb::{parse_controller, tests::board, tests::keyboard, VERSION};
     use super::*;
 
     fn device(location: &str) -> Controller {
@@ -260,6 +266,9 @@ mod tests {
         let i = info(&a, &[device_id(&a)]);
         assert!(i.picked && i.direct && !i.slow);
         assert_eq!((i.kind.as_str(), i.leds), ("Keyboard", 4));
+        assert!(i.empty.is_empty());
+        let board = parse_controller(&board(VERSION), 1, VERSION).unwrap();
+        assert_eq!(info(&board, &[]).empty, ["JRAINBOW1"]);
         // Nothing of where it is goes to the view or the settings.
         let shown = serde_json::to_string(&i).unwrap();
         assert!(!shown.contains("SERIAL") && !shown.contains("hid#"));

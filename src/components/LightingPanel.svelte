@@ -107,6 +107,8 @@
     };
   });
 
+  // "A", "A and B", "A, B and C".
+  const list = (items: string[]) => (items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
   const hex = (c: Rgb8) => '#' + [c.r, c.g, c.b].map((v) => v.toString(16).padStart(2, '0')).join('');
   const settings = $derived(lv?.settings);
   const speed = $derived(SPEEDS.find((s) => s.id === settings?.speed));
@@ -169,12 +171,27 @@
                 {#if setupNote}<p class="note" role="status">{setupNote}</p>{/if}
               </div>
             </div>
+            <!-- 2.6.2: another lighting program writes over OpenRGB's colours. Named, never touched. -->
+            {#each status.others as o (o.name)}
+              <div class="other" role="status">
+                <p><b>{o.name} is running</b> and takes your lights back from OpenRGB, so they don't change.</p>
+                <p class="note">
+                  {#if o.services.length > 0}
+                    In Windows' Services (Win+R, then <code>services.msc</code>), set {list(o.services)} to Manual and stop
+                    {o.services.length === 1 ? 'it' : 'them'}, or {o.remedy}.
+                  {:else}
+                    Quit {list(o.processes)}, or {o.remedy}.
+                  {/if}
+                  Then restart the PC. Clokrix never stops another program itself.
+                </p>
+              </div>
+            {/each}
           {/if}
           <div class="row">
             <p class="note">
               Each picture of the screen is made small on the graphics card and kept only as one colour: nothing of it is
-              saved or leaves this PC. Close the lighting in iCUE, Synapse, G HUB or Armoury Crate, or they fight OpenRGB
-              for the devices.
+              saved or leaves this PC. Close the lighting in iCUE, Synapse, G HUB, Armoury Crate, MSI Center or SignalRGB, or
+              they fight OpenRGB for the devices.
             </p>
             <More about="ambient lighting">
               The colour is the one glowing most: vivid colours count, grey, white and black do not, so a red sign in a dark
@@ -201,7 +218,9 @@
                       <small>
                         {d.kind} · {d.leds} LED{d.leds === 1 ? '' : 's'}{d.slow ? ' · on the memory bus: 5 colours a second at most' : ''}{d.direct
                           ? ''
-                          : ' · no Direct mode in OpenRGB, so it cannot follow the screen'}
+                          : ' · no Direct mode in OpenRGB, so it cannot follow the screen'}{d.empty.length > 0
+                          ? ` · ${list(d.empty)} ${d.empty.length === 1 ? 'has' : 'have'} no LEDs set: in OpenRGB, Resize ${d.empty.length === 1 ? 'it' : 'them'} to your fans' or strip's LED count`
+                          : ''}
                       </small>
                     </span>
                   </label>
@@ -303,6 +322,16 @@
     border: 1px solid var(--line);
     border-radius: 12px;
     transition: background-color 120ms linear;
+  }
+  .other {
+    margin: 0.6rem 0;
+    padding: 0.5rem 0.7rem;
+    border-left: 3px solid var(--warn);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--warn) 9%, transparent);
+  }
+  .other p {
+    margin: 0.1rem 0;
   }
   .devices {
     margin: 0;

@@ -74,14 +74,21 @@ fn query(buf: &mut Vec<u64>) -> Result<&[u8], BoxError> {
 
 /// Whether a process named `image` (as "OpenRGB.exe") runs now, for any user.
 pub fn running(image: &str) -> bool {
+    names().iter().any(|n| n.eq_ignore_ascii_case(image))
+}
+
+/// The image name of every process now ("OpenRGB.exe"), for any user: empty if the list cannot
+/// be read.
+pub fn names() -> Vec<String> {
     let mut buf = vec![0u64; 64 * 1024];
     let Ok(bytes) = query(&mut buf) else {
-        return false;
+        return Vec::new();
     };
     let base = bytes.as_ptr() as usize;
     parse_process_list(bytes, base)
-        .iter()
-        .any(|p| p.name.eq_ignore_ascii_case(image))
+        .into_iter()
+        .map(|p| p.name)
+        .collect()
 }
 
 impl Provider for ProcessProvider {

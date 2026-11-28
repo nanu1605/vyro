@@ -60,7 +60,7 @@ P11, driver part) are replaced by **PawnIO** — see decisions 10–11 and the P
 | 43 | Settings sections in a window | A section named in Settings' list opens in a centred window over the page, growing out of its name and shrinking back into it; Ctrl K and the links that name a section open it the same way (2.5; the owner, 2026-11-13: "That section should pop out of the screen also add animations to it", and chose the centred window) | decided |
 | 44 | Glass | Every theme turns to iOS-like glass: see-through panes over a more colourful wash, lit along their top edge, with layers that float over content (menus, toasts, the top bar, the phone's bars and sheets) frosting what is under them, and windows solid panes lit the same way (decision 45); cards do not blur, since the soft wash under them would look the same. On Windows 11 (build 22523 and later) the window itself turns see-through, with Windows' Acrylic frosting the desktop behind it; AMOLED's black stays black. Settings → Appearance → Glass effects, on by default, turns it off, as do Windows' Transparency effects and a system's request for less transparency; off is 2.4's look exactly. Desktop widgets, the game overlay, the phone app, the LAN page and the checkout page take it too (2.5; the owner, 2026-11-14: "Add IOS like glass effect in whole clokrix including relay, which will make clokrix to look premium.", and chose the see-through window on Windows 11 and all six themes with a switch) | decided |
 | 45 | Settings as tiles | Settings is a search box and six tiles (Appearance; Gaming and overlay; Phone and remote; Startup and units; Updates; Clokrix Pro), each saying its state in a line; a tile opens its group in decision 43's window, grown out of the tile. The search finds any one setting by its name or a word it goes by, and opens its window on it, ringed; Ctrl K too. A setting says what it does in a line, the rest behind "More"; the less used ones are under "Advanced"; Phone and remote is in tabs. Windows (every dialog) are solid panes with glass's sheen and lit edge, frosting nothing: the blur was redone at every frame they grew (2.5; the owner, 2026-11-15: "The settings pop out animation is very laggy." and "The setting page attached in the screenshot has too much on the page which makes the settings page very user-unfriendly. Please share ideas to make it more user-friendly.", and chose tiles that pop out with all four tidy-ups: six groups, shorter text, the advanced parts folded, search). The tiles fill the page's width, 3, 2 or 1 across by the page's own width, and grow a little on a wide screen (the owner, the same day: "the settings page is now good but the cards are in the left aligned which does not look good, make the cards size dynamic so they covers the screen according to the screen size.", and chose "Fill the width") | decided |
-| 46 | Ambient lighting through OpenRGB | The owner's RGB devices take the colour glowing most on the screen (2.6; the owner, 2026-11-27: "Whatever is glowing in the screen, the most the RGB of the keyboard or mouse or any other devices which is connected to the computer, should change automatically with the colour which is glowing most on the screen. Clokrix should intelligently figure out which colour is glowing the most or which colour to send to the devices", and chose OpenRGB). Clokrix drives them through OpenRGB, never bundled. From 2.6.1 Clokrix sets OpenRGB up when the owner asks (the owner, 2026-11-27: "install OpenRGB  with the installer", choosing to download it at set-up): OpenRGB's own official installer, downloaded from its release page by the Lighting view's Set up OpenRGB, checked against a pinned SHA-256 and run with one administrator prompt; its service then runs the SDK server on 127.0.0.1 only. Clokrix talks to it with a client of its own written from OpenRGB's protocol document, no GPL code copied: Direct mode only, never save-mode, each device's mode put back when lighting stops. The screen is captured only while lighting is on, made small on the GPU and kept as one colour in memory; a phone screen session on the same monitor takes it over. Clokrix Pro | decided |
+| 46 | Ambient lighting through OpenRGB | The owner's RGB devices take the colour glowing most on the screen (2.6; the owner, 2026-11-27: "Whatever is glowing in the screen, the most the RGB of the keyboard or mouse or any other devices which is connected to the computer, should change automatically with the colour which is glowing most on the screen. Clokrix should intelligently figure out which colour is glowing the most or which colour to send to the devices", and chose OpenRGB). Clokrix drives them through OpenRGB, never bundled. From 2.6.1 Clokrix sets OpenRGB up when the owner asks (the owner, 2026-11-27: "install OpenRGB  with the installer", choosing to download it at set-up): OpenRGB's own official installer, downloaded from its release page by the Lighting view's Set up OpenRGB, checked against a pinned SHA-256 and run with one administrator prompt; its service then runs the SDK server on 127.0.0.1 only. Clokrix talks to it with a client of its own written from OpenRGB's protocol document, no GPL code copied: Direct mode only, never save-mode, each device's mode put back when lighting stops. The screen is captured only while lighting is on, made small on the GPU and kept as one colour in memory; a phone screen session on the same monitor takes it over. Another lighting program that takes the lights back is named in the Lighting view, with how to stop it, while it runs; Clokrix never stops or changes it (2.6.2; the owner, 2026-11-28: "lights are not working", with MSI Center's Mystic Light on the PC, and chose "Name it, I close it"). Clokrix Pro | decided |
 | 47 | The phone wheel | A phone the owner allowed ("Steers games", off by default, set on the PC) steers games as an Xbox 360 controller (2.6; the owner, 2026-11-27: "can we use the mobile phones gyro behaviour and drive any driving games like Euro truck simulator 2 or Snowrunner, etc using a phone just like it's a Moza wheel? Also there should be no lag.", and chose ViGEmBus installed on first use). Its packets go only over the direct connection, unordered and never resent; the relay is too slow and never carries them. ViGEmBus's signed installer comes in the MSI and runs only when the owner sets the wheel up on the PC, with one administrator prompt there, never from the phone; Clokrix talks to it with a client of its own, and the controller exists only while a phone steers. Clokrix Pro | decided |
 | 48 | The owner's dashboard | The owner sees every key on the website's `/dashboard`, signed in with the key page's passkeys (2.6; the owner, 2026-11-27: "Make an admin panel dashboard where i can see keys which are currently in use and also including the system the key is in use and names of the person who owns that key. I need a full dashboard."). The buyer's name is asked at checkout and goes to Razorpay with the order; the dashboard reads names, emails and phones from Razorpay as it opens and the website never keeps them. A 2.6 app tells the checkout its PC's name, processor, graphics card and Windows and Clokrix versions, which the ledger keeps for that key's PC only. The owner can cancel a key (its PC turns Free at its next weekly check), restore one they cancelled, free one from its PC, name it, and give one to a named person | decided |
 
@@ -5618,6 +5618,51 @@ no source to republish (decision 46). On `claude/vyro-2.0`.
       No deploy was needed: the website and the relay are unchanged.
 - [ ] **Field check**: [`docs/field-check-2.6.md`](docs/field-check-2.6.md) §1 now starts with
       Set up OpenRGB.
+
+### 2.6.2 — lights that don't change
+
+The owner (2026-11-28), after 2.6.1:
+
+> lights are not working
+
+Their answers: in Clokrix's Lighting view the devices are listed and ticked and a colour shows,
+but the real lights stay the same; in OpenRGB itself the devices are listed, but a colour set
+there does not change them either; the lights are a keyboard or mouse, and the board's own,
+fans and strips; MSI Center / Mystic Light is on the PC. So the fault is not in Clokrix's client:
+MSI's lighting services keep the controllers and write over OpenRGB. Two outside sources (no
+official MSI page) name the services that conflict with OpenRGB: Lian Li's L-Connect 3 ×
+OpenRGB beta notes (`LightKeeperService`, `MSI Center Service`, `MSI_Case_Service`,
+`Mystic_Light_Service`: set them to Manual) and py_rgb's README (stop `Mystic_Light_Service`,
+`MSI_Case_Service` and `LightKeeperService`: they hold the controller). The owner chose "Name it,
+I close it" over a button that stops the other program's service (decision 46). On
+`claude/vyro-2.0`.
+
+- [x] **The other program named** (`lighting/others.rs`): while lighting is on, every 10 s, the
+      app reads the names of the services running (`transport::running_services`, listing only)
+      and of the processes (`live::names`), and the Lighting view names each lighting program it
+      recognises with the services found on this PC: "MSI Center's Mystic Light is running and
+      takes your lights back from OpenRGB", then set those services to Manual and stop them, or
+      remove Mystic Light in MSI Center's Features, and restart the PC. A program is recognised
+      only with a source for its names: MSI's, for now (services whose name or Services' name
+      holds `mystic_light`, `mystic light`, `lightkeeper`, `ledkeeper`, `msi_case_service` or
+      `msi center service`; `LEDKeeper2.exe`, `LEDKeeper.exe`, `LightKeeperService.exe`). The
+      view's note also names MSI Center and SignalRGB among those that fight OpenRGB.
+- [x] **Headers with no LEDs set**: OpenRGB lists a board's header for fans or a strip (MSI's
+      JRAINBOW) as a zone whose size the owner sets in OpenRGB's Resize; until then it has no
+      LEDs, and no colour reaches it. Clokrix now reads each zone's sizes and the device's row
+      says which header has none and to Resize it.
+- [x] **The log says what failed**: OpenRGB not answering is logged once with its error until it
+      changes (it was at debug, so never logged), each device put in Direct with its LEDs and
+      any header with none, and the other lighting programs as they come and go.
+- [x] **Locally:** core tests (MSI's names in any case and generation, its process only when no
+      service of it runs, MSI Afterburner, RTSS, `MSI.CentralServer.exe` and Nahimic left
+      alone; a board's empty header under every protocol 0 to 5); clippy for Windows (core and
+      app) and Linux; the front end's types and tests; the accessibility sweep with
+      `?others=msi` in the browser preview.
+- [ ] **CI**: the `openrgb_setup` example now also prints what the Lighting view would name from
+      the runner's real lists of services and processes (none expected), and fails if either
+      cannot be read.
+- [ ] **Field check**: [`docs/field-check-2.6.md`](docs/field-check-2.6.md) §1, step 2.
 
 ## Risks
 

@@ -238,6 +238,7 @@ export type { LightDevice } from './bindings/LightDevice';
 export type { LightingSettings } from './bindings/LightingSettings';
 export type { LightingStatus } from './bindings/LightingStatus';
 export type { LightLink } from './bindings/LightLink';
+export type { OtherLighting } from './bindings/OtherLighting';
 export type { SetupStep } from './bindings/SetupStep';
 export type { LightSpeed } from './bindings/LightSpeed';
 export type { NoColour } from './bindings/NoColour';

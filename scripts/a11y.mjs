@@ -408,6 +408,24 @@ async function sweepLighting(browser, theme, width) {
   await page.getByText('Constructed RGB Keyboard').waitFor({ timeout: 8000 }).catch(() => problem(at('Set up OpenRGB'), 'no devices after it'));
   await axe(page, at('Lighting, OpenRGB set up'));
   await noSidewaysScroll(page, at('Lighting, OpenRGB set up'));
+
+  // 2.6.2: MSI's lighting program runs, and a board's header has no LEDs set.
+  await page.goto(`${BASE}/?others=msi`);
+  await page.waitForTimeout(1200);
+  await tab(page, 'Lighting');
+  await page.getByRole('switch', { name: "Light my devices with the screen's colour" }).check();
+  checks++;
+  await page
+    .getByText("MSI Center's Mystic Light is running")
+    .waitFor({ timeout: 5000 })
+    .catch(() => problem(at('Lighting, MSI'), 'MSI Center is not named'));
+  checks++;
+  await page
+    .getByText(/JRAINBOW1 has no LEDs set/)
+    .waitFor({ timeout: 5000 })
+    .catch(() => problem(at('Lighting, MSI'), 'the empty header is not named'));
+  await axe(page, at('Lighting, another lighting program'));
+  await noSidewaysScroll(page, at('Lighting, another lighting program'));
   await ctx.close();
 }
 
