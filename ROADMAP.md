@@ -5715,7 +5715,9 @@ runs a 2.6.2 build and the updater offers only a higher version. On `claude/vyro
       now types 36 in "LEDs on JRAINBOW1", presses Set and sees "36 LEDs". Its only problems
       were Chromium asking the preview for `/favicon.ico` (404) on the first page: the full
       Chromium used locally asks, CI's headless shell does not.
-- [ ] **CI**
+- [x] **CI** (run 46122713913 on 3acf67f, every job green): the Windows job's clippy, core and
+      app tests, install checks and OpenRGB set-up as before. Its runner has no RGB devices, so
+      a real header is set only in the field check.
 - [ ] **2.6.3 released**: on the owner's "release 2.6.3".
 - [ ] **Field check**: [`docs/field-check-2.6.md`](docs/field-check-2.6.md) §1, step 3.
 
