@@ -43,9 +43,12 @@ About an hour.
    colour set in OpenRGB itself changes the lights.
 3. **Devices.** OpenRGB's devices are listed; those that cannot follow the screen say why. Pick
    your keyboard, mouse and any other device. RGB memory and boards are listed too (OpenRGB's
-   service reaches them through PawnIO). A board header for fans or a strip that says it has
-   no LEDs set: in OpenRGB, select the board, **Resize** that zone to their LED count; the row
-   no longer says so, and they light.
+   service reaches them through PawnIO). A board header for fans or a strip (an MSI board's
+   JRAINBOW1 and JRAINBOW2) says "no LEDs set, so its fans or strip stay dark" (2.6.3). Tick the
+   board, type your fans' LED count in that header's box and press **Set**: within a moment it
+   shows that many LEDs and the fans light in the screen's colour. In OpenRGB, the board's
+   **Edit Zone** for that header shows the same count, and it stays after a restart. Change it
+   there instead: Clokrix shows the new count within 10 s.
 4. **A still picture.** Open a mostly dark picture with one bright red sign (a search for
    "neon sign" will do), full screen: the devices go red within a moment. A grey document or the
    desktop with no colour: white (or Clokrix blue or off, as "When the screen has no colour"

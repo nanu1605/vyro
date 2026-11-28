@@ -12,7 +12,7 @@ third-party monitoring app or library).
 - **Build spec:** [`PROJECT_PLAN.md`](PROJECT_PLAN.md) — what to build and why.
 - **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — milestones, phase tracker, decision log.
 
-**Status:** 2.6.2. New in 2.6 (Pro): [ambient lighting](#ambient-lighting-26), your RGB keyboard,
+**Status:** 2.6.3. New in 2.6 (Pro): [ambient lighting](#ambient-lighting-26), your RGB keyboard,
 mouse and other lights in the colour glowing most on the screen, through OpenRGB, which 2.6.1
 sets up for you; and [the phone
 wheel](#the-phone-wheel-26), a phone you allow as a steering wheel with pedals that the PC plays
@@ -121,7 +121,8 @@ game in front), as bright as the scene, and never flashes more than 3 times a se
   MSI Center or SignalRGB, or they fight OpenRGB, and the lights stay as they were. From 2.6.2
   the Lighting view names MSI Center's Mystic Light while its services run, with how to stop
   them; Clokrix never stops another program itself. A board's header for fans or a strip has
-  no LEDs until its size is set in OpenRGB (Resize), and the view says so.
+  no LEDs, and stays dark, until its LED count is set: from 2.6.3 type it in the Lighting view
+  and press Set (OpenRGB keeps it, as its own Edit Zone does).
 - **Set up OpenRGB** (2.6.1): without OpenRGB on the PC, the Lighting view offers to set it up.
   Clokrix then downloads OpenRGB 1.1's own installer from its release page, checks it is exactly
   the file Clokrix knows (its SHA-256), and installs it after one Windows prompt for an

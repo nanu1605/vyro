@@ -1,9 +1,10 @@
 // Browser preview of the Lighting view (2.6): OpenRGB with three devices (constructed), and the
 // colour following a screen that cycles slowly through a few scenes. `?openrgb=missing` (2.6.1):
 // OpenRGB is not on the PC until Set up OpenRGB, which downloads, installs and starts it.
-// `?others=msi` (2.6.2): MSI Center's Mystic Light runs, and a board's fan header has no LEDs set.
+// `?others=msi` (2.6.2): MSI Center's Mystic Light runs, and a board's fan header has no LEDs set,
+// until its count is set (2.6.3).
 
-import type { LightDevice, LightingSettings, LightingStatus, LightLink, OtherLighting, Rgb8, SetupStep } from './types';
+import type { LightDevice, LightingSettings, LightingStatus, LightLink, OtherLighting, Rgb8, SetupStep, ZoneSize } from './types';
 import type { LightingView } from './ipc';
 
 let settings: LightingSettings = {
@@ -16,10 +17,10 @@ let settings: LightingSettings = {
 };
 
 const DEVICES: Array<Omit<LightDevice, 'picked'>> = [
-  { id: 'a1b2c3d4e5f60718', name: 'Constructed RGB Keyboard', kind: 'Keyboard', leds: 104, direct: true, slow: false, empty: [] },
-  { id: 'b2c3d4e5f6071829', name: 'Constructed Gaming Mouse', kind: 'Mouse', leds: 3, direct: true, slow: false, empty: [] },
-  { id: 'c3d4e5f607182930', name: 'Constructed DDR5 Module', kind: 'Memory', leds: 8, direct: true, slow: true, empty: [] },
-  { id: 'd4e5f60718293041', name: 'Constructed Light Strip', kind: 'LED strip', leds: 30, direct: false, slow: false, empty: [] },
+  { id: 'a1b2c3d4e5f60718', name: 'Constructed RGB Keyboard', kind: 'Keyboard', leds: 104, direct: true, slow: false, zones: [] },
+  { id: 'b2c3d4e5f6071829', name: 'Constructed Gaming Mouse', kind: 'Mouse', leds: 3, direct: true, slow: false, zones: [] },
+  { id: 'c3d4e5f607182930', name: 'Constructed DDR5 Module', kind: 'Memory', leds: 8, direct: true, slow: true, zones: [] },
+  { id: 'd4e5f60718293041', name: 'Constructed Light Strip', kind: 'LED strip', leds: 30, direct: false, slow: false, zones: [] },
 ];
 
 const query = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
@@ -31,7 +32,7 @@ const BOARD: Omit<LightDevice, 'picked'> = {
   leds: 6,
   direct: true,
   slow: false,
-  empty: ['JRAINBOW1'],
+  zones: [{ name: 'JRAINBOW1', leds: 0, min: 0, max: 240 }],
 };
 const MSI: OtherLighting = {
   name: "MSI Center's Mystic Light",
@@ -59,7 +60,9 @@ function status(): LightingStatus {
   }
   return {
     link,
-    devices: connected ? [...DEVICES, ...(msi ? [BOARD] : [])].map((d) => ({ ...d, picked: settings.devices.includes(d.id) })) : [],
+    devices: connected
+      ? [...DEVICES, ...(msi ? [BOARD] : [])].map((d) => ({ ...d, zones: d.zones.map((z) => ({ ...z })), picked: settings.devices.includes(d.id) }))
+      : [],
     colour: settings.on ? scene : null,
     capture: settings.on ? 'Desktop Duplication' : null,
     held: null,
@@ -91,6 +94,15 @@ export function simLighting(): LightingView {
 export function simSetLighting(next: LightingSettings): LightingView {
   settings = { ...next, brightness: Math.min(100, Math.max(10, next.brightness)) };
   return view();
+}
+
+export function simSetLightZone(size: ZoneSize): void {
+  if (!settings.on) throw new Error('Turn ambient lighting on first.');
+  const d = [...DEVICES, BOARD].find((x) => x.id === size.device);
+  const z = d?.zones.find((x) => x.name === size.zone);
+  if (!d || !z) return;
+  d.leds += Math.min(z.max, Math.max(z.min, size.leds)) - z.leds;
+  z.leds = Math.min(z.max, Math.max(z.min, size.leds));
 }
 
 export function simWatchLighting(): LightingStatus {

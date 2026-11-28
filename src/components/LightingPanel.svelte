@@ -8,8 +8,8 @@
   import CardGrid, { type CardItem } from './CardGrid.svelte';
   import LoadState from './LoadState.svelte';
   import More from './More.svelte';
-  import { getLighting, onLightingStatus, setLighting, setUpOpenRgb, watchLighting, type LightingView } from '../ipc';
-  import type { LightingSettings, LightingStatus, LightSpeed, NoColour, Rgb8 } from '../types';
+  import { getLighting, onLightingStatus, setLighting, setLightZone, setUpOpenRgb, watchLighting, type LightingView } from '../ipc';
+  import type { LightDevice, LightingSettings, LightingStatus, LightSpeed, LightZone, NoColour, Rgb8 } from '../types';
 
   interface Props {
     active: boolean;
@@ -23,6 +23,11 @@
   // Set up OpenRGB (2.6.1): pressed, and what came of it.
   let settingUp = $state(false);
   let setupNote = $state<string | null>(null);
+  // A header's LED count (2.6.3): what is typed in each box (by device and zone), the one being
+  // sent, and what came of the last Set, under its device.
+  let drafts = $state<Record<string, string>>({});
+  let sizing = $state<string | null>(null);
+  let zoneNote = $state<{ device: string; text: string } | null>(null);
 
   const CARDS: CardItem[] = [
     { id: 'light-main', title: 'Ambient lighting', w: 2 },
@@ -76,6 +81,28 @@
     } finally {
       settingUp = false;
       status = await watchLighting().catch(() => status);
+    }
+  }
+
+  // The owner's Set: the count typed for header `z` of device `d`, sent to OpenRGB.
+  async function setZone(d: LightDevice, z: LightZone): Promise<void> {
+    const key = `${d.id}/${z.name}`;
+    const typed = (drafts[key] ?? '').trim();
+    const leds = Number(typed);
+    if (typed === '' || !Number.isInteger(leds) || leds < z.min || leds > z.max) {
+      zoneNote = { device: d.id, text: `Type a whole number from ${z.min} to ${z.max} for ${z.name}.` };
+      return;
+    }
+    sizing = key;
+    try {
+      await setLightZone({ device: d.id, zone: z.name, leds });
+      delete drafts[key];
+      zoneNote = { device: d.id, text: `${z.name}: ${leds} LED${leds === 1 ? '' : 's'} sent to OpenRGB, which keeps it.` };
+      status = await watchLighting().catch(() => status);
+    } catch (e) {
+      zoneNote = { device: d.id, text: String(e) };
+    } finally {
+      sizing = null;
     }
   }
 
@@ -191,13 +218,15 @@
             <p class="note">
               Each picture of the screen is made small on the graphics card and kept only as one colour: nothing of it is
               saved or leaves this PC. Close the lighting in iCUE, Synapse, G HUB, Armoury Crate, MSI Center or SignalRGB, or
-              they fight OpenRGB for the devices.
+              they fight OpenRGB for the devices. Turn this off before trying colours in OpenRGB itself: while it is on,
+              Clokrix sends its colour to the devices ticked here.
             </p>
             <More about="ambient lighting">
               The colour is the one glowing most: vivid colours count, grey, white and black do not, so a red sign in a dark
               game lights red. It follows the screen's brightness, and never flashes more than 3 times a second whatever the
               screen does. Devices go into OpenRGB's Direct mode while lighting is on, and back to their own mode when it goes
-              off, when Clokrix closes, or at its next start after a crash; nothing is saved to a device.
+              off, when Clokrix closes, or at its next start after a crash; nothing is saved to a device. A header's LED
+              count you set here goes to OpenRGB, which keeps it in its own settings, as its Edit Zone does.
             </More>
           </div>
         </Card>
@@ -218,12 +247,50 @@
                       <small>
                         {d.kind} · {d.leds} LED{d.leds === 1 ? '' : 's'}{d.slow ? ' · on the memory bus: 5 colours a second at most' : ''}{d.direct
                           ? ''
-                          : ' · no Direct mode in OpenRGB, so it cannot follow the screen'}{d.empty.length > 0
-                          ? ` · ${list(d.empty)} ${d.empty.length === 1 ? 'has' : 'have'} no LEDs set: in OpenRGB, Resize ${d.empty.length === 1 ? 'it' : 'them'} to your fans' or strip's LED count`
-                          : ''}
+                          : ' · no Direct mode in OpenRGB, so it cannot follow the screen'}
                       </small>
                     </span>
                   </label>
+                  <!-- 2.6.3: a header for fans or a strip has no LEDs until its count is set. -->
+                  {#if d.zones.length > 0}
+                    <div class="zones">
+                      {#each d.zones as z (z.name)}
+                        {@const key = `${d.id}/${z.name}`}
+                        <form
+                          class="zone"
+                          novalidate
+                          onsubmit={(e) => {
+                            e.preventDefault();
+                            void setZone(d, z);
+                          }}
+                        >
+                          <span class="zname">
+                            {z.name}
+                            <small class:dark={z.leds === 0}>
+                              {z.leds === 0 ? 'no LEDs set, so its fans or strip stay dark' : `${z.leds} LED${z.leds === 1 ? '' : 's'}`}
+                            </small>
+                          </span>
+                          <input
+                            type="number"
+                            inputmode="numeric"
+                            min={z.min}
+                            max={z.max}
+                            step="1"
+                            placeholder={z.leds === 0 ? 'LEDs' : String(z.leds)}
+                            aria-label="LEDs on {z.name}"
+                            value={drafts[key] ?? ''}
+                            oninput={(e) => (drafts[key] = e.currentTarget.value)}
+                          />
+                          <button type="submit" aria-label="Set {z.name}'s LEDs" disabled={busy || sizing === key}>Set</button>
+                        </form>
+                      {/each}
+                      {#if zoneNote?.device === d.id}<p class="note" role="status">{zoneNote.text}</p>{/if}
+                      <p class="note">
+                        Add up your fans' LEDs: each fan's box says how many, so 3 fans of 12 make 36. More than you have does no
+                        harm; fewer leaves the rest dark.
+                      </p>
+                    </div>
+                  {/if}
                 </li>
               {/each}
             </ul>
@@ -337,6 +404,38 @@
     margin: 0;
     padding: 0;
     list-style: none;
+  }
+  .zones {
+    margin: -0.3rem 0 0.7rem 1.6rem;
+  }
+  .zone {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.5rem;
+    margin: 0.3rem 0;
+    font-size: 0.82rem;
+  }
+  .zname {
+    flex: 1 1 10rem;
+    min-width: 0;
+  }
+  .zname small {
+    display: block;
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+  .zname small.dark {
+    color: var(--warn);
+  }
+  .zone input {
+    width: 5.5rem;
+    padding: 0.25rem 0.45rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
   }
   .field {
     margin: 0.5rem 0 0.8rem;

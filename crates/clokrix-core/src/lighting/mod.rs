@@ -115,8 +115,31 @@ pub struct LightDevice {
     /// On the memory bus: colours at most 5 times a second.
     pub slow: bool,
     pub picked: bool,
-    /// Its zones with no LEDs until their size is set in OpenRGB (2.6.2): names only.
-    pub empty: Vec<String>,
+    /// Its headers for fans or strips, whose LED count is the owner's to set (2.6.3; at 0, none
+    /// of their LEDs takes a colour): names and counts only.
+    pub zones: Vec<LightZone>,
+}
+
+/// A zone whose LED count is the owner's to set: a board's header for fans or a strip (2.6.3).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct LightZone {
+    pub name: String,
+    pub leds: u32,
+    pub min: u32,
+    pub max: u32,
+}
+
+/// The owner's Set (2.6.3): zone `zone` of device `device` (its [`device_id`]) given `leds` LEDs,
+/// within the zone's bounds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ZoneSize {
+    pub device: String,
+    pub zone: String,
+    pub leds: u32,
 }
 
 /// What the Lighting view shows.
@@ -201,7 +224,17 @@ pub fn info(c: &Controller, picked: &[String]) -> LightDevice {
         leds: c.leds as u32,
         direct: c.direct_mode().is_some(),
         slow: on_memory_bus(c),
-        empty: c.empty_zones(),
+        zones: c
+            .zones
+            .iter()
+            .filter(|z| z.min < z.max)
+            .map(|z| LightZone {
+                name: z.name.clone(),
+                leds: z.count,
+                min: z.min,
+                max: z.max,
+            })
+            .collect(),
     }
 }
 
@@ -266,9 +299,17 @@ mod tests {
         let i = info(&a, &[device_id(&a)]);
         assert!(i.picked && i.direct && !i.slow);
         assert_eq!((i.kind.as_str(), i.leds), ("Keyboard", 4));
-        assert!(i.empty.is_empty());
+        assert!(i.zones.is_empty());
         let board = parse_controller(&board(VERSION), 1, VERSION).unwrap();
-        assert_eq!(info(&board, &[]).empty, ["JRAINBOW1"]);
+        assert_eq!(
+            info(&board, &[]).zones,
+            [LightZone {
+                name: "JRAINBOW1".into(),
+                leds: 0,
+                min: 0,
+                max: 240
+            }]
+        );
         // Nothing of where it is goes to the view or the settings.
         let shown = serde_json::to_string(&i).unwrap();
         assert!(!shown.contains("SERIAL") && !shown.contains("hid#"));

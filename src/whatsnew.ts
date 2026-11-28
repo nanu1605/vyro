@@ -21,6 +21,16 @@ export interface Release {
 
 export const NOTES: Release[] = [
   {
+    version: '2.6.3',
+    items: [
+      {
+        icon: 'lighting',
+        title: 'Set your fans’ LED count in Clokrix',
+        text: 'A board’s header for fans or a strip has no LEDs in OpenRGB until their count is set, so those lights stay dark. The Lighting view now lists each such header: type the number of LEDs on it and press Set. Clokrix also sees a count changed in OpenRGB within 10 seconds.',
+      },
+    ],
+  },
+  {
     version: '2.6.2',
     items: [
       {

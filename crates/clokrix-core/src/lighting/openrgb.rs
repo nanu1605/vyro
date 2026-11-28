@@ -7,7 +7,9 @@
 //! what follows; numbers little-endian) and its data. Clokrix speaks protocol 5 (OpenRGB 1.0) and
 //! anything older the server speaks: the server says its own version, and the lower one is used.
 //! Clokrix only reads the devices, puts them in their "Direct" mode and sends colours; it never
-//! asks a device to save a mode, which writes its memory (docs/control-safety.md).
+//! asks a device to save a mode, which writes its memory (docs/control-safety.md). Since 2.6.3 it
+//! also sets the LED count of a fan or strip header, when the owner types it and presses Set:
+//! the same request OpenRGB's own Edit Zone sends, which OpenRGB keeps in its settings.
 
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpStream};
@@ -29,6 +31,8 @@ pub mod id {
     pub const CLIENT_NAME: u32 = 50;
     /// The server's word that its devices changed.
     pub const DEVICE_LIST_UPDATED: u32 = 100;
+    /// A zone's LED count: a header for fans or a strip (2.6.3; in every protocol).
+    pub const RESIZE_ZONE: u32 = 1000;
     pub const UPDATE_LEDS: u32 = 1050;
     pub const UPDATE_MODE: u32 = 1101;
     /// Saves a mode to the device's memory: never sent.
@@ -86,7 +90,7 @@ pub struct Mode {
 pub struct Zone {
     pub name: String,
     /// The LEDs it may have, and has: a header for fans or a strip (min < max) has as many as
-    /// it is given in OpenRGB's Resize, none until then (2.6.2).
+    /// it is given (OpenRGB's Edit Zone, or Clokrix's Set since 2.6.3), none until then.
     pub min: u32,
     pub max: u32,
     pub count: u32,
@@ -127,6 +131,18 @@ impl Controller {
             .filter(|z| z.min < z.max && z.count == 0)
             .map(|z| z.name.clone())
             .collect()
+    }
+
+    /// Zone `name`'s index and `leds` within its bounds, if its size is the owner's to set; none
+    /// for a zone of fixed size or one it does not have. OpenRGB's server checks no bounds, so
+    /// this does (2.6.3).
+    pub fn zone_size(&self, name: &str, leds: u32) -> Option<(u32, u32)> {
+        let i = self
+            .zones
+            .iter()
+            .position(|z| z.name == name && z.min < z.max)?;
+        let z = &self.zones[i];
+        Some((u32::try_from(i).ok()?, leds.clamp(z.min, z.max)))
     }
 }
 
@@ -291,6 +307,14 @@ pub fn update_mode(index: i32, raw: &[u8]) -> Vec<u8> {
     d
 }
 
+/// [`id::RESIZE_ZONE`]'s data: the zone's index and its LED count, nothing before them.
+pub fn resize_zone(zone: u32, leds: u32) -> Vec<u8> {
+    let mut d = Vec::with_capacity(8);
+    d.extend_from_slice(&zone.to_le_bytes());
+    d.extend_from_slice(&leds.to_le_bytes());
+    d
+}
+
 /// A connection to OpenRGB's SDK server.
 pub struct Client {
     stream: TcpStream,
@@ -403,6 +427,12 @@ impl Client {
     /// Device `index` in mode `mode` (as it described it).
     pub fn set_mode(&mut self, index: u32, mode: i32, raw: &[u8]) -> io::Result<()> {
         self.send(index, id::UPDATE_MODE, &update_mode(mode, raw))
+    }
+
+    /// Zone `zone` of device `index` given `leds` LEDs, as [`Controller::zone_size`] gave
+    /// them; read the device again for its new count.
+    pub fn resize_zone(&mut self, index: u32, zone: u32, leds: u32) -> io::Result<()> {
+        self.send(index, id::RESIZE_ZONE, &resize_zone(zone, leds))
     }
 
     /// Every LED of device `index` in `colour`.
@@ -562,8 +592,8 @@ pub(crate) mod tests {
     }
 
     /// A board's description under `version` (constructed): six LEDs of its own, and a header
-    /// for fans or a strip whose size was never set in OpenRGB.
-    pub(crate) fn board(version: u32) -> Vec<u8> {
+    /// for fans or a strip of up to 240 LEDs, given `leds`.
+    pub(crate) fn sized_board(version: u32, leds: u32) -> Vec<u8> {
         described(
             version,
             0,
@@ -571,9 +601,14 @@ pub(crate) mod tests {
             "HID: board",
             &[
                 ("Onboard", [6, 6, 6], false),
-                ("JRAINBOW1", [0, 240, 0], false),
+                ("JRAINBOW1", [0, 240, leds], false),
             ],
         )
+    }
+
+    /// The board with its header's size never set.
+    pub(crate) fn board(version: u32) -> Vec<u8> {
+        sized_board(version, 0)
     }
 
     #[test]
@@ -617,6 +652,24 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn sets_a_header_s_leds_only_within_its_bounds() {
+        let b = parse_controller(&board(VERSION), 0, VERSION).unwrap();
+        assert_eq!(b.zone_size("JRAINBOW1", 36), Some((1, 36)));
+        // OpenRGB's server checks no bounds: Clokrix does.
+        assert_eq!(b.zone_size("JRAINBOW1", 100_000), Some((1, 240)));
+        assert_eq!(b.zone_size("JRAINBOW1", 0), Some((1, 0)));
+        // A zone of fixed size, or one the device does not have: nothing to set.
+        assert_eq!(b.zone_size("Onboard", 3), None);
+        assert_eq!(b.zone_size("JRAINBOW2", 3), None);
+        let k = parse_controller(&keyboard(VERSION, 3, "USB"), 0, VERSION).unwrap();
+        assert_eq!(k.zone_size("Keys", 3), None);
+        // As OpenRGB reads it: the zone, then the count, nothing before them.
+        assert_eq!(resize_zone(1, 36), [1, 0, 0, 0, 36, 0, 0, 0]);
+        let h = header(4, id::RESIZE_ZONE, 8);
+        assert_eq!(parse_header(&h).map(|h| (h.device, h.id)), Some((4, 1000)));
+    }
+
+    #[test]
     fn refuses_a_description_cut_short_or_too_large() {
         let d = keyboard(VERSION, 3, "USB");
         for cut in [0, 10, 40, d.len() / 2, d.len() - 1] {
@@ -657,7 +710,8 @@ pub(crate) mod tests {
     type Got = Vec<(Header, Vec<u8>)>;
 
     /// A stand-in OpenRGB on protocol `server`, with `devices` keyboards. Answers counts,
-    /// descriptions and its version; tells of changed devices once, after the first colour.
+    /// descriptions and its version; tells of changed devices once, after the first colour. A
+    /// device whose zone is given a size becomes [`sized_board`] with that many LEDs.
     pub(crate) fn server(server: u32, devices: u32) -> (SocketAddr, mpsc::Receiver<Got>) {
         let l = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = l.local_addr().unwrap();
@@ -666,6 +720,7 @@ pub(crate) mod tests {
             let (mut s, _) = l.accept().unwrap();
             let mut got = Got::new();
             let mut told = false;
+            let mut sized = std::collections::HashMap::new();
             loop {
                 let mut h = [0u8; 16];
                 if s.read_exact(&mut h).is_err() {
@@ -689,7 +744,14 @@ pub(crate) mod tests {
                             .get(..4)
                             .map_or(0, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
                         let leds = 2 + h.device as u16;
-                        reply(&mut s, h.device, 1, &keyboard(v, leds, "USB: 1-2"));
+                        let described = match sized.get(&h.device) {
+                            Some(&n) => sized_board(v, n),
+                            None => keyboard(v, leds, "USB: 1-2"),
+                        };
+                        reply(&mut s, h.device, 1, &described);
+                    }
+                    id::RESIZE_ZONE if d.len() == 8 => {
+                        sized.insert(h.device, u32::from_le_bytes([d[4], d[5], d[6], d[7]]));
                     }
                     id::UPDATE_LEDS if !told => {
                         told = true;
@@ -751,6 +813,30 @@ pub(crate) mod tests {
             };
             assert_eq!(asked.1, want);
         }
+    }
+
+    #[test]
+    fn sets_a_header_s_leds_then_reads_the_device_again() {
+        let (addr, rx) = server(VERSION, 2);
+        let mut c = Client::connect(addr).unwrap();
+        c.resize_zone(1, 1, 36).unwrap();
+        let b = c.controller(1).unwrap();
+        assert_eq!((b.index, b.leds), (1, 6 + 36));
+        assert_eq!(b.zones[1].count, 36);
+        assert!(b.empty_zones().is_empty());
+        drop(c);
+        let got = rx.recv().unwrap();
+        let at = got
+            .iter()
+            .position(|(h, _)| h.id == id::RESIZE_ZONE)
+            .unwrap();
+        assert_eq!(got[at].0.device, 1);
+        assert_eq!(got[at].1, resize_zone(1, 36));
+        assert_eq!(
+            (got[at + 1].0.id, got[at + 1].0.device),
+            (id::CONTROLLER_DATA, 1)
+        );
+        assert!(got.iter().all(|(h, _)| h.id != id::SAVE_MODE));
     }
 
     #[test]

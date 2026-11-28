@@ -421,11 +421,22 @@ async function sweepLighting(browser, theme, width) {
     .catch(() => problem(at('Lighting, MSI'), 'MSI Center is not named'));
   checks++;
   await page
-    .getByText(/JRAINBOW1 has no LEDs set/)
+    .getByText('no LEDs set, so its fans or strip stay dark')
     .waitFor({ timeout: 5000 })
     .catch(() => problem(at('Lighting, MSI'), 'the empty header is not named'));
   await axe(page, at('Lighting, another lighting program'));
   await noSidewaysScroll(page, at('Lighting, another lighting program'));
+
+  // 2.6.3: the header's LED count set here.
+  await page.getByLabel('LEDs on JRAINBOW1').fill('36');
+  await page.getByRole('button', { name: "Set JRAINBOW1's LEDs" }).click();
+  checks++;
+  await page
+    .getByText('36 LEDs', { exact: true })
+    .waitFor({ timeout: 5000 })
+    .catch(() => problem(at('Lighting, header set'), 'the header does not show its 36 LEDs'));
+  await axe(page, at('Lighting, header set'));
+  await noSidewaysScroll(page, at('Lighting, header set'));
   await ctx.close();
 }
 

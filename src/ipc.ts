@@ -8,7 +8,7 @@ import { DEFAULT_GAMES, effectiveFor } from './games';
 import { DEFAULT_OVERLAY, overlayData, type OverlayCorner, type OverlayData, type OverlaySettings } from './overlay';
 import { savedLook, type AccentChoice, type OpenOn, type ThemeId } from './themes';
 import { EMPTY as NO_WIDGETS, type Widgets } from './widgets';
-import type { AlertFired, AlertRule, BackendStatus, Edition, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Control, Dashboard, DeviceInfo, Devices, LinkState, PhoneAction, PowerState, ScreenStatus, WakeReadiness, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo, GpuTestDone, GpuTestKind, GpuTestProgress, TuneConfig, TuneEvent, TuneSettings, TuneStatus, LightingSettings, LightingStatus, WheelOptions, WheelStatus } from './types';
+import type { AlertFired, AlertRule, BackendStatus, Edition, DiagReport, DiagSummary, BenchMode, BenchProgress, BenchRun, Preflight, RunSummary, Effective, GameAutomation, FanConfig, FanEvent, FanEventKind, FanStatus, HeaderStatus, GameSession, GameSnapshot, GameTimeline, WindowSeries, Insights, Profile, ProfileSpec, ScoreReport, TempUnit, HealthEvent, Control, Dashboard, DeviceInfo, Devices, LinkState, PhoneAction, PowerState, ScreenStatus, WakeReadiness, DisplayInfo, DriveInfo, HardwareChange, HardwareId, NetAdapterInfo, HistoryRange, PawnIoStatus, HistorySeries, RemoteBrief, RemoteStatus, SensorSnapshot, SensorTree, SystemInfo, GpuTestDone, GpuTestKind, GpuTestProgress, TuneConfig, TuneEvent, TuneSettings, TuneStatus, LightingSettings, LightingStatus, WheelOptions, WheelStatus, ZoneSize } from './types';
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -1249,6 +1249,12 @@ export async function watchLighting(): Promise<LightingStatus> {
 export async function setUpOpenRgb(): Promise<string> {
   if (!inTauri) return (await import('./sim-lighting')).simSetUpOpenRgb();
   return invoke<string>('set_up_openrgb');
+}
+
+/** A header's LED count (2.6.3): sent to OpenRGB by the lighting thread, within its bounds. */
+export async function setLightZone(size: ZoneSize): Promise<void> {
+  if (!inTauri) return (await import('./sim-lighting')).simSetLightZone(size);
+  return invoke<void>('set_light_zone', { size });
 }
 
 export async function onLightingStatus(cb: (s: LightingStatus) => void): Promise<() => void> {

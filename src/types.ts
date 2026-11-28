@@ -235,6 +235,8 @@ export interface GpuTestDone {
   message: string;
 }
 export type { LightDevice } from './bindings/LightDevice';
+export type { LightZone } from './bindings/LightZone';
+export type { ZoneSize } from './bindings/ZoneSize';
 export type { LightingSettings } from './bindings/LightingSettings';
 export type { LightingStatus } from './bindings/LightingStatus';
 export type { LightLink } from './bindings/LightLink';

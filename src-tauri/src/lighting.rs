@@ -16,6 +16,11 @@
 //! Another lighting program (2.6.2, `lighting::others`): while lighting is on, the names of the
 //! services and processes running are read every 10 s, and the view names each lighting program
 //! Clokrix recognises among them, with how to stop it. Clokrix never stops or touches it.
+//!
+//! A header's LED count (2.6.3): a board's header for fans or a strip has none until its size is
+//! set, so its lights stay dark. The owner types the count in the view and presses Set; the
+//! thread sends it to OpenRGB (within the zone's bounds), which keeps it, and reads the device
+//! again. A size set in OpenRGB itself tells no client, so the devices are read again every 10 s.
 
 use std::collections::{HashMap, HashSet};
 use std::net::{Ipv4Addr, SocketAddr};
@@ -30,7 +35,7 @@ use clokrix_core::lighting::others::OtherLighting;
 use clokrix_core::lighting::setup::{self, Next};
 use clokrix_core::lighting::{
     self, device_id, info, interval, restore_mode, saved_mode, LightLink, LightingSettings,
-    LightingStatus, SavedMode, SetupStep,
+    LightingStatus, SavedMode, SetupStep, ZoneSize,
 };
 use clokrix_core::{files, lock};
 use serde::{Deserialize, Serialize};
@@ -47,6 +52,10 @@ const FRAME: Duration = Duration::from_millis(33);
 const TELL: Duration = Duration::from_millis(250);
 /// Other lighting programs are looked for this often.
 const OTHERS: Duration = Duration::from_secs(10);
+/// OpenRGB's devices are read again this often, for sizes set in OpenRGB.
+const REREAD: Duration = Duration::from_secs(10);
+/// The owner's Sets waiting for the thread, at most.
+const SIZES: usize = 16;
 
 /// What is kept: the settings, and the modes to put back.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -76,6 +85,8 @@ pub struct LightingState {
     setting_up: Mutex<Option<SetupStep>>,
     /// OpenRGB was just set up: the thread looks for it afresh.
     fresh: AtomicBool,
+    /// The owner's Sets of a header's LED count, for the thread to send (2.6.3).
+    sizes: Mutex<Vec<ZoneSize>>,
 }
 
 impl LightingState {
@@ -98,6 +109,7 @@ impl LightingState {
             watched: Mutex::new(Instant::now()),
             setting_up: Mutex::new(None),
             fresh: AtomicBool::new(false),
+            sizes: Mutex::new(Vec::new()),
         }
     }
 
@@ -394,9 +406,12 @@ fn run(app: &AppHandle) {
         return;
     };
     log::info!("lighting: on");
+    // Sets from an earlier run are not this one's.
+    lock(&state.sizes).clear();
     let mut client: Option<Client> = None;
     let mut devices: Vec<Controller> = Vec::new();
     let mut look_at = Instant::now();
+    let mut reread_at = Instant::now() + REREAD;
     // OpenRGB not answering since then; started here then (once a run).
     let mut silent_since: Option<Instant> = None;
     let mut started_at: Option<Instant> = None;
@@ -460,6 +475,7 @@ fn run(app: &AppHandle) {
                     sent.clear();
                     silent_since = None;
                     failed = None;
+                    reread_at = tick + REREAD;
                 }
                 Err(e) => {
                     let said = e.to_string();
@@ -489,6 +505,74 @@ fn run(app: &AppHandle) {
                 Err(e) => {
                     log::info!("lighting: OpenRGB went: {e}");
                     client = None;
+                }
+            }
+        }
+
+        // A size set in OpenRGB (its Edit Zone) tells no client: the devices read again.
+        if tick >= reread_at {
+            reread_at = tick + REREAD;
+            if let Some(c) = &mut client {
+                match c.controllers() {
+                    Ok(now) => {
+                        let ids = |l: &[Controller]| l.iter().map(device_id).collect::<Vec<_>>();
+                        if ids(&now) != ids(&devices) {
+                            // Another list: as when OpenRGB says its devices changed.
+                            direct.clear();
+                            sent.clear();
+                        } else {
+                            for (was, d) in devices.iter().zip(&now) {
+                                if was.leds != d.leds {
+                                    log::info!("lighting: {} now has {} LEDs", d.name, d.leds);
+                                    sent.remove(&device_id(d));
+                                }
+                            }
+                        }
+                        devices = now;
+                    }
+                    Err(e) => {
+                        log::info!("lighting: OpenRGB: {e}");
+                        client = None;
+                    }
+                }
+            }
+        }
+
+        // The owner's Set: a header's LED count, then the device read again for its new count.
+        if let Some(c) = client.as_mut().filter(|_| !lock(&state.sizes).is_empty()) {
+            let asked = std::mem::take(&mut *lock(&state.sizes));
+            for z in asked {
+                let Some(i) = devices.iter().position(|d| device_id(d) == z.device) else {
+                    log::info!("lighting: no device for {}'s LEDs now", z.zone);
+                    continue;
+                };
+                let (index, name) = (devices[i].index, devices[i].name.clone());
+                let Some((zone, leds)) = devices[i].zone_size(&z.zone, z.leds) else {
+                    log::info!("lighting: {name} has no {} whose LEDs can be set", z.zone);
+                    continue;
+                };
+                match c
+                    .resize_zone(index, zone, leds)
+                    .and_then(|()| c.controller(index))
+                {
+                    Ok(again) => {
+                        let has = again.zones.get(zone as usize).map_or(0, |z| z.count);
+                        if has == leds {
+                            log::info!("lighting: {name}: {} set to {leds} LEDs", z.zone);
+                        } else {
+                            log::info!(
+                                "lighting: {name}: {} asked for {leds} LEDs, OpenRGB has {has}",
+                                z.zone
+                            );
+                        }
+                        sent.remove(&z.device);
+                        devices[i] = again;
+                    }
+                    Err(e) => {
+                        log::info!("lighting: OpenRGB: {e}");
+                        client = None;
+                        break;
+                    }
                 }
             }
         }
@@ -700,6 +784,30 @@ pub fn set_lighting(
     state.save();
     resume(&app);
     Ok(view(&state))
+}
+
+/// The owner's Set (2.6.3): a header's LED count, sent to OpenRGB by the lighting thread, within
+/// the zone's bounds. The view sees the new count in its status.
+#[tauri::command]
+pub fn set_light_zone(
+    app: AppHandle,
+    state: tauri::State<'_, LightingState>,
+    size: ZoneSize,
+) -> Result<(), String> {
+    if !crate::edition::full(&app) {
+        return Err("Ambient lighting is part of Clokrix Pro.".into());
+    }
+    if !state.settings().on {
+        return Err("Turn ambient lighting on first.".into());
+    }
+    let mut sizes = lock(&state.sizes);
+    // The newest for a zone wins.
+    sizes.retain(|z| (&z.device, &z.zone) != (&size.device, &size.zone));
+    if sizes.len() >= SIZES {
+        return Err("Too many at once: wait a moment.".into());
+    }
+    sizes.push(size);
+    Ok(())
 }
 
 /// The view is open: it hears the colour for the next few seconds.
